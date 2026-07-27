@@ -10,14 +10,28 @@ import { getRateLimit } from "../../services/githubService";
 import { getPullRequestCount } from "../../services/pullRequestsService";
 import { getMyGitHubSettings } from "../../services/settingsService";
 
+// A plain three-bar glyph, same stroke style as Sidebar's ChevronIcon —
+// only ever shown below the 768px breakpoint (see global.css), where
+// Sidebar becomes an off-canvas drawer instead of a persistent rail.
+function MenuIcon() {
+    return (
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+            <line x1="3" y1="5.5" x2="17" y2="5.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+            <line x1="3" y1="10" x2="17" y2="10" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+            <line x1="3" y1="14.5" x2="17" y2="14.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+        </svg>
+    );
+}
+
 // The slim top strip: brand mark on the left, account/rate-limit controls
 // on the right. Primary navigation and the theme toggle both live in
-// Sidebar now — this bar only ever holds a handful of controls, so it
-// doesn't need its own collapse/hamburger behavior, just normal flex-wrap.
+// Sidebar — on tablet/desktop it's a persistent rail with no need for a
+// hamburger; below 768px it becomes an off-canvas drawer that this bar's
+// menu button opens (mobile-nav-toggle is hidden via CSS at wider widths).
 export default function TopBar() {
 
     const { user, loading, login, logout, oauthConfigured, tokenOwner, canApproveReleases } = useAuth();
-    const { setTab } = useNavigation();
+    const { setTab, mobileNavOpen, setMobileNavOpen } = useNavigation();
 
     const [rateLimit, setRateLimit] = useState(null);
     const [prCount, setPrCount] = useState(0);
@@ -85,6 +99,17 @@ export default function TopBar() {
     return (
 
         <header className="top-bar">
+
+            <button
+                type="button"
+                className="mobile-nav-toggle"
+                onClick={() => setMobileNavOpen(!mobileNavOpen)}
+                aria-label={mobileNavOpen ? "Close navigation" : "Open navigation"}
+                aria-expanded={mobileNavOpen}
+                title={mobileNavOpen ? "Close navigation" : "Open navigation"}
+            >
+                <MenuIcon />
+            </button>
 
             <button
                 type="button"

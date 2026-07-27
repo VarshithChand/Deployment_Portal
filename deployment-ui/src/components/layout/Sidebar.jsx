@@ -44,14 +44,18 @@ const TABS = [
 
 const STORAGE_KEY = "sidebar-collapsed";
 
-// Left-hand persistent nav, collapsed to icons-only by default (matches
-// the reference the user pointed at — Google Keep's own left rail) with a
-// small arrow to pull it open, rather than a hamburger button that hides
-// the nav behind a dropdown. Settings lives as the last nav item rather
-// than only being reachable through the account badge in TopBar.
+// Left-hand nav. On tablet/desktop (>=768px, see global.css) it's a
+// persistent rail, collapsed to icons-only by default (matches the
+// reference the user pointed at — Google Keep's own left rail) with a
+// small arrow to pull it open. Below 768px the same markup instead becomes
+// an off-canvas drawer — hidden until TopBar's hamburger opens it, always
+// full-width/full-label there regardless of the desktop collapse state,
+// since an icon-only overlay makes little sense when it's not saving any
+// persistent layout space to begin with. Settings lives as the last nav
+// item rather than only being reachable through the account badge in TopBar.
 export default function Sidebar() {
 
-    const { tab, setTab } = useNavigation();
+    const { tab, setTab, mobileNavOpen, setMobileNavOpen } = useNavigation();
     const { canApproveReleases } = useAuth();
     const { theme, toggleTheme } = useTheme();
 
@@ -78,7 +82,18 @@ export default function Sidebar() {
 
     return (
 
-        <aside className={`app-sidebar ${collapsed ? "collapsed" : ""}`}>
+        <>
+
+            {/* Only rendered (and only ever visible) below the 768px
+                breakpoint — tapping outside the open drawer closes it,
+                same as tapping a nav item inside it already does. */}
+            <div
+                className={`mobile-nav-backdrop ${mobileNavOpen ? "visible" : ""}`}
+                onClick={() => setMobileNavOpen(false)}
+                aria-hidden="true"
+            />
+
+            <aside className={`app-sidebar ${collapsed ? "collapsed" : ""} ${mobileNavOpen ? "mobile-open" : ""}`}>
 
             <button
                 type="button"
@@ -131,7 +146,9 @@ export default function Sidebar() {
 
             </div>
 
-        </aside>
+            </aside>
+
+        </>
 
     );
 

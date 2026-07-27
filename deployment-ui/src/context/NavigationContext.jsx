@@ -20,6 +20,12 @@ export default function NavigationProvider({ children }) {
     const [tab, setTabState] = useState(readTabFromUrl);
     const [pendingRepoUrl, setPendingRepoUrl] = useState(null);
 
+    // The mobile drawer (Sidebar becomes an off-canvas panel below the
+    // 768px breakpoint — see global.css) and its hamburger trigger (TopBar)
+    // are siblings, not parent/child, so this is the shared home for
+    // "is the drawer open" rather than prop-drilling between them.
+    const [mobileNavOpen, setMobileNavOpen] = useState(false);
+
     const setTab = useCallback((nextTab) => {
 
         setTabState(nextTab);
@@ -33,6 +39,10 @@ export default function NavigationProvider({ children }) {
         // reload-safe and shareable.
         window.history.replaceState(null, "", url);
 
+        // Picking a page closes the mobile drawer — on desktop/tablet this
+        // is a no-op since the drawer state has no visible effect there.
+        setMobileNavOpen(false);
+
     }, []);
 
     function goToSettingsWithRepo(url) {
@@ -45,7 +55,10 @@ export default function NavigationProvider({ children }) {
     return (
 
         <NavigationContext.Provider
-            value={{ tab, setTab, pendingRepoUrl, setPendingRepoUrl, goToSettingsWithRepo }}
+            value={{
+                tab, setTab, pendingRepoUrl, setPendingRepoUrl, goToSettingsWithRepo,
+                mobileNavOpen, setMobileNavOpen
+            }}
         >
 
             {children}

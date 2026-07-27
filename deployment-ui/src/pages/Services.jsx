@@ -762,6 +762,7 @@ export default function Services() {
 
                                                     ) : (
 
+                                                        <div className="table-scroll">
                                                         <table className="table">
 
                                                             <thead>
@@ -807,6 +808,7 @@ export default function Services() {
                                                             </tbody>
 
                                                         </table>
+                                                        </div>
 
                                                     )}
 

@@ -1312,31 +1312,149 @@ textarea{
 
 }
 
+/* Below 768px, Sidebar stops being a persistent rail — a rail that only
+   ever gets as narrow as icon-only (the old fix here) still eats a fixed
+   slice of a phone-width viewport permanently. Instead it becomes an
+   off-canvas drawer: hidden by translateX until TopBar's hamburger opens
+   it, then it overlays the content rather than sharing space with it. */
 @media(max-width:768px){
 
     .app-sidebar{
 
-        width:60px;
+        position:fixed;
+
+        top:0;
+
+        left:0;
+
+        bottom:0;
+
+        width:270px;
+
+        max-width:80vw;
+
+        z-index:100;
+
+        transform:translateX(-100%);
+
+        transition:transform .25s ease;
+
+        box-shadow:4px 0 24px rgba(0,0,0,.3);
 
     }
 
-    .app-sidebar .app-sidebar-item-label{
+    .app-sidebar.mobile-open{
 
-        display:none;
+        transform:translateX(0);
 
     }
 
-    .app-sidebar .app-sidebar-item{
+    /* Always full-width/labelled here, regardless of the desktop collapsed
+       state carried over from localStorage — an icon-only drawer saves no
+       layout space when it's an overlay rather than a shared column. */
+    .app-sidebar.collapsed{
 
-        justify-content:center;
+        width:270px;
 
-        padding:10px;
+        max-width:80vw;
+
+    }
+
+    .app-sidebar.collapsed .app-sidebar-item-label{
+
+        display:block;
+
+    }
+
+    .app-sidebar.collapsed .app-sidebar-item{
+
+        justify-content:flex-start;
+
+        padding:10px 12px;
 
     }
 
     .app-sidebar-toggle{
 
         display:none;
+
+    }
+
+}
+
+@media(min-width:769px){
+
+    .mobile-nav-toggle{
+
+        display:none;
+
+    }
+
+    .mobile-nav-backdrop{
+
+        display:none;
+
+    }
+
+}
+
+.mobile-nav-toggle{
+
+    flex-shrink:0;
+
+    display:flex;
+
+    align-items:center;
+
+    justify-content:center;
+
+    width:36px;
+
+    height:36px;
+
+    padding:0;
+
+    background:none;
+
+    border:1px solid var(--border);
+
+    border-radius:8px;
+
+    color:var(--text);
+
+    transition:background-color .15s ease;
+
+}
+
+.mobile-nav-toggle:hover{
+
+    background:var(--table-row-hover);
+
+}
+
+/* position:fixed so it covers the full viewport (TopBar included) whenever
+   the drawer is open — display:none the rest of the time rather than just
+   opacity, so it can never silently eat clicks on tablet/desktop even if
+   mobileNavOpen happens to still be true from a previous narrow layout. */
+.mobile-nav-backdrop{
+
+    display:none;
+
+    position:fixed;
+
+    inset:0;
+
+    background:rgba(0,0,0,.5);
+
+    z-index:90;
+
+}
+
+@media(max-width:768px){
+
+    .mobile-nav-backdrop.visible{
+
+        display:block;
 
     }
 
