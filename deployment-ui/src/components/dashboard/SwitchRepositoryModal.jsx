@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 
 import { getAccountRepositories } from "../../services/githubService";
-import { saveGitHubSettings } from "../../services/settingsService";
+import { saveMyGitHubSettings } from "../../services/settingsService";
 
 import SearchBox from "../common/SearchBox";
 import ConfirmDialog from "../ConfirmDialog";
@@ -134,7 +134,7 @@ export default function SwitchRepositoryModal({
 
             setSwitching(true);
 
-            await saveGitHubSettings({
+            await saveMyGitHubSettings({
                 owner: target.owner,
                 repository: target.name,
                 personalAccessToken: null
@@ -283,7 +283,7 @@ export default function SwitchRepositoryModal({
                     <>
                         From <strong>{currentFullName || "(no repository configured)"}</strong>
                         {" "}to <strong>{target.fullName}</strong>.
-                        {" "}This changes the repository the whole portal points at.
+                        {" "}This changes the repository you point at.
                     </>
                 )
             }

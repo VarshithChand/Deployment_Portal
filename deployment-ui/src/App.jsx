@@ -15,6 +15,7 @@ import TopBar from "./components/layout/TopBar";
 import Sidebar from "./components/layout/Sidebar";
 import Footer from "./components/layout/Footer";
 import ErrorBoundary from "./components/common/ErrorBoundary";
+import RequireGitHubSetup from "./components/RequireGitHubSetup";
 import useNavigation from "./hooks/useNavigation";
 
 function App(){
@@ -27,34 +28,38 @@ function App(){
 
             <TopBar />
 
-            <div className="app-body">
+            <RequireGitHubSetup>
 
-                <Sidebar />
+                <div className="app-body">
 
-                <div className="app-content-column">
+                    <Sidebar />
 
-                    <ErrorBoundary key={tab} onRecover={() => setTab("dashboard")}>
+                    <div className="app-content-column">
 
-                        {tab === "dashboard" && <Dashboard/>}
-                        {tab === "deploy" && <Deploy/>}
-                        {tab === "approvals" && <Approvals/>}
-                        {tab === "pullRequests" && <PullRequests/>}
-                        {tab === "storage" && <Storage/>}
-                        {tab === "analytics" && <Analytics/>}
-                        {tab === "timeline" && <Timeline/>}
-                        {tab === "history" && <History/>}
-                        {tab === "templates" && <TemplateTester/>}
-                        {tab === "services" && <Services/>}
-                        {tab === "docker" && <Docker/>}
-                        {tab === "settings" && <Settings/>}
+                        <ErrorBoundary key={tab} onRecover={() => setTab("dashboard")}>
 
-                    </ErrorBoundary>
+                            {tab === "dashboard" && <Dashboard/>}
+                            {tab === "deploy" && <Deploy/>}
+                            {tab === "approvals" && <Approvals/>}
+                            {tab === "pullRequests" && <PullRequests/>}
+                            {tab === "storage" && <Storage/>}
+                            {tab === "analytics" && <Analytics/>}
+                            {tab === "timeline" && <Timeline/>}
+                            {tab === "history" && <History/>}
+                            {tab === "templates" && <TemplateTester/>}
+                            {tab === "services" && <Services/>}
+                            {tab === "docker" && <Docker/>}
+                            {tab === "settings" && <Settings/>}
 
-                    <Footer />
+                        </ErrorBoundary>
+
+                        <Footer />
+
+                    </div>
 
                 </div>
 
-            </div>
+            </RequireGitHubSetup>
 
         </>
 

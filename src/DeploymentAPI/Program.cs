@@ -36,9 +36,6 @@ if (string.IsNullOrWhiteSpace(builder.Configuration["Jwt:Secret"]))
     builder.Configuration["Jwt:Secret"] = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
 }
 
-builder.Services.Configure<GitHubSettings>(
-    builder.Configuration.GetSection("GitHub"));
-
 builder.Services.Configure<NotificationSettings>(
     builder.Configuration.GetSection("Notifications"));
 
@@ -53,6 +50,12 @@ builder.Services.Configure<GitHubOAuthSettings>(
 
 builder.Services.Configure<AuthorizationSettings>(
     builder.Configuration.GetSection("Auth"));
+
+//
+// HttpContext access from within services (GitHubAuthService reads the
+// current request's logged-in user to resolve their own GitHub credentials)
+//
+builder.Services.AddHttpContextAccessor();
 
 //
 // Controllers
@@ -74,7 +77,10 @@ builder.Services.AddMemoryCache();
 //
 // Dependency Injection
 //
-builder.Services.AddSingleton<GitHubAuthService>();
+// Scoped, not Singleton: it resolves the current request's user's own
+// GitHub repo/token (see GitHubAuthService) — one instance per request,
+// same as GitHubApiService below.
+builder.Services.AddScoped<GitHubAuthService>();
 builder.Services.AddSingleton<ActivityLogService>();
 // Docker.DotNet's client is meant to be created once and reused, like
 // HttpClient, rather than re-connected to the daemon on every request.
@@ -226,6 +232,19 @@ app.UseCors("ReactPolicy");
 //
 app.UseAuthentication();
 app.UseAuthorization();
+
+//
+// Per-user GitHub credentials — loads the current request's logged-in
+// user's own repo/token into the request-scoped GitHubAuthService once,
+// before any controller action runs. Must come after UseAuthentication so
+// HttpContext.User is already populated.
+//
+app.Use(async (context, next) =>
+{
+    var githubAuth = context.RequestServices.GetRequiredService<GitHubAuthService>();
+    await githubAuth.LoadAsync();
+    await next();
+});
 
 //
 // Controllers

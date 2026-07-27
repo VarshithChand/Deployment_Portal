@@ -5,8 +5,20 @@ export const getSettings = async () => {
     return response.data;
 };
 
-export const saveGitHubSettings = async (payload) => {
-    const response = await settingsApi.post("/github", payload);
+// Every logged-in user has their own GitHub repo + token — not shared
+// portal-wide settings like the rest of this file.
+export const getMyGitHubSettings = async () => {
+    const response = await settingsApi.get("/me/github");
+    return response.data;
+};
+
+export const saveMyGitHubSettings = async (payload) => {
+    const response = await settingsApi.post("/me/github", payload);
+    return response.data;
+};
+
+export const clearMyGitHubToken = async () => {
+    const response = await settingsApi.delete("/me/github");
     return response.data;
 };
 

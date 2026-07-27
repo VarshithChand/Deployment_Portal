@@ -3838,3 +3838,49 @@ textarea{
     padding:6px 14px;
     font-size:13px;
 }
+
+/* RequireGitHubSetup — the mandatory "connect your repo" gate every logged-in
+   user sees once, before reaching any other page. */
+.setup-gate{
+    flex:1;
+    min-height:70vh;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    padding:40px 20px;
+}
+
+.setup-gate-card{
+    width:100%;
+    max-width:420px;
+    background:var(--card-bg);
+    border:1px solid var(--border);
+    border-radius:12px;
+    box-shadow:0 5px 15px var(--card-shadow);
+    padding:32px;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    gap:14px;
+    animation:card-in .4s ease both;
+}
+
+.setup-gate-title{
+    font-size:20px;
+    font-weight:600;
+    color:var(--text);
+    text-align:center;
+    margin:0;
+}
+
+.setup-gate-form{
+    width:100%;
+    display:flex;
+    flex-direction:column;
+    gap:16px;
+    margin-top:8px;
+}
+
+.setup-gate-form .btn{
+    width:100%;
+}

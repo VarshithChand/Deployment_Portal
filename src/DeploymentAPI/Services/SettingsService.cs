@@ -33,26 +33,57 @@ public class SettingsService
         return BuildView(root);
     }
 
-    public async Task<SettingsViewDto> SaveGitHubAsync(GitHubSettingsUpdateDto update)
+    // Every user brings their own GitHub repo + token — stored keyed by
+    // their portal login (the GitHub username from OAuth) under
+    // "UserGitHubCredentials", instead of the one shared "GitHub" section
+    // this used to be. GitHubAuthService.LoadAsync() reads this per request.
+    public async Task<UserGitHubCredentials> GetUserGitHubCredentialsAsync(string login)
+    {
+        var root = await ReadRootAsync();
+        var users = root["UserGitHubCredentials"] as JObject;
+        var entry = users?[login] as JObject;
+
+        return new UserGitHubCredentials(
+            entry?["Owner"]?.ToString() ?? string.Empty,
+            entry?["Repository"]?.ToString() ?? string.Empty,
+            entry?["PersonalAccessToken"]?.ToString());
+    }
+
+    public async Task<UserGitHubCredentials> SaveUserGitHubCredentialsAsync(string login, GitHubSettingsUpdateDto update)
     {
         var root = await ReadRootAsync();
 
-        var github = root["GitHub"] as JObject ?? new JObject();
+        var users = root["UserGitHubCredentials"] as JObject ?? new JObject();
+        var entry = users[login] as JObject ?? new JObject();
 
-        github["Owner"] = update.Owner;
-        github["Repository"] = update.Repository;
+        entry["Owner"] = update.Owner;
+        entry["Repository"] = update.Repository;
 
         if (!string.IsNullOrWhiteSpace(update.PersonalAccessToken))
-            github["PersonalAccessToken"] = update.PersonalAccessToken;
+            entry["PersonalAccessToken"] = update.PersonalAccessToken;
 
-        root["GitHub"] = github;
+        users[login] = entry;
+        root["UserGitHubCredentials"] = users;
 
         await WriteRootAsync(root);
 
-        _log.LogInfo("Settings", $"GitHub settings saved: {update.Owner}/{update.Repository}"
+        _log.LogInfo("Settings", $"GitHub settings saved for '{login}': {update.Owner}/{update.Repository}"
             + (string.IsNullOrWhiteSpace(update.PersonalAccessToken) ? "" : " (token updated)"));
 
-        return BuildView(root);
+        return await GetUserGitHubCredentialsAsync(login);
+    }
+
+    public async Task ClearUserGitHubTokenAsync(string login)
+    {
+        var root = await ReadRootAsync();
+
+        if (root["UserGitHubCredentials"] is JObject users && users[login] is JObject entry)
+        {
+            entry.Remove("PersonalAccessToken");
+            await WriteRootAsync(root);
+
+            _log.LogInfo("Settings", $"GitHub token cleared for '{login}'.");
+        }
     }
 
     public async Task<SettingsViewDto> SaveDockerAsync(DockerSettingsUpdateDto update)
@@ -116,26 +147,27 @@ public class SettingsService
     }
 
     // "Clear" removes only the secret field, leaving non-secret identifiers
-    // (Owner/Repository, Docker Registry/Username, OAuth ClientId) in place —
-    // a null SecretField means the whole section IS the thing being cleared.
+    // (Docker Registry/Username, OAuth ClientId) in place — a null
+    // SecretField means the whole section IS the thing being cleared.
+    // GitHub credentials are per-user now (see ClearUserGitHubTokenAsync)
+    // and aren't part of this shared-section mechanism at all.
     private static readonly Dictionary<string, (string SectionKey, string? SecretField)> SectionInfo = new()
     {
-        ["github"] = ("GitHub", "PersonalAccessToken"),
         ["docker"] = ("Docker", "Password"),
         ["github-oauth"] = ("GitHubOAuth", "ClientSecret"),
         ["admins"] = ("Auth", null)
     };
 
     // Unlike a per-section clear (which only removes the secret, leaving the
-    // repo URL / registry / client ID in place), "all" wipes every
-    // configurable section entirely — including GitHub Owner/Repository —
-    // resetting the portal back to its unconfigured, first-run state. Jwt
-    // is deliberately left alone so existing sessions/cookies stay valid.
+    // registry / client ID in place), "all" wipes every shared, portal-wide
+    // section entirely — resetting the portal back to its unconfigured,
+    // first-run state. Per-user GitHub credentials aren't touched by this
+    // (each user manages their own), and Jwt is deliberately left alone so
+    // existing sessions/cookies stay valid.
     public async Task<SettingsViewDto> ClearAllAsync()
     {
         var root = await ReadRootAsync();
 
-        root.Remove("GitHub");
         root.Remove("Docker");
         root.Remove("GitHubOAuth");
         root.Remove("Auth");
@@ -241,7 +273,6 @@ public class SettingsService
 
     private static SettingsViewDto BuildView(JObject root)
     {
-        var github = root["GitHub"] as JObject;
         var docker = root["Docker"] as JObject;
         var oauth = root["GitHubOAuth"] as JObject;
         var auth = root["Auth"] as JObject;
@@ -252,10 +283,6 @@ public class SettingsService
 
         return new SettingsViewDto
         {
-            GitHubOwner = github?["Owner"]?.ToString() ?? string.Empty,
-            GitHubRepository = github?["Repository"]?.ToString() ?? string.Empty,
-            GitHubTokenConfigured = !string.IsNullOrWhiteSpace(github?["PersonalAccessToken"]?.ToString()),
-
             DockerRegistry = docker?["Registry"]?.ToString() ?? string.Empty,
             DockerUsername = docker?["Username"]?.ToString() ?? string.Empty,
             DockerPasswordConfigured = !string.IsNullOrWhiteSpace(docker?["Password"]?.ToString()),

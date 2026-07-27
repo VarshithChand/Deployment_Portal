@@ -1,15 +1,11 @@
 namespace DeploymentAPI.DTOs;
 
-// Safe-to-return view of stored settings — secrets are never echoed back,
-// only whether one has been saved.
+// Safe-to-return view of the portal-wide (shared) settings — secrets are
+// never echoed back, only whether one has been saved. GitHub repo/token are
+// NOT here: those are per-user now (see UserGitHubCredentials and
+// SettingsController's api/settings/me/github endpoints).
 public class SettingsViewDto
 {
-    public string GitHubOwner { get; set; } = string.Empty;
-
-    public string GitHubRepository { get; set; } = string.Empty;
-
-    public bool GitHubTokenConfigured { get; set; }
-
     public string DockerRegistry { get; set; } = string.Empty;
 
     public string DockerUsername { get; set; } = string.Empty;

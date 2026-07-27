@@ -2,7 +2,9 @@ import { useCallback, useEffect, useState } from "react";
 
 import {
     getSettings,
-    saveGitHubSettings,
+    getMyGitHubSettings,
+    saveMyGitHubSettings,
+    clearMyGitHubToken,
     saveDockerSettings,
     saveGitHubOAuthSettings,
     saveAdminUsernames,
@@ -113,14 +115,17 @@ export default function Settings() {
 
         try {
 
-            const data = await getSettings();
+            const [data, myGitHub] = await Promise.all([
+                getSettings(),
+                getMyGitHubSettings()
+            ]);
 
             setGithubRepoUrl(
-                data.gitHubOwner && data.gitHubRepository
-                    ? `https://github.com/${data.gitHubOwner}/${data.gitHubRepository}`
+                myGitHub.gitHubOwner && myGitHub.gitHubRepository
+                    ? `https://github.com/${myGitHub.gitHubOwner}/${myGitHub.gitHubRepository}`
                     : ""
             );
-            setGithubTokenConfigured(!!data.gitHubTokenConfigured);
+            setGithubTokenConfigured(!!myGitHub.gitHubTokenConfigured);
 
             setDockerRegistry(data.dockerRegistry || "");
             setDockerUsername(data.dockerUsername || "");
@@ -284,7 +289,7 @@ export default function Settings() {
 
             setSavingGitHub(true);
 
-            await saveGitHubSettings({
+            await saveMyGitHubSettings({
                 owner: parsed.owner,
                 repository: parsed.repository,
                 personalAccessToken: githubToken || null
@@ -421,12 +426,16 @@ export default function Settings() {
 
         try {
 
-            await clearSettings(section);
-
             if (section === "github") {
+                await clearMyGitHubToken();
                 setGithubToken("");
                 refreshOauthStatus();
+                toast.show(`${label} cleared.`, "success");
+                load();
+                return;
             }
+
+            await clearSettings(section);
 
             if (section === "docker") {
                 setDockerPassword("");
@@ -458,10 +467,11 @@ export default function Settings() {
     async function handleClearAll() {
 
         if (!(await confirm({
-            title: "Clear all data?",
+            title: "Clear all shared settings?",
             message:
-                "Clear ALL saved data? This removes the GitHub repository URL and token, " +
-                "Docker credentials, OAuth settings, and the admin allowlist. This cannot be undone.",
+                "Clear ALL shared portal settings? This removes the Docker credentials, OAuth " +
+                "settings, and the admin allowlist. It does not touch anyone's own GitHub repo/token " +
+                "— clear those individually from the GitHub section above. This cannot be undone.",
             confirmLabel: "Clear All Data",
             danger: true
         }))) {
@@ -601,14 +611,15 @@ export default function Settings() {
                 </h2>
 
                 <p className="empty-state" style={{ padding: "0 0 15px", textAlign: "left" }}>
-                    Everything the backend needs to call GitHub and Docker on the portal's
-                    behalf, saved server-side in a gitignored local config file — never
-                    stored in the browser.
+                    Saved server-side in a gitignored local config file — never stored in the
+                    browser. Your GitHub repo and token below are yours alone; every other
+                    user of this portal configures their own. Docker, OAuth, and the admin
+                    allowlist further down are shared by the whole portal instead.
                 </p>
 
                 <div className="settings-subsection">
 
-                <h3 className="settings-subhead">GitHub</h3>
+                <h3 className="settings-subhead">Your GitHub Access</h3>
 
                 {githubTokenConfigured && (
 

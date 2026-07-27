@@ -8,7 +8,7 @@ import AccountAvatar from "../common/AccountAvatar";
 import ActivityBell from "./ActivityBell";
 import { getRateLimit } from "../../services/githubService";
 import { getPullRequestCount } from "../../services/pullRequestsService";
-import { getSettings } from "../../services/settingsService";
+import { getMyGitHubSettings } from "../../services/settingsService";
 
 // The slim top strip: brand mark on the left, account/rate-limit controls
 // on the right. Primary navigation and the theme toggle both live in
@@ -23,11 +23,19 @@ export default function TopBar() {
     const [prCount, setPrCount] = useState(0);
     const [repoName, setRepoName] = useState("");
 
-    // One-time fetch — the repo only changes via the Settings page saving
-    // new GitHub settings, which already does a full page reload afterward.
+    // Re-fetches when the logged-in user changes — each user has their own
+    // configured repo now, so this can't be a one-time fetch on mount the
+    // way it was back when the whole portal shared a single repo. Skipped
+    // entirely while logged out, since an anonymous caller has no "own"
+    // repo to show (the request would just 401).
     useEffect(() => {
 
-        getSettings()
+        if (!user) {
+            setRepoName("");
+            return;
+        }
+
+        getMyGitHubSettings()
             .then((settings) => {
                 if (settings.gitHubOwner && settings.gitHubRepository) {
                     setRepoName(`${settings.gitHubOwner}/${settings.gitHubRepository}`);
@@ -35,7 +43,7 @@ export default function TopBar() {
             })
             .catch((err) => console.error(err));
 
-    }, []);
+    }, [user]);
 
     async function loadRateLimit() {
 

@@ -1,18 +1,50 @@
-using DeploymentAPI.Configuration;
-using Microsoft.Extensions.Options;
-
 namespace DeploymentAPI.Services;
 
+// Resolves the GitHub repo + Personal Access Token to use for the current
+// request. Each portal user configures their own (see SettingsService's
+// per-user credential methods) — this used to read one shared, app-wide
+// value from config, but the portal now supports multiple independent
+// users, each pointed at their own repo with their own token.
+//
+// Scoped, not Singleton: it needs to know who's making the current request.
+// LoadAsync() is called once per request (see the middleware in Program.cs,
+// registered right after UseAuthentication so HttpContext.User is already
+// populated) — that's what keeps CreateClient()/Owner/Repository/HasToken
+// below synchronous, so none of GitHubApiService's/DeploymentService's many
+// call sites needed to change to await them.
 public class GitHubAuthService
 {
-    private readonly IOptionsMonitor<GitHubSettings> _options;
+    private readonly SettingsService _settings;
+    private readonly IHttpContextAccessor _httpContextAccessor;
 
-    public GitHubAuthService(IOptionsMonitor<GitHubSettings> options)
+    private string _owner = string.Empty;
+    private string _repository = string.Empty;
+    private string? _personalAccessToken;
+    private bool _loaded;
+
+    public GitHubAuthService(SettingsService settings, IHttpContextAccessor httpContextAccessor)
     {
-        _options = options;
+        _settings = settings;
+        _httpContextAccessor = httpContextAccessor;
     }
 
-    private GitHubSettings Settings => _options.CurrentValue;
+    public async Task LoadAsync()
+    {
+        if (_loaded) return;
+
+        var login = _httpContextAccessor.HttpContext?.User?.Identity?.Name;
+
+        if (!string.IsNullOrWhiteSpace(login))
+        {
+            var creds = await _settings.GetUserGitHubCredentialsAsync(login);
+
+            _owner = creds.Owner;
+            _repository = creds.Repository;
+            _personalAccessToken = creds.PersonalAccessToken;
+        }
+
+        _loaded = true;
+    }
 
     public HttpClient CreateClient()
     {
@@ -21,11 +53,11 @@ public class GitHubAuthService
         // Skip the header entirely when no token is configured — sending
         // "Bearer " with an empty value gets rejected by GitHub instead of
         // being treated as an anonymous request.
-        if (!string.IsNullOrWhiteSpace(Settings.PersonalAccessToken))
+        if (!string.IsNullOrWhiteSpace(_personalAccessToken))
         {
             client.DefaultRequestHeaders.Add(
                 "Authorization",
-                $"Bearer {Settings.PersonalAccessToken}");
+                $"Bearer {_personalAccessToken}");
         }
 
         client.DefaultRequestHeaders.Add(
@@ -39,9 +71,9 @@ public class GitHubAuthService
         return client;
     }
 
-    public string Owner => Settings.Owner;
+    public string Owner => _owner;
 
-    public string Repository => Settings.Repository;
+    public string Repository => _repository;
 
-    public bool HasToken => !string.IsNullOrWhiteSpace(Settings.PersonalAccessToken);
+    public bool HasToken => !string.IsNullOrWhiteSpace(_personalAccessToken);
 }

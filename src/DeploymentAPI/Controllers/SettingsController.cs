@@ -1,6 +1,7 @@
 using DeploymentAPI.DTOs;
 using DeploymentAPI.Helpers;
 using DeploymentAPI.Services;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace DeploymentAPI.Controllers;
@@ -56,22 +57,58 @@ public class SettingsController : ControllerBase
         return Ok(await _github.PreviewRepositoryAsync(owner, repository));
     }
 
-    // Changing credentials or the admin allowlist is restricted to admins —
-    // without this, any anonymous visitor could overwrite the GitHub PAT,
-    // point the OAuth app at their own client, or add their own GitHub
-    // username to the admin list. The one exception is a fresh, unconfigured
-    // instance (no admin designated yet): the first person to visit Settings
-    // has to be able to configure it without a login that, before any admin
-    // exists, nobody could have obtained. See AdminGate for the shared rule.
+    // Every logged-in user manages their own GitHub repo + token — no
+    // AdminGate here, since this is that user's own data, not a shared
+    // portal-wide setting. [Authorize] is all that's needed: User.Identity
+    // .Name is always populated for an authenticated request (see
+    // AuthService.IssueJwt).
 
-    [HttpPost("github")]
-    public async Task<IActionResult> SaveGitHub(GitHubSettingsUpdateDto request)
+    [Authorize]
+    [HttpGet("me/github")]
+    public async Task<IActionResult> GetMyGitHub()
     {
-        if (await AdminGate.DenyUnlessAdminAsync(this, _settings, "change settings") is IActionResult denied)
-            return denied;
+        var creds = await _settings.GetUserGitHubCredentialsAsync(User.Identity!.Name!);
 
-        return Ok(await _settings.SaveGitHubAsync(request));
+        return Ok(new
+        {
+            GitHubOwner = creds.Owner,
+            GitHubRepository = creds.Repository,
+            GitHubTokenConfigured = creds.TokenConfigured,
+            IsConfigured = creds.IsConfigured
+        });
     }
+
+    [Authorize]
+    [HttpPost("me/github")]
+    public async Task<IActionResult> SaveMyGitHub(GitHubSettingsUpdateDto request)
+    {
+        var creds = await _settings.SaveUserGitHubCredentialsAsync(User.Identity!.Name!, request);
+
+        return Ok(new
+        {
+            GitHubOwner = creds.Owner,
+            GitHubRepository = creds.Repository,
+            GitHubTokenConfigured = creds.TokenConfigured,
+            IsConfigured = creds.IsConfigured
+        });
+    }
+
+    [Authorize]
+    [HttpDelete("me/github")]
+    public async Task<IActionResult> ClearMyGitHubToken()
+    {
+        await _settings.ClearUserGitHubTokenAsync(User.Identity!.Name!);
+        return Ok();
+    }
+
+    // Changing shared, portal-wide credentials or the admin allowlist is
+    // restricted to admins — without this, any anonymous visitor could
+    // point the Docker registry at their own account, point the OAuth app
+    // at their own client, or add their own GitHub username to the admin
+    // list. The one exception is a fresh, unconfigured instance (no admin
+    // designated yet): the first person to visit Settings has to be able
+    // to configure it without a login that, before any admin exists,
+    // nobody could have obtained. See AdminGate for the shared rule.
 
     [HttpPost("docker")]
     public async Task<IActionResult> SaveDocker(DockerSettingsUpdateDto request)
