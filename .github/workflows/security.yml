@@ -5,7 +5,7 @@ on:
 
   push:
     branches:
-      - S_21_P2
+      - master
     paths:
       - 'src/SecurityAPI/**'
       - 'config/patch.config'
@@ -115,6 +115,12 @@ jobs:
         with:
           fetch-depth: 0
           ref: ${{ github.ref_name }}
+          # The default GITHUB_TOKEN can't push past master's branch
+          # protection (it isn't on the ruleset's bypass list) — a PAT
+          # belonging to an account that IS allowed to bypass (e.g. the
+          # repo owner) is what makes the pushes below actually succeed.
+          # Add one under Settings > Secrets and variables > Actions.
+          token: ${{ secrets.PUSH_PAT }}
 
       - name: Download Publish Files
         uses: actions/download-artifact@v4
