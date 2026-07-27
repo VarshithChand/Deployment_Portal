@@ -145,6 +145,12 @@ public class SettingsController : ControllerBase
 
         try
         {
+            if (section == "all")
+            {
+                var key = PortalIdentity.GetOrCreateKey(HttpContext);
+                return Ok(await _settings.ClearAllAsync(key));
+            }
+
             return Ok(await _settings.ClearAsync(section));
         }
         catch (ArgumentException ex)

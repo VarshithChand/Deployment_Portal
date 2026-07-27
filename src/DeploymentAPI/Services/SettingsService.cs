@@ -160,17 +160,21 @@ public class SettingsService
 
     // Unlike a per-section clear (which only removes the secret, leaving the
     // registry / client ID in place), "all" wipes every shared, portal-wide
-    // section entirely — resetting the portal back to its unconfigured,
-    // first-run state. Per-user GitHub credentials aren't touched by this
-    // (each user manages their own), and Jwt is deliberately left alone so
-    // existing sessions/cookies stay valid.
-    public async Task<SettingsViewDto> ClearAllAsync()
+    // section entirely, plus the caller's own GitHub repo/token — resetting
+    // both back to unconfigured, first-run state. Only the CALLER's own
+    // entry in UserGitHubCredentials is removed (other users' stay intact —
+    // "all" for one visitor never reaches into another's data). Jwt is
+    // deliberately left alone so existing sessions/cookies stay valid.
+    public async Task<SettingsViewDto> ClearAllAsync(string callerKey)
     {
         var root = await ReadRootAsync();
 
         root.Remove("Docker");
         root.Remove("GitHubOAuth");
         root.Remove("Auth");
+
+        if (root["UserGitHubCredentials"] is JObject users)
+            users.Remove(callerKey);
 
         await WriteRootAsync(root);
 
@@ -181,9 +185,6 @@ public class SettingsService
 
     public async Task<SettingsViewDto> ClearAsync(string section)
     {
-        if (section == "all")
-            return await ClearAllAsync();
-
         if (!SectionInfo.TryGetValue(section, out var info))
             throw new ArgumentException($"Unknown settings section '{section}'.");
 

@@ -467,11 +467,11 @@ export default function Settings() {
     async function handleClearAll() {
 
         if (!(await confirm({
-            title: "Clear all shared settings?",
+            title: "Clear all data?",
             message:
-                "Clear ALL shared portal settings? This removes the Docker credentials, OAuth " +
-                "settings, and the admin allowlist. It does not touch anyone's own GitHub repo/token " +
-                "— clear those individually from the GitHub section above. This cannot be undone.",
+                "Clear ALL saved data? This removes your GitHub repository URL and token, the " +
+                "Docker credentials, OAuth settings, and the admin allowlist. Other users' own " +
+                "GitHub repo/token are untouched — this only clears yours. This cannot be undone.",
             confirmLabel: "Clear All Data",
             danger: true
         }))) {
