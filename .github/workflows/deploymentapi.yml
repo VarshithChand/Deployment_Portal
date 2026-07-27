@@ -99,7 +99,10 @@ jobs:
       - build
 
     concurrency:
-      group: deploymentapi-artifact-${{ github.ref }}
+      # Shared across all four artifact-build workflows (not per-service)
+      # because they all now commit onto the same 'artifacts' branch —
+      # letting two of them push at once would race on that one ref.
+      group: artifacts-branch-push
       cancel-in-progress: false
 
     runs-on: ubuntu-latest
@@ -145,17 +148,28 @@ jobs:
         run: |
           git config user.name "sam"
           git config user.email "sam@github-actions.local"
-          git checkout ${GITHUB_REF_NAME}
 
-      - name: Sync With Remote
+      - name: Checkout Artifacts Branch
         shell: bash
+        env:
+          ARTIFACT_BRANCH: artifacts
         run: |
+          # Artifact rotation commits live on their own branch instead of
+          # master, so master's history stays free of generated zip/rotation
+          # commits — merge this branch in, or delete it, whenever you want.
+          #
           # Because this job runs one-at-a-time (see concurrency group above),
           # this is guaranteed to be the latest state before we start
           # rotating/committing. We never rebase after this point, so binary
           # zip renames can never conflict.
-          git fetch origin ${GITHUB_REF_NAME}
-          git reset --hard origin/${GITHUB_REF_NAME}
+          if git ls-remote --exit-code --heads origin "$ARTIFACT_BRANCH" >/dev/null 2>&1; then
+            git fetch origin "$ARTIFACT_BRANCH"
+            git checkout -B "$ARTIFACT_BRANCH" "origin/$ARTIFACT_BRANCH"
+          else
+            # First run: no artifacts branch yet — branch it off whatever
+            # commit triggered this workflow.
+            git checkout -B "$ARTIFACT_BRANCH"
+          fi
 
       - name: Capture Previous Commit Messages
         shell: bash
@@ -239,22 +253,24 @@ jobs:
 
       - name: Push Commits
         shell: bash
+        env:
+          ARTIFACT_BRANCH: artifacts
         run: |
           # No rebase here on purpose: rebasing replays commits that rename
           # binary zip files, which Git cannot auto-merge and which caused
           # the rename/rename conflicts. The concurrency group plus the
-          # "Sync With Remote" step already guarantee we're pushing on top
-          # of the true latest commit, so a plain push should always be a
-          # fast-forward. We still retry a few times for transient network
-          # issues only.
+          # "Checkout Artifacts Branch" step already guarantee we're pushing
+          # on top of the true latest commit, so a plain push should always
+          # be a fast-forward. We still retry a few times for transient
+          # network issues only.
           for i in 1 2 3
           do
-            if git push origin ${GITHUB_REF_NAME}; then
+            if git push origin "$ARTIFACT_BRANCH"; then
               echo "Push Successful"
               exit 0
             fi
             echo "Push rejected or failed. Fetching latest and retrying ($i)..."
-            git fetch origin ${GITHUB_REF_NAME}
+            git fetch origin "$ARTIFACT_BRANCH"
             sleep 2
           done
 
