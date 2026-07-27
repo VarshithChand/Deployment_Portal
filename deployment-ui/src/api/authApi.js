@@ -1,7 +1,3 @@
-import axios from "axios";
-import { API_BASE } from "./apiBase";
+import { createApiClient } from "./apiBase";
 
-export default axios.create({
-    baseURL: `${API_BASE}/api/auth`,
-    withCredentials: true
-});
+export default createApiClient("/api/auth");

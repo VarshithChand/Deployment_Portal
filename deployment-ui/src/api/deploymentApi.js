@@ -1,9 +1,6 @@
-import axios from "axios";
-import { API_BASE } from "./apiBase";
+import { createApiClient } from "./apiBase";
 
-const deploymentApi = axios.create({
-    baseURL: `${API_BASE}/api/deployment`,
-    withCredentials: true,
+const deploymentApi = createApiClient("/api/deployment", {
     headers: {
         "Content-Type": "application/json"
     }

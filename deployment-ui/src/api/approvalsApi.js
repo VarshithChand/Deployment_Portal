@@ -1,11 +1,5 @@
-import axios from "axios";
-import { API_BASE } from "./apiBase";
+import { createApiClient } from "./apiBase";
 
-const approvalsApi = axios.create({
-
-    baseURL: `${API_BASE}/api/approvals`,
-    withCredentials: true
-
-});
+const approvalsApi = createApiClient("/api/approvals");
 
 export default approvalsApi;

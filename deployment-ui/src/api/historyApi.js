@@ -1,11 +1,5 @@
-import axios from "axios";
-import { API_BASE } from "./apiBase";
+import { createApiClient } from "./apiBase";
 
-const historyApi = axios.create({
-
-    baseURL: `${API_BASE}/api/history`,
-    withCredentials: true
-
-});
+const historyApi = createApiClient("/api/history");
 
 export default historyApi;
