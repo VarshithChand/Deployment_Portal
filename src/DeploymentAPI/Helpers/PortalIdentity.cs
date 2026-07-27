@@ -2,12 +2,16 @@ using Microsoft.AspNetCore.Http;
 
 namespace DeploymentAPI.Helpers;
 
-// Resolves which stored GitHub credentials this request should use. Prefers
-// a real GitHub OAuth login when one exists (so it survives across devices,
-// and ties into the Admin/Viewer allowlist); otherwise falls back to a
-// per-browser session id. That fallback is what lets the portal work — each
-// visitor getting their own isolated repo + token — without anyone needing
-// to set up or complete a GitHub OAuth App first.
+// Resolves which stored GitHub credentials this request should use — always
+// the current browser/device's own per-session id, NEVER the GitHub OAuth
+// login. Those are deliberately kept separate: a GitHub login (see
+// AdminGate/AuthorizationSettings) decides what someone is *allowed to do*
+// (Admin vs Viewer), but which repo + token a given browser points at is
+// purely local to that browser. Keying credentials off the login instead
+// would mean logging into the same GitHub account from a second laptop
+// shares (and can silently overwrite) the first laptop's saved repo/token —
+// exactly the cross-device leak this is here to prevent. Every browser gets
+// its own isolated slot regardless of who, if anyone, is logged in.
 //
 // The session id itself is preferably read from the X-Session-Id header
 // (see deployment-ui's apiBase.js: a random id generated once and kept in
@@ -18,9 +22,6 @@ namespace DeploymentAPI.Helpers;
 // regardless of SameSite/Secure. The cookie fallback below only still
 // exists for same-origin setups (the Docker/nginx build, local dev via
 // Vite's proxy) or any client that isn't sending the header.
-//
-// The two identity spaces are prefixed ("gh:" vs "sess:") so a session id
-// can never collide with a real GitHub username.
 //
 // Memoized on HttpContext.Items so every caller within one request (the
 // GitHubAuthService-loading middleware, then whichever controller action
@@ -36,17 +37,9 @@ public static class PortalIdentity
         if (context.Items.TryGetValue(ItemsKey, out var cached) && cached is string cachedKey)
             return cachedKey;
 
-        var login = context.User?.Identity?.IsAuthenticated == true
-            ? context.User.Identity?.Name
-            : null;
-
         string key;
 
-        if (!string.IsNullOrWhiteSpace(login))
-        {
-            key = $"gh:{login}";
-        }
-        else if (context.Request.Headers.TryGetValue(SessionHeaderName, out var headerValue)
+        if (context.Request.Headers.TryGetValue(SessionHeaderName, out var headerValue)
             && !string.IsNullOrWhiteSpace(headerValue))
         {
             key = $"sess:{headerValue}";
