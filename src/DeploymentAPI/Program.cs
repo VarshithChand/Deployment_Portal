@@ -8,6 +8,7 @@ using Microsoft.IdentityModel.Tokens;
 var builder = WebApplication.CreateBuilder(args);
 
 //
+//
 // Configuration
 // appsettings.Local.json holds real secrets (GitHub PAT) and is gitignored;
 // it overrides the placeholder values checked into appsettings.json.
