@@ -77,17 +77,20 @@ export default function RequireGitHubSetup({ children }) {
             });
 
             toast.show(`Connected to ${parsed.owner}/${parsed.repository}.`, "success");
-            setConfigured(true);
+
+            // Full reload, not just dismissing the popup — Dashboard and
+            // every other page already mounted and fetched (and failed,
+            // with no repo configured yet) the moment this popup appeared
+            // behind it, and none of them know to refetch on their own just
+            // because this component's local state changes. Same reasoning
+            // as Settings.jsx's own save button.
+            setTimeout(() => window.location.reload(), 900);
 
         }
         catch (err) {
 
             console.error(err);
             toast.show(err.response?.data?.message || "Failed to save GitHub settings.", "error");
-
-        }
-        finally {
-
             setSaving(false);
 
         }
