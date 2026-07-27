@@ -1,13 +1,15 @@
 using DeploymentAPI.Helpers;
 using DeploymentAPI.Services;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace DeploymentAPI.Controllers;
 
 // Open pull requests to review/merge, plus a closed/merged history and
-// recent commit log. Listing is open to any caller (same as the rest of
-// this app's read endpoints); approving/merging is admin-gated the same
-// way every other mutating action against GitHub is.
+// recent commit log. Every action requires a logged-in, allowlisted user;
+// approving/merging is further admin-gated the same way every other
+// mutating action against GitHub is.
+[Authorize]
 [ApiController]
 [Route("api/pull-requests")]
 public class PullRequestsController : ControllerBase

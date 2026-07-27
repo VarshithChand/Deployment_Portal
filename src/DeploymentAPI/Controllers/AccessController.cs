@@ -2,15 +2,17 @@ using System.Security.Claims;
 using DeploymentAPI.DTOs;
 using DeploymentAPI.Helpers;
 using DeploymentAPI.Services;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace DeploymentAPI.Controllers;
 
 // Repository access management — invite/remove collaborators, assign
 // permission levels, and note a branch's purpose or restrict who can
-// push to it. Listing is open to any caller (same as GitHubController's
-// branch/repo endpoints); every action that changes real GitHub state or
-// the locally-stored branch notes is admin-gated.
+// push to it. Every action requires a logged-in, allowlisted user (see
+// AuthorizationSettings); on top of that, every action that changes real
+// GitHub state or the locally-stored branch notes is further admin-gated.
+[Authorize]
 [ApiController]
 [Route("api/access")]
 public class AccessController : ControllerBase

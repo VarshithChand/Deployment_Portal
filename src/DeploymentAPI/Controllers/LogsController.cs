@@ -1,8 +1,10 @@
 using DeploymentAPI.Services;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace DeploymentAPI.Controllers;
 
+[Authorize]
 [ApiController]
 [Route("api/logs")]
 public class LogsController : ControllerBase

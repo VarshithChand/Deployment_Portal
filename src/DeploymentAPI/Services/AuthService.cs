@@ -74,8 +74,23 @@ public class AuthService
         var userJson = JObject.Parse(await userResponse.Content.ReadAsStringAsync());
         var login = userJson["login"]?.ToString() ?? string.Empty;
 
-        var isAdmin = _authzOptions.CurrentValue.AdminGitHubUsernames
+        var authz = _authzOptions.CurrentValue;
+
+        var isAdmin = authz.AdminGitHubUsernames
             .Any(u => string.Equals(u, login, StringComparison.OrdinalIgnoreCase));
+
+        var isAllowedViewer = authz.ViewerGitHubUsernames
+            .Any(u => string.Equals(u, login, StringComparison.OrdinalIgnoreCase));
+
+        // Both lists empty means the portal hasn't been configured yet
+        // (bootstrap mode) — let anyone finish the login so a first admin
+        // can actually get in. Once either list has an entry, only the
+        // usernames on them may proceed; everyone else is rejected here,
+        // before a token is ever issued.
+        var allowlistConfigured = authz.AdminGitHubUsernames.Count > 0 || authz.ViewerGitHubUsernames.Count > 0;
+
+        if (allowlistConfigured && !isAdmin && !isAllowedViewer)
+            throw new UnauthorizedAccessException($"GitHub user '{login}' is not on the allowlist for this portal.");
 
         return (login, isAdmin ? "Admin" : "Viewer");
     }

@@ -79,6 +79,8 @@ export default function AuthProvider({ children }) {
             toast.show(
                 authError === "invalid_state"
                     ? "Login session expired, please try again."
+                    : authError === "not_allowed"
+                    ? "Your GitHub account isn't authorized to access this portal."
                     : "GitHub login failed.",
                 "error"
             );

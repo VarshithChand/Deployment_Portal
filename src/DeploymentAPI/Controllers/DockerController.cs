@@ -4,6 +4,7 @@ using DeploymentAPI.DTOs;
 using DeploymentAPI.Helpers;
 using DeploymentAPI.Services;
 
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace DeploymentAPI.Controllers;
@@ -13,6 +14,13 @@ namespace DeploymentAPI.Controllers;
 // endpoints, is admin-gated. Unlike GET /api/settings this has no safe
 // public view: listing containers hands out the full inventory of
 // whatever's running on the host, not just this portal's own services.
+// [Authorize] closes the gap AdminGate.IsAdminOrBootstrap leaves open: in
+// bootstrap mode (empty admin list) that check treats everyone as admin,
+// so without a real login requirement here, an unconfigured deployment
+// would leave Docker management reachable with no login at all. Populate
+// Auth:AdminGitHubUsernames to leave bootstrap mode and get real Admin-only
+// enforcement.
+[Authorize]
 [ApiController]
 [Route("api/docker")]
 public class DockerController : ControllerBase

@@ -1,10 +1,17 @@
 using DeploymentAPI.DTOs;
 using DeploymentAPI.Helpers;
 using DeploymentAPI.Services;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace DeploymentAPI.Controllers;
 
+// [Authorize] by default like every other controller — the one exception
+// is Get() below, which the frontend calls before login even happens (to
+// decide whether to show a "Login with GitHub" button at all). It's
+// already safe to expose anonymously: see SettingsViewDto, secrets are
+// never echoed back, only whether one has been saved.
+[Authorize]
 [ApiController]
 [Route("api/settings")]
 public class SettingsController : ControllerBase
@@ -18,6 +25,7 @@ public class SettingsController : ControllerBase
         _github = github;
     }
 
+    [AllowAnonymous]
     [HttpGet]
     public async Task<IActionResult> Get()
     {

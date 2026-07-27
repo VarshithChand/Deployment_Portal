@@ -64,6 +64,10 @@ public class AuthController : ControllerBase
 
             return Redirect(frontendUrl);
         }
+        catch (UnauthorizedAccessException)
+        {
+            return Redirect($"{frontendUrl}?authError=not_allowed");
+        }
         catch (Exception)
         {
             return Redirect($"{frontendUrl}?authError=login_failed");

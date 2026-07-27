@@ -1,10 +1,12 @@
 using DeploymentAPI.DTOs;
 using DeploymentAPI.Helpers;
 using DeploymentAPI.Services;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace DeploymentAPI.Controllers;
 
+[Authorize]
 [ApiController]
 [Route("api/approvals")]
 public class ApprovalsController : ControllerBase
