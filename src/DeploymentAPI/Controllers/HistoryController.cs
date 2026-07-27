@@ -1,10 +1,8 @@
 using DeploymentAPI.Services;
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace DeploymentAPI.Controllers;
 
-[Authorize]
 [ApiController]
 [Route("api/history")]
 public class HistoryController : ControllerBase

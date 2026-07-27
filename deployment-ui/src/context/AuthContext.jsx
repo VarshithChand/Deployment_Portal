@@ -1,7 +1,7 @@
 import { createContext, useCallback, useEffect, useState } from "react";
 
 import { getMe, logout as logoutRequest } from "../services/authService";
-import { getSettings } from "../services/settingsService";
+import { getSettings, getMyGitHubSettings } from "../services/settingsService";
 import { getTokenOwner } from "../services/githubService";
 import { API_BASE } from "../api/apiBase";
 import useToast from "../hooks/useToast";
@@ -27,20 +27,25 @@ export default function AuthProvider({ children }) {
 
     }, []);
 
-    // Covers both GitHub OAuth login and the Personal Access Token the
-    // backend uses to call the GitHub API — pages that gate an action behind
-    // "is a PAT configured" (e.g. triggering a deployment) read that here too.
+    // Covers both GitHub OAuth login and the Personal Access Token this
+    // caller (a real login, or an anonymous per-browser session — see
+    // PortalIdentity) has configured for their own repo — pages that gate
+    // an action behind "is a PAT configured" (e.g. triggering a deployment)
+    // read that here too.
     const refreshOauthStatus = useCallback(async () => {
 
         try {
 
-            const settings = await getSettings();
+            const [settings, myGitHub] = await Promise.all([
+                getSettings(),
+                getMyGitHubSettings()
+            ]);
 
             setOauthConfigured(
                 !!settings.gitHubOAuthClientId && !!settings.gitHubOAuthClientSecretConfigured
             );
 
-            const hasToken = !!settings.gitHubTokenConfigured;
+            const hasToken = !!myGitHub.gitHubTokenConfigured;
             setGithubTokenConfigured(hasToken);
 
             if (hasToken) {

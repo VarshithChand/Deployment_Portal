@@ -23,23 +23,19 @@ export default function TopBar() {
     const [prCount, setPrCount] = useState(0);
     const [repoName, setRepoName] = useState("");
 
-    // Re-fetches when the logged-in user changes — each user has their own
-    // configured repo now, so this can't be a one-time fetch on mount the
-    // way it was back when the whole portal shared a single repo. Skipped
-    // entirely while logged out, since an anonymous caller has no "own"
-    // repo to show (the request would just 401).
+    // Re-fetches when the logged-in user changes — each caller (a real
+    // login, or an anonymous per-browser session — see PortalIdentity) has
+    // their own configured repo now, so this can't be a one-time fetch on
+    // mount the way it was back when the whole portal shared a single repo.
     useEffect(() => {
-
-        if (!user) {
-            setRepoName("");
-            return;
-        }
 
         getMyGitHubSettings()
             .then((settings) => {
-                if (settings.gitHubOwner && settings.gitHubRepository) {
-                    setRepoName(`${settings.gitHubOwner}/${settings.gitHubRepository}`);
-                }
+                setRepoName(
+                    settings.gitHubOwner && settings.gitHubRepository
+                        ? `${settings.gitHubOwner}/${settings.gitHubRepository}`
+                        : ""
+                );
             })
             .catch((err) => console.error(err));
 

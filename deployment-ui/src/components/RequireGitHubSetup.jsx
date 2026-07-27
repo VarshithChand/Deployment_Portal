@@ -2,25 +2,23 @@ import { useEffect, useState } from "react";
 
 import { getMyGitHubSettings, saveMyGitHubSettings } from "../services/settingsService";
 import parseRepoUrl from "../utils/parseRepoUrl";
-import useAuth from "../hooks/useAuth";
 import useToast from "../hooks/useToast";
 import ClearableInput from "./common/ClearableInput";
 import Logo from "./common/Logo";
 import LoadingSpinner from "./LoadingSpinner";
 
 // Blocks every other page behind a one-time "point this at your repo" form.
-// Every portal user brings their own GitHub repo + token now (see
+// Every portal visitor brings their own GitHub repo + token now (see
 // SettingsController's api/settings/me/github) instead of the whole portal
-// sharing one — this is where a user who hasn't set theirs up yet is asked
+// sharing one — this is where anyone who hasn't set theirs up yet is asked
 // for it, before they can reach anything else.
 //
-// Only applies once someone is actually logged in: an anonymous "Public
-// view" visitor has no account to attach credentials to, so they pass
-// straight through to whatever anonymous browsing the rest of the app
-// still allows (e.g. the Public Repository Lookup card).
+// Not gated on GitHub OAuth login: api/settings/me/github works for anyone,
+// logged in or not — PortalIdentity resolves an isolated anonymous session
+// for whoever hasn't logged in, so this pops up for literally every first
+// visit, no OAuth App setup required to get past it.
 export default function RequireGitHubSetup({ children }) {
 
-    const { user, loading: authLoading } = useAuth();
     const toast = useToast();
 
     const [checking, setChecking] = useState(true);
@@ -32,15 +30,7 @@ export default function RequireGitHubSetup({ children }) {
 
     useEffect(() => {
 
-        if (authLoading) return;
-
-        if (!user) {
-            setChecking(false);
-            return;
-        }
-
         let cancelled = false;
-        setChecking(true);
 
         getMyGitHubSettings()
             .then((settings) => {
@@ -58,7 +48,7 @@ export default function RequireGitHubSetup({ children }) {
             cancelled = true;
         };
 
-    }, [user, authLoading]);
+    }, []);
 
     async function handleSave(e) {
 
@@ -111,9 +101,9 @@ export default function RequireGitHubSetup({ children }) {
 
         <>
 
-            {authLoading || checking ? <LoadingSpinner /> : children}
+            {checking ? <LoadingSpinner /> : children}
 
-            {!authLoading && !checking && user && !configured && (
+            {!checking && !configured && (
 
                 <div className="dialog-backdrop">
 

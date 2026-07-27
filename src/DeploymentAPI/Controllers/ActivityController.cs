@@ -1,13 +1,11 @@
 using DeploymentAPI.Services;
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace DeploymentAPI.Controllers;
 
 // Recent GitHub activity (commits + workflow runs) for the TopBar
-// notification bell — read-only, but still requires a logged-in,
-// allowlisted user like every other controller here.
-[Authorize]
+// notification bell — scoped to whatever repo/token PortalIdentity
+// resolved for this caller (see GitHubAuthService), no login required.
 [ApiController]
 [Route("api/activity")]
 public class ActivityController : ControllerBase

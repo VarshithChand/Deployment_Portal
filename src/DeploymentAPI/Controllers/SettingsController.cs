@@ -1,7 +1,6 @@
 using DeploymentAPI.DTOs;
 using DeploymentAPI.Helpers;
 using DeploymentAPI.Services;
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace DeploymentAPI.Controllers;
@@ -57,17 +56,18 @@ public class SettingsController : ControllerBase
         return Ok(await _github.PreviewRepositoryAsync(owner, repository));
     }
 
-    // Every logged-in user manages their own GitHub repo + token — no
-    // AdminGate here, since this is that user's own data, not a shared
-    // portal-wide setting. [Authorize] is all that's needed: User.Identity
-    // .Name is always populated for an authenticated request (see
-    // AuthService.IssueJwt).
+    // Every visitor manages their own GitHub repo + token — no AdminGate,
+    // no [Authorize], no GitHub OAuth login required at all. PortalIdentity
+    // resolves who's asking: a real GitHub login if one exists, otherwise
+    // an anonymous per-browser session cookie it creates on the spot. That's
+    // what lets this work immediately for anyone, isolated from every other
+    // visitor, without anyone needing to set up (or complete) an OAuth App.
 
-    [Authorize]
     [HttpGet("me/github")]
     public async Task<IActionResult> GetMyGitHub()
     {
-        var creds = await _settings.GetUserGitHubCredentialsAsync(User.Identity!.Name!);
+        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var creds = await _settings.GetUserGitHubCredentialsAsync(key);
 
         return Ok(new
         {
@@ -78,11 +78,11 @@ public class SettingsController : ControllerBase
         });
     }
 
-    [Authorize]
     [HttpPost("me/github")]
     public async Task<IActionResult> SaveMyGitHub(GitHubSettingsUpdateDto request)
     {
-        var creds = await _settings.SaveUserGitHubCredentialsAsync(User.Identity!.Name!, request);
+        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var creds = await _settings.SaveUserGitHubCredentialsAsync(key, request);
 
         return Ok(new
         {
@@ -93,11 +93,11 @@ public class SettingsController : ControllerBase
         });
     }
 
-    [Authorize]
     [HttpDelete("me/github")]
     public async Task<IActionResult> ClearMyGitHubToken()
     {
-        await _settings.ClearUserGitHubTokenAsync(User.Identity!.Name!);
+        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        await _settings.ClearUserGitHubTokenAsync(key);
         return Ok();
     }
 
