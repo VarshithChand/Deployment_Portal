@@ -21,8 +21,27 @@ public static class AdminGate
         view.AdminGitHubUsernames.Count == 0
         || (controller.User.Identity?.IsAuthenticated == true && controller.User.IsInRole("Admin"));
 
+    // CSRF guard: the actual authorization above relies on the portal_token
+    // cookie, which is SameSite=None (required so the separately-hosted
+    // frontend's cross-origin requests carry it at all) — meaning it's
+    // attached to literally any cross-site request a browser sends,
+    // including a plain <form> POST from an attacker's page, with no
+    // JavaScript and no CORS preflight involved at all. Every legitimate
+    // request from this app's own frontend always carries X-Session-Id
+    // (see apiBase.js's interceptor — sent on every call regardless of
+    // login state), which a bare HTML form can never set. Requiring its
+    // presence blocks that attack outright without needing separate
+    // CSRF-token infrastructure: a forged form has no way to add it, and a
+    // forged fetch()/XHR that tried to would trigger a CORS preflight this
+    // app's origin allowlist already rejects for any untrusted site.
+    private static bool HasSessionHeader(ControllerBase controller) =>
+        controller.Request.Headers.ContainsKey("X-Session-Id");
+
     public static async Task<IActionResult?> DenyUnlessAdminAsync(ControllerBase controller, SettingsService settings, string action)
     {
+        if (!HasSessionHeader(controller))
+            return controller.StatusCode(403, new { message = "Missing required request header." });
+
         var view = await settings.GetViewAsync();
 
         if (IsAdminOrBootstrap(controller, view))
