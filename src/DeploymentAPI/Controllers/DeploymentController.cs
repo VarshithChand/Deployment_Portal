@@ -1,12 +1,13 @@
 using DeploymentAPI.DTOs;
 using DeploymentAPI.Helpers;
 using DeploymentAPI.Services;
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace DeploymentAPI.Controllers;
 
-[Authorize]
+// No class-level [Authorize]: Deploy() already runs through AdminGate,
+// which is bootstrap-aware (see AdminGate/SettingsController) — a blanket
+// attribute here would block that intentional bootstrap flow.
 [ApiController]
 [Route("api/deployment")]
 public class DeploymentController : ControllerBase

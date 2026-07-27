@@ -9,10 +9,12 @@ namespace DeploymentAPI.Controllers;
 
 // Repository access management — invite/remove collaborators, assign
 // permission levels, and note a branch's purpose or restrict who can
-// push to it. Every action requires a logged-in, allowlisted user (see
-// AuthorizationSettings); on top of that, every action that changes real
-// GitHub state or the locally-stored branch notes is further admin-gated.
-[Authorize]
+// push to it. No class-level [Authorize]: every action that changes real
+// GitHub state or the locally-stored branch notes already runs through
+// AdminGate, which is bootstrap-aware (see AdminGate/SettingsController) —
+// a blanket attribute here would block that intentional bootstrap flow.
+// The plain read actions below get [Authorize] individually instead, since
+// they had no protection at all before.
 [ApiController]
 [Route("api/access")]
 public class AccessController : ControllerBase
@@ -31,6 +33,7 @@ public class AccessController : ControllerBase
     // Lets the Access Levels/Invite pages hide Triage and Maintain up
     // front on a personal-account repo instead of only finding out via a
     // rejected request.
+    [Authorize]
     [HttpGet("repo-info")]
     public async Task<IActionResult> RepoInfo()
     {
@@ -39,6 +42,7 @@ public class AccessController : ControllerBase
 
     // Active collaborators only — used by the Branches page's "restrict who
     // can push" picker, since a pending invite can't push yet regardless.
+    [Authorize]
     [HttpGet("collaborators")]
     public async Task<IActionResult> Collaborators([FromQuery] bool force = false)
     {
@@ -46,6 +50,7 @@ public class AccessController : ControllerBase
     }
 
     // Active + pending combined — what the Access Levels page renders.
+    [Authorize]
     [HttpGet("entries")]
     public async Task<IActionResult> Entries([FromQuery] bool force = false)
     {
@@ -180,6 +185,7 @@ public class AccessController : ControllerBase
         return Ok(await _github.GetBranches(forceRefresh: true));
     }
 
+    [Authorize]
     [HttpGet("branches")]
     public async Task<IActionResult> Branches([FromQuery] bool force = false)
     {

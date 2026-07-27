@@ -6,7 +6,11 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace DeploymentAPI.Controllers;
 
-[Authorize]
+// No class-level [Authorize]: Decide() already runs through AdminGate,
+// which is bootstrap-aware (see AdminGate/SettingsController) — a blanket
+// attribute here would block that intentional bootstrap flow. The plain
+// read actions get [Authorize] individually instead, since they had no
+// protection at all before.
 [ApiController]
 [Route("api/approvals")]
 public class ApprovalsController : ControllerBase
@@ -20,6 +24,7 @@ public class ApprovalsController : ControllerBase
         _settings = settings;
     }
 
+    [Authorize]
     [HttpGet("pending")]
     public async Task<IActionResult> Pending()
     {
@@ -44,6 +49,7 @@ public class ApprovalsController : ControllerBase
         return Ok();
     }
 
+    [Authorize]
     [HttpGet("history")]
     public async Task<IActionResult> History()
     {

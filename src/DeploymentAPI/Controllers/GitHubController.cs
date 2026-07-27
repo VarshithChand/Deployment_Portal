@@ -5,7 +5,11 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace DeploymentAPI.Controllers;
 
-[Authorize]
+// No class-level [Authorize]: DeleteArtifact already runs through
+// AdminGate, which is bootstrap-aware (see AdminGate/SettingsController) —
+// a blanket attribute here would block that intentional bootstrap flow.
+// Every other action gets [Authorize] individually instead, since they had
+// no protection at all before.
 [ApiController]
 [Route("api/github")]
 public class GitHubController : ControllerBase
@@ -19,6 +23,7 @@ public class GitHubController : ControllerBase
         _settings = settings;
     }
 
+    [Authorize]
     [HttpGet("repository")]
     public async Task<IActionResult> Repository([FromQuery] bool force = false)
     {
@@ -28,42 +33,49 @@ public class GitHubController : ControllerBase
         return Content(json, "application/json");
     }
 
+    [Authorize]
     [HttpGet("branches")]
     public async Task<IActionResult> Branches([FromQuery] bool force = false)
     {
         return Ok(await _service.GetBranches(force));
     }
 
+    [Authorize]
     [HttpGet("rate-limit")]
     public async Task<IActionResult> RateLimit()
     {
         return Ok(await _service.GetRateLimitAsync());
     }
 
+    [Authorize]
     [HttpGet("token-owner")]
     public async Task<IActionResult> TokenOwner()
     {
         return Ok(await _service.GetTokenOwnerAsync());
     }
 
+    [Authorize]
     [HttpGet("account-repositories")]
     public async Task<IActionResult> AccountRepositories()
     {
         return Ok(await _service.GetAccountRepositoriesAsync());
     }
 
+    [Authorize]
     [HttpGet("artifacts")]
     public async Task<IActionResult> Artifacts([FromQuery] bool force = false)
     {
         return Ok(await _service.GetArtifacts(force));
     }
 
+    [Authorize]
     [HttpGet("docker-images")]
     public async Task<IActionResult> DockerImages()
     {
         return Ok(await _service.GetDockerImages());
     }
 
+    [Authorize]
     [HttpGet("artifacts/{id}/download")]
     public async Task<IActionResult> DownloadArtifact(long id)
     {
@@ -83,6 +95,7 @@ public class GitHubController : ControllerBase
         return NoContent();
     }
 
+    [Authorize]
     [HttpGet("workflows")]
     public async Task<IActionResult> Workflows([FromQuery] bool force = false)
     {
@@ -90,6 +103,7 @@ public class GitHubController : ControllerBase
         return Content(json, "application/json");
     }
 
+    [Authorize]
     [HttpGet("workflow-inputs")]
     public async Task<IActionResult> WorkflowInputs([FromQuery] string path, [FromQuery] string? branch)
     {
@@ -99,6 +113,7 @@ public class GitHubController : ControllerBase
         return Ok(await _service.GetWorkflowInputsAsync(path, branch));
     }
 
+    [Authorize]
     [HttpGet("workflow-yaml")]
     public async Task<IActionResult> WorkflowYaml([FromQuery] string path, [FromQuery] string? branch)
     {
@@ -109,6 +124,7 @@ public class GitHubController : ControllerBase
         return Ok(new { path, branch, content = yaml });
     }
 
+    [Authorize]
     [HttpGet("workflows/last-run")]
     public async Task<IActionResult> LastRun([FromQuery] string workflow, [FromQuery] string? branch)
     {

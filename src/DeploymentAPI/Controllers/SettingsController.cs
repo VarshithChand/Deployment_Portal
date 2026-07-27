@@ -1,17 +1,20 @@
 using DeploymentAPI.DTOs;
 using DeploymentAPI.Helpers;
 using DeploymentAPI.Services;
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace DeploymentAPI.Controllers;
 
-// [Authorize] by default like every other controller — the one exception
-// is Get() below, which the frontend calls before login even happens (to
-// decide whether to show a "Login with GitHub" button at all). It's
-// already safe to expose anonymously: see SettingsViewDto, secrets are
+// No class-level [Authorize] here on purpose: every mutating action below
+// already runs through AdminGate.DenyUnlessAdminAsync, which is bootstrap-
+// aware (an anonymous caller may configure settings only while the admin
+// allowlist is still empty — see AdminGate). A blanket [Authorize] would sit
+// in front of that check and block the very bootstrap flow it exists for,
+// since nobody could log in before any admin/OAuth app has been configured.
+// Get() is likewise intentionally anonymous — the frontend calls it before
+// login even happens, to decide whether to show a "Login with GitHub"
+// button at all — and it's already safe: see SettingsViewDto, secrets are
 // never echoed back, only whether one has been saved.
-[Authorize]
 [ApiController]
 [Route("api/settings")]
 public class SettingsController : ControllerBase
@@ -25,7 +28,6 @@ public class SettingsController : ControllerBase
         _github = github;
     }
 
-    [AllowAnonymous]
     [HttpGet]
     public async Task<IActionResult> Get()
     {
