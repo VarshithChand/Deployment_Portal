@@ -3,6 +3,7 @@ using System.Text;
 using DeploymentAPI.Configuration;
 using DeploymentAPI.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.IdentityModel.Tokens;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -150,6 +151,25 @@ builder.Services
 builder.Services.AddAuthorization();
 
 var app = builder.Build();
+
+//
+// Forwarded headers — must be the very first middleware. Render (and most
+// PaaS hosts) terminate HTTPS at their own edge and forward plain HTTP to
+// this container, so without this, Request.IsHttps reads false here even
+// though the site is genuinely served over HTTPS. Every cross-site cookie
+// this app sets (portal_token, oauth_state, portal_session) keys its
+// SameSite/Secure attributes off Request.IsHttps — get that wrong and those
+// cookies get set as SameSite=Lax, which browsers silently drop on the
+// cross-site requests a separately-hosted frontend (e.g. Cloudflare Pages/
+// Workers) makes to this API. KnownNetworks/KnownProxies are cleared
+// because Render's proxy isn't a fixed address we can allowlist in advance.
+var forwardedHeaderOptions = new ForwardedHeadersOptions
+{
+    ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto
+};
+forwardedHeaderOptions.KnownNetworks.Clear();
+forwardedHeaderOptions.KnownProxies.Clear();
+app.UseForwardedHeaders(forwardedHeaderOptions);
 
 //
 // Error handling — surface GitHub API failures (rate limits, 404s, etc.) as a
