@@ -6,7 +6,7 @@
     "enabled": true
   },
   "assets": {
-    "directory": "deployment-ui"
+    "directory": "deployment-ui/dist"
   },
   "compatibility_flags": [
     "nodejs_compat"
