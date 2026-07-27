@@ -117,12 +117,9 @@ One command, from the repo root:
 cp .env.example .env
 ```
 
-Open `.env` and fill in your repo details:
-```
-GITHUB_OWNER=your-github-org-or-user
-GITHUB_REPOSITORY=your-repo-name
-GITHUB_PAT=ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-```
+You don't need to fill in a repo/PAT here — once the containers are running,
+open the app and use the "Connect your GitHub repository" popup on first
+visit instead. Every visitor configures their own repo + token that way.
 
 Then build and start both containers:
 ```bash
@@ -175,12 +172,8 @@ part of the repo is needed:
 curl -O https://raw.githubusercontent.com/VarshithChand/yaml/master/docker-compose.prod.yml
 ```
 
-Next to it, create a `.env`:
-```
-GITHUB_OWNER=your-github-org-or-user
-GITHUB_REPOSITORY=your-repo-name
-GITHUB_PAT=ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-```
+No `.env` needed for a repo/PAT — connect to GitHub from inside the app itself
+once it's running (see 5a).
 
 Then:
 ```bash
@@ -199,9 +192,6 @@ of a bind-mounted folder.
 docker network create portal-network
 
 docker run -d --name deployment-api --network portal-network \
-  -e GitHub__Owner=your-github-org-or-user \
-  -e GitHub__Repository=your-repo-name \
-  -e GitHub__PersonalAccessToken=ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx \
   -v deployment-data:/data \
   ghcr.io/varshithchand/deployment-portal-api:latest
 
@@ -249,10 +239,9 @@ it's up and run:
 curl -fsSL https://raw.githubusercontent.com/VarshithChand/yaml/master/scripts/aws/ec2-setup.sh | sudo bash
 ```
 
-It installs Docker + the Compose plugin, pulls `docker-compose.prod.yml`, and — since there's
-no `.env` yet on a fresh instance — stops there with a template `.env` at
-`/opt/deployment-portal/.env` and a printed reminder. SSH in, fill in your real
-`GITHUB_OWNER`/`GITHUB_REPOSITORY`/`GITHUB_PAT`, then:
+It installs Docker + the Compose plugin and pulls `docker-compose.prod.yml`. No `.env`
+values to fill in for GitHub — connect from inside the app itself once it's running (see
+5a). SSH in and start it:
 ```bash
 cd /opt/deployment-portal
 docker compose -f docker-compose.prod.yml up -d

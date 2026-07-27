@@ -45,24 +45,9 @@ cd "$APP_DIR"
 
 curl -fsSL "$COMPOSE_URL" -o docker-compose.prod.yml
 
-if [ ! -f .env ]; then
-  echo "==> Writing a .env template — EDIT THIS before the app will work correctly"
-  cat > .env <<'EOF'
-GITHUB_OWNER=your-github-org-or-user
-GITHUB_REPOSITORY=your-repo-name
-GITHUB_PAT=ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-EOF
-  echo ""
-  echo "############################################################"
-  echo "# $APP_DIR/.env was just created with placeholder values.  #"
-  echo "# Edit it with your real GitHub repo + PAT, then run:      #"
-  echo "#   cd $APP_DIR && docker compose -f docker-compose.prod.yml up -d"
-  echo "############################################################"
-  echo ""
-else
-  echo "==> .env already exists, leaving it as-is"
-fi
-
+# No .env needed for a GitHub repo/PAT — every visitor connects their own
+# from inside the app itself (the "Connect your GitHub repository" popup
+# on first use) once the stack is up.
 echo "==> Pulling images and starting the stack"
 docker compose -f docker-compose.prod.yml pull
 docker compose -f docker-compose.prod.yml up -d

@@ -6,10 +6,11 @@ services:
       # Named volume below, not a bind mount — this file is meant to run
       # standalone (no repo checkout needed), so there's no local
       # ./src/DeploymentAPI/data folder to point at.
+      # GitHub repo + PAT are no longer set here — every visitor configures
+      # their own from the app itself (the "Connect your GitHub repository"
+      # popup on first use), stored per-user/per-session in the file this
+      # path points at instead of one shared, env-configured value.
       SETTINGS_FILE_PATH: /data/appsettings.Local.json
-      GitHub__Owner: ${GITHUB_OWNER}
-      GitHub__Repository: ${GITHUB_REPOSITORY}
-      GitHub__PersonalAccessToken: ${GITHUB_PAT}
     volumes:
       - deployment-data:/data
       # Same tradeoff as docker-compose.yml's own build-from-source version
