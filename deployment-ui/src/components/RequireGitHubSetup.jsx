@@ -60,14 +60,6 @@ export default function RequireGitHubSetup({ children }) {
 
     }, [user, authLoading]);
 
-    if (authLoading || checking) {
-        return <LoadingSpinner />;
-    }
-
-    if (!user || configured) {
-        return children;
-    }
-
     async function handleSave(e) {
 
         e.preventDefault();
@@ -112,72 +104,92 @@ export default function RequireGitHubSetup({ children }) {
 
     }
 
+    // Renders behind the popup rather than being replaced by it — the app
+    // shell mounts normally (so there's no jarring swap once the form is
+    // done), the modal on top is what actually blocks interacting with it.
     return (
 
-        <div className="setup-gate">
+        <>
 
-            <div className="setup-gate-card">
+            {authLoading || checking ? <LoadingSpinner /> : children}
 
-                <Logo showEyebrow={false} size={40} />
+            {!authLoading && !checking && user && !configured && (
 
-                <h1 className="setup-gate-title">Connect your GitHub repository</h1>
+                <div className="dialog-backdrop">
 
-                <p className="field-hint" style={{ textAlign: "center" }}>
-                    Every user of this portal points at their own repo with their own token —
-                    this is saved to your account only, and is required before you can use
-                    anything else here.
-                </p>
+                    <div
+                        className="dialog setup-gate-dialog"
+                        role="dialog"
+                        aria-modal="true"
+                        aria-labelledby="github-setup-title"
+                    >
 
-                <form onSubmit={handleSave} className="setup-gate-form">
+                        <Logo showEyebrow={false} size={40} />
 
-                    <div className="form-group">
-                        <label>Repository URL</label>
-                        <ClearableInput
-                            placeholder="https://github.com/owner/repo"
-                            value={repoUrl}
-                            onChange={(e) => setRepoUrl(e.target.value)}
-                            onClear={() => setRepoUrl("")}
-                            autoComplete="off"
-                            name="repository-url"
-                            autoFocus
-                        />
-                        {repoUrl.trim() && !parseRepoUrl(repoUrl) && (
-                            <p className="field-hint field-hint-bad">
-                                Doesn't look like a GitHub repository URL yet — expecting something like
-                                https://github.com/owner/repo
-                            </p>
-                        )}
+                        <h1 id="github-setup-title" className="setup-gate-title">
+                            Connect your GitHub repository
+                        </h1>
+
+                        <p className="field-hint" style={{ textAlign: "center" }}>
+                            Every user of this portal points at their own repo with their own token —
+                            this is saved to your account only, and is required before you can use
+                            anything else here.
+                        </p>
+
+                        <form onSubmit={handleSave} className="setup-gate-form">
+
+                            <div className="form-group">
+                                <label>Repository URL</label>
+                                <ClearableInput
+                                    placeholder="https://github.com/owner/repo"
+                                    value={repoUrl}
+                                    onChange={(e) => setRepoUrl(e.target.value)}
+                                    onClear={() => setRepoUrl("")}
+                                    autoComplete="off"
+                                    name="repository-url"
+                                    autoFocus
+                                />
+                                {repoUrl.trim() && !parseRepoUrl(repoUrl) && (
+                                    <p className="field-hint field-hint-bad">
+                                        Doesn't look like a GitHub repository URL yet — expecting something like
+                                        https://github.com/owner/repo
+                                    </p>
+                                )}
+                            </div>
+
+                            <div className="form-group">
+                                <label>Personal Access Token</label>
+                                <input
+                                    type="password"
+                                    className="form-control"
+                                    placeholder="ghp_..."
+                                    value={token}
+                                    onChange={(e) => setToken(e.target.value)}
+                                    autoComplete="new-password"
+                                />
+                                <a
+                                    href="https://github.com/settings/tokens"
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="token-help-link"
+                                >
+                                    Generate a token on GitHub &rarr;
+                                </a>
+                            </div>
+
+                            <button type="submit" className="btn btn-primary" disabled={saving}>
+                                {saving ? "Connecting..." : "Continue"}
+                            </button>
+
+                        </form>
+
                     </div>
 
-                    <div className="form-group">
-                        <label>Personal Access Token</label>
-                        <input
-                            type="password"
-                            className="form-control"
-                            placeholder="ghp_..."
-                            value={token}
-                            onChange={(e) => setToken(e.target.value)}
-                            autoComplete="new-password"
-                        />
-                        <a
-                            href="https://github.com/settings/tokens"
-                            target="_blank"
-                            rel="noreferrer"
-                            className="token-help-link"
-                        >
-                            Generate a token on GitHub &rarr;
-                        </a>
-                    </div>
+                </div>
 
-                    <button type="submit" className="btn btn-primary" disabled={saving}>
-                        {saving ? "Connecting..." : "Continue"}
-                    </button>
+            )}
 
-                </form>
-
-            </div>
-
-        </div>
+        </>
 
     );
 

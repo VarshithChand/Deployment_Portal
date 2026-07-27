@@ -90,9 +90,14 @@ export default function TopBar() {
 
         <header className="top-bar">
 
-            <div className="top-bar-brand">
+            <button
+                type="button"
+                className="top-bar-brand top-bar-brand-link"
+                onClick={() => setTab("dashboard")}
+                title="Go to Dashboard"
+            >
                 <Logo showEyebrow={false} size={32} />
-            </div>
+            </button>
 
             <div className="top-bar-actions">
 

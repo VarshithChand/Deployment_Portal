@@ -1370,6 +1370,24 @@ textarea{
 
 }
 
+.top-bar-brand-link{
+
+    background:none;
+    border:none;
+    padding:0;
+    margin:0;
+    cursor:pointer;
+    display:inline-flex;
+    align-items:center;
+    opacity:1;
+    transition:opacity .15s ease;
+
+}
+
+.top-bar-brand-link:hover{
+    opacity:.8;
+}
+
 .top-bar-brand .logo-title{
 
     font-size:17px;
@@ -3839,30 +3857,15 @@ textarea{
     font-size:13px;
 }
 
-/* RequireGitHubSetup — the mandatory "connect your repo" gate every logged-in
-   user sees once, before reaching any other page. */
-.setup-gate{
-    flex:1;
-    min-height:70vh;
-    display:flex;
-    align-items:center;
-    justify-content:center;
-    padding:40px 20px;
-}
-
-.setup-gate-card{
-    width:100%;
-    max-width:420px;
-    background:var(--card-bg);
-    border:1px solid var(--border);
-    border-radius:12px;
-    box-shadow:0 5px 15px var(--card-shadow);
-    padding:32px;
+/* RequireGitHubSetup — the mandatory "connect your repo" popup every
+   logged-in user sees once, before reaching any other page. Backdrop/card
+   chrome comes from .dialog-backdrop/.dialog (see ConfirmDialog) — this
+   just adds the extra layout .dialog itself doesn't need. */
+.setup-gate-dialog{
     display:flex;
     flex-direction:column;
     align-items:center;
     gap:14px;
-    animation:card-in .4s ease both;
 }
 
 .setup-gate-title{
