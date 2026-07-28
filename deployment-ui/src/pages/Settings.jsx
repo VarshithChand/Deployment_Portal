@@ -1194,8 +1194,8 @@ export default function Settings() {
 
                         <thead>
                             <tr>
+                                <th>PAT Owner</th>
                                 <th>Repository</th>
-                                <th>Session</th>
                                 <th>Restricted</th>
                                 <th></th>
                             </tr>
@@ -1206,8 +1206,8 @@ export default function Settings() {
                             {patUsers.map((u) => (
 
                                 <tr key={u.key} className={selectedPatUserKey === u.key ? "table-row-active" : ""}>
+                                    <td>{u.patOwnerLogin}</td>
                                     <td>{u.owner}/{u.repository}</td>
-                                    <td>{u.key}</td>
                                     <td>
                                         {u.restrictedTabCount > 0 ? (
                                             <span className="badge badge-danger">{u.restrictedTabCount} restricted</span>
@@ -1245,7 +1245,7 @@ export default function Settings() {
                 <div className="card">
 
                     <h2 className="card-title">
-                        Sidebar Access — {selectedPatUserKey}
+                        Sidebar Access — {patUsers.find((u) => u.key === selectedPatUserKey)?.patOwnerLogin || selectedPatUserKey}
                     </h2>
 
                     {sidebarAccessLoading ? (

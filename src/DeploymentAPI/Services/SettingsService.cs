@@ -287,22 +287,56 @@ public class SettingsService
         if (users == null)
             return new List<PatUserSummaryDto>();
 
-        return users.Properties()
+        var entries = users.Properties()
             .Where(p => p.Value is JObject entry && !string.IsNullOrWhiteSpace(entry["PersonalAccessToken"]?.ToString()))
-            .Select(p =>
-            {
-                var entry = (JObject)p.Value!;
-                var restrictionCount = (access?[p.Name] as JObject)?.Properties().Count() ?? 0;
-
-                return new PatUserSummaryDto
-                {
-                    Key = p.Name,
-                    Owner = entry["Owner"]?.ToString() ?? string.Empty,
-                    Repository = entry["Repository"]?.ToString() ?? string.Empty,
-                    RestrictedTabCount = restrictionCount
-                };
-            })
             .ToList();
+
+        // Two different browsers can configure the SAME repo (as in
+        // "VarshithChand/yaml" for both an admin's own session and a
+        // teammate's) — Owner/Repository alone can't tell them apart, so
+        // this resolves each token's actual GitHub identity live, the same
+        // way AdminGate does for the admin-authority check itself.
+        var logins = await Task.WhenAll(
+            entries.Select(p => ResolvePatOwnerLoginAsync(((JObject)p.Value!)["PersonalAccessToken"]!.ToString()!)));
+
+        return entries.Select((p, i) =>
+        {
+            var entry = (JObject)p.Value!;
+            var restrictionCount = (access?[p.Name] as JObject)?.Properties().Count() ?? 0;
+
+            return new PatUserSummaryDto
+            {
+                Key = p.Name,
+                PatOwnerLogin = logins[i] ?? "Unknown (invalid or expired token)",
+                Owner = entry["Owner"]?.ToString() ?? string.Empty,
+                Repository = entry["Repository"]?.ToString() ?? string.Empty,
+                RestrictedTabCount = restrictionCount
+            };
+        }).ToList();
+    }
+
+    private static async Task<string?> ResolvePatOwnerLoginAsync(string token)
+    {
+        using var client = new HttpClient();
+
+        client.DefaultRequestHeaders.Add("Authorization", $"Bearer {token}");
+        client.DefaultRequestHeaders.Add("User-Agent", "DeploymentPortal");
+        client.DefaultRequestHeaders.Add("Accept", "application/vnd.github+json");
+
+        try
+        {
+            var response = await client.GetAsync("https://api.github.com/user");
+
+            if (!response.IsSuccessStatusCode)
+                return null;
+
+            var json = await response.Content.ReadAsStringAsync();
+            return JObject.Parse(json)["login"]?.ToString();
+        }
+        catch
+        {
+            return null;
+        }
     }
 
     public async Task ClearSidebarAccessAsync(string key)
