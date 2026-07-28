@@ -17,4 +17,6 @@ public class WorkflowDto
     public DateTime CreatedAt { get; set; }
 
     public string CommitMessage { get; set; } = string.Empty;
+
+    public string HtmlUrl { get; set; } = string.Empty;
 }

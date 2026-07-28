@@ -1084,7 +1084,9 @@ public class GitHubApiService
                  ? createdAt
                  : DateTime.MinValue,
 
-        CommitMessage = x["head_commit"]?["message"]?.ToString() ?? string.Empty
+        CommitMessage = x["head_commit"]?["message"]?.ToString() ?? string.Empty,
+
+        HtmlUrl = x["html_url"]?.ToString() ?? string.Empty
     };
 
     //===========================================================

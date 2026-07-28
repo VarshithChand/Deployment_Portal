@@ -82,6 +82,20 @@ export default function DeploymentProgress({ runId }) {
 
                 <span>{label}</span>
 
+                {run?.htmlUrl && (
+
+                    <a
+                        href={run.htmlUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="btn btn-secondary btn-sm"
+                        style={{ marginLeft: "auto" }}
+                    >
+                        View on GitHub &rarr;
+                    </a>
+
+                )}
+
             </div>
 
             <div className="progress">

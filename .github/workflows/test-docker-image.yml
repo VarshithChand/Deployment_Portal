@@ -1,0 +1,124 @@
+name: Test Docker Image
+
+###############################################################
+# Smoke-tests one of the five images "Docker Build and Push.yml"
+# publishes to GHCR: pulls it fresh on this runner, starts it,
+# and watches it for a few minutes to confirm it doesn't crash.
+# Triggered from the app's own Deploy page like any other
+# workflow_dispatch workflow — it reads these inputs and shows a
+# "View on GitHub" link to this run once triggered.
+###############################################################
+
+on:
+  workflow_dispatch:
+    inputs:
+      image:
+        description: "Which image to test"
+        required: true
+        type: choice
+        options:
+          - deployment-portal-api
+          - deployment-portal-ui
+          - deployment-portal-admin-api
+          - deployment-portal-pmscore-api
+          - deployment-portal-security-api
+      tag:
+        description: "Image tag to pull"
+        required: false
+        default: "latest"
+      duration_minutes:
+        description: "How long to keep it running before checking (minutes)"
+        required: false
+        type: choice
+        default: "4"
+        options:
+          - "3"
+          - "4"
+          - "5"
+
+permissions:
+  packages: read
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+
+  test_image:
+
+    name: Run and Verify - ${{ inputs.image }}
+
+    runs-on: ubuntu-latest
+
+    steps:
+
+      - name: Log In to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # GHCR requires a lowercase image path — a GitHub username or org
+      # name isn't guaranteed to be, same reason "Docker Build and
+      # Push.yml" does this before building.
+      - name: Lowercase Image Owner
+        id: owner
+        run: echo "owner=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
+
+      - name: Resolve Image Reference
+        id: image
+        env:
+          IMAGE_NAME: ${{ inputs.image }}
+          IMAGE_TAG: ${{ inputs.tag }}
+          IMAGE_OWNER: ${{ steps.owner.outputs.owner }}
+        run: echo "ref=$REGISTRY/$IMAGE_OWNER/$IMAGE_NAME:$IMAGE_TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Pull Image
+        run: docker pull ${{ steps.image.outputs.ref }}
+
+      - name: Start Container
+        id: run
+        run: |
+          CONTAINER_ID=$(docker run -d ${{ steps.image.outputs.ref }})
+          echo "id=$CONTAINER_ID" >> "$GITHUB_OUTPUT"
+          echo "Started container ${CONTAINER_ID:0:12} from ${{ steps.image.outputs.ref }}"
+
+      # Polls every 10s instead of one long sleep, so a crash is caught
+      # (and the job fails) as soon as it happens rather than only at the
+      # very end of the window.
+      - name: Watch It For The Test Window
+        env:
+          DURATION_MINUTES: ${{ inputs.duration_minutes }}
+          CONTAINER_ID: ${{ steps.run.outputs.id }}
+        run: |
+          duration_seconds=$(( DURATION_MINUTES * 60 ))
+          elapsed=0
+
+          while [ "$elapsed" -lt "$duration_seconds" ]; do
+            sleep 10
+            elapsed=$((elapsed + 10))
+
+            state="$(docker inspect -f '{{.State.Running}}' "$CONTAINER_ID")"
+
+            if [ "$state" != "true" ]; then
+              echo "::error::Container exited after ${elapsed}s — it did not stay running for the full ${DURATION_MINUTES}-minute test window."
+              exit 1
+            fi
+
+            echo "Still running after ${elapsed}s..."
+          done
+
+          echo "Container stayed running for the full ${DURATION_MINUTES} minute(s). Test passed."
+
+      - name: Container Logs
+        if: always()
+        env:
+          CONTAINER_ID: ${{ steps.run.outputs.id }}
+        run: docker logs "$CONTAINER_ID" || true
+
+      - name: Clean Up
+        if: always()
+        env:
+          CONTAINER_ID: ${{ steps.run.outputs.id }}
+        run: docker rm -f "$CONTAINER_ID" || true
