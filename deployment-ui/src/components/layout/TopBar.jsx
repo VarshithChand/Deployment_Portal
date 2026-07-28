@@ -15,10 +15,10 @@ import { getMyGitHubSettings } from "../../services/settingsService";
 // Sidebar becomes an off-canvas drawer instead of a persistent rail.
 function MenuIcon() {
     return (
-        <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
-            <line x1="3" y1="5.5" x2="17" y2="5.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-            <line x1="3" y1="10" x2="17" y2="10" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-            <line x1="3" y1="14.5" x2="17" y2="14.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+        <svg width="22" height="22" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+            <line x1="3" y1="5.5" x2="17" y2="5.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+            <line x1="3" y1="10" x2="17" y2="10" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+            <line x1="3" y1="14.5" x2="17" y2="14.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
         </svg>
     );
 }

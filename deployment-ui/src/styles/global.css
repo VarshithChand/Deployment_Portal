@@ -1380,37 +1380,36 @@ textarea{
 
     }
 
-}
-
-@media(min-width:769px){
-
     .mobile-nav-toggle{
 
-        display:none;
-
-    }
-
-    .mobile-nav-backdrop{
-
-        display:none;
+        display:flex;
 
     }
 
 }
 
+/* Hidden by default (desktop/tablet default, like the rest of this
+   stylesheet) — shown only inside the max-width:768px block above. A
+   previous version of this tried to hide it with a separate
+   min-width:769px block instead; that rule and this one have identical
+   specificity, so with both "in scope" at once, source order alone (not
+   which media query looks more specific) decides the winner — and this
+   base rule came second, so it silently won even on desktop. Keeping the
+   default here and only ever turning it on inside the narrow breakpoint
+   avoids that race entirely. */
 .mobile-nav-toggle{
 
-    flex-shrink:0;
+    display:none;
 
-    display:flex;
+    flex-shrink:0;
 
     align-items:center;
 
     justify-content:center;
 
-    width:36px;
+    width:40px;
 
-    height:36px;
+    height:40px;
 
     padding:0;
 
