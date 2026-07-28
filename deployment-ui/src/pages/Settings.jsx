@@ -72,8 +72,15 @@ export default function Settings() {
 
     const toast = useToast();
     const { confirm, dialog } = useConfirm();
-    const { refreshOauthStatus } = useAuth();
+    const { user, refreshOauthStatus } = useAuth();
     const { pendingRepoUrl, setPendingRepoUrl, refreshSidebarAccess } = useNavigation();
+
+    // Sidebar Access controls what every other visitor can even reach, so
+    // unlike the rest of this page (visible to everyone, gated only on
+    // save), it's hidden from view entirely unless this browser is actually
+    // logged in as the admin — not just "not shown as an option," since
+    // reaching it via a raw "?view=sidebar-access" URL is guarded below too.
+    const isAdmin = user?.role === "Admin";
 
     // "hub" is the Settings landing page — a couple of option tiles rather
     // than one long scroll of every card at once. Picking one switches to
@@ -182,6 +189,18 @@ export default function Settings() {
         }
 
     }
+
+    // Bounces away from Sidebar Access if it's ever reached without admin
+    // access — a raw "?view=sidebar-access" URL, or an admin session that
+    // expired while this page was already open.
+    useEffect(() => {
+
+        if (view === "sidebar-access" && !isAdmin) {
+            setView("hub");
+        }
+
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [view, isAdmin]);
 
     useEffect(() => {
 
@@ -696,13 +715,17 @@ export default function Settings() {
                         </p>
                     </button>
 
-                    <button type="button" className="settings-hub-tile" onClick={() => setView("sidebar-access")}>
-                        <h2>Sidebar Access</h2>
-                        <p>
-                            Lock or hide any sidebar section for everyone else using the portal —
-                            admin-only to change.
-                        </p>
-                    </button>
+                    {isAdmin && (
+
+                        <button type="button" className="settings-hub-tile" onClick={() => setView("sidebar-access")}>
+                            <h2>Sidebar Access</h2>
+                            <p>
+                                Lock or hide any sidebar section for everyone else using the portal —
+                                only visible to you.
+                            </p>
+                        </button>
+
+                    )}
 
                 </div>
 
@@ -1061,7 +1084,7 @@ export default function Settings() {
 
             )}
 
-            {view === "sidebar-access" && (
+            {view === "sidebar-access" && isAdmin && (
 
             <>
 
