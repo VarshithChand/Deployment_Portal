@@ -75,9 +75,17 @@ export default function DeploymentForm({
     const { githubTokenConfigured } = useAuth();
     const { setTab } = useNavigation();
 
-    // CI mode never shows deploy inputs; CD and the combined CI+CD mode both do,
-    // since a combined pipeline still declares whatever deploy inputs it needs.
-    const showInputs = mode !== "CI";
+    // Whether a workflow needs an inputs form has nothing to do with which
+    // CI/CD bucket it's browsed under — that's just a name-based heuristic
+    // (see classifyWorkflow below) for filtering the dropdown, and plenty of
+    // workflows that read as "CI" by name (build/test — including a Docker
+    // image smoke test) still declare required workflow_dispatch inputs.
+    // This used to be `mode !== "CI"`, which skipped fetching a CI-bucketed
+    // workflow's inputs entirely and silently dispatched it with none —
+    // GitHub then rejects the run for whatever inputs it actually required.
+    // Driven by the fetch below instead: true only once the selected
+    // workflow's own declared inputs come back non-empty.
+    const showInputs = Array.isArray(workflowInputs) && workflowInputs.length > 0;
 
     function toggleArtifact(name) {
 
@@ -144,12 +152,14 @@ export default function DeploymentForm({
     }
 
     /* -----------------------------
-       Fetch the selected workflow's declared inputs (CD only)
+       Fetch the selected workflow's declared inputs — always, regardless
+       of CI/CD mode (see showInputs above for why this can't be
+       conditional on mode without silently dropping required inputs).
     ------------------------------*/
 
     useEffect(() => {
 
-        if (!showInputs || !workflow) {
+        if (!workflow) {
 
             setWorkflowInputs(null);
             setInputValues({});
@@ -208,7 +218,7 @@ export default function DeploymentForm({
         };
 
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [workflow, showInputs, branch]);
+    }, [workflow, branch]);
 
     useEffect(() => {
 
