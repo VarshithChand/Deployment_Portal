@@ -42,14 +42,18 @@ public class DeploymentService
 
         var isCi = string.Equals(request.Mode, "CI", StringComparison.OrdinalIgnoreCase);
 
-        // CI just runs the workflow on a branch — no inputs, since we don't know
-        // what (if any) inputs a given CI workflow declares, and sending inputs
-        // it doesn't expect makes GitHub reject the dispatch outright. CD sends
-        // whatever inputs the frontend built from that specific workflow's own
-        // declared schema, so the keys always match what it actually expects.
-        object body = isCi
-            ? new { @ref = request.Branch }
-            : new { @ref = request.Branch, inputs = request.Inputs };
+        // Whether a workflow takes inputs has nothing to do with its CI/CD
+        // mode label (that's just a name-based bucket for the dropdown) — some
+        // CI-classified workflows (e.g. a Docker image smoke test) declare
+        // required workflow_dispatch inputs same as any CD workflow. Forward
+        // whatever inputs the frontend actually built from that workflow's own
+        // declared schema; only omit the key entirely when there are none, so
+        // workflows with zero inputs don't get an empty object GitHub doesn't expect.
+        var hasInputs = request.Inputs is { Count: > 0 };
+
+        object body = hasInputs
+            ? new { @ref = request.Branch, inputs = request.Inputs }
+            : new { @ref = request.Branch };
 
         var json =
             JsonSerializer.Serialize(body);

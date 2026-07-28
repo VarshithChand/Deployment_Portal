@@ -263,7 +263,16 @@ export default function DeploymentForm({
     }, [workflow, branch]);
 
     const artifactInput = (workflowInputs || []).find((i) => /artifact/i.test(i.name));
-    const dockerInput = (workflowInputs || []).find((i) => /docker|image/i.test(i.name));
+
+    // Only treat a "docker/image"-named input as a free-form registry path —
+    // if the workflow itself declares fixed `options` (e.g. a `type: choice`
+    // input like test-docker-image.yml's `image`), it renders through the
+    // generic select dropdown below instead so its value always matches one
+    // of the workflow's own declared choices.
+    const dockerInput = (workflowInputs || []).find(
+        (i) => /docker|image/i.test(i.name) && !(i.options && i.options.length > 0)
+    );
+
     const clusterInputs = (workflowInputs || []).filter((i) => /cluster/i.test(i.name));
 
     const otherInputs = (workflowInputs || []).filter((i) =>
