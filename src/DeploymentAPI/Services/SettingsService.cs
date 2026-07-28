@@ -56,11 +56,16 @@ public class SettingsService
         var users = root["UserGitHubCredentials"] as JObject ?? new JObject();
         var entry = users[login] as JObject ?? new JObject();
 
-        entry["Owner"] = update.Owner;
-        entry["Repository"] = update.Repository;
+        // Trimmed defensively: a stray leading/trailing space (easy to pick
+        // up copy-pasting from a browser or terminal) makes GitHub reject
+        // the token outright with a plain 401 that looks identical to an
+        // actually-wrong token, which is a frustrating thing to have to
+        // debug from the outside.
+        entry["Owner"] = update.Owner?.Trim() ?? string.Empty;
+        entry["Repository"] = update.Repository?.Trim() ?? string.Empty;
 
         if (!string.IsNullOrWhiteSpace(update.PersonalAccessToken))
-            entry["PersonalAccessToken"] = update.PersonalAccessToken;
+            entry["PersonalAccessToken"] = update.PersonalAccessToken.Trim();
 
         users[login] = entry;
         root["UserGitHubCredentials"] = users;
@@ -155,8 +160,7 @@ public class SettingsService
     {
         ["docker"] = ("Docker", "Password"),
         ["github-oauth"] = ("GitHubOAuth", "ClientSecret"),
-        ["admins"] = ("Auth", null),
-        ["sidebar"] = ("SidebarAccess", null)
+        ["admins"] = ("Auth", null)
     };
 
     // Unlike a per-section clear (which only removes the secret, leaving the
@@ -207,10 +211,14 @@ public class SettingsService
         return BuildView(root);
     }
 
-    // Which sidebar tabs the repo owner has restricted for everyone else —
-    // "locked" (still shown, greyed out, unreachable) or "hidden" (removed
-    // from the sidebar and unreachable). Absent from this dict means fully
-    // visible/usable, so a fresh portal starts with nothing restricted.
+    // Which sidebar tabs the admin has restricted, PER PAT user (keyed the
+    // same way UserGitHubCredentials is — see PortalIdentity) — "locked"
+    // (still shown, greyed out, unreachable) or "hidden" (removed from the
+    // sidebar and unreachable). Absent from a user's entry means fully
+    // visible/usable for them, so a brand new PAT user starts unrestricted.
+    // Deliberately per-user rather than one shared policy: the admin picks
+    // a specific PAT user (see GetPatUsersAsync) from Settings > Sidebar
+    // Access and restricts THEM, not "everyone browsing the portal."
     private static readonly HashSet<string> ValidSidebarStates = new() { "locked", "hidden" };
 
     // Never restrictable: "settings" is the only way back to this screen to
@@ -219,39 +227,93 @@ public class SettingsService
     // would strand someone with nowhere safe to go.
     private static readonly HashSet<string> UnrestrictableTabs = new() { "settings", "dashboard" };
 
-    public async Task<Dictionary<string, string>> GetSidebarAccessAsync()
+    public async Task<Dictionary<string, string>> GetSidebarAccessAsync(string key)
     {
         var root = await ReadRootAsync();
-        var access = root["SidebarAccess"] as JObject;
+        var users = root["SidebarAccess"] as JObject;
+        var entry = users?[key] as JObject;
 
-        return access?.Properties()
+        return entry?.Properties()
             .ToDictionary(p => p.Name, p => p.Value?.ToString() ?? string.Empty)
             ?? new Dictionary<string, string>();
     }
 
-    public async Task<Dictionary<string, string>> SaveSidebarAccessAsync(Dictionary<string, string> states)
+    public async Task<Dictionary<string, string>> SaveSidebarAccessAsync(string key, Dictionary<string, string> states)
     {
         var root = await ReadRootAsync();
-        var access = new JObject();
+        var users = root["SidebarAccess"] as JObject ?? new JObject();
+        var entry = new JObject();
 
-        foreach (var (key, state) in states)
+        foreach (var (tabKey, state) in states)
         {
-            if (UnrestrictableTabs.Contains(key))
+            if (UnrestrictableTabs.Contains(tabKey))
                 continue;
 
             if (ValidSidebarStates.Contains(state))
-                access[key] = state;
+                entry[tabKey] = state;
         }
 
-        root["SidebarAccess"] = access;
+        // No restrictions left for this user — drop their entry entirely
+        // rather than keep an empty object around.
+        if (entry.Properties().Any())
+            users[key] = entry;
+        else
+            users.Remove(key);
+
+        root["SidebarAccess"] = users;
 
         await WriteRootAsync(root);
 
-        _log.LogInfo("Settings", access.Properties().Any()
-            ? $"Sidebar access updated: {string.Join(", ", access.Properties().Select(p => $"{p.Name}={p.Value}"))}"
-            : "Sidebar access reset — every tab visible again.");
+        _log.LogInfo("Settings", entry.Properties().Any()
+            ? $"Sidebar access updated for '{key}': {string.Join(", ", entry.Properties().Select(p => $"{p.Name}={p.Value}"))}"
+            : $"Sidebar access reset for '{key}' — every tab visible again.");
 
-        return await GetSidebarAccessAsync();
+        return await GetSidebarAccessAsync(key);
+    }
+
+    // The list an admin picks from in Settings > Sidebar Access — every
+    // browser/device that has ever configured a Personal Access Token here,
+    // regardless of which repo. Only PAT users are listed (not every
+    // UserGitHubCredentials entry) since a session with no token can't
+    // trigger anything restriction would matter for. Labeled by owner/repo,
+    // not a resolved GitHub identity — that would mean a live API call per
+    // entry here, and some stored tokens may no longer even be valid.
+    public async Task<List<PatUserSummaryDto>> GetPatUsersAsync()
+    {
+        var root = await ReadRootAsync();
+        var users = root["UserGitHubCredentials"] as JObject;
+        var access = root["SidebarAccess"] as JObject;
+
+        if (users == null)
+            return new List<PatUserSummaryDto>();
+
+        return users.Properties()
+            .Where(p => p.Value is JObject entry && !string.IsNullOrWhiteSpace(entry["PersonalAccessToken"]?.ToString()))
+            .Select(p =>
+            {
+                var entry = (JObject)p.Value!;
+                var restrictionCount = (access?[p.Name] as JObject)?.Properties().Count() ?? 0;
+
+                return new PatUserSummaryDto
+                {
+                    Key = p.Name,
+                    Owner = entry["Owner"]?.ToString() ?? string.Empty,
+                    Repository = entry["Repository"]?.ToString() ?? string.Empty,
+                    RestrictedTabCount = restrictionCount
+                };
+            })
+            .ToList();
+    }
+
+    public async Task ClearSidebarAccessAsync(string key)
+    {
+        var root = await ReadRootAsync();
+
+        if (root["SidebarAccess"] is JObject users && users.Remove(key))
+        {
+            await WriteRootAsync(root);
+            _log.LogInfo("Settings", $"Sidebar access reset for '{key}' — every tab visible again.");
+        }
     }
 
     // Branch "purpose" is a portal-only note (GitHub has no such field) —

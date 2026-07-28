@@ -18,6 +18,15 @@ export default function AuthProvider({ children }) {
     const [githubTokenConfigured, setGithubTokenConfigured] = useState(false);
     const [tokenOwner, setTokenOwner] = useState(null);
 
+    // True when THIS session has admin authority — either a real GitHub
+    // OAuth login as an allowlisted username, or (see AdminGate.
+    // IsAdminViaPersonalAccessTokenAsync) a configured Personal Access
+    // Token that belongs to one. Lets an admin act through the PAT they
+    // already use for every other GitHub call in this portal, without also
+    // needing to complete OAuth login just to reach admin-only UI like
+    // Sidebar Access.
+    const [isAdminSession, setIsAdminSession] = useState(false);
+
     const refresh = useCallback(async () => {
 
         setLoading(true);
@@ -44,6 +53,8 @@ export default function AuthProvider({ children }) {
             setOauthConfigured(
                 !!settings.gitHubOAuthClientId && !!settings.gitHubOAuthClientSecretConfigured
             );
+
+            setIsAdminSession(!!settings.isAdminSession);
 
             const hasToken = !!myGitHub.gitHubTokenConfigured;
             setGithubTokenConfigured(hasToken);
@@ -122,7 +133,7 @@ export default function AuthProvider({ children }) {
 
     return (
 
-        <AuthContext.Provider value={{ user, loading, login, logout, refresh, oauthConfigured, githubTokenConfigured, tokenOwner, canApproveReleases: !!tokenOwner?.canApprove, refreshOauthStatus }}>
+        <AuthContext.Provider value={{ user, loading, login, logout, refresh, oauthConfigured, githubTokenConfigured, tokenOwner, canApproveReleases: !!tokenOwner?.canApprove, isAdminSession, refreshOauthStatus }}>
 
             {children}
 

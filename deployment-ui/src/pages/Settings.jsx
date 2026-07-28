@@ -8,8 +8,10 @@ import {
     saveDockerSettings,
     saveGitHubOAuthSettings,
     saveAdminUsernames,
-    getSidebarAccess,
-    saveSidebarAccess,
+    getPatUsers,
+    getUserSidebarAccess,
+    saveUserSidebarAccess,
+    clearUserSidebarAccess,
     clearSettings,
     previewGitHubRepository
 } from "../services/settingsService";
@@ -72,15 +74,18 @@ export default function Settings() {
 
     const toast = useToast();
     const { confirm, dialog } = useConfirm();
-    const { user, refreshOauthStatus } = useAuth();
+    const { user, isAdminSession, refreshOauthStatus } = useAuth();
     const { pendingRepoUrl, setPendingRepoUrl, refreshSidebarAccess } = useNavigation();
 
     // Sidebar Access controls what every other visitor can even reach, so
     // unlike the rest of this page (visible to everyone, gated only on
-    // save), it's hidden from view entirely unless this browser is actually
-    // logged in as the admin — not just "not shown as an option," since
-    // reaching it via a raw "?view=sidebar-access" URL is guarded below too.
-    const isAdmin = user?.role === "Admin";
+    // save), it's hidden from view entirely unless this browser actually has
+    // admin authority — via a real GitHub OAuth login (user.role) OR a
+    // configured Personal Access Token that belongs to an allowlisted
+    // username (isAdminSession, from AdminGate.IsAdminViaPersonalAccessTokenAsync)
+    // — not just "not shown as an option," since reaching it via a raw
+    // "?view=sidebar-access" URL is guarded below too.
+    const isAdmin = user?.role === "Admin" || isAdminSession;
 
     // "hub" is the Settings landing page — a couple of option tiles rather
     // than one long scroll of every card at once. Picking one switches to
@@ -142,8 +147,14 @@ export default function Settings() {
 
     const [adminUsernamesText, setAdminUsernamesText] = useState("");
 
+    // Sidebar Access is two levels: a list of PAT users to pick from, then
+    // that one user's own per-tab restrictions once picked.
+    const [patUsers, setPatUsers] = useState([]);
+    const [patUsersLoading, setPatUsersLoading] = useState(true);
+    const [selectedPatUserKey, setSelectedPatUserKey] = useState(null);
+
     const [sidebarAccessMap, setSidebarAccessMap] = useState({});
-    const [sidebarAccessLoading, setSidebarAccessLoading] = useState(true);
+    const [sidebarAccessLoading, setSidebarAccessLoading] = useState(false);
     const [savingSidebarAccess, setSavingSidebarAccess] = useState(false);
     const [clearingSidebarAccess, setClearingSidebarAccess] = useState(false);
 
@@ -222,11 +233,54 @@ export default function Settings() {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
+    // Only fetched once this browser actually has admin authority — the
+    // endpoint itself is admin-gated, so trying earlier (e.g. before a PAT
+    // owner check resolves) would just fail silently and add console noise
+    // for every other visitor.
     useEffect(() => {
+
+        if (!isAdmin) {
+            setPatUsersLoading(false);
+            return;
+        }
 
         let cancelled = false;
 
-        getSidebarAccess()
+        setPatUsersLoading(true);
+
+        getPatUsers()
+            .then((data) => {
+                if (!cancelled) {
+                    setPatUsers(Array.isArray(data) ? data : []);
+                }
+            })
+            .catch((err) => console.error(err))
+            .finally(() => {
+                if (!cancelled) {
+                    setPatUsersLoading(false);
+                }
+            });
+
+        return () => {
+            cancelled = true;
+        };
+
+    }, [isAdmin]);
+
+    // The per-tab editor loads fresh each time a different PAT user is
+    // picked (or deselected, which clears it back out).
+    useEffect(() => {
+
+        if (!selectedPatUserKey) {
+            setSidebarAccessMap({});
+            return;
+        }
+
+        let cancelled = false;
+
+        setSidebarAccessLoading(true);
+
+        getUserSidebarAccess(selectedPatUserKey)
             .then((data) => {
                 if (!cancelled) {
                     setSidebarAccessMap(data || {});
@@ -243,7 +297,7 @@ export default function Settings() {
             cancelled = true;
         };
 
-    }, []);
+    }, [selectedPatUserKey]);
 
     useEffect(() => {
 
@@ -493,16 +547,32 @@ export default function Settings() {
 
     }
 
+    // Re-pulls the PAT user list so each row's restricted-tab-count badge
+    // reflects whatever was just saved/reset, without a full page reload.
+    async function refreshPatUsers() {
+
+        try {
+            setPatUsers(await getPatUsers());
+        }
+        catch (err) {
+            console.error(err);
+        }
+
+    }
+
     async function handleSaveSidebarAccess() {
+
+        if (!selectedPatUserKey) return;
 
         try {
 
             setSavingSidebarAccess(true);
 
-            const saved = await saveSidebarAccess(sidebarAccessMap);
+            const saved = await saveUserSidebarAccess(selectedPatUserKey, sidebarAccessMap);
 
             setSidebarAccessMap(saved || {});
             toast.show("Sidebar access saved.", "success");
+            refreshPatUsers();
             refreshSidebarAccess();
 
         }
@@ -522,9 +592,11 @@ export default function Settings() {
 
     async function handleClearSidebarAccess() {
 
+        if (!selectedPatUserKey) return;
+
         if (!(await confirm({
             title: "Reset sidebar access?",
-            message: "Every tab goes back to fully visible for everyone. This cannot be undone.",
+            message: "Every tab goes back to fully visible for this PAT user. This cannot be undone.",
             confirmLabel: "Reset",
             danger: true
         }))) {
@@ -535,10 +607,11 @@ export default function Settings() {
 
             setClearingSidebarAccess(true);
 
-            await clearSettings("sidebar");
+            await clearUserSidebarAccess(selectedPatUserKey);
 
             setSidebarAccessMap({});
-            toast.show("Sidebar access reset — everything is visible again.", "success");
+            toast.show("Sidebar access reset — everything is visible again for this PAT user.", "success");
+            refreshPatUsers();
             refreshSidebarAccess();
 
         }
@@ -1095,16 +1168,23 @@ export default function Settings() {
                 </h2>
 
                 <p className="empty-state" style={{ padding: "0 0 15px", textAlign: "left" }}>
-                    Restrict any sidebar section for everyone else browsing this portal.
+                    Pick a PAT user below, then restrict any sidebar section for just them.
                     <strong> Locked</strong> keeps it visible but disabled, with a lock icon in
                     place of its usual one. <strong>Hidden</strong> removes it from the sidebar
-                    entirely. Saving requires admin access — Settings itself can't be
-                    restricted, so there's always a way back here.
+                    entirely. Only visible/changeable by an admin — Settings and Dashboard can't
+                    be restricted, so there's always a way back in.
                 </p>
 
-                {sidebarAccessLoading ? (
+                {patUsersLoading ? (
 
-                    <p className="field-hint">Loading sidebar access...</p>
+                    <p className="field-hint">Loading PAT users...</p>
+
+                ) : patUsers.length === 0 ? (
+
+                    <p className="empty-state">
+                        No PAT users yet — nobody has configured a Personal Access Token on
+                        this portal.
+                    </p>
 
                 ) : (
 
@@ -1114,27 +1194,37 @@ export default function Settings() {
 
                         <thead>
                             <tr>
-                                <th>Section</th>
-                                <th>Access</th>
+                                <th>Repository</th>
+                                <th>Session</th>
+                                <th>Restricted</th>
+                                <th></th>
                             </tr>
                         </thead>
 
                         <tbody>
 
-                            {SIDEBAR_TABS.map(({ key, label }) => (
+                            {patUsers.map((u) => (
 
-                                <tr key={key}>
-                                    <td>{label}</td>
+                                <tr key={u.key} className={selectedPatUserKey === u.key ? "table-row-active" : ""}>
+                                    <td>{u.owner}/{u.repository}</td>
+                                    <td>{u.key}</td>
                                     <td>
-                                        <select
-                                            className="form-control"
-                                            value={sidebarAccessMap[key] || "visible"}
-                                            onChange={(e) => setSidebarTabState(key, e.target.value)}
+                                        {u.restrictedTabCount > 0 ? (
+                                            <span className="badge badge-danger">{u.restrictedTabCount} restricted</span>
+                                        ) : (
+                                            <span className="badge badge-success">Fully visible</span>
+                                        )}
+                                    </td>
+                                    <td>
+                                        <button
+                                            type="button"
+                                            className="btn btn-secondary btn-sm"
+                                            onClick={() => setSelectedPatUserKey(
+                                                selectedPatUserKey === u.key ? null : u.key
+                                            )}
                                         >
-                                            {SIDEBAR_STATES.map((s) => (
-                                                <option key={s.value} value={s.value}>{s.label}</option>
-                                            ))}
-                                        </select>
+                                            {selectedPatUserKey === u.key ? "Close" : "Manage Sidebar Access"}
+                                        </button>
                                     </td>
                                 </tr>
 
@@ -1148,19 +1238,77 @@ export default function Settings() {
 
                 )}
 
-                <div className="button-row" style={{ marginTop: "15px" }}>
+            </div>
 
-                    <button className="btn btn-primary" onClick={handleSaveSidebarAccess} disabled={savingSidebarAccess || sidebarAccessLoading}>
-                        {savingSidebarAccess ? "Saving..." : "Save Sidebar Access"}
-                    </button>
+            {selectedPatUserKey && (
 
-                    <button className="btn btn-danger" onClick={handleClearSidebarAccess} disabled={clearingSidebarAccess || sidebarAccessLoading}>
-                        {clearingSidebarAccess ? "Resetting..." : "Reset All To Visible"}
-                    </button>
+                <div className="card">
+
+                    <h2 className="card-title">
+                        Sidebar Access — {selectedPatUserKey}
+                    </h2>
+
+                    {sidebarAccessLoading ? (
+
+                        <p className="field-hint">Loading this user's sidebar access...</p>
+
+                    ) : (
+
+                        <div className="table-scroll">
+
+                        <table className="table">
+
+                            <thead>
+                                <tr>
+                                    <th>Section</th>
+                                    <th>Access</th>
+                                </tr>
+                            </thead>
+
+                            <tbody>
+
+                                {SIDEBAR_TABS.map(({ key, label }) => (
+
+                                    <tr key={key}>
+                                        <td>{label}</td>
+                                        <td>
+                                            <select
+                                                className="form-control"
+                                                value={sidebarAccessMap[key] || "visible"}
+                                                onChange={(e) => setSidebarTabState(key, e.target.value)}
+                                            >
+                                                {SIDEBAR_STATES.map((s) => (
+                                                    <option key={s.value} value={s.value}>{s.label}</option>
+                                                ))}
+                                            </select>
+                                        </td>
+                                    </tr>
+
+                                ))}
+
+                            </tbody>
+
+                        </table>
+
+                        </div>
+
+                    )}
+
+                    <div className="button-row" style={{ marginTop: "15px" }}>
+
+                        <button className="btn btn-primary" onClick={handleSaveSidebarAccess} disabled={savingSidebarAccess || sidebarAccessLoading}>
+                            {savingSidebarAccess ? "Saving..." : "Save Sidebar Access"}
+                        </button>
+
+                        <button className="btn btn-danger" onClick={handleClearSidebarAccess} disabled={clearingSidebarAccess || sidebarAccessLoading}>
+                            {clearingSidebarAccess ? "Resetting..." : "Reset This User To Visible"}
+                        </button>
+
+                    </div>
 
                 </div>
 
-            </div>
+            )}
 
             </>
 

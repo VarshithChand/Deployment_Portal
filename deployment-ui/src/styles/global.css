@@ -2469,6 +2469,14 @@ textarea{
 
 }
 
+.table-row-active{
+
+    background:var(--table-row-hover);
+
+    box-shadow:inset 3px 0 0 #2563eb;
+
+}
+
 .table-row-clickable{
 
     cursor:pointer;

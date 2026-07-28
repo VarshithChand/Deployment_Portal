@@ -42,13 +42,32 @@ export const clearSettings = async (section) => {
     return response.data;
 };
 
+// The caller's own restrictions — used by Sidebar/App's route guard, safe
+// for anyone to read since it can only ever resolve to their own session.
 export const getSidebarAccess = async () => {
     const response = await settingsApi.get("/sidebar");
     return response.data;
 };
 
-export const saveSidebarAccess = async (states) => {
-    const response = await settingsApi.post("/sidebar", { states });
+// Admin-only: every PAT user the admin can pick from in Settings > Sidebar
+// Access, then that one user's own restrictions to load into the editor.
+export const getPatUsers = async () => {
+    const response = await settingsApi.get("/sidebar/users");
+    return response.data;
+};
+
+export const getUserSidebarAccess = async (key) => {
+    const response = await settingsApi.get("/sidebar/user", { params: { key } });
+    return response.data;
+};
+
+export const saveUserSidebarAccess = async (key, states) => {
+    const response = await settingsApi.post("/sidebar/user", { states }, { params: { key } });
+    return response.data;
+};
+
+export const clearUserSidebarAccess = async (key) => {
+    const response = await settingsApi.delete("/sidebar/user", { params: { key } });
     return response.data;
 };
 

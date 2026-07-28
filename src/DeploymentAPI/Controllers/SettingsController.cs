@@ -33,13 +33,18 @@ public class SettingsController : ControllerBase
     {
         var view = await _settings.GetViewAsync();
 
+        var isAdmin = AdminGate.IsAdminOrBootstrap(this, view)
+            || await AdminGate.IsAdminViaPersonalAccessTokenAsync(this, view);
+
+        view.IsAdminSession = isAdmin;
+
         // The admin allowlist is only needed by an admin editing it, or
         // during bootstrap when it's empty anyway — showing the real
         // usernames to an anonymous/non-admin visitor once configured is
         // pure reconnaissance value (exactly who to target to gain admin
         // access here) for no functional benefit, since they can't act on
         // it either way.
-        if (!AdminGate.IsAdminOrBootstrap(this, view))
+        if (!isAdmin)
         {
             view.AdminGitHubUsernames = new List<string>();
         }
@@ -137,21 +142,66 @@ public class SettingsController : ControllerBase
         return Ok(await _settings.SaveAdminUsernamesAsync(request));
     }
 
-    // Read is anonymous — every visitor's Sidebar needs this to know which
-    // tabs to grey out or remove, not just the admin managing it.
+    // Read is anonymous — every visitor's own Sidebar needs to know which of
+    // ITS OWN tabs to grey out or remove. Restrictions are per PAT user
+    // (see SettingsService), so this always resolves to the caller's own
+    // key — nobody can read (or infer) what's restricted for anyone else
+    // through this endpoint.
     [HttpGet("sidebar")]
     public async Task<IActionResult> GetSidebarAccess()
     {
-        return Ok(await _settings.GetSidebarAccessAsync());
+        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        return Ok(await _settings.GetSidebarAccessAsync(key));
     }
 
-    [HttpPost("sidebar")]
-    public async Task<IActionResult> SaveSidebarAccess(SidebarAccessUpdateDto request)
+    // Admin-only picker: every browser/device that has configured a PAT,
+    // so the admin can choose one to restrict. See Settings > Sidebar
+    // Access, which lists these before showing the per-tab editor for
+    // whichever one is selected.
+    [HttpGet("sidebar/users")]
+    public async Task<IActionResult> GetPatUsers()
     {
-        if (await AdminGate.DenyUnlessAdminAsync(this, _settings, "change settings") is IActionResult denied)
+        if (await AdminGate.DenyUnlessAdminAsync(this, _settings, "view PAT users") is IActionResult denied)
             return denied;
 
-        return Ok(await _settings.SaveSidebarAccessAsync(request.States));
+        return Ok(await _settings.GetPatUsersAsync());
+    }
+
+    [HttpGet("sidebar/user")]
+    public async Task<IActionResult> GetUserSidebarAccess([FromQuery] string key)
+    {
+        if (await AdminGate.DenyUnlessAdminAsync(this, _settings, "view sidebar access") is IActionResult denied)
+            return denied;
+
+        if (string.IsNullOrWhiteSpace(key))
+            return BadRequest("key is required.");
+
+        return Ok(await _settings.GetSidebarAccessAsync(key));
+    }
+
+    [HttpPost("sidebar/user")]
+    public async Task<IActionResult> SaveUserSidebarAccess([FromQuery] string key, SidebarAccessUpdateDto request)
+    {
+        if (await AdminGate.DenyUnlessAdminAsync(this, _settings, "change sidebar access") is IActionResult denied)
+            return denied;
+
+        if (string.IsNullOrWhiteSpace(key))
+            return BadRequest("key is required.");
+
+        return Ok(await _settings.SaveSidebarAccessAsync(key, request.States));
+    }
+
+    [HttpDelete("sidebar/user")]
+    public async Task<IActionResult> ClearUserSidebarAccess([FromQuery] string key)
+    {
+        if (await AdminGate.DenyUnlessAdminAsync(this, _settings, "change sidebar access") is IActionResult denied)
+            return denied;
+
+        if (string.IsNullOrWhiteSpace(key))
+            return BadRequest("key is required.");
+
+        await _settings.ClearSidebarAccessAsync(key);
+        return Ok(await _settings.GetSidebarAccessAsync(key));
     }
 
     [HttpDelete("{section}")]

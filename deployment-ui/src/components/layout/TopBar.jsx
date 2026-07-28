@@ -30,7 +30,7 @@ function MenuIcon() {
 // menu button opens (mobile-nav-toggle is hidden via CSS at wider widths).
 export default function TopBar() {
 
-    const { user, loading, login, logout, oauthConfigured, tokenOwner, canApproveReleases } = useAuth();
+    const { user, loading, login, logout, oauthConfigured, tokenOwner, canApproveReleases, isAdminSession } = useAuth();
     const { setTab, mobileNavOpen, setMobileNavOpen } = useNavigation();
 
     const [rateLimit, setRateLimit] = useState(null);
@@ -202,6 +202,10 @@ export default function TopBar() {
                                     onClick={() => setTab("settings")}
                                 >
                                     <AccountAvatar avatarUrl={tokenOwner.avatarUrl} name={tokenOwner.login} size={26} />
+
+                                    {isAdminSession && (
+                                        <span className="badge badge-success">Admin</span>
+                                    )}
                                 </button>
 
                             ) : (

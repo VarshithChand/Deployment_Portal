@@ -1,6 +1,7 @@
 using DeploymentAPI.DTOs;
 using DeploymentAPI.Services;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace DeploymentAPI.Helpers;
 
@@ -47,6 +48,27 @@ public static class AdminGate
         if (IsAdminOrBootstrap(controller, view))
             return null;
 
+        if (await IsAdminViaPersonalAccessTokenAsync(controller, view))
+            return null;
+
         return controller.StatusCode(403, new { message = $"Admin login required to {action}." });
+    }
+
+    // Alternate path to the same "Admin" authority as a real GitHub OAuth
+    // login: this session's own configured Personal Access Token belongs to
+    // an allowlisted username. Lets an admin act through the PAT they
+    // already configure for every other GitHub action in this portal,
+    // without also having to complete a separate OAuth login just to
+    // qualify for admin-gated actions like Sidebar Access.
+    public static async Task<bool> IsAdminViaPersonalAccessTokenAsync(ControllerBase controller, SettingsViewDto view)
+    {
+        if (view.AdminGitHubUsernames.Count == 0)
+            return false;
+
+        var auth = controller.HttpContext.RequestServices.GetRequiredService<GitHubAuthService>();
+        var login = await auth.GetAuthenticatedLoginAsync();
+
+        return login != null
+            && view.AdminGitHubUsernames.Any(u => string.Equals(u, login, StringComparison.OrdinalIgnoreCase));
     }
 }

@@ -1,4 +1,5 @@
 using DeploymentAPI.Helpers;
+using Newtonsoft.Json.Linq;
 
 namespace DeploymentAPI.Services;
 
@@ -80,4 +81,35 @@ public class GitHubAuthService
     public string Repository => _repository;
 
     public bool HasToken => !string.IsNullOrWhiteSpace(_personalAccessToken);
+
+    // Who this request's configured Personal Access Token actually belongs
+    // to, per GitHub itself — used by AdminGate to let someone act as admin
+    // through their own per-session PAT instead of also requiring a
+    // separate GitHub OAuth login. Deliberately uncached and per-request:
+    // GitHubApiService's caches are keyed by owner/repo, not by session or
+    // token, so two sessions configured for the same repo with two
+    // different accounts' tokens could otherwise read each other's cached
+    // identity — fine for repo metadata, not for an admin decision.
+    public async Task<string?> GetAuthenticatedLoginAsync()
+    {
+        if (!HasToken)
+            return null;
+
+        using var client = CreateClient();
+
+        try
+        {
+            var response = await client.GetAsync("https://api.github.com/user");
+
+            if (!response.IsSuccessStatusCode)
+                return null;
+
+            var json = await response.Content.ReadAsStringAsync();
+            return JObject.Parse(json)["login"]?.ToString();
+        }
+        catch
+        {
+            return null;
+        }
+    }
 }
