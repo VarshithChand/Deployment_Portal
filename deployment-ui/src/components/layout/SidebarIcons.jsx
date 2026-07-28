@@ -54,6 +54,18 @@ export function PullRequestIcon() {
     );
 }
 
+// Shackle (circle) sitting above the case (rect) — the rect's top edge
+// crosses the circle's lower half, reading as a padlock from rects/circles
+// alone with no hand-authored curve path.
+export function LockIcon() {
+    return (
+        <svg {...common}>
+            <circle cx="9" cy="7" r="3.2" stroke="currentColor" strokeWidth="1.4" fill="none" />
+            <rect x="4" y="8" width="10" height="7" rx="1.2" stroke="currentColor" strokeWidth="1.4" fill="none" />
+        </svg>
+    );
+}
+
 // Two stacked boxes (a small one atop a larger one) — a shipping-container
 // metaphor distinct from both DashboardIcon's 2x2 grid and StorageIcon's
 // single rect-with-divider.

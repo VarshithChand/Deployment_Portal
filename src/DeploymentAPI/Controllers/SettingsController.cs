@@ -137,6 +137,23 @@ public class SettingsController : ControllerBase
         return Ok(await _settings.SaveAdminUsernamesAsync(request));
     }
 
+    // Read is anonymous — every visitor's Sidebar needs this to know which
+    // tabs to grey out or remove, not just the admin managing it.
+    [HttpGet("sidebar")]
+    public async Task<IActionResult> GetSidebarAccess()
+    {
+        return Ok(await _settings.GetSidebarAccessAsync());
+    }
+
+    [HttpPost("sidebar")]
+    public async Task<IActionResult> SaveSidebarAccess(SidebarAccessUpdateDto request)
+    {
+        if (await AdminGate.DenyUnlessAdminAsync(this, _settings, "change settings") is IActionResult denied)
+            return denied;
+
+        return Ok(await _settings.SaveSidebarAccessAsync(request.States));
+    }
+
     [HttpDelete("{section}")]
     public async Task<IActionResult> Clear(string section)
     {

@@ -42,6 +42,16 @@ export const clearSettings = async (section) => {
     return response.data;
 };
 
+export const getSidebarAccess = async () => {
+    const response = await settingsApi.get("/sidebar");
+    return response.data;
+};
+
+export const saveSidebarAccess = async (states) => {
+    const response = await settingsApi.post("/sidebar", { states });
+    return response.data;
+};
+
 export const previewGitHubRepository = async (owner, repository) => {
     const response = await settingsApi.get("/github/preview", {
         params: { owner, repository }

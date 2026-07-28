@@ -8,6 +8,8 @@ import {
     saveDockerSettings,
     saveGitHubOAuthSettings,
     saveAdminUsernames,
+    getSidebarAccess,
+    saveSidebarAccess,
     clearSettings,
     previewGitHubRepository
 } from "../services/settingsService";
@@ -28,7 +30,32 @@ import useNavigation from "../hooks/useNavigation";
 import usePagination from "../hooks/usePagination";
 import parseRepoUrl from "../utils/parseRepoUrl";
 
-const VIEWS = ["hub", "credentials", "activity-log", "access-levels", "branches"];
+const VIEWS = ["hub", "credentials", "activity-log", "access-levels", "branches", "sidebar-access"];
+
+// Every restrictable sidebar tab except "settings" and "dashboard" — the
+// backend refuses those two entries regardless of what's sent (locking
+// Settings would strand every admin with no way back in, and Dashboard is
+// where the frontend's route guard sends anyone who lands on a restricted
+// tab — see SettingsService.SaveSidebarAccessAsync). Labels mirror
+// Sidebar.jsx's own TABS.
+const SIDEBAR_TABS = [
+    { key: "deploy", label: "Deploy" },
+    { key: "approvals", label: "Approvals" },
+    { key: "pullRequests", label: "Pull Requests" },
+    { key: "storage", label: "Artifacts & Images" },
+    { key: "analytics", label: "Analytics" },
+    { key: "timeline", label: "Timeline" },
+    { key: "history", label: "History" },
+    { key: "templates", label: "Template Tester" },
+    { key: "services", label: "Services" },
+    { key: "docker", label: "Docker" }
+];
+
+const SIDEBAR_STATES = [
+    { value: "visible", label: "Visible" },
+    { value: "locked", label: "Locked" },
+    { value: "hidden", label: "Hidden" }
+];
 
 // Mirrors the same "?tab=" pattern NavigationContext uses for the top-level
 // tab, one level down — so reloading (or bookmarking) a Settings sub-page
@@ -46,7 +73,7 @@ export default function Settings() {
     const toast = useToast();
     const { confirm, dialog } = useConfirm();
     const { refreshOauthStatus } = useAuth();
-    const { pendingRepoUrl, setPendingRepoUrl } = useNavigation();
+    const { pendingRepoUrl, setPendingRepoUrl, refreshSidebarAccess } = useNavigation();
 
     // "hub" is the Settings landing page — a couple of option tiles rather
     // than one long scroll of every card at once. Picking one switches to
@@ -107,6 +134,11 @@ export default function Settings() {
     const [oauthClientSecretConfigured, setOauthClientSecretConfigured] = useState(false);
 
     const [adminUsernamesText, setAdminUsernamesText] = useState("");
+
+    const [sidebarAccessMap, setSidebarAccessMap] = useState({});
+    const [sidebarAccessLoading, setSidebarAccessLoading] = useState(true);
+    const [savingSidebarAccess, setSavingSidebarAccess] = useState(false);
+    const [clearingSidebarAccess, setClearingSidebarAccess] = useState(false);
 
     const [logs, setLogs] = useState([]);
     const [logsLoading, setLogsLoading] = useState(true);
@@ -169,6 +201,29 @@ export default function Settings() {
         init();
 
         // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
+    useEffect(() => {
+
+        let cancelled = false;
+
+        getSidebarAccess()
+            .then((data) => {
+                if (!cancelled) {
+                    setSidebarAccessMap(data || {});
+                }
+            })
+            .catch((err) => console.error(err))
+            .finally(() => {
+                if (!cancelled) {
+                    setSidebarAccessLoading(false);
+                }
+            });
+
+        return () => {
+            cancelled = true;
+        };
+
     }, []);
 
     useEffect(() => {
@@ -413,6 +468,75 @@ export default function Settings() {
 
     }
 
+    function setSidebarTabState(key, state) {
+
+        setSidebarAccessMap((prev) => ({ ...prev, [key]: state }));
+
+    }
+
+    async function handleSaveSidebarAccess() {
+
+        try {
+
+            setSavingSidebarAccess(true);
+
+            const saved = await saveSidebarAccess(sidebarAccessMap);
+
+            setSidebarAccessMap(saved || {});
+            toast.show("Sidebar access saved.", "success");
+            refreshSidebarAccess();
+
+        }
+        catch (err) {
+
+            console.error(err);
+            toast.show(err.response?.data?.message || "Failed to save sidebar access.", "error");
+
+        }
+        finally {
+
+            setSavingSidebarAccess(false);
+
+        }
+
+    }
+
+    async function handleClearSidebarAccess() {
+
+        if (!(await confirm({
+            title: "Reset sidebar access?",
+            message: "Every tab goes back to fully visible for everyone. This cannot be undone.",
+            confirmLabel: "Reset",
+            danger: true
+        }))) {
+            return;
+        }
+
+        try {
+
+            setClearingSidebarAccess(true);
+
+            await clearSettings("sidebar");
+
+            setSidebarAccessMap({});
+            toast.show("Sidebar access reset — everything is visible again.", "success");
+            refreshSidebarAccess();
+
+        }
+        catch (err) {
+
+            console.error(err);
+            toast.show(err.response?.data?.message || "Failed to reset sidebar access.", "error");
+
+        }
+        finally {
+
+            setClearingSidebarAccess(false);
+
+        }
+
+    }
+
     async function handleClear(section, label) {
 
         if (!(await confirm({
@@ -518,6 +642,7 @@ export default function Settings() {
         : view === "activity-log" ? "Activity Log"
         : view === "access-levels" ? "Access Levels"
         : view === "branches" ? "Branches"
+        : view === "sidebar-access" ? "Sidebar Access"
         : "Settings";
 
     return (
@@ -568,6 +693,14 @@ export default function Settings() {
                         <p>
                             Create branches, note what each one is for, and restrict who can
                             push to it.
+                        </p>
+                    </button>
+
+                    <button type="button" className="settings-hub-tile" onClick={() => setView("sidebar-access")}>
+                        <h2>Sidebar Access</h2>
+                        <p>
+                            Lock or hide any sidebar section for everyone else using the portal —
+                            admin-only to change.
                         </p>
                     </button>
 
@@ -919,6 +1052,88 @@ export default function Settings() {
                     </button>
 
                 </div>
+
+                </div>
+
+            </div>
+
+            </>
+
+            )}
+
+            {view === "sidebar-access" && (
+
+            <>
+
+            <div className="card">
+
+                <h2 className="card-title">
+                    Sidebar Access
+                </h2>
+
+                <p className="empty-state" style={{ padding: "0 0 15px", textAlign: "left" }}>
+                    Restrict any sidebar section for everyone else browsing this portal.
+                    <strong> Locked</strong> keeps it visible but disabled, with a lock icon in
+                    place of its usual one. <strong>Hidden</strong> removes it from the sidebar
+                    entirely. Saving requires admin access — Settings itself can't be
+                    restricted, so there's always a way back here.
+                </p>
+
+                {sidebarAccessLoading ? (
+
+                    <p className="field-hint">Loading sidebar access...</p>
+
+                ) : (
+
+                    <div className="table-scroll">
+
+                    <table className="table">
+
+                        <thead>
+                            <tr>
+                                <th>Section</th>
+                                <th>Access</th>
+                            </tr>
+                        </thead>
+
+                        <tbody>
+
+                            {SIDEBAR_TABS.map(({ key, label }) => (
+
+                                <tr key={key}>
+                                    <td>{label}</td>
+                                    <td>
+                                        <select
+                                            className="form-control"
+                                            value={sidebarAccessMap[key] || "visible"}
+                                            onChange={(e) => setSidebarTabState(key, e.target.value)}
+                                        >
+                                            {SIDEBAR_STATES.map((s) => (
+                                                <option key={s.value} value={s.value}>{s.label}</option>
+                                            ))}
+                                        </select>
+                                    </td>
+                                </tr>
+
+                            ))}
+
+                        </tbody>
+
+                    </table>
+
+                    </div>
+
+                )}
+
+                <div className="button-row" style={{ marginTop: "15px" }}>
+
+                    <button className="btn btn-primary" onClick={handleSaveSidebarAccess} disabled={savingSidebarAccess || sidebarAccessLoading}>
+                        {savingSidebarAccess ? "Saving..." : "Save Sidebar Access"}
+                    </button>
+
+                    <button className="btn btn-danger" onClick={handleClearSidebarAccess} disabled={clearingSidebarAccess || sidebarAccessLoading}>
+                        {clearingSidebarAccess ? "Resetting..." : "Reset All To Visible"}
+                    </button>
 
                 </div>
 

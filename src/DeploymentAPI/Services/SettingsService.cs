@@ -155,7 +155,8 @@ public class SettingsService
     {
         ["docker"] = ("Docker", "Password"),
         ["github-oauth"] = ("GitHubOAuth", "ClientSecret"),
-        ["admins"] = ("Auth", null)
+        ["admins"] = ("Auth", null),
+        ["sidebar"] = ("SidebarAccess", null)
     };
 
     // Unlike a per-section clear (which only removes the secret, leaving the
@@ -204,6 +205,53 @@ public class SettingsService
         _log.LogInfo("Settings", $"{info.SectionKey} section cleared ({section}).");
 
         return BuildView(root);
+    }
+
+    // Which sidebar tabs the repo owner has restricted for everyone else —
+    // "locked" (still shown, greyed out, unreachable) or "hidden" (removed
+    // from the sidebar and unreachable). Absent from this dict means fully
+    // visible/usable, so a fresh portal starts with nothing restricted.
+    private static readonly HashSet<string> ValidSidebarStates = new() { "locked", "hidden" };
+
+    // Never restrictable: "settings" is the only way back to this screen to
+    // undo a lock/hide, and "dashboard" is where the frontend's route guard
+    // redirects anyone who lands on a restricted tab — restricting either
+    // would strand someone with nowhere safe to go.
+    private static readonly HashSet<string> UnrestrictableTabs = new() { "settings", "dashboard" };
+
+    public async Task<Dictionary<string, string>> GetSidebarAccessAsync()
+    {
+        var root = await ReadRootAsync();
+        var access = root["SidebarAccess"] as JObject;
+
+        return access?.Properties()
+            .ToDictionary(p => p.Name, p => p.Value?.ToString() ?? string.Empty)
+            ?? new Dictionary<string, string>();
+    }
+
+    public async Task<Dictionary<string, string>> SaveSidebarAccessAsync(Dictionary<string, string> states)
+    {
+        var root = await ReadRootAsync();
+        var access = new JObject();
+
+        foreach (var (key, state) in states)
+        {
+            if (UnrestrictableTabs.Contains(key))
+                continue;
+
+            if (ValidSidebarStates.Contains(state))
+                access[key] = state;
+        }
+
+        root["SidebarAccess"] = access;
+
+        await WriteRootAsync(root);
+
+        _log.LogInfo("Settings", access.Properties().Any()
+            ? $"Sidebar access updated: {string.Join(", ", access.Properties().Select(p => $"{p.Name}={p.Value}"))}"
+            : "Sidebar access reset — every tab visible again.");
+
+        return await GetSidebarAccessAsync();
     }
 
     // Branch "purpose" is a portal-only note (GitHub has no such field) —

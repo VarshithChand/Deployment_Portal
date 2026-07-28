@@ -1290,6 +1290,22 @@ textarea{
 
 }
 
+.app-sidebar-item.locked{
+
+    cursor:not-allowed;
+
+    opacity:.5;
+
+}
+
+.app-sidebar-item.locked:hover{
+
+    background:none;
+
+    color:var(--text-muted);
+
+}
+
 .app-sidebar-item-icon{
 
     flex-shrink:0;

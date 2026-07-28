@@ -19,8 +19,11 @@ import {
     SettingsIcon,
     ChevronIcon,
     SunIcon,
-    MoonIcon
+    MoonIcon,
+    LockIcon
 } from "./SidebarIcons";
+
+import useToast from "../../hooks/useToast";
 
 // Approvals and Pull Requests are both gated on the same repo-admin
 // permission (canApproveReleases) — listed together so the filter below
@@ -55,9 +58,10 @@ const STORAGE_KEY = "sidebar-collapsed";
 // item rather than only being reachable through the account badge in TopBar.
 export default function Sidebar() {
 
-    const { tab, setTab, mobileNavOpen, setMobileNavOpen } = useNavigation();
+    const { tab, setTab, mobileNavOpen, setMobileNavOpen, sidebarAccess } = useNavigation();
     const { canApproveReleases } = useAuth();
     const { theme, toggleTheme } = useTheme();
+    const toast = useToast();
 
     const [collapsed, setCollapsed] = useState(() => {
 
@@ -66,7 +70,20 @@ export default function Sidebar() {
 
     });
 
-    const visibleTabs = TABS.filter((t) => !GATED_TABS.has(t.key) || canApproveReleases);
+    const visibleTabs = TABS
+        .filter((t) => !GATED_TABS.has(t.key) || canApproveReleases)
+        .filter((t) => sidebarAccess[t.key] !== "hidden");
+
+    function handleTabClick(key) {
+
+        if (sidebarAccess[key] === "locked") {
+            toast.show("This section has been restricted by the portal admin.", "error");
+            return;
+        }
+
+        setTab(key);
+
+    }
 
     function toggleCollapsed() {
 
@@ -109,20 +126,29 @@ export default function Sidebar() {
 
                 <nav className="app-sidebar-nav">
 
-                    {visibleTabs.map(({ key, label, Icon }) => (
+                    {visibleTabs.map(({ key, label, Icon }) => {
 
-                        <button
-                            key={key}
-                            type="button"
-                            className={`app-sidebar-item ${tab === key ? "active" : ""}`}
-                            onClick={() => setTab(key)}
-                            title={collapsed ? label : undefined}
-                        >
-                            <span className="app-sidebar-item-icon"><Icon /></span>
-                            <span className="app-sidebar-item-label">{label}</span>
-                        </button>
+                        const locked = sidebarAccess[key] === "locked";
 
-                    ))}
+                        return (
+
+                            <button
+                                key={key}
+                                type="button"
+                                className={`app-sidebar-item ${tab === key ? "active" : ""} ${locked ? "locked" : ""}`}
+                                onClick={() => handleTabClick(key)}
+                                title={locked ? "Restricted by the portal admin" : (collapsed ? label : undefined)}
+                                aria-disabled={locked}
+                            >
+                                <span className="app-sidebar-item-icon">
+                                    {locked ? <LockIcon /> : <Icon />}
+                                </span>
+                                <span className="app-sidebar-item-label">{label}</span>
+                            </button>
+
+                        );
+
+                    })}
 
                 </nav>
 
