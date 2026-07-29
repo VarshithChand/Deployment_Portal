@@ -1,30 +1,107 @@
 using DeploymentAPI.DTOs;
 using Newtonsoft.Json.Linq;
+using Npgsql;
 
 namespace DeploymentAPI.Services;
 
-// Reads/writes appsettings.Local.json directly (the gitignored file that overrides
-// appsettings.json) so credentials entered via the Settings page are never
-// stored in the browser and never land in a file that gets committed.
+// Reads/writes settings as one JSON blob — either appsettings.Local.json
+// (the gitignored file that overrides appsettings.json, for local dev) or a
+// single row in Postgres when a DATABASE_URL is configured. The container's
+// own disk (Render's free tier, and any redeploy) is wiped on restart, which
+// silently reset the admin allowlist and every PAT user's credentials back
+// to nothing — DATABASE_URL is what makes any of that survive.
 public class SettingsService
 {
     private readonly string _localSettingsPath;
+    private readonly string? _connectionString;
     private readonly ActivityLogService _log;
+
+    // CREATE TABLE IF NOT EXISTS is idempotent and cheap, but there's no
+    // reason to round-trip it on every single read/write within the same
+    // process — a race between two requests both finding this false is
+    // harmless (the statement is safe to run concurrently).
+    private static bool _tableEnsured;
 
     public SettingsService(IHostEnvironment env, ActivityLogService log)
     {
         // SETTINGS_FILE_PATH lets a deployment point this at a mounted
-        // persistent volume (e.g. Fly.io) instead of the app's own content
-        // root, which is typically wiped and replaced on every redeploy.
-        // Program.cs points AddJsonFile at the same path, so reads and
-        // writes always agree on where the file lives.
+        // persistent volume instead of the app's own content root. DATABASE_URL
+        // (Render's standard Postgres connection string convention) takes
+        // priority when present — see ReadRootAsync/WriteRootAsync below.
         var overridePath = Environment.GetEnvironmentVariable("SETTINGS_FILE_PATH");
 
         _localSettingsPath = string.IsNullOrWhiteSpace(overridePath)
             ? Path.Combine(env.ContentRootPath, "appsettings.Local.json")
             : overridePath;
 
+        var databaseUrl = Environment.GetEnvironmentVariable("DATABASE_URL");
+
+        _connectionString = string.IsNullOrWhiteSpace(databaseUrl)
+            ? null
+            : BuildConnectionString(databaseUrl);
+
         _log = log;
+    }
+
+    // Render (and Heroku before it) hand out Postgres connections as a
+    // "postgres://user:pass@host:port/dbname" URI rather than Npgsql's own
+    // "Host=...;Username=...;..." format, so this bridges the two. SSL is
+    // required outright — Render's Postgres instances reject plain
+    // connections, and there's no local-dev case to accommodate here since
+    // DATABASE_URL is only ever set when a real Postgres is meant to be used.
+    private static string BuildConnectionString(string databaseUrl)
+    {
+        var uri = new Uri(databaseUrl);
+        var userInfo = uri.UserInfo.Split(':', 2);
+
+        var builder = new NpgsqlConnectionStringBuilder
+        {
+            Host = uri.Host,
+            Port = uri.Port > 0 ? uri.Port : 5432,
+            Username = Uri.UnescapeDataString(userInfo[0]),
+            Password = userInfo.Length > 1 ? Uri.UnescapeDataString(userInfo[1]) : string.Empty,
+            Database = uri.AbsolutePath.TrimStart('/'),
+            SslMode = SslMode.Require
+        };
+
+        return builder.ConnectionString;
+    }
+
+    // Called once from Program.cs, before AddJsonFile brings the local file
+    // into IConfiguration, when DATABASE_URL is set. Several settings
+    // (GitHubOAuthSettings, AuthorizationSettings, DockerSettings, JwtSettings
+    // — see Program.cs's Configure<> calls) are bound from that file via
+    // IOptionsMonitor, not read through this service's own GetViewAsync/etc,
+    // so without this the file stays empty forever in a container whose disk
+    // never had this run's Postgres data on it, even though every other read
+    // path through SettingsService itself would correctly see it.
+    public static async Task HydrateLocalFileFromDatabaseAsync(string databaseUrl, string localFilePath)
+    {
+        var connectionString = BuildConnectionString(databaseUrl);
+
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+
+        await using (var createCommand = new NpgsqlCommand(
+            "CREATE TABLE IF NOT EXISTS portal_settings (id INTEGER PRIMARY KEY, data JSONB NOT NULL)",
+            connection))
+        {
+            await createCommand.ExecuteNonQueryAsync();
+        }
+
+        await using var selectCommand = new NpgsqlCommand("SELECT data FROM portal_settings WHERE id = 1", connection);
+        var result = await selectCommand.ExecuteScalarAsync();
+
+        var json = result as string ?? "{}";
+
+        var directory = Path.GetDirectoryName(localFilePath);
+
+        if (!string.IsNullOrEmpty(directory))
+            Directory.CreateDirectory(directory);
+
+        await File.WriteAllTextAsync(localFilePath, json);
+
+        _tableEnsured = true;
     }
 
     public async Task<SettingsViewDto> GetViewAsync()
@@ -441,6 +518,9 @@ public class SettingsService
 
     private async Task<JObject> ReadRootAsync()
     {
+        if (_connectionString != null)
+            return await ReadRootFromDatabaseAsync();
+
         if (!File.Exists(_localSettingsPath))
             return new JObject();
 
@@ -453,6 +533,75 @@ public class SettingsService
 
     private async Task WriteRootAsync(JObject root)
     {
+        if (_connectionString != null)
+        {
+            await WriteRootToDatabaseAsync(root);
+            return;
+        }
+
+        var directory = Path.GetDirectoryName(_localSettingsPath);
+
+        if (!string.IsNullOrEmpty(directory))
+            Directory.CreateDirectory(directory);
+
+        await File.WriteAllTextAsync(_localSettingsPath, root.ToString());
+    }
+
+    // Everything this service stores lives as one JSON blob — same shape as
+    // the file, just in a single row (id is always 1) instead of a path.
+    // Simplest possible schema that still gets real persistence: no per-
+    // section columns to keep in sync with BuildView/SaveXAsync, no
+    // migrations to write when a new section is added (see SidebarAccess,
+    // added well after this table would have first been created).
+    private async Task EnsureTableAsync(NpgsqlConnection connection)
+    {
+        if (_tableEnsured)
+            return;
+
+        await using var command = new NpgsqlCommand(
+            "CREATE TABLE IF NOT EXISTS portal_settings (id INTEGER PRIMARY KEY, data JSONB NOT NULL)",
+            connection);
+
+        await command.ExecuteNonQueryAsync();
+        _tableEnsured = true;
+    }
+
+    private async Task<JObject> ReadRootFromDatabaseAsync()
+    {
+        await using var connection = new NpgsqlConnection(_connectionString);
+        await connection.OpenAsync();
+        await EnsureTableAsync(connection);
+
+        await using var command = new NpgsqlCommand("SELECT data FROM portal_settings WHERE id = 1", connection);
+        var result = await command.ExecuteScalarAsync();
+
+        return result is string json && !string.IsNullOrWhiteSpace(json)
+            ? JObject.Parse(json)
+            : new JObject();
+    }
+
+    private async Task WriteRootToDatabaseAsync(JObject root)
+    {
+        await using var connection = new NpgsqlConnection(_connectionString);
+        await connection.OpenAsync();
+        await EnsureTableAsync(connection);
+
+        await using var command = new NpgsqlCommand(
+            "INSERT INTO portal_settings (id, data) VALUES (1, @data::jsonb) " +
+            "ON CONFLICT (id) DO UPDATE SET data = @data::jsonb",
+            connection);
+
+        command.Parameters.AddWithValue("data", root.ToString(Newtonsoft.Json.Formatting.None));
+        await command.ExecuteNonQueryAsync();
+
+        // Mirrored into the local file too (which IConfiguration is already
+        // watching with reloadOnChange — see Program.cs) so IOptionsMonitor-
+        // bound settings on THIS running process pick up the change right
+        // away, without waiting for a restart to re-hydrate from Postgres.
+        // Postgres stays the durable copy; on a multi-instance deployment
+        // other instances only see this write on their own next restart,
+        // which is a real gap but not one Render's free single-instance
+        // tier hits.
         var directory = Path.GetDirectoryName(_localSettingsPath);
 
         if (!string.IsNullOrEmpty(directory))

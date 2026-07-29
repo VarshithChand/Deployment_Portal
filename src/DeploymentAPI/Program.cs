@@ -21,6 +21,21 @@ var builder = WebApplication.CreateBuilder(args);
 var localSettingsPath = Environment.GetEnvironmentVariable("SETTINGS_FILE_PATH")
     ?? "appsettings.Local.json";
 
+// When DATABASE_URL is set (see SettingsService), Postgres is the durable
+// source of truth — the container's own disk doesn't survive a restart on
+// Render's free tier, which otherwise silently reset the admin allowlist
+// and every PAT user's credentials back to nothing. This has to run BEFORE
+// AddJsonFile below so the settings several IOptionsMonitor<T> bindings
+// read straight from that file (GitHubOAuthSettings, AuthorizationSettings,
+// DockerSettings, JwtSettings) start out matching what's actually saved,
+// not whatever an empty fresh container happens to have on disk.
+var databaseUrl = Environment.GetEnvironmentVariable("DATABASE_URL");
+
+if (!string.IsNullOrWhiteSpace(databaseUrl))
+{
+    await SettingsService.HydrateLocalFileFromDatabaseAsync(databaseUrl, localSettingsPath);
+}
+
 builder.Configuration.AddJsonFile(localSettingsPath, optional: true, reloadOnChange: true);
 
 // Jwt:Secret has no Settings-page equivalent — it only ever comes from
