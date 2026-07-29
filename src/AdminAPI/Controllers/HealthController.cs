@@ -1,6 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
 
-#
 namespace AdminAPI.Controllers;
 
 [ApiController]
