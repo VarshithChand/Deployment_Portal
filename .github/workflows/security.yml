@@ -118,12 +118,12 @@ jobs:
         with:
           fetch-depth: 0
           ref: ${{ github.ref_name }}
-          # The default GITHUB_TOKEN can't push past master's branch
-          # protection (it isn't on the ruleset's bypass list) — a PAT
-          # belonging to an account that IS allowed to bypass (e.g. the
-          # repo owner) is what makes the pushes below actually succeed.
-          # Add one under Settings > Secrets and variables > Actions.
-          token: ${{ secrets.PUSH_PAT }}
+          # This job only ever pushes to the "artifacts" branch (see
+          # ARTIFACT_BRANCH below), which isn't under master's branch
+          # protection ruleset — the default GITHUB_TOKEN (with this
+          # workflow's own "contents: write" permission) is enough, no
+          # separate PAT/secret needed.
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Download Publish Files
         uses: actions/download-artifact@v4
