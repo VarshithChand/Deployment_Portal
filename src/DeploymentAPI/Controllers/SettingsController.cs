@@ -86,6 +86,14 @@ public class SettingsController : ControllerBase
     [HttpPost("me/github")]
     public async Task<IActionResult> SaveMyGitHub(GitHubSettingsUpdateDto request)
     {
+        // Owner/Repository end up interpolated into dozens of GitHub API
+        // URLs across this app's lifetime, not just this one request -
+        // rejecting anything outside a real GitHub name's character set
+        // here means every one of those later uses is safe from a crafted
+        // value redirecting a request onto an unintended API path.
+        if (!GitHubNameValidator.IsValid(request.Owner) || !GitHubNameValidator.IsValid(request.Repository))
+            return BadRequest(new { message = "Owner and repository must be valid GitHub names (letters, numbers, hyphens, underscores, periods only)." });
+
         var key = PortalIdentity.GetOrCreateKey(HttpContext);
         var creds = await _settings.SaveUserGitHubCredentialsAsync(key, request);
 

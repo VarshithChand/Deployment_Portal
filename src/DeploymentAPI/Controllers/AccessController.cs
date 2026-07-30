@@ -98,6 +98,13 @@ public class AccessController : ControllerBase
         if (string.IsNullOrWhiteSpace(request.Owner) || string.IsNullOrWhiteSpace(request.Repository))
             return BadRequest(new { message = "Pick a repository to assign this user to." });
 
+        // These end up interpolated into a GitHub API URL - rejecting
+        // anything outside a real GitHub name's character set here means
+        // a crafted value can't redirect that request onto an unintended
+        // API path.
+        if (!GitHubNameValidator.IsValid(request.Owner) || !GitHubNameValidator.IsValid(request.Repository))
+            return BadRequest(new { message = "Owner and repository must be valid GitHub names (letters, numbers, hyphens, underscores, periods only)." });
+
         var permission = string.IsNullOrWhiteSpace(request.Permission) ? "push" : request.Permission;
 
         await _github.InviteCollaboratorToRepoAsync(request.Owner, request.Repository, username, permission);
