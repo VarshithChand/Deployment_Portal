@@ -6,6 +6,7 @@ import useConfirm from "../hooks/useConfirm";
 import LoadingSpinner from "../components/LoadingSpinner";
 import PageLayout from "../components/layout/PageLayout";
 import CopyButton from "../components/common/CopyButton";
+import SectionTabs from "../components/common/SectionTabs";
 
 import {
     getContainers,
@@ -531,22 +532,7 @@ export default function Docker() {
 
                 <div className="card">
 
-                    <div className="button-row" style={{ marginBottom: 20 }}>
-
-                        {SECTIONS.map((s) => (
-
-                            <button
-                                key={s.key}
-                                type="button"
-                                className={`btn btn-sm ${section === s.key ? "btn-primary" : "btn-secondary"}`}
-                                onClick={() => switchSection(s.key)}
-                            >
-                                {s.label}
-                            </button>
-
-                        ))}
-
-                    </div>
+                    <SectionTabs sections={SECTIONS} active={section} onSelect={switchSection} />
 
                     {section === "containers" && (
 
