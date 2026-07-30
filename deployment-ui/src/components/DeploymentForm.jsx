@@ -829,6 +829,7 @@ export default function DeploymentForm({
                 =========================== */}
 
                 <button
+                    type="button"
 
                     className="btn btn-success"
 

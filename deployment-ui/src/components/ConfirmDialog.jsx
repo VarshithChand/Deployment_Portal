@@ -72,6 +72,7 @@ export default function ConfirmDialog({
                 <div>
 
                     <button
+                        type="button"
                         ref={confirmRef}
                         className={`btn ${danger ? "btn-danger" : "btn-success"}`}
                         onClick={onConfirm}
@@ -82,6 +83,7 @@ export default function ConfirmDialog({
                     </button>
 
                     <button
+                        type="button"
                         ref={cancelRef}
                         className="btn btn-secondary"
                         onClick={onCancel}

@@ -326,7 +326,7 @@ export default function BranchManager() {
                     ))}
                 </select>
 
-                <button className="btn btn-primary" onClick={handleCreateBranch} disabled={creatingBranch}>
+                <button type="button" className="btn btn-primary" onClick={handleCreateBranch} disabled={creatingBranch}>
                     {creatingBranch ? "Creating..." : "Create Branch"}
                 </button>
 
@@ -432,6 +432,7 @@ export default function BranchManager() {
                                             />
 
                                             <button
+                                                type="button"
                                                 className="btn btn-primary"
                                                 onClick={() => handleSavePurpose(b.name)}
                                                 disabled={savingPurpose === b.name}
@@ -477,6 +478,7 @@ export default function BranchManager() {
                                         <div className="button-row">
 
                                             <button
+                                                type="button"
                                                 className="btn btn-primary"
                                                 onClick={() => handleSaveRestriction(b.name)}
                                                 disabled={savingRestriction === b.name}
@@ -487,6 +489,7 @@ export default function BranchManager() {
                                             {b.restricted && (
 
                                                 <button
+                                                    type="button"
                                                     className="btn btn-danger"
                                                     onClick={() => handleRemoveRestriction(b.name)}
                                                     disabled={savingRestriction === b.name}

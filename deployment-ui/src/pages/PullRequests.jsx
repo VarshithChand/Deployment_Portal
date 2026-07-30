@@ -278,6 +278,7 @@ export default function PullRequests() {
                                         <div className="access-branch-actions">
 
                                             <button
+                                                type="button"
                                                 className="btn btn-secondary btn-sm"
                                                 onClick={() => handleApprove(pr.number)}
                                                 disabled={actingNumber === pr.number}
@@ -286,6 +287,7 @@ export default function PullRequests() {
                                             </button>
 
                                             <button
+                                                type="button"
                                                 className="btn btn-primary btn-sm"
                                                 onClick={() => handleMerge(pr.number)}
                                                 disabled={actingNumber === pr.number || pr.draft}

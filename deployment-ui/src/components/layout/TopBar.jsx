@@ -164,7 +164,7 @@ export default function TopBar() {
                                 </span>
                             </button>
 
-                            <button className="theme-toggle" onClick={logout}>
+                            <button type="button" className="theme-toggle" onClick={logout}>
                                 Logout
                             </button>
 
@@ -172,7 +172,7 @@ export default function TopBar() {
 
                     ) : oauthConfigured ? (
 
-                        <button className="theme-toggle" onClick={login}>
+                        <button type="button" className="theme-toggle" onClick={login}>
                             Login with GitHub
                         </button>
 
@@ -210,7 +210,7 @@ export default function TopBar() {
 
                             ) : (
 
-                                <button className="theme-toggle" onClick={() => setTab("settings")}>
+                                <button type="button" className="theme-toggle" onClick={() => setTab("settings")}>
                                     Set up GitHub Login
                                 </button>
 

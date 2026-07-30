@@ -270,6 +270,7 @@ export default function Approvals() {
                                 <div className="button-row" style={{ marginTop: "15px" }}>
 
                                     <button
+                                        type="button"
                                         className="btn btn-success"
                                         disabled={decidingRunId === run.runId}
                                         onClick={() => handleDecision(run.runId, true)}
@@ -278,6 +279,7 @@ export default function Approvals() {
                                     </button>
 
                                     <button
+                                        type="button"
                                         className="btn btn-danger"
                                         disabled={decidingRunId === run.runId}
                                         onClick={() => handleDecision(run.runId, false)}

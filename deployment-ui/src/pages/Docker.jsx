@@ -639,7 +639,7 @@ export default function Docker() {
                                     <label htmlFor="docker-restart-policy">Restart unless stopped</label>
                                 </div>
 
-                                <button className="btn btn-primary" disabled={creatingContainer}>
+                                <button type="submit" className="btn btn-primary" disabled={creatingContainer}>
                                     {creatingContainer ? "Creating..." : "Create Container"}
                                 </button>
 
@@ -693,6 +693,7 @@ export default function Docker() {
 
                                                     {c.state === "running" ? (
                                                         <button
+                                                            type="button"
                                                             className="btn btn-secondary btn-sm"
                                                             onClick={() => handleStop(c.id)}
                                                             disabled={actingId === c.id}
@@ -701,6 +702,7 @@ export default function Docker() {
                                                         </button>
                                                     ) : (
                                                         <button
+                                                            type="button"
                                                             className="btn btn-secondary btn-sm"
                                                             onClick={() => handleRestart(c.id)}
                                                             disabled={actingId === c.id}
@@ -711,6 +713,7 @@ export default function Docker() {
 
                                                     {c.state === "running" && (
                                                         <button
+                                                            type="button"
                                                             className="btn btn-secondary btn-sm"
                                                             onClick={() => handleRestart(c.id)}
                                                             disabled={actingId === c.id}
@@ -720,6 +723,7 @@ export default function Docker() {
                                                     )}
 
                                                     <button
+                                                        type="button"
                                                         className="btn btn-secondary btn-sm"
                                                         onClick={() => toggleLogs(c.id)}
                                                     >
@@ -727,6 +731,7 @@ export default function Docker() {
                                                     </button>
 
                                                     <button
+                                                        type="button"
                                                         className="btn btn-danger btn-sm"
                                                         onClick={() => handleRemoveContainer(c.id, c.name)}
                                                         disabled={actingId === c.id}
@@ -805,6 +810,7 @@ export default function Docker() {
                                             <td>{new Date(img.createdAt).toLocaleString()}</td>
                                             <td>
                                                 <button
+                                                    type="button"
                                                     className="btn btn-danger btn-sm"
                                                     onClick={() => handleRemoveImage(img.id, img.tags[0])}
                                                     disabled={actingId === img.id}
@@ -852,7 +858,7 @@ export default function Docker() {
                                     value={newVolumeName}
                                     onChange={(e) => setNewVolumeName(e.target.value)}
                                 />
-                                <button className="btn btn-primary">Create</button>
+                                <button type="submit" className="btn btn-primary">Create</button>
                             </form>
 
                         )}
@@ -886,6 +892,7 @@ export default function Docker() {
                                             <td className="commit-sha">{v.mountpoint}</td>
                                             <td>
                                                 <button
+                                                    type="button"
                                                     className="btn btn-danger btn-sm"
                                                     onClick={() => handleRemoveVolume(v.name)}
                                                     disabled={actingId === v.name}
@@ -943,7 +950,7 @@ export default function Docker() {
                                     <option value="overlay">overlay</option>
                                     <option value="host">host</option>
                                 </select>
-                                <button className="btn btn-primary">Create</button>
+                                <button type="submit" className="btn btn-primary">Create</button>
                             </form>
 
                         )}
@@ -977,6 +984,7 @@ export default function Docker() {
                                             <td>{n.scope}</td>
                                             <td>
                                                 <button
+                                                    type="button"
                                                     className="btn btn-danger btn-sm"
                                                     onClick={() => handleRemoveNetwork(n.id, n.name)}
                                                     disabled={actingId === n.id}

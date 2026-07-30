@@ -534,7 +534,7 @@ export default function Services() {
                                 </select>
                             </div>
 
-                            <button className="btn btn-primary">Create User</button>
+                            <button type="submit" className="btn btn-primary">Create User</button>
 
                         </form>
 
@@ -594,6 +594,7 @@ export default function Services() {
                                         <td>{new Date(u.createdAt).toLocaleDateString()}</td>
                                         <td>
                                             <button
+                                                type="button"
                                                 className="btn btn-danger btn-sm"
                                                 onClick={() => handleRemoveUser(u.id, u.username)}
                                             >
@@ -653,7 +654,7 @@ export default function Services() {
                                 />
                             </div>
 
-                            <button className="btn btn-primary">Create Project</button>
+                            <button type="submit" className="btn btn-primary">Create Project</button>
 
                         </form>
 
@@ -706,6 +707,7 @@ export default function Services() {
                                             <div className="button-row">
 
                                                 <button
+                                                    type="button"
                                                     className="btn btn-secondary btn-sm"
                                                     onClick={() => toggleProjectTasks(p.id)}
                                                 >
@@ -713,6 +715,7 @@ export default function Services() {
                                                 </button>
 
                                                 <button
+                                                    type="button"
                                                     className="btn btn-danger btn-sm"
                                                     onClick={() => handleRemoveProject(p.id, p.name)}
                                                 >
@@ -753,7 +756,7 @@ export default function Services() {
                                                             value={newTaskAssignee}
                                                             onChange={(e) => setNewTaskAssignee(e.target.value)}
                                                         />
-                                                        <button className="btn btn-primary btn-sm">Add Task</button>
+                                                        <button type="submit" className="btn btn-primary btn-sm">Add Task</button>
                                                     </form>
 
                                                     {tasks.length === 0 ? (
@@ -795,6 +798,7 @@ export default function Services() {
                                                                         </td>
                                                                         <td>
                                                                             <button
+                                                                                type="button"
                                                                                 className="btn btn-danger btn-sm"
                                                                                 onClick={() => handleRemoveTask(t.id, p.id)}
                                                                             >
@@ -877,7 +881,7 @@ export default function Services() {
                             value={newKeyName}
                             onChange={(e) => setNewKeyName(e.target.value)}
                         />
-                        <button className="btn btn-primary">Create Key</button>
+                        <button type="submit" className="btn btn-primary">Create Key</button>
                     </form>
 
                     {apiKeys.length === 0 ? (
@@ -916,6 +920,7 @@ export default function Services() {
                                         <td>
                                             {!k.revoked && (
                                                 <button
+                                                    type="button"
                                                     className="btn btn-danger btn-sm"
                                                     onClick={() => handleRevokeKey(k.id, k.name)}
                                                 >

@@ -125,11 +125,11 @@ export default function WorkflowGraph({ jobs, layers, jobStates, onApprove, onRe
 
                                     <div className="button-row">
 
-                                        <button className="btn btn-success" onClick={() => onApprove(job.id)}>
+                                        <button type="button" className="btn btn-success" onClick={() => onApprove(job.id)}>
                                             Approve
                                         </button>
 
-                                        <button className="btn btn-danger" onClick={() => onReject(job.id)}>
+                                        <button type="button" className="btn btn-danger" onClick={() => onReject(job.id)}>
                                             Reject
                                         </button>
 

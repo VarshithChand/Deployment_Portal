@@ -60,6 +60,7 @@ export default function YamlViewerDialog({
                 <div>
 
                     <button
+                        type="button"
                         className="btn btn-success"
                         onClick={handleCopy}
                         disabled={loading || !!error}
@@ -68,6 +69,7 @@ export default function YamlViewerDialog({
                     </button>
 
                     <button
+                        type="button"
                         className="btn"
                         onClick={onClose}
                     >

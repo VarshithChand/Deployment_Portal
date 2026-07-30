@@ -26,6 +26,7 @@ export default function QuickActions({
             <div className="quick-actions-buttons">
 
                 <button
+                    type="button"
 
                     className="btn btn-primary"
 
@@ -57,6 +58,7 @@ export default function QuickActions({
                 {githubTokenConfigured && (
 
                     <button
+                        type="button"
 
                         className="btn btn-primary"
                         onClick={() => setSwitchOpen(true)}

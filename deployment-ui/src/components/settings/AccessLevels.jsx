@@ -408,6 +408,7 @@ export default function AccessLevels() {
                                         )}
 
                                         <button
+                                            type="button"
                                             className="btn btn-danger btn-sm"
                                             onClick={() => handleRemove(entry)}
                                             disabled={busyLogin === entry.login}
@@ -462,6 +463,7 @@ export default function AccessLevels() {
                                                     </select>
 
                                                     <button
+                                                        type="button"
                                                         className="btn btn-primary"
                                                         onClick={() => handleAssign(entry.login)}
                                                         disabled={assigning}

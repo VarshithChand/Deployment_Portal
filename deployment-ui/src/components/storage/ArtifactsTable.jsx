@@ -116,6 +116,7 @@ export default function ArtifactsTable({ artifacts = [], owner, repository, onDe
 
                                 <td onClick={(e) => e.stopPropagation()}>
                                     <button
+                                        type="button"
                                         className="btn btn-danger"
                                         style={{ padding: "6px 14px", fontSize: "13px" }}
                                         disabled={deletingId === artifact.id}

@@ -276,7 +276,7 @@ export default function SwitchRepositoryModal({
                 )}
 
                 <div>
-                    <button className="btn" onClick={onClose}>Close</button>
+                    <button type="button" className="btn" onClick={onClose}>Close</button>
                 </div>
 
             </div>

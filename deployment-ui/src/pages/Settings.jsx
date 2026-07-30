@@ -874,6 +874,7 @@ export default function Settings() {
                     </p>
 
                     <button
+                        type="button"
                         className="btn btn-danger"
                         onClick={handleClearAll}
                         disabled={clearingAll}
@@ -1048,11 +1049,11 @@ export default function Settings() {
 
                 <div className="button-row">
 
-                    <button className="btn btn-primary" onClick={handleSaveGitHub} disabled={savingGitHub}>
+                    <button type="button" className="btn btn-primary" onClick={handleSaveGitHub} disabled={savingGitHub}>
                         {savingGitHub ? "Saving..." : "Save GitHub Settings"}
                     </button>
 
-                    <button className="btn btn-danger" onClick={() => handleClear("github", "GitHub token")}>
+                    <button type="button" className="btn btn-danger" onClick={() => handleClear("github", "GitHub token")}>
                         Clear Token
                     </button>
 
@@ -1111,11 +1112,11 @@ export default function Settings() {
 
                 <div className="button-row">
 
-                    <button className="btn btn-primary" onClick={handleSaveDocker} disabled={savingDocker}>
+                    <button type="button" className="btn btn-primary" onClick={handleSaveDocker} disabled={savingDocker}>
                         {savingDocker ? "Saving..." : "Save Docker Settings"}
                     </button>
 
-                    <button className="btn btn-danger" onClick={() => handleClear("docker", "Docker password")}>
+                    <button type="button" className="btn btn-danger" onClick={() => handleClear("docker", "Docker password")}>
                         Clear Password
                     </button>
 
@@ -1163,11 +1164,11 @@ export default function Settings() {
 
                 <div className="button-row">
 
-                    <button className="btn btn-primary" onClick={handleSaveOAuth} disabled={savingOAuth}>
+                    <button type="button" className="btn btn-primary" onClick={handleSaveOAuth} disabled={savingOAuth}>
                         {savingOAuth ? "Saving..." : "Save OAuth Settings"}
                     </button>
 
-                    <button className="btn btn-danger" onClick={() => handleClear("github-oauth", "GitHub OAuth client secret")}>
+                    <button type="button" className="btn btn-danger" onClick={() => handleClear("github-oauth", "GitHub OAuth client secret")}>
                         Clear Secret
                     </button>
 
@@ -1241,11 +1242,11 @@ export default function Settings() {
 
                 <div className="button-row">
 
-                    <button className="btn btn-primary" onClick={handleSaveSonar} disabled={savingSonar}>
+                    <button type="button" className="btn btn-primary" onClick={handleSaveSonar} disabled={savingSonar}>
                         {savingSonar ? "Saving..." : "Save Sonar Settings"}
                     </button>
 
-                    <button className="btn btn-danger" onClick={() => handleClear("sonar", "Sonar token")}>
+                    <button type="button" className="btn btn-danger" onClick={() => handleClear("sonar", "Sonar token")}>
                         Clear Token
                     </button>
 
@@ -1275,11 +1276,11 @@ export default function Settings() {
 
                 <div className="button-row">
 
-                    <button className="btn btn-primary" onClick={handleSaveAdmins} disabled={savingAdmins}>
+                    <button type="button" className="btn btn-primary" onClick={handleSaveAdmins} disabled={savingAdmins}>
                         {savingAdmins ? "Saving..." : "Save Admin Allowlist"}
                     </button>
 
-                    <button className="btn btn-danger" onClick={() => handleClear("admins", "admin allowlist")}>
+                    <button type="button" className="btn btn-danger" onClick={() => handleClear("admins", "admin allowlist")}>
                         Clear
                     </button>
 
@@ -1432,11 +1433,11 @@ export default function Settings() {
 
                     <div className="button-row" style={{ marginTop: "15px" }}>
 
-                        <button className="btn btn-primary" onClick={handleSaveSidebarAccess} disabled={savingSidebarAccess || sidebarAccessLoading}>
+                        <button type="button" className="btn btn-primary" onClick={handleSaveSidebarAccess} disabled={savingSidebarAccess || sidebarAccessLoading}>
                             {savingSidebarAccess ? "Saving..." : "Save Sidebar Access"}
                         </button>
 
-                        <button className="btn btn-danger" onClick={handleClearSidebarAccess} disabled={clearingSidebarAccess || sidebarAccessLoading}>
+                        <button type="button" className="btn btn-danger" onClick={handleClearSidebarAccess} disabled={clearingSidebarAccess || sidebarAccessLoading}>
                             {clearingSidebarAccess ? "Resetting..." : "Reset This User To Visible"}
                         </button>
 

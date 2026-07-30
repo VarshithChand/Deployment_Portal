@@ -111,7 +111,7 @@ export default function InviteCollaborator({ onInvited, isOrganization }) {
                         ))}
                     </select>
 
-                    <button className="btn btn-primary" onClick={handleInvite} disabled={inviting}>
+                    <button type="button" className="btn btn-primary" onClick={handleInvite} disabled={inviting}>
                         {inviting ? "Inviting..." : "Invite"}
                     </button>
 

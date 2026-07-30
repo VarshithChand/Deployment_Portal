@@ -322,11 +322,11 @@ export default function TemplateTester() {
 
                 <div className="button-row" style={{ marginTop: "15px" }}>
 
-                    <button className="btn btn-primary" onClick={handleRun} disabled={running}>
+                    <button type="button" className="btn btn-primary" onClick={handleRun} disabled={running}>
                         {running ? "Running..." : "Run"}
                     </button>
 
-                    <button className="btn btn-secondary" onClick={loadExample} disabled={running}>
+                    <button type="button" className="btn btn-secondary" onClick={loadExample} disabled={running}>
                         Load example
                     </button>
 
@@ -352,7 +352,7 @@ export default function TemplateTester() {
                         <pre className="workflow-fix-preview">{suggestedFix}</pre>
 
                         <div className="button-row" style={{ marginTop: "10px" }}>
-                            <button className="btn btn-primary" onClick={handleApplyFix}>
+                            <button type="button" className="btn btn-primary" onClick={handleApplyFix}>
                                 Apply fix &amp; run
                             </button>
                         </div>
@@ -434,11 +434,11 @@ export default function TemplateTester() {
 
                     <div className="button-row" style={{ marginTop: "15px" }}>
 
-                        <button className="btn btn-primary" onClick={startWithParams}>
+                        <button type="button" className="btn btn-primary" onClick={startWithParams}>
                             Run
                         </button>
 
-                        <button className="btn btn-secondary" onClick={() => setParamDialog(null)}>
+                        <button type="button" className="btn btn-secondary" onClick={() => setParamDialog(null)}>
                             Cancel
                         </button>
 

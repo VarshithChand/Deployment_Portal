@@ -39,7 +39,7 @@ export default class ErrorBoundary extends Component {
                             Dashboard and try again.
                         </p>
 
-                        <button className="btn btn-primary" onClick={this.props.onRecover}>
+                        <button type="button" className="btn btn-primary" onClick={this.props.onRecover}>
                             Go to Dashboard
                         </button>
 

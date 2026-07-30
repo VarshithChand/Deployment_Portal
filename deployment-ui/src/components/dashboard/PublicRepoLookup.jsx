@@ -73,7 +73,7 @@ export default function PublicRepoLookup() {
                 />
             </div>
 
-            <button className="btn btn-primary" onClick={handleLookup} disabled={loading}>
+            <button type="button" className="btn btn-primary" onClick={handleLookup} disabled={loading}>
                 {loading ? "Looking up..." : "View Repository"}
             </button>
 
@@ -108,6 +108,7 @@ export default function PublicRepoLookup() {
                         </div>
 
                         <button
+                            type="button"
                             className="btn btn-primary"
                             style={{ marginTop: "14px" }}
                             onClick={() => goToSettingsWithRepo(preview.htmlUrl)}
