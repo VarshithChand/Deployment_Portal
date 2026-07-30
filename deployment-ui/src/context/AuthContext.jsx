@@ -27,6 +27,14 @@ export default function AuthProvider({ children }) {
     // Sidebar Access.
     const [isAdminSession, setIsAdminSession] = useState(false);
 
+    // False until refreshOauthStatus's first call resolves. isAdminSession
+    // starts false too, but that's indistinguishable from "checked, and
+    // this session isn't admin" — a route guard reacting to isAdminSession
+    // alone bounces a real admin away on every hard reload, since it fires
+    // before this first check has had a chance to complete. Guards must
+    // wait for this to be true before treating isAdminSession as final.
+    const [oauthStatusChecked, setOauthStatusChecked] = useState(false);
+
     const refresh = useCallback(async () => {
 
         setLoading(true);
@@ -82,6 +90,11 @@ export default function AuthProvider({ children }) {
             console.error(err);
 
         }
+        finally {
+
+            setOauthStatusChecked(true);
+
+        }
 
     }, []);
 
@@ -133,7 +146,7 @@ export default function AuthProvider({ children }) {
 
     return (
 
-        <AuthContext.Provider value={{ user, loading, login, logout, refresh, oauthConfigured, githubTokenConfigured, tokenOwner, canApproveReleases: !!tokenOwner?.canApprove, isAdminSession, refreshOauthStatus }}>
+        <AuthContext.Provider value={{ user, loading, login, logout, refresh, oauthConfigured, githubTokenConfigured, tokenOwner, canApproveReleases: !!tokenOwner?.canApprove, isAdminSession, oauthStatusChecked, refreshOauthStatus }}>
 
             {children}
 

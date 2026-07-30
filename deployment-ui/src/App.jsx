@@ -32,7 +32,7 @@ const ADMIN_ONLY_TABS = new Set(["codeQuality"]);
 function App(){
 
     const { tab, setTab, sidebarAccess } = useNavigation();
-    const { isAdminSession } = useAuth();
+    const { isAdminSession, oauthStatusChecked } = useAuth();
     const toast = useToast();
 
     // Locking/hiding a tab (see Settings > Sidebar Access) has to actually
@@ -52,7 +52,11 @@ function App(){
 
         }
 
-        if (ADMIN_ONLY_TABS.has(tab) && !isAdminSession) {
+        // isAdminSession starts false and only becomes reliable once
+        // oauthStatusChecked flips true (see AuthContext) - enforcing this
+        // before then would bounce a real admin on every hard reload of an
+        // admin-only tab, since the check hasn't resolved yet.
+        if (ADMIN_ONLY_TABS.has(tab) && oauthStatusChecked && !isAdminSession) {
 
             toast.show("This section is admin-only.", "error");
             setTab("dashboard");
@@ -60,7 +64,7 @@ function App(){
         }
 
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [tab, sidebarAccess, isAdminSession]);
+    }, [tab, sidebarAccess, isAdminSession, oauthStatusChecked]);
 
     return(
 

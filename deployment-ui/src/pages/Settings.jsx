@@ -75,7 +75,7 @@ export default function Settings() {
 
     const toast = useToast();
     const { confirm, dialog } = useConfirm();
-    const { user, isAdminSession, refreshOauthStatus } = useAuth();
+    const { user, isAdminSession, oauthStatusChecked, refreshOauthStatus } = useAuth();
     const { pendingRepoUrl, setPendingRepoUrl, refreshSidebarAccess } = useNavigation();
 
     // Sidebar Access controls what every other visitor can even reach, so
@@ -219,14 +219,18 @@ export default function Settings() {
     // session that expired while this page was already open. Both now
     // require Admin server-side (see LogsController/AdminGate), so showing
     // either to a non-admin would just be an empty/failed page.
+    // isAdminSession (part of isAdmin) starts false and only becomes
+    // reliable once oauthStatusChecked flips true — without that guard
+    // this bounced a real admin back to "hub" on every hard reload of
+    // "?view=sidebar-access", since the check hadn't resolved yet.
     useEffect(() => {
 
-        if ((view === "sidebar-access" || view === "activity-log") && !isAdmin) {
+        if ((view === "sidebar-access" || view === "activity-log") && oauthStatusChecked && !isAdmin) {
             setView("hub");
         }
 
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [view, isAdmin]);
+    }, [view, isAdmin, oauthStatusChecked]);
 
     useEffect(() => {
 
