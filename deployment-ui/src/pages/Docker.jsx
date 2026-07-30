@@ -1,12 +1,15 @@
-import { Fragment, useState } from "react";
+import { useState } from "react";
 
 import usePolling from "../hooks/usePolling";
 import useToast from "../hooks/useToast";
 import useConfirm from "../hooks/useConfirm";
 import LoadingSpinner from "../components/LoadingSpinner";
 import PageLayout from "../components/layout/PageLayout";
-import CopyButton from "../components/common/CopyButton";
 import SectionTabs from "../components/common/SectionTabs";
+import ContainersSection from "../components/docker/ContainersSection";
+import ImagesSection from "../components/docker/ImagesSection";
+import VolumesSection from "../components/docker/VolumesSection";
+import NetworksSection from "../components/docker/NetworksSection";
 
 import {
     getContainers,
@@ -528,475 +531,75 @@ export default function Docker() {
 
             ) : (
 
-                <>
-
                 <div className="card">
 
                     <SectionTabs sections={SECTIONS} active={section} onSelect={switchSection} />
 
                     {section === "containers" && (
 
-                        <>
-
-                        <div className="access-panel-header">
-                            <h2 className="card-title">Containers</h2>
-                            <button
-                                type="button"
-                                className="btn btn-secondary btn-sm"
-                                onClick={() => setShowCreateContainer((v) => !v)}
-                            >
-                                {showCreateContainer ? "Cancel" : "+ New Container"}
-                            </button>
-                        </div>
-
-                        {showCreateContainer && (
-
-                            <form className="card" style={{ marginBottom: 20 }} onSubmit={handleCreateContainer}>
-
-                                <div className="form-group">
-                                    <label>Image</label>
-                                    <input
-                                        className="form-control"
-                                        placeholder="ghcr.io/varshithchand/deployment-portal-api:latest"
-                                        value={containerForm.image}
-                                        onChange={(e) => setContainerForm({ ...containerForm, image: e.target.value })}
-                                    />
-                                </div>
-
-                                <div className="form-group">
-                                    <label>Container name (optional)</label>
-                                    <input
-                                        className="form-control"
-                                        value={containerForm.name}
-                                        onChange={(e) => setContainerForm({ ...containerForm, name: e.target.value })}
-                                    />
-                                </div>
-
-                                <div className="form-group">
-                                    <label>Ports (host:container, comma-separated)</label>
-                                    <input
-                                        className="form-control"
-                                        placeholder="8090:8080"
-                                        value={containerForm.ports}
-                                        onChange={(e) => setContainerForm({ ...containerForm, ports: e.target.value })}
-                                    />
-                                </div>
-
-                                <div className="form-group">
-                                    <label>Environment variables (KEY=value, comma-separated)</label>
-                                    <input
-                                        className="form-control"
-                                        placeholder="ASPNETCORE_ENVIRONMENT=Production"
-                                        value={containerForm.env}
-                                        onChange={(e) => setContainerForm({ ...containerForm, env: e.target.value })}
-                                    />
-                                </div>
-
-                                <div className="form-group">
-                                    <label>Volumes (name-or-path:/container/path, comma-separated)</label>
-                                    <input
-                                        className="form-control"
-                                        value={containerForm.volumes}
-                                        onChange={(e) => setContainerForm({ ...containerForm, volumes: e.target.value })}
-                                    />
-                                </div>
-
-                                <div className="form-group">
-                                    <label>Network</label>
-                                    <select
-                                        className="form-control"
-                                        value={containerForm.network}
-                                        onChange={(e) => setContainerForm({ ...containerForm, network: e.target.value })}
-                                    >
-                                        <option value="">Default</option>
-                                        {networks.map((n) => (
-                                            <option key={n.id} value={n.name}>{n.name}</option>
-                                        ))}
-                                    </select>
-                                </div>
-
-                                <div className="access-restrict-checkbox" style={{ marginBottom: 15 }}>
-                                    <input
-                                        type="checkbox"
-                                        id="docker-restart-policy"
-                                        checked={containerForm.restart}
-                                        onChange={(e) => setContainerForm({ ...containerForm, restart: e.target.checked })}
-                                    />
-                                    <label htmlFor="docker-restart-policy">Restart unless stopped</label>
-                                </div>
-
-                                <button type="submit" className="btn btn-primary" disabled={creatingContainer}>
-                                    {creatingContainer ? "Creating..." : "Create Container"}
-                                </button>
-
-                            </form>
-
-                        )}
-
-                        {containers.length === 0 ? (
-
-                            <p className="empty-state">No containers found on this host.</p>
-
-                        ) : (
-
-                            <div className="table-scroll">
-
-                            <table className="table">
-
-                                <thead>
-                                    <tr>
-                                        <th>Name</th>
-                                        <th>Image</th>
-                                        <th>Status</th>
-                                        <th>Ports</th>
-                                        <th>Created</th>
-                                        <th></th>
-                                    </tr>
-                                </thead>
-
-                                <tbody>
-
-                                    {containers.map((c) => (
-
-                                        <Fragment key={c.id}>
-
-                                        <tr>
-                                            <td>
-                                                {c.name}
-                                                <CopyButton value={c.id} label="Copy container ID" />
-                                            </td>
-                                            <td>{c.image}</td>
-                                            <td>
-                                                <span className={`badge ${c.state === "running" ? "badge-success" : "badge-secondary"}`}>
-                                                    {c.status}
-                                                </span>
-                                            </td>
-                                            <td>{c.ports.join(", ") || "—"}</td>
-                                            <td>{new Date(c.createdAt).toLocaleString()}</td>
-                                            <td>
-
-                                                <div className="button-row">
-
-                                                    {c.state === "running" ? (
-                                                        <button
-                                                            type="button"
-                                                            className="btn btn-secondary btn-sm"
-                                                            onClick={() => handleStop(c.id)}
-                                                            disabled={actingId === c.id}
-                                                        >
-                                                            Stop
-                                                        </button>
-                                                    ) : (
-                                                        <button
-                                                            type="button"
-                                                            className="btn btn-secondary btn-sm"
-                                                            onClick={() => handleRestart(c.id)}
-                                                            disabled={actingId === c.id}
-                                                        >
-                                                            Start
-                                                        </button>
-                                                    )}
-
-                                                    {c.state === "running" && (
-                                                        <button
-                                                            type="button"
-                                                            className="btn btn-secondary btn-sm"
-                                                            onClick={() => handleRestart(c.id)}
-                                                            disabled={actingId === c.id}
-                                                        >
-                                                            Restart
-                                                        </button>
-                                                    )}
-
-                                                    <button
-                                                        type="button"
-                                                        className="btn btn-secondary btn-sm"
-                                                        onClick={() => toggleLogs(c.id)}
-                                                    >
-                                                        {logs.id === c.id ? "Hide Logs" : "Logs"}
-                                                    </button>
-
-                                                    <button
-                                                        type="button"
-                                                        className="btn btn-danger btn-sm"
-                                                        onClick={() => handleRemoveContainer(c.id, c.name)}
-                                                        disabled={actingId === c.id}
-                                                    >
-                                                        Remove
-                                                    </button>
-
-                                                </div>
-
-                                            </td>
-                                        </tr>
-
-                                        {logs.id === c.id && (
-
-                                            <tr>
-                                                <td colSpan={6}>
-                                                    <pre className="docker-logs">
-                                                        {loadingLogs ? "Loading..." : logs.text}
-                                                    </pre>
-                                                </td>
-                                            </tr>
-
-                                        )}
-
-                                        </Fragment>
-
-                                    ))}
-
-                                </tbody>
-
-                            </table>
-
-                            </div>
-
-                        )}
-
-                        </>
+                        <ContainersSection
+                            containers={containers}
+                            networks={networks}
+                            showCreateContainer={showCreateContainer}
+                            setShowCreateContainer={setShowCreateContainer}
+                            containerForm={containerForm}
+                            setContainerForm={setContainerForm}
+                            creatingContainer={creatingContainer}
+                            handleCreateContainer={handleCreateContainer}
+                            actingId={actingId}
+                            logs={logs}
+                            loadingLogs={loadingLogs}
+                            handleStop={handleStop}
+                            handleRestart={handleRestart}
+                            toggleLogs={toggleLogs}
+                            handleRemoveContainer={handleRemoveContainer}
+                        />
 
                     )}
 
                     {section === "images" && (
 
-                        <>
-
-                        <h2 className="card-title">Images</h2>
-
-                        {images.length === 0 ? (
-
-                            <p className="empty-state">No images found on this host.</p>
-
-                        ) : (
-
-                            <div className="table-scroll">
-
-                            <table className="table">
-
-                                <thead>
-                                    <tr>
-                                        <th>Tags</th>
-                                        <th>Size</th>
-                                        <th>Created</th>
-                                        <th></th>
-                                    </tr>
-                                </thead>
-
-                                <tbody>
-
-                                    {images.map((img) => (
-
-                                        <tr key={img.id}>
-                                            <td>
-                                                {img.tags.length > 0 ? img.tags.join(", ") : <em>untagged</em>}
-                                                <CopyButton value={img.id} label="Copy image ID" />
-                                            </td>
-                                            <td>{(img.sizeBytes / (1024 * 1024)).toFixed(1)} MB</td>
-                                            <td>{new Date(img.createdAt).toLocaleString()}</td>
-                                            <td>
-                                                <button
-                                                    type="button"
-                                                    className="btn btn-danger btn-sm"
-                                                    onClick={() => handleRemoveImage(img.id, img.tags[0])}
-                                                    disabled={actingId === img.id}
-                                                >
-                                                    Remove
-                                                </button>
-                                            </td>
-                                        </tr>
-
-                                    ))}
-
-                                </tbody>
-
-                            </table>
-
-                            </div>
-
-                        )}
-
-                        </>
+                        <ImagesSection
+                            images={images}
+                            actingId={actingId}
+                            handleRemoveImage={handleRemoveImage}
+                        />
 
                     )}
 
                     {section === "volumes" && (
 
-                        <>
-
-                        <div className="access-panel-header">
-                            <h2 className="card-title">Volumes</h2>
-                            <button
-                                type="button"
-                                className="btn btn-secondary btn-sm"
-                                onClick={() => setShowCreateVolume((v) => !v)}
-                            >
-                                {showCreateVolume ? "Cancel" : "+ New Volume"}
-                            </button>
-                        </div>
-
-                        {showCreateVolume && (
-
-                            <form className="form-group" style={{ display: "flex", gap: 10 }} onSubmit={handleCreateVolume}>
-                                <input
-                                    className="form-control"
-                                    placeholder="volume-name"
-                                    value={newVolumeName}
-                                    onChange={(e) => setNewVolumeName(e.target.value)}
-                                />
-                                <button type="submit" className="btn btn-primary">Create</button>
-                            </form>
-
-                        )}
-
-                        {volumes.length === 0 ? (
-
-                            <p className="empty-state">No volumes found on this host.</p>
-
-                        ) : (
-
-                            <div className="table-scroll">
-
-                            <table className="table">
-
-                                <thead>
-                                    <tr>
-                                        <th>Name</th>
-                                        <th>Driver</th>
-                                        <th>Mountpoint</th>
-                                        <th></th>
-                                    </tr>
-                                </thead>
-
-                                <tbody>
-
-                                    {volumes.map((v) => (
-
-                                        <tr key={v.name}>
-                                            <td>{v.name}</td>
-                                            <td>{v.driver}</td>
-                                            <td className="commit-sha">{v.mountpoint}</td>
-                                            <td>
-                                                <button
-                                                    type="button"
-                                                    className="btn btn-danger btn-sm"
-                                                    onClick={() => handleRemoveVolume(v.name)}
-                                                    disabled={actingId === v.name}
-                                                >
-                                                    Remove
-                                                </button>
-                                            </td>
-                                        </tr>
-
-                                    ))}
-
-                                </tbody>
-
-                            </table>
-
-                            </div>
-
-                        )}
-
-                        </>
+                        <VolumesSection
+                            volumes={volumes}
+                            showCreateVolume={showCreateVolume}
+                            setShowCreateVolume={setShowCreateVolume}
+                            newVolumeName={newVolumeName}
+                            setNewVolumeName={setNewVolumeName}
+                            handleCreateVolume={handleCreateVolume}
+                            actingId={actingId}
+                            handleRemoveVolume={handleRemoveVolume}
+                        />
 
                     )}
 
                     {section === "networks" && (
 
-                        <>
-
-                        <div className="access-panel-header">
-                            <h2 className="card-title">Networks</h2>
-                            <button
-                                type="button"
-                                className="btn btn-secondary btn-sm"
-                                onClick={() => setShowCreateNetwork((v) => !v)}
-                            >
-                                {showCreateNetwork ? "Cancel" : "+ New Network"}
-                            </button>
-                        </div>
-
-                        {showCreateNetwork && (
-
-                            <form className="form-group" style={{ display: "flex", gap: 10 }} onSubmit={handleCreateNetwork}>
-                                <input
-                                    className="form-control"
-                                    placeholder="network-name"
-                                    value={newNetworkName}
-                                    onChange={(e) => setNewNetworkName(e.target.value)}
-                                />
-                                <select
-                                    className="form-control"
-                                    style={{ maxWidth: 160 }}
-                                    value={newNetworkDriver}
-                                    onChange={(e) => setNewNetworkDriver(e.target.value)}
-                                >
-                                    <option value="bridge">bridge</option>
-                                    <option value="overlay">overlay</option>
-                                    <option value="host">host</option>
-                                </select>
-                                <button type="submit" className="btn btn-primary">Create</button>
-                            </form>
-
-                        )}
-
-                        {networks.length === 0 ? (
-
-                            <p className="empty-state">No networks found on this host.</p>
-
-                        ) : (
-
-                            <div className="table-scroll">
-
-                            <table className="table">
-
-                                <thead>
-                                    <tr>
-                                        <th>Name</th>
-                                        <th>Driver</th>
-                                        <th>Scope</th>
-                                        <th></th>
-                                    </tr>
-                                </thead>
-
-                                <tbody>
-
-                                    {networks.map((n) => (
-
-                                        <tr key={n.id}>
-                                            <td>{n.name}</td>
-                                            <td>{n.driver}</td>
-                                            <td>{n.scope}</td>
-                                            <td>
-                                                <button
-                                                    type="button"
-                                                    className="btn btn-danger btn-sm"
-                                                    onClick={() => handleRemoveNetwork(n.id, n.name)}
-                                                    disabled={actingId === n.id}
-                                                >
-                                                    Remove
-                                                </button>
-                                            </td>
-                                        </tr>
-
-                                    ))}
-
-                                </tbody>
-
-                            </table>
-
-                            </div>
-
-                        )}
-
-                        </>
+                        <NetworksSection
+                            networks={networks}
+                            showCreateNetwork={showCreateNetwork}
+                            setShowCreateNetwork={setShowCreateNetwork}
+                            newNetworkName={newNetworkName}
+                            setNewNetworkName={setNewNetworkName}
+                            newNetworkDriver={newNetworkDriver}
+                            setNewNetworkDriver={setNewNetworkDriver}
+                            handleCreateNetwork={handleCreateNetwork}
+                            actingId={actingId}
+                            handleRemoveNetwork={handleRemoveNetwork}
+                        />
 
                     )}
 
                 </div>
-
-                </>
 
             )}
 
