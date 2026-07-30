@@ -50,7 +50,9 @@ export default function ConfirmDialog({
 
         <div
             className="dialog-backdrop"
+            role="presentation"
             onClick={(e) => { if (e.target === e.currentTarget) onCancel(); }}
+            onKeyDown={(e) => { if (e.key === "Escape") onCancel(); }}
         >
 
             <div className="dialog" role="alertdialog" aria-modal="true" aria-labelledby="confirm-dialog-title">

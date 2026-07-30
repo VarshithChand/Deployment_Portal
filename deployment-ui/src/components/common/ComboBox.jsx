@@ -123,13 +123,14 @@ export default function ComboBox({
 
                         filtered.map((opt) => (
 
-                            <div
+                            <button
                                 key={opt.value}
+                                type="button"
                                 className={`combobox-option ${opt.value === value ? "selected" : ""}`}
                                 onClick={() => handleSelect(opt)}
                             >
                                 {opt.label}
-                            </div>
+                            </button>
 
                         ))
 

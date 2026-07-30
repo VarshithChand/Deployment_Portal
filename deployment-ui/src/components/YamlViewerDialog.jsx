@@ -27,9 +27,19 @@ export default function YamlViewerDialog({
 
     return (
 
-        <div className="dialog-backdrop" onClick={onClose}>
+        <div
+            className="dialog-backdrop"
+            role="presentation"
+            onClick={onClose}
+            onKeyDown={(e) => { if (e.key === "Escape") onClose(); }}
+        >
 
-            <div className="dialog dialog-wide" onClick={(e) => e.stopPropagation()}>
+            <div
+                className="dialog dialog-wide"
+                role="presentation"
+                onClick={(e) => e.stopPropagation()}
+                onKeyDown={(e) => e.stopPropagation()}
+            >
 
                 <h2>{path || "Workflow YAML"}</h2>
 
