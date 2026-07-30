@@ -100,6 +100,13 @@ public class GitHubController : ControllerBase
         if (string.IsNullOrWhiteSpace(path))
             return BadRequest("path is required.");
 
+        // path is interpolated into a GitHub contents API URL - rejecting
+        // anything outside a real repo file path's shape here means a
+        // crafted value (a ".." segment, say) can't redirect that request
+        // onto an unintended API path.
+        if (!GitHubNameValidator.IsValidRepoPath(path))
+            return BadRequest(new { message = "path must be a valid repository-relative file path." });
+
         return Ok(await _service.GetWorkflowInputsAsync(path, branch));
     }
 
@@ -108,6 +115,9 @@ public class GitHubController : ControllerBase
     {
         if (string.IsNullOrWhiteSpace(path))
             return BadRequest("path is required.");
+
+        if (!GitHubNameValidator.IsValidRepoPath(path))
+            return BadRequest(new { message = "path must be a valid repository-relative file path." });
 
         var yaml = await _service.GetWorkflowYamlAsync(path, branch);
         return Ok(new { path, branch, content = yaml });

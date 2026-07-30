@@ -856,9 +856,17 @@ public class GitHubApiService
 
         var refQuery = string.IsNullOrWhiteSpace(branch) ? "" : $"?ref={Uri.EscapeDataString(branch)}";
 
+        // path is a repo-relative file path (e.g. ".github/workflows/deploy.yml")
+        // and its "/" separators have to stay literal for GitHub's contents API -
+        // escaping the whole string would turn them into "%2F" and break every
+        // nested-directory workflow. Escaping segment-by-segment closes the
+        // injection risk (no "..", "?", "#", etc. can smuggle through a
+        // segment) without touching the slashes that give the path its shape.
+        var escapedPath = string.Join('/', path.Split('/').Select(Uri.EscapeDataString));
+
         var contentJson = await HttpClientHelper.GetAsync(
             client,
-            $"https://api.github.com/repos/{Uri.EscapeDataString(_auth.Owner)}/{Uri.EscapeDataString(_auth.Repository)}/contents/{path}{refQuery}");
+            $"https://api.github.com/repos/{Uri.EscapeDataString(_auth.Owner)}/{Uri.EscapeDataString(_auth.Repository)}/contents/{escapedPath}{refQuery}");
 
         var base64 = JObject.Parse(contentJson)["content"]?.ToString() ?? "";
         return Encoding.UTF8.GetString(Convert.FromBase64String(base64.Replace("\n", "").Replace("\r", "")));

@@ -21,4 +21,23 @@ public static class GitHubNameValidator
 
     public static bool IsValid(string? value) =>
         !string.IsNullOrWhiteSpace(value) && Pattern.IsMatch(value);
+
+    // For a repo-relative file path (e.g. ".github/workflows/deploy.yml"),
+    // not a single name — Pattern alone isn't enough here since "." and ".."
+    // both satisfy it on their own, and either one as a whole path segment
+    // is exactly what lets a crafted path traverse outside the intended
+    // /contents/ prefix once .NET's Uri collapses "/../" per RFC 3986.
+    public static bool IsValidRepoPath(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value) || value.StartsWith('/') || value.EndsWith('/'))
+            return false;
+
+        foreach (var segment in value.Split('/'))
+        {
+            if (segment == "." || segment == ".." || !Pattern.IsMatch(segment))
+                return false;
+        }
+
+        return true;
+    }
 }
