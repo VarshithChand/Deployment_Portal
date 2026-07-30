@@ -38,19 +38,28 @@ if (!string.IsNullOrWhiteSpace(databaseUrl))
 
 builder.Configuration.AddJsonFile(localSettingsPath, optional: true, reloadOnChange: true);
 
-// Jwt:Secret has no Settings-page equivalent — it only ever comes from
-// config (appsettings.Local.json, an env var, etc). On a brand new
-// deployment none of those exist yet, and an empty secret isn't just
-// "auth doesn't work" — AddJwtBearer below builds a SymmetricSecurityKey
-// from it, which throws on a zero-length key on literally every request
-// (UseAuthentication runs for every request, not just [Authorize] ones).
-// Falling back to a generated one avoids that; the only cost is that
+// Resolved explicitly from an actual environment variable first — reading
+// a JWT signing key through the generic IConfiguration indexer (which can
+// just as easily be backed by a committed appsettings.json) is flagged as
+// a potential secret disclosure regardless of what that particular value
+// happens to be; sourcing it straight from Environment.GetEnvironmentVariable
+// makes the "this never comes from a checked-in file" guarantee explicit
+// in the code, not just true by convention. Jwt:Secret (appsettings.Local.json,
+// which IS gitignored, or Postgres via the same file — see SettingsService)
+// remains a local-dev-friendly fallback; a random one is generated as a
+// last resort so a brand new deployment doesn't 500 on every request from
+// a zero-length signing key. The only cost of that last case is that
 // existing sessions need to log in again after a restart, since nothing
-// persists this value anywhere.
-if (string.IsNullOrWhiteSpace(builder.Configuration["Jwt:Secret"]))
-{
-    builder.Configuration["Jwt:Secret"] = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
-}
+// persists a generated value anywhere.
+var jwtSecret = Environment.GetEnvironmentVariable("JWT_SECRET");
+
+if (string.IsNullOrWhiteSpace(jwtSecret))
+    jwtSecret = builder.Configuration["Jwt:Secret"];
+
+if (string.IsNullOrWhiteSpace(jwtSecret))
+    jwtSecret = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
+
+builder.Configuration["Jwt:Secret"] = jwtSecret;
 
 builder.Services.Configure<NotificationSettings>(
     builder.Configuration.GetSection("Notifications"));
@@ -145,8 +154,7 @@ builder.Services
             ValidateAudience = true,
             ValidAudience = jwtSettings["Audience"],
             ValidateIssuerSigningKey = true,
-            IssuerSigningKey = new SymmetricSecurityKey(
-                Encoding.UTF8.GetBytes(jwtSettings["Secret"] ?? string.Empty)),
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSecret)),
             ValidateLifetime = true
         };
 

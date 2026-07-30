@@ -60,9 +60,16 @@ jobs:
 
       - name: Confirm
         shell: bash
+        env:
+          # Passed as an env var, never interpolated straight into the
+          # script body — inputs.confirm is arbitrary text anyone who can
+          # trigger this workflow controls, and templating it directly into
+          # `run:` would let shell metacharacters in that text execute as
+          # commands on the runner (which has contents: write here).
+          CONFIRM_INPUT: ${{ inputs.confirm }}
         run: |
 
-          if [ "${{ inputs.confirm }}" != "DELETE" ]; then
+          if [ "$CONFIRM_INPUT" != "DELETE" ]; then
             {
               echo "## Cleanup cancelled"
               echo ""
@@ -92,6 +99,12 @@ jobs:
 
       - name: Reset Artifact Folders
         shell: bash
+        env:
+          # Same reasoning as the Confirm step above — GitHub does
+          # constrain this one to its declared choice options before
+          # dispatch, but there's no reason to rely on that alone when an
+          # env var costs nothing extra.
+          TARGET_INPUT: ${{ inputs.target }}
         run: |
 
           reset_service() {
@@ -108,7 +121,7 @@ jobs:
             touch "$BASE/New/.gitkeep" "$BASE/Old1/.gitkeep" "$BASE/Old2/.gitkeep"
           }
 
-          case "${{ inputs.target }}" in
+          case "$TARGET_INPUT" in
             All)
               reset_service "AdminAPI"
               reset_service "PMSCoreAPI"
@@ -128,6 +141,8 @@ jobs:
 
       - name: Commit Cleanup
         shell: bash
+        env:
+          TARGET_INPUT: ${{ inputs.target }}
         run: |
 
           git config user.name "github-actions[bot]"
@@ -140,7 +155,7 @@ jobs:
             exit 0
           fi
 
-          git commit -m "Clean artifacts (${{ inputs.target }})"
+          git commit -m "Clean artifacts ($TARGET_INPUT)"
 
           for i in 1 2 3; do
             if git push origin ${GITHUB_REF_NAME}; then
@@ -164,12 +179,14 @@ jobs:
       - name: Summary
         if: always()
         shell: bash
+        env:
+          TARGET_INPUT: ${{ inputs.target }}
         run: |
 
           {
             echo "## Artifacts cleaned"
             echo ""
-            echo "Target : ${{ inputs.target }}"
+            echo "Target : $TARGET_INPUT"
             echo ""
             echo "New / Old1 / Old2 folders are now empty and ready for fresh builds."
           } >> "$GITHUB_STEP_SUMMARY"
