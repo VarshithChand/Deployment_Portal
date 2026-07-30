@@ -106,6 +106,7 @@ builder.Services.AddScoped<DeploymentService>();
 builder.Services.AddScoped<NotificationService>();
 builder.Services.AddScoped<SettingsService>();
 builder.Services.AddScoped<AuthService>();
+builder.Services.AddScoped<SonarApiService>();
 
 //
 // CORS

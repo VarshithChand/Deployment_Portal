@@ -211,6 +211,46 @@ public class SettingsService
         return BuildView(root);
     }
 
+    // SonarCloud/SonarQube credentials for the Code Quality page — shared,
+    // portal-wide, same as Docker/OAuth above (there's one repo being
+    // scanned, not one per PAT user). The token is never sent to the
+    // frontend; SonarController uses it server-side to call Sonar's own Web
+    // API, the same pattern GitHub credentials already follow.
+    public async Task<SettingsViewDto> SaveSonarAsync(SonarSettingsUpdateDto update)
+    {
+        var root = await ReadRootAsync();
+
+        var sonar = root["Sonar"] as JObject ?? new JObject();
+
+        sonar["HostUrl"] = string.IsNullOrWhiteSpace(update.HostUrl) ? "https://sonarcloud.io" : update.HostUrl.TrimEnd('/');
+        sonar["Organization"] = update.Organization ?? string.Empty;
+        sonar["ProjectKey"] = update.ProjectKey ?? string.Empty;
+
+        if (!string.IsNullOrWhiteSpace(update.Token))
+            sonar["Token"] = update.Token;
+
+        root["Sonar"] = sonar;
+
+        await WriteRootAsync(root);
+
+        _log.LogInfo("Settings", $"Sonar settings saved: {update.Organization}/{update.ProjectKey}"
+            + (string.IsNullOrWhiteSpace(update.Token) ? "" : " (token updated)"));
+
+        return BuildView(root);
+    }
+
+    public async Task<SonarCredentials> GetSonarCredentialsAsync()
+    {
+        var root = await ReadRootAsync();
+        var sonar = root["Sonar"] as JObject;
+
+        return new SonarCredentials(
+            sonar?["HostUrl"]?.ToString() is string h && !string.IsNullOrWhiteSpace(h) ? h : "https://sonarcloud.io",
+            sonar?["Organization"]?.ToString() ?? string.Empty,
+            sonar?["ProjectKey"]?.ToString() ?? string.Empty,
+            sonar?["Token"]?.ToString());
+    }
+
     public async Task<SettingsViewDto> SaveAdminUsernamesAsync(AdminUsernamesUpdateDto update)
     {
         var root = await ReadRootAsync();
@@ -237,7 +277,8 @@ public class SettingsService
     {
         ["docker"] = ("Docker", "Password"),
         ["github-oauth"] = ("GitHubOAuth", "ClientSecret"),
-        ["admins"] = ("Auth", null)
+        ["admins"] = ("Auth", null),
+        ["sonar"] = ("Sonar", "Token")
     };
 
     // Unlike a per-section clear (which only removes the secret, leaving the
@@ -498,6 +539,7 @@ public class SettingsService
         var docker = root["Docker"] as JObject;
         var oauth = root["GitHubOAuth"] as JObject;
         var auth = root["Auth"] as JObject;
+        var sonar = root["Sonar"] as JObject;
 
         var admins = (auth?["AdminGitHubUsernames"] as JArray)?
             .Select(x => x.ToString())
@@ -512,7 +554,12 @@ public class SettingsService
             GitHubOAuthClientId = oauth?["ClientId"]?.ToString() ?? string.Empty,
             GitHubOAuthClientSecretConfigured = !string.IsNullOrWhiteSpace(oauth?["ClientSecret"]?.ToString()),
 
-            AdminGitHubUsernames = admins
+            AdminGitHubUsernames = admins,
+
+            SonarHostUrl = sonar?["HostUrl"]?.ToString() is string h && !string.IsNullOrWhiteSpace(h) ? h : "https://sonarcloud.io",
+            SonarOrganization = sonar?["Organization"]?.ToString() ?? string.Empty,
+            SonarProjectKey = sonar?["ProjectKey"]?.ToString() ?? string.Empty,
+            SonarTokenConfigured = !string.IsNullOrWhiteSpace(sonar?["Token"]?.ToString())
         };
     }
 

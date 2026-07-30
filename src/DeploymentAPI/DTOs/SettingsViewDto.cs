@@ -18,6 +18,14 @@ public class SettingsViewDto
 
     public List<string> AdminGitHubUsernames { get; set; } = new();
 
+    public string SonarHostUrl { get; set; } = "https://sonarcloud.io";
+
+    public string SonarOrganization { get; set; } = string.Empty;
+
+    public string SonarProjectKey { get; set; } = string.Empty;
+
+    public bool SonarTokenConfigured { get; set; }
+
     // Whether the CURRENT caller (this request's OAuth login or configured
     // Personal Access Token) has admin authority — computed per-request in
     // SettingsController.Get(), never derived from AdminGitHubUsernames on

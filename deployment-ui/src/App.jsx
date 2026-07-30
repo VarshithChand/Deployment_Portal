@@ -11,6 +11,7 @@ import Timeline from "./pages/Timeline";
 import TemplateTester from "./pages/TemplateTester";
 import Services from "./pages/Services";
 import Docker from "./pages/Docker";
+import CodeQuality from "./pages/CodeQuality";
 import Settings from "./pages/Settings";
 
 import TopBar from "./components/layout/TopBar";
@@ -19,11 +20,19 @@ import Footer from "./components/layout/Footer";
 import ErrorBoundary from "./components/common/ErrorBoundary";
 import RequireGitHubSetup from "./components/RequireGitHubSetup";
 import useNavigation from "./hooks/useNavigation";
+import useAuth from "./hooks/useAuth";
 import useToast from "./hooks/useToast";
+
+// Admin-only regardless of Sidebar Access state — there's one shared Sonar
+// project for the whole repo, and the backend rejects a non-admin outright
+// (see SonarController), so a direct/bookmarked link needs the same guard
+// the Sidebar tab itself already gets (see Sidebar.jsx's ADMIN_ONLY_TABS).
+const ADMIN_ONLY_TABS = new Set(["codeQuality"]);
 
 function App(){
 
     const { tab, setTab, sidebarAccess } = useNavigation();
+    const { isAdminSession } = useAuth();
     const toast = useToast();
 
     // Locking/hiding a tab (see Settings > Sidebar Access) has to actually
@@ -39,11 +48,19 @@ function App(){
 
             toast.show("This section has been restricted by the portal admin.", "error");
             setTab("dashboard");
+            return;
+
+        }
+
+        if (ADMIN_ONLY_TABS.has(tab) && !isAdminSession) {
+
+            toast.show("This section is admin-only.", "error");
+            setTab("dashboard");
 
         }
 
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [tab, sidebarAccess]);
+    }, [tab, sidebarAccess, isAdminSession]);
 
     return(
 
@@ -72,6 +89,7 @@ function App(){
                             {tab === "templates" && <TemplateTester/>}
                             {tab === "services" && <Services/>}
                             {tab === "docker" && <Docker/>}
+                            {tab === "codeQuality" && <CodeQuality/>}
                             {tab === "settings" && <Settings/>}
 
                         </ErrorBoundary>

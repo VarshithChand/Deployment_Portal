@@ -8,6 +8,7 @@ import {
     saveDockerSettings,
     saveGitHubOAuthSettings,
     saveAdminUsernames,
+    saveSonarSettings,
     getPatUsers,
     getUserSidebarAccess,
     saveUserSidebarAccess,
@@ -115,6 +116,7 @@ export default function Settings() {
     const [savingDocker, setSavingDocker] = useState(false);
     const [savingOAuth, setSavingOAuth] = useState(false);
     const [savingAdmins, setSavingAdmins] = useState(false);
+    const [savingSonar, setSavingSonar] = useState(false);
     const [clearingAll, setClearingAll] = useState(false);
 
     const [githubRepoUrl, setGithubRepoUrl] = useState("");
@@ -144,6 +146,12 @@ export default function Settings() {
     const [oauthClientId, setOauthClientId] = useState("");
     const [oauthClientSecret, setOauthClientSecret] = useState("");
     const [oauthClientSecretConfigured, setOauthClientSecretConfigured] = useState(false);
+
+    const [sonarHostUrl, setSonarHostUrl] = useState("https://sonarcloud.io");
+    const [sonarOrganization, setSonarOrganization] = useState("");
+    const [sonarProjectKey, setSonarProjectKey] = useState("");
+    const [sonarToken, setSonarToken] = useState("");
+    const [sonarTokenConfigured, setSonarTokenConfigured] = useState(false);
 
     const [adminUsernamesText, setAdminUsernamesText] = useState("");
 
@@ -185,6 +193,11 @@ export default function Settings() {
             setOauthClientSecretConfigured(!!data.gitHubOAuthClientSecretConfigured);
 
             setAdminUsernamesText((data.adminGitHubUsernames || []).join(", "));
+
+            setSonarHostUrl(data.sonarHostUrl || "https://sonarcloud.io");
+            setSonarOrganization(data.sonarOrganization || "");
+            setSonarProjectKey(data.sonarProjectKey || "");
+            setSonarTokenConfigured(!!data.sonarTokenConfigured);
 
         }
         catch (err) {
@@ -514,6 +527,38 @@ export default function Settings() {
         finally {
 
             setSavingOAuth(false);
+
+        }
+
+    }
+
+    async function handleSaveSonar() {
+
+        try {
+
+            setSavingSonar(true);
+
+            await saveSonarSettings({
+                hostUrl: sonarHostUrl,
+                organization: sonarOrganization,
+                projectKey: sonarProjectKey,
+                token: sonarToken || null
+            });
+
+            setSonarToken("");
+            toast.show("Sonar settings saved.", "success");
+            load();
+
+        }
+        catch (err) {
+
+            console.error(err);
+            toast.show(err.response?.data?.message || "Failed to save Sonar settings.", "error");
+
+        }
+        finally {
+
+            setSavingSonar(false);
 
         }
 
@@ -1124,6 +1169,84 @@ export default function Settings() {
 
                     <button className="btn btn-danger" onClick={() => handleClear("github-oauth", "GitHub OAuth client secret")}>
                         Clear Secret
+                    </button>
+
+                </div>
+
+                </div>
+
+                <div className="settings-subsection">
+
+                <h3 className="settings-subhead">Sonar (Code Quality)</h3>
+
+                <p className="empty-state" style={{ padding: "0 0 15px", textAlign: "left" }}>
+                    Powers the Code Quality page — a SonarCloud (or self-hosted SonarQube)
+                    project and a token with permission to read its analysis. The token is
+                    only ever used server-side, never sent to the browser.
+                </p>
+
+                <div className="form-group">
+                    <label>Host URL</label>
+                    <ClearableInput
+                        placeholder="https://sonarcloud.io"
+                        value={sonarHostUrl}
+                        onChange={(e) => setSonarHostUrl(e.target.value)}
+                        onClear={() => setSonarHostUrl("https://sonarcloud.io")}
+                        autoComplete="off"
+                        name="sonar-host-url"
+                    />
+                </div>
+
+                <div className="form-group">
+                    <label>Organization</label>
+                    <ClearableInput
+                        placeholder="your-sonarcloud-org"
+                        value={sonarOrganization}
+                        onChange={(e) => setSonarOrganization(e.target.value)}
+                        onClear={() => setSonarOrganization("")}
+                        autoComplete="off"
+                        name="sonar-organization"
+                    />
+                </div>
+
+                <div className="form-group">
+                    <label>Project Key</label>
+                    <ClearableInput
+                        placeholder="VarshithChand_yaml"
+                        value={sonarProjectKey}
+                        onChange={(e) => setSonarProjectKey(e.target.value)}
+                        onClear={() => setSonarProjectKey("")}
+                        autoComplete="off"
+                        name="sonar-project-key"
+                    />
+                </div>
+
+                <div className="form-group">
+                    <label>
+                        Token
+                        {" "}
+                        {sonarTokenConfigured && (
+                            <span className="badge badge-success">Saved</span>
+                        )}
+                    </label>
+                    <ClearableInput
+                        type="password"
+                        placeholder={sonarTokenConfigured ? "Leave blank to keep current token" : ""}
+                        value={sonarToken}
+                        onChange={(e) => setSonarToken(e.target.value)}
+                        onClear={() => setSonarToken("")}
+                        autoComplete="new-password"
+                    />
+                </div>
+
+                <div className="button-row">
+
+                    <button className="btn btn-primary" onClick={handleSaveSonar} disabled={savingSonar}>
+                        {savingSonar ? "Saving..." : "Save Sonar Settings"}
+                    </button>
+
+                    <button className="btn btn-danger" onClick={() => handleClear("sonar", "Sonar token")}>
+                        Clear Token
                     </button>
 
                 </div>

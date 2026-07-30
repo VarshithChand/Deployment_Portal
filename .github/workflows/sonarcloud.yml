@@ -1,0 +1,98 @@
+name: SonarCloud Analysis
+
+##############################################################################
+# Scans the four backend projects (no single .sln ties them together, so
+# each is built individually inside the same begin/end wrapper) and reports
+# results back to SonarCloud — what the portal's own Code Quality page
+# reads via SonarController, using the same project key configured in
+# Settings > Credentials > Sonar.
+#
+# Needs three repository secrets (Settings > Secrets and variables > Actions):
+#   SONAR_TOKEN         - a SonarCloud token with "Execute Analysis" on this project
+#   SONAR_ORGANIZATION  - your SonarCloud organization key
+#   SONAR_PROJECT_KEY    - this project's key (must match what's saved in the portal)
+##############################################################################
+
+on:
+  workflow_dispatch:
+
+  push:
+    branches:
+      - master
+
+  pull_request:
+    branches:
+      - master
+
+jobs:
+
+  analyze:
+
+    name: Analyze
+    runs-on: ubuntu-latest
+
+    steps:
+
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          # SonarCloud's new-code/blame analysis needs real history, not
+          # the default single-commit shallow clone.
+          fetch-depth: 0
+
+      - name: Set Up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: "zulu"
+          java-version: "17"
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Cache SonarCloud Packages
+        uses: actions/cache@v4
+        with:
+          path: ~/sonar/cache
+          key: ${{ runner.os }}-sonar
+          restore-keys: ${{ runner.os }}-sonar
+
+      - name: Cache SonarCloud Scanner
+        id: cache-sonar-scanner
+        uses: actions/cache@v4
+        with:
+          path: ./.sonar/scanner
+          key: ${{ runner.os }}-sonar-scanner
+
+      - name: Install SonarCloud Scanner
+        if: steps.cache-sonar-scanner.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p ./.sonar/scanner
+          dotnet tool update dotnet-sonarscanner --tool-path ./.sonar/scanner
+
+      - name: Begin Analysis
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: |
+          ./.sonar/scanner/dotnet-sonarscanner begin \
+            /k:"${{ secrets.SONAR_PROJECT_KEY }}" \
+            /o:"${{ secrets.SONAR_ORGANIZATION }}" \
+            /d:sonar.token="${{ secrets.SONAR_TOKEN }}" \
+            /d:sonar.host.url="https://sonarcloud.io" \
+            /d:sonar.sources="src,deployment-ui/src" \
+            /d:sonar.exclusions="**/bin/**,**/obj/**,deployment-ui/dist/**,deployment-ui/node_modules/**"
+
+      - name: Restore And Build All Projects
+        run: |
+          for proj in src/DeploymentAPI src/AdminAPI src/PMSCoreAPI src/SecurityAPI; do
+            echo "::group::Building $proj"
+            dotnet restore "$proj"
+            dotnet build "$proj" --configuration Release --no-incremental
+            echo "::endgroup::"
+          done
+
+      - name: End Analysis
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: ./.sonar/scanner/dotnet-sonarscanner end /d:sonar.token="${{ secrets.SONAR_TOKEN }}"

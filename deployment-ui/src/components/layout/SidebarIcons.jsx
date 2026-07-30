@@ -78,6 +78,25 @@ export function DockerIcon() {
     );
 }
 
+// A shield (flat top, pointed bottom — straight-line polygon, no curves)
+// with a checkmark inside — distinct from ApprovalsIcon's plain circle by
+// outline shape alone, reading as "quality/passed" rather than "one item
+// approved."
+export function CodeQualityIcon() {
+    return (
+        <svg {...common}>
+            <polygon
+                points="9,2 14.5,4 14.5,9 9,16 3.5,9 3.5,4"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.4"
+                strokeLinejoin="round"
+            />
+            <polyline points="6,8.7 8.3,11 12,6.5" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+    );
+}
+
 export function StorageIcon() {
     return (
         <svg {...common}>

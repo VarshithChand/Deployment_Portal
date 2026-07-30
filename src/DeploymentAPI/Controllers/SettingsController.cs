@@ -133,6 +133,15 @@ public class SettingsController : ControllerBase
         return Ok(await _settings.SaveGitHubOAuthAsync(request));
     }
 
+    [HttpPost("sonar")]
+    public async Task<IActionResult> SaveSonar(SonarSettingsUpdateDto request)
+    {
+        if (await AdminGate.DenyUnlessAdminAsync(this, _settings, "change settings") is IActionResult denied)
+            return denied;
+
+        return Ok(await _settings.SaveSonarAsync(request));
+    }
+
     [HttpPost("admins")]
     public async Task<IActionResult> SaveAdmins(AdminUsernamesUpdateDto request)
     {

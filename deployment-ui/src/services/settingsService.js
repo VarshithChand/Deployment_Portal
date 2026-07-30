@@ -37,6 +37,11 @@ export const saveAdminUsernames = async (payload) => {
     return response.data;
 };
 
+export const saveSonarSettings = async (payload) => {
+    const response = await settingsApi.post("/sonar", payload);
+    return response.data;
+};
+
 export const clearSettings = async (section) => {
     const response = await settingsApi.delete(`/${section}`);
     return response.data;

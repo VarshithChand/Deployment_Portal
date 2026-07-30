@@ -16,6 +16,7 @@ import {
     TemplatesIcon,
     ServicesIcon,
     DockerIcon,
+    CodeQualityIcon,
     SettingsIcon,
     ChevronIcon,
     SunIcon,
@@ -42,8 +43,15 @@ const TABS = [
     { key: "templates", label: "Template Tester", Icon: TemplatesIcon },
     { key: "services", label: "Services", Icon: ServicesIcon },
     { key: "docker", label: "Docker", Icon: DockerIcon },
+    { key: "codeQuality", label: "Code Quality", Icon: CodeQualityIcon },
     { key: "settings", label: "Settings", Icon: SettingsIcon }
 ];
+
+// Admin-only, same as Settings > Sidebar Access / Activity Log — there's
+// one shared Sonar project for the whole repo (not scoped per PAT user),
+// and the backend rejects a non-admin outright (see SonarController), so
+// showing this tab to anyone else would just be a dead end.
+const ADMIN_ONLY_TABS = new Set(["codeQuality"]);
 
 const STORAGE_KEY = "sidebar-collapsed";
 
@@ -59,7 +67,7 @@ const STORAGE_KEY = "sidebar-collapsed";
 export default function Sidebar() {
 
     const { tab, setTab, mobileNavOpen, setMobileNavOpen, sidebarAccess } = useNavigation();
-    const { canApproveReleases } = useAuth();
+    const { canApproveReleases, isAdminSession } = useAuth();
     const { theme, toggleTheme } = useTheme();
     const toast = useToast();
 
@@ -72,6 +80,7 @@ export default function Sidebar() {
 
     const visibleTabs = TABS
         .filter((t) => !GATED_TABS.has(t.key) || canApproveReleases)
+        .filter((t) => !ADMIN_ONLY_TABS.has(t.key) || isAdminSession)
         .filter((t) => sidebarAccess[t.key] !== "hidden");
 
     function handleTabClick(key) {
