@@ -158,7 +158,7 @@ public class GitHubApiService
             // approve a protected-environment deployment they weren't
             // explicitly named a reviewer on.
             var repoJson = await HttpClientHelper.GetAsync(
-                client, $"https://api.github.com/repos/{_auth.Owner}/{_auth.Repository}");
+                client, $"https://api.github.com/repos/{Uri.EscapeDataString(_auth.Owner)}/{Uri.EscapeDataString(_auth.Repository)}");
 
             var repo = JObject.Parse(repoJson);
             var canApprove = (bool?)repo["permissions"]?["admin"] ?? false;
@@ -217,7 +217,7 @@ public class GitHubApiService
             var client = _auth.CreateClient();
 
             var url =
-                $"https://api.github.com/repos/{_auth.Owner}/{_auth.Repository}";
+                $"https://api.github.com/repos/{Uri.EscapeDataString(_auth.Owner)}/{Uri.EscapeDataString(_auth.Repository)}";
 
             return await HttpClientHelper.GetAsync(client, url);
         }, forceRefresh);
@@ -248,7 +248,7 @@ public class GitHubApiService
             // per_page=100, repos with more branches than that would silently
             // drop the rest from the Deploy page's branch picker.
             var url =
-                $"https://api.github.com/repos/{_auth.Owner}/{_auth.Repository}/branches?per_page=100";
+                $"https://api.github.com/repos/{Uri.EscapeDataString(_auth.Owner)}/{Uri.EscapeDataString(_auth.Repository)}/branches?per_page=100";
 
             var json = await HttpClientHelper.GetAsync(client, url);
 
@@ -268,7 +268,7 @@ public class GitHubApiService
         var client = _auth.CreateClient();
 
         var refUrl =
-            $"https://api.github.com/repos/{_auth.Owner}/{_auth.Repository}/git/ref/heads/{Uri.EscapeDataString(sourceBranch)}";
+            $"https://api.github.com/repos/{Uri.EscapeDataString(_auth.Owner)}/{Uri.EscapeDataString(_auth.Repository)}/git/ref/heads/{Uri.EscapeDataString(sourceBranch)}";
 
         var refJson = await HttpClientHelper.GetAsync(client, refUrl);
         var sha = JObject.Parse(refJson)["object"]?["sha"]?.ToString();
@@ -277,7 +277,7 @@ public class GitHubApiService
             throw new HttpRequestException($"Couldn't resolve a commit to branch from on '{sourceBranch}'.");
 
         var createUrl =
-            $"https://api.github.com/repos/{_auth.Owner}/{_auth.Repository}/git/refs";
+            $"https://api.github.com/repos/{Uri.EscapeDataString(_auth.Owner)}/{Uri.EscapeDataString(_auth.Repository)}/git/refs";
 
         var body = new { @ref = $"refs/heads/{newBranchName}", sha };
         var json = System.Text.Json.JsonSerializer.Serialize(body);
@@ -294,7 +294,7 @@ public class GitHubApiService
         var client = _auth.CreateClient();
 
         var url =
-            $"https://api.github.com/repos/{_auth.Owner}/{_auth.Repository}/git/refs/heads/{Uri.EscapeDataString(branch)}";
+            $"https://api.github.com/repos/{Uri.EscapeDataString(_auth.Owner)}/{Uri.EscapeDataString(_auth.Repository)}/git/refs/heads/{Uri.EscapeDataString(branch)}";
 
         var response = await client.DeleteAsync(url);
 
@@ -314,7 +314,7 @@ public class GitHubApiService
             var client = _auth.CreateClient();
 
             var url =
-                $"https://api.github.com/repos/{_auth.Owner}/{_auth.Repository}/collaborators?per_page=100&affiliation=direct";
+                $"https://api.github.com/repos/{Uri.EscapeDataString(_auth.Owner)}/{Uri.EscapeDataString(_auth.Repository)}/collaborators?per_page=100&affiliation=direct";
 
             var json = await HttpClientHelper.GetAsync(client, url);
             var array = JArray.Parse(json);
@@ -409,7 +409,7 @@ public class GitHubApiService
         var client = _auth.CreateClient();
 
         var url =
-            $"https://api.github.com/repos/{_auth.Owner}/{_auth.Repository}/collaborators/{Uri.EscapeDataString(username)}";
+            $"https://api.github.com/repos/{Uri.EscapeDataString(_auth.Owner)}/{Uri.EscapeDataString(_auth.Repository)}/collaborators/{Uri.EscapeDataString(username)}";
 
         var response = await client.DeleteAsync(url);
 
@@ -431,7 +431,7 @@ public class GitHubApiService
             var client = _auth.CreateClient();
 
             var url =
-                $"https://api.github.com/repos/{_auth.Owner}/{_auth.Repository}/invitations?per_page=100";
+                $"https://api.github.com/repos/{Uri.EscapeDataString(_auth.Owner)}/{Uri.EscapeDataString(_auth.Repository)}/invitations?per_page=100";
 
             var json = await HttpClientHelper.GetAsync(client, url);
             var array = JArray.Parse(json);
@@ -462,7 +462,7 @@ public class GitHubApiService
         var client = _auth.CreateClient();
 
         var url =
-            $"https://api.github.com/repos/{_auth.Owner}/{_auth.Repository}/invitations/{invitationId}";
+            $"https://api.github.com/repos/{Uri.EscapeDataString(_auth.Owner)}/{Uri.EscapeDataString(_auth.Repository)}/invitations/{invitationId}";
 
         // This endpoint wants "permissions" (plural) with the read/write
         // naming — the inverse of the normalization GetCollaboratorsAsync
@@ -487,7 +487,7 @@ public class GitHubApiService
         var client = _auth.CreateClient();
 
         var url =
-            $"https://api.github.com/repos/{_auth.Owner}/{_auth.Repository}/invitations/{invitationId}";
+            $"https://api.github.com/repos/{Uri.EscapeDataString(_auth.Owner)}/{Uri.EscapeDataString(_auth.Repository)}/invitations/{invitationId}";
 
         var response = await client.DeleteAsync(url);
 
@@ -540,7 +540,7 @@ public class GitHubApiService
             var client = _auth.CreateClient();
 
             var url =
-                $"https://api.github.com/repos/{_auth.Owner}/{_auth.Repository}/branches/{Uri.EscapeDataString(branch)}/protection";
+                $"https://api.github.com/repos/{Uri.EscapeDataString(_auth.Owner)}/{Uri.EscapeDataString(_auth.Repository)}/branches/{Uri.EscapeDataString(branch)}/protection";
 
             var response = await client.GetAsync(url);
 
@@ -567,7 +567,7 @@ public class GitHubApiService
         var client = _auth.CreateClient();
 
         var url =
-            $"https://api.github.com/repos/{_auth.Owner}/{_auth.Repository}/branches/{Uri.EscapeDataString(branch)}/protection";
+            $"https://api.github.com/repos/{Uri.EscapeDataString(_auth.Owner)}/{Uri.EscapeDataString(_auth.Repository)}/branches/{Uri.EscapeDataString(branch)}/protection";
 
         // GitHub's "Update branch protection" endpoint requires all four
         // top-level fields in one request even when only restrictions is
@@ -596,7 +596,7 @@ public class GitHubApiService
         var client = _auth.CreateClient();
 
         var url =
-            $"https://api.github.com/repos/{_auth.Owner}/{_auth.Repository}/branches/{Uri.EscapeDataString(branch)}/protection/restrictions";
+            $"https://api.github.com/repos/{Uri.EscapeDataString(_auth.Owner)}/{Uri.EscapeDataString(_auth.Repository)}/branches/{Uri.EscapeDataString(branch)}/protection/restrictions";
 
         var response = await client.DeleteAsync(url);
 
@@ -617,7 +617,7 @@ public class GitHubApiService
             var client = _auth.CreateClient();
 
             var url =
-                $"https://api.github.com/repos/{_auth.Owner}/{_auth.Repository}/actions/artifacts?per_page=100";
+                $"https://api.github.com/repos/{Uri.EscapeDataString(_auth.Owner)}/{Uri.EscapeDataString(_auth.Repository)}/actions/artifacts?per_page=100";
 
             var json = await HttpClientHelper.GetAsync(client, url);
 
@@ -669,7 +669,7 @@ public class GitHubApiService
                         CommitMessage = run?.CommitMessage ?? string.Empty,
 
                         WorkflowRunUrl = runId > 0
-                            ? $"https://github.com/{_auth.Owner}/{_auth.Repository}/actions/runs/{runId}"
+                            ? $"https://github.com/{Uri.EscapeDataString(_auth.Owner)}/{Uri.EscapeDataString(_auth.Repository)}/actions/runs/{runId}"
                             : string.Empty
                     };
                 })
@@ -692,7 +692,7 @@ public class GitHubApiService
                 : $"&branch={Uri.EscapeDataString(branch)}";
 
             var runsUrl =
-                $"https://api.github.com/repos/{_auth.Owner}/{_auth.Repository}/actions/workflows/{workflowId}/runs" +
+                $"https://api.github.com/repos/{Uri.EscapeDataString(_auth.Owner)}/{Uri.EscapeDataString(_auth.Repository)}/actions/workflows/{workflowId}/runs" +
                 $"?per_page=1{branchQuery}";
 
             var runsJson = await HttpClientHelper.GetAsync(client, runsUrl);
@@ -706,7 +706,7 @@ public class GitHubApiService
             // The dedicated per-run artifacts endpoint, not the repo-wide list —
             // this only returns what that specific run produced.
             var artifactsUrl =
-                $"https://api.github.com/repos/{_auth.Owner}/{_auth.Repository}/actions/runs/{run.Id}/artifacts";
+                $"https://api.github.com/repos/{Uri.EscapeDataString(_auth.Owner)}/{Uri.EscapeDataString(_auth.Repository)}/actions/runs/{run.Id}/artifacts";
 
             var artifactsJson = await HttpClientHelper.GetAsync(client, artifactsUrl);
 
@@ -750,7 +750,7 @@ public class GitHubApiService
         var client = _auth.CreateClient();
 
         var url =
-            $"https://api.github.com/repos/{_auth.Owner}/{_auth.Repository}/actions/artifacts/{artifactId}/zip";
+            $"https://api.github.com/repos/{Uri.EscapeDataString(_auth.Owner)}/{Uri.EscapeDataString(_auth.Repository)}/actions/artifacts/{artifactId}/zip";
 
         var response = await client.GetAsync(url);
 
@@ -766,7 +766,7 @@ public class GitHubApiService
         var client = _auth.CreateClient();
 
         var url =
-            $"https://api.github.com/repos/{_auth.Owner}/{_auth.Repository}/actions/artifacts/{artifactId}";
+            $"https://api.github.com/repos/{Uri.EscapeDataString(_auth.Owner)}/{Uri.EscapeDataString(_auth.Repository)}/actions/artifacts/{artifactId}";
 
         var response = await client.DeleteAsync(url);
 
@@ -795,7 +795,7 @@ public class GitHubApiService
             {
                 var json = await HttpClientHelper.GetAsync(
                     client,
-                    $"https://api.github.com/orgs/{_auth.Owner}/packages?package_type=container&per_page=100");
+                    $"https://api.github.com/orgs/{Uri.EscapeDataString(_auth.Owner)}/packages?package_type=container&per_page=100");
 
                 packages = JArray.Parse(json);
             }
@@ -803,7 +803,7 @@ public class GitHubApiService
             {
                 var json = await HttpClientHelper.GetAsync(
                     client,
-                    $"https://api.github.com/users/{_auth.Owner}/packages?package_type=container&per_page=100");
+                    $"https://api.github.com/users/{Uri.EscapeDataString(_auth.Owner)}/packages?package_type=container&per_page=100");
 
                 packages = JArray.Parse(json);
             }
@@ -837,7 +837,7 @@ public class GitHubApiService
             var client = _auth.CreateClient();
 
             var url =
-                $"https://api.github.com/repos/{_auth.Owner}/{_auth.Repository}/actions/workflows?per_page=100";
+                $"https://api.github.com/repos/{Uri.EscapeDataString(_auth.Owner)}/{Uri.EscapeDataString(_auth.Repository)}/actions/workflows?per_page=100";
 
             return await HttpClientHelper.GetAsync(client, url);
         }, forceRefresh);
@@ -858,7 +858,7 @@ public class GitHubApiService
 
         var contentJson = await HttpClientHelper.GetAsync(
             client,
-            $"https://api.github.com/repos/{_auth.Owner}/{_auth.Repository}/contents/{path}{refQuery}");
+            $"https://api.github.com/repos/{Uri.EscapeDataString(_auth.Owner)}/{Uri.EscapeDataString(_auth.Repository)}/contents/{path}{refQuery}");
 
         var base64 = JObject.Parse(contentJson)["content"]?.ToString() ?? "";
         return Encoding.UTF8.GetString(Convert.FromBase64String(base64.Replace("\n", "").Replace("\r", "")));
@@ -939,7 +939,7 @@ public class GitHubApiService
             var client = _auth.CreateClient();
 
             var url =
-                $"https://api.github.com/repos/{_auth.Owner}/{_auth.Repository}/actions/runs?per_page=100";
+                $"https://api.github.com/repos/{Uri.EscapeDataString(_auth.Owner)}/{Uri.EscapeDataString(_auth.Repository)}/actions/runs?per_page=100";
 
             var json = await HttpClientHelper.GetAsync(client, url);
 
@@ -963,7 +963,7 @@ public class GitHubApiService
             var client = _auth.CreateClient();
 
             var url =
-                $"https://api.github.com/repos/{_auth.Owner}/{_auth.Repository}/actions/runs/{runId}";
+                $"https://api.github.com/repos/{Uri.EscapeDataString(_auth.Owner)}/{Uri.EscapeDataString(_auth.Repository)}/actions/runs/{runId}";
 
             var json = await HttpClientHelper.GetAsync(client, url);
 
@@ -994,7 +994,7 @@ public class GitHubApiService
         foreach (var run in waitingRuns)
         {
             var url =
-                $"https://api.github.com/repos/{_auth.Owner}/{_auth.Repository}/actions/runs/{run.Id}/pending_deployments";
+                $"https://api.github.com/repos/{Uri.EscapeDataString(_auth.Owner)}/{Uri.EscapeDataString(_auth.Repository)}/actions/runs/{run.Id}/pending_deployments";
 
             var json = await HttpClientHelper.GetAsync(client, url);
             var array = JArray.Parse(json);
@@ -1032,7 +1032,7 @@ public class GitHubApiService
         var client = _auth.CreateClient();
 
         var url =
-            $"https://api.github.com/repos/{_auth.Owner}/{_auth.Repository}/actions/runs/{decision.RunId}/pending_deployments";
+            $"https://api.github.com/repos/{Uri.EscapeDataString(_auth.Owner)}/{Uri.EscapeDataString(_auth.Repository)}/actions/runs/{decision.RunId}/pending_deployments";
 
         var body = new
         {
@@ -1116,7 +1116,7 @@ public class GitHubApiService
             var client = _auth.CreateClient();
 
             var url =
-                $"https://api.github.com/repos/{_auth.Owner}/{_auth.Repository}/pulls?state=open&per_page=100&sort=created&direction=desc";
+                $"https://api.github.com/repos/{Uri.EscapeDataString(_auth.Owner)}/{Uri.EscapeDataString(_auth.Repository)}/pulls?state=open&per_page=100&sort=created&direction=desc";
 
             var json = await HttpClientHelper.GetAsync(client, url);
             var array = JArray.Parse(json);
@@ -1141,7 +1141,7 @@ public class GitHubApiService
             var client = _auth.CreateClient();
 
             var url =
-                $"https://api.github.com/repos/{_auth.Owner}/{_auth.Repository}/pulls?state=closed&per_page=50&sort=updated&direction=desc";
+                $"https://api.github.com/repos/{Uri.EscapeDataString(_auth.Owner)}/{Uri.EscapeDataString(_auth.Repository)}/pulls?state=closed&per_page=50&sort=updated&direction=desc";
 
             var json = await HttpClientHelper.GetAsync(client, url);
             var array = JArray.Parse(json);
@@ -1155,7 +1155,7 @@ public class GitHubApiService
             var client = _auth.CreateClient();
 
             var url =
-                $"https://api.github.com/repos/{_auth.Owner}/{_auth.Repository}/commits?per_page=30";
+                $"https://api.github.com/repos/{Uri.EscapeDataString(_auth.Owner)}/{Uri.EscapeDataString(_auth.Repository)}/commits?per_page=30";
 
             var json = await HttpClientHelper.GetAsync(client, url);
             var array = JArray.Parse(json);
@@ -1226,7 +1226,7 @@ public class GitHubApiService
             Actor = r.TriggeredBy,
             ActorAvatarUrl = string.Empty,
             Timestamp = r.CreatedAt,
-            HtmlUrl = $"https://github.com/{_auth.Owner}/{_auth.Repository}/actions/runs/{r.Id}"
+            HtmlUrl = $"https://github.com/{Uri.EscapeDataString(_auth.Owner)}/{Uri.EscapeDataString(_auth.Repository)}/actions/runs/{r.Id}"
         }));
 
         return events
@@ -1240,7 +1240,7 @@ public class GitHubApiService
         var client = _auth.CreateClient();
 
         var url =
-            $"https://api.github.com/repos/{_auth.Owner}/{_auth.Repository}/pulls/{number}/reviews";
+            $"https://api.github.com/repos/{Uri.EscapeDataString(_auth.Owner)}/{Uri.EscapeDataString(_auth.Repository)}/pulls/{number}/reviews";
 
         var body = new { @event = "APPROVE" };
         var json = System.Text.Json.JsonSerializer.Serialize(body);
@@ -1255,7 +1255,7 @@ public class GitHubApiService
         var client = _auth.CreateClient();
 
         var url =
-            $"https://api.github.com/repos/{_auth.Owner}/{_auth.Repository}/pulls/{number}/merge";
+            $"https://api.github.com/repos/{Uri.EscapeDataString(_auth.Owner)}/{Uri.EscapeDataString(_auth.Repository)}/pulls/{number}/merge";
 
         var response = await client.PutAsync(url, new StringContent("{}", Encoding.UTF8, "application/json"));
 

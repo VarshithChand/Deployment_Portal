@@ -232,7 +232,11 @@ function main() {
   const generateScript = path.resolve(process.cwd(), GENERATE_TOKENS_SCRIPT);
   if (fs.existsSync(generateScript)) {
     try {
-      execFileSync('node', [generateScript, '--config', DESIGN_TOKENS_JSON, '-o', DESIGN_TOKENS_CSS], {
+      // process.execPath is the absolute path to the Node binary actually
+      // running this script — using the bare string 'node' instead would
+      // resolve through PATH, which a writable/hijacked directory earlier
+      // in PATH could redirect to a different executable entirely.
+      execFileSync(process.execPath, [generateScript, '--config', DESIGN_TOKENS_JSON, '-o', DESIGN_TOKENS_CSS], {
         cwd: process.cwd(),
         stdio: 'inherit'
       });

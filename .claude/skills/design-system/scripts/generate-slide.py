@@ -21,10 +21,12 @@ def _e(value, default=''):
 def _safe_url(url, default='#'):
     """Validate and escape a URL for use in href attributes.
 
-    Only allows http://, https://, #, and / schemes to prevent
-    javascript: URI injection (CWE-79).
+    Only allows https://, #, and / schemes to prevent javascript: URI
+    injection (CWE-79) - plain http:// is rejected too, same as any other
+    disallowed scheme, since a generated slide has no way to know whether
+    a plain-HTTP link it's given is actually safe to send a reader to.
     """
-    if url and str(url).strip().lower().startswith(('http://', 'https://', '#', '/')):
+    if url and str(url).strip().lower().startswith(('https://', '#', '/')):
         return escape(str(url), quote=True)
     return default
 
