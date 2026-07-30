@@ -46,9 +46,6 @@ on:
       - 'src/AdminAPI/**'
       - 'config/patch.config'
 
-permissions:
-  contents: write        # needed to commit/push the rotated artifact
-
 env:
   CONFIG_FILE: config/patch.config
 
@@ -136,6 +133,9 @@ jobs:
     needs:
       - read_config
       - build
+
+    permissions:
+      contents: write # needed to commit/push the rotated artifact
 
     concurrency:
       group: admin-api-artifact-${{ github.ref }}

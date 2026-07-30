@@ -37,8 +37,13 @@ public class DeploymentService
         // in its "path" field. Sending the full path 404s.
         var workflowId = NormalizeWorkflowId(request.Workflow);
 
+        // Owner/Repository come from this caller's own saved settings and
+        // workflowId from the Deploy form's own request body - all three
+        // escaped so a crafted value can't redirect this request onto a
+        // different GitHub API path than the dispatch it's meant to be.
         var url =
-            $"https://api.github.com/repos/{_auth.Owner}/{_auth.Repository}/actions/workflows/{workflowId}/dispatches";
+            $"https://api.github.com/repos/{Uri.EscapeDataString(_auth.Owner)}/{Uri.EscapeDataString(_auth.Repository)}" +
+            $"/actions/workflows/{Uri.EscapeDataString(workflowId)}/dispatches";
 
         var isCi = string.Equals(request.Mode, "CI", StringComparison.OrdinalIgnoreCase);
 
@@ -144,7 +149,8 @@ public class DeploymentService
         DateTime triggeredAt)
     {
         var url =
-            $"https://api.github.com/repos/{_auth.Owner}/{_auth.Repository}/actions/workflows/{workflow}/runs" +
+            $"https://api.github.com/repos/{Uri.EscapeDataString(_auth.Owner)}/{Uri.EscapeDataString(_auth.Repository)}" +
+            $"/actions/workflows/{Uri.EscapeDataString(workflow)}/runs" +
             $"?branch={Uri.EscapeDataString(branch)}&event=workflow_dispatch&per_page=5";
 
         for (var attempt = 0; attempt < 5; attempt++)

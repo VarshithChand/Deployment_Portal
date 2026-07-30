@@ -51,15 +51,23 @@ public class GitHubApiService
     {
         var client = _auth.CreateClient();
 
+        // owner/repository here are whatever the caller typed into the
+        // Settings page's repo URL field — escaped before going into the
+        // URL path so a crafted value (e.g. containing "/" or "..") can't
+        // make this request land on a different GitHub API path than the
+        // repo lookup it's meant to be.
+        var encodedOwner = Uri.EscapeDataString(owner);
+        var encodedRepository = Uri.EscapeDataString(repository);
+
         try
         {
             var repoJson = await HttpClientHelper.GetAsync(
-                client, $"https://api.github.com/repos/{owner}/{repository}");
+                client, $"https://api.github.com/repos/{encodedOwner}/{encodedRepository}");
 
             var repo = JObject.Parse(repoJson);
 
             var branchesResponse = await client.GetAsync(
-                $"https://api.github.com/repos/{owner}/{repository}/branches?per_page=100");
+                $"https://api.github.com/repos/{encodedOwner}/{encodedRepository}/branches?per_page=100");
 
             await HttpClientHelper.EnsureSuccessAsync(branchesResponse);
 
@@ -70,7 +78,7 @@ public class GitHubApiService
                 && linkValues.Any(v => v.Contains("rel=\"next\""));
 
             var workflowsJson = await HttpClientHelper.GetAsync(
-                client, $"https://api.github.com/repos/{owner}/{repository}/actions/workflows");
+                client, $"https://api.github.com/repos/{encodedOwner}/{encodedRepository}/actions/workflows");
 
             var workflowCount = (int?)JObject.Parse(workflowsJson)["total_count"] ?? 0;
 
@@ -363,8 +371,13 @@ public class GitHubApiService
     {
         var client = _auth.CreateClient();
 
+        // owner/repository can be arbitrary text here (InviteCollaboratorToRepoAsync
+        // passes through whatever the Access Levels page's "assign to another
+        // repository" field was given) - escaped so a crafted value can't
+        // redirect this request onto a different GitHub API path than intended.
         var collaboratorUrl =
-            $"https://api.github.com/repos/{owner}/{repository}/collaborators/{Uri.EscapeDataString(username)}";
+            $"https://api.github.com/repos/{Uri.EscapeDataString(owner)}/{Uri.EscapeDataString(repository)}" +
+            $"/collaborators/{Uri.EscapeDataString(username)}";
 
         // "Check if a user is a repository collaborator" — 204 if yes, 404
         // if no. Checked first rather than blindly deleting, so a
@@ -1058,7 +1071,10 @@ public class GitHubApiService
 
         return runs
             .Where(r => r.Status == "completed"
-                && System.Text.RegularExpressions.Regex.IsMatch(r.Name, "release|deploy", System.Text.RegularExpressions.RegexOptions.IgnoreCase))
+                && System.Text.RegularExpressions.Regex.IsMatch(
+                    r.Name, "release|deploy",
+                    System.Text.RegularExpressions.RegexOptions.IgnoreCase,
+                    TimeSpan.FromSeconds(1)))
             .OrderByDescending(r => r.CreatedAt)
             .Take(20)
             .ToList();

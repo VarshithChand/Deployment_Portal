@@ -62,9 +62,6 @@ on:
       - 'src/PMSCoreAPI/**'
       - 'src/SecurityAPI/**'
 
-permissions:
-  contents: write        # needed to commit/push the rotated artifact
-
 # A new push/run on the same branch supersedes the previous one: the older
 # in-flight run (even one paused waiting for approval) is cancelled, so you
 # never approve a stale artifact and the run list stays clean.
@@ -194,6 +191,9 @@ jobs:
     needs:
       - setup
       - build
+
+    permissions:
+      contents: write # needed to commit/push the rotated artifact
 
     concurrency:
       group: artifact-${{ needs.setup.outputs.dir }}-${{ github.ref }}
