@@ -40,7 +40,7 @@ services:
       context: ./deployment-ui
       dockerfile: Dockerfile
     ports:
-      - "8081:80"
+      - "8081:8080"
     depends_on:
       # Waits for the backend's HEALTHCHECK (see src/DeploymentAPI/Dockerfile)
       # to actually pass, not just for the container to start — otherwise

@@ -196,7 +196,7 @@ docker run -d --name deployment-api --network portal-network \
   ghcr.io/varshithchand/deployment-portal-api:latest
 
 docker run -d --name deployment-ui --network portal-network \
-  -p 8081:80 \
+  -p 8081:8080 \
   ghcr.io/varshithchand/deployment-portal-ui:latest
 ```
 

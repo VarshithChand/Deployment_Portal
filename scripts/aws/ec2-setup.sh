@@ -29,7 +29,10 @@ systemctl enable --now docker
 if ! docker compose version >/dev/null 2>&1; then
   echo "==> Installing the Docker Compose plugin"
   mkdir -p /usr/local/lib/docker/cli-plugins
-  curl -fsSL "https://github.com/docker/compose/releases/latest/download/docker-compose-linux-$(uname -m)" \
+  # --proto '=https' refuses the transfer outright if a redirect in the
+  # chain ever points somewhere other than https, rather than trusting -L
+  # to follow it wherever it leads.
+  curl -fsSL --proto '=https' "https://github.com/docker/compose/releases/latest/download/docker-compose-linux-$(uname -m)" \
     -o /usr/local/lib/docker/cli-plugins/docker-compose
   chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
 fi
@@ -43,7 +46,7 @@ echo "==> Setting up $APP_DIR"
 mkdir -p "$APP_DIR"
 cd "$APP_DIR"
 
-curl -fsSL "$COMPOSE_URL" -o docker-compose.prod.yml
+curl -fsSL --proto '=https' "$COMPOSE_URL" -o docker-compose.prod.yml
 
 # No .env needed for a GitHub repo/PAT — every visitor connects their own
 # from inside the app itself (the "Connect your GitHub repository" popup

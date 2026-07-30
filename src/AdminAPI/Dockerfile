@@ -16,6 +16,11 @@ RUN apt-get update \
 
 COPY --from=build /app/publish .
 
+# $APP_UID is a non-root user (UID 64198) the official aspnet image already
+# creates for exactly this — switched to after copying files (which needs
+# root) since the app itself only ever needs to read them, not write.
+USER $APP_UID
+
 ENV ASPNETCORE_URLS=http://+:8080
 EXPOSE 8080
 
