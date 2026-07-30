@@ -201,12 +201,14 @@ export default function Settings() {
 
     }
 
-    // Bounces away from Sidebar Access if it's ever reached without admin
-    // access — a raw "?view=sidebar-access" URL, or an admin session that
-    // expired while this page was already open.
+    // Bounces away from Sidebar Access or Activity Log if either is ever
+    // reached without admin access — a raw "?view=..." URL, or an admin
+    // session that expired while this page was already open. Both now
+    // require Admin server-side (see LogsController/AdminGate), so showing
+    // either to a non-admin would just be an empty/failed page.
     useEffect(() => {
 
-        if (view === "sidebar-access" && !isAdmin) {
+        if ((view === "sidebar-access" || view === "activity-log") && !isAdmin) {
             setView("hub");
         }
 
@@ -299,7 +301,14 @@ export default function Settings() {
 
     }, [selectedPatUserKey]);
 
+    // Admin-only server-side (see LogsController) — matches Sidebar Access's
+    // own pattern of not even attempting the fetch for a non-admin session.
     useEffect(() => {
+
+        if (!isAdmin) {
+            setLogsLoading(false);
+            return;
+        }
 
         let cancelled = false;
 
@@ -320,7 +329,7 @@ export default function Settings() {
             cancelled = true;
         };
 
-    }, []);
+    }, [isAdmin]);
 
     useEffect(() => {
 
@@ -764,13 +773,17 @@ export default function Settings() {
                         </p>
                     </button>
 
-                    <button type="button" className="settings-hub-tile" onClick={() => setView("activity-log")}>
-                        <h2>Activity Log</h2>
-                        <p>
-                            Recent settings changes and backend errors, kept in memory on
-                            the server.
-                        </p>
-                    </button>
+                    {isAdmin && (
+
+                        <button type="button" className="settings-hub-tile" onClick={() => setView("activity-log")}>
+                            <h2>Activity Log</h2>
+                            <p>
+                                Recent settings changes and backend errors, kept in memory on
+                                the server — spans every session, so admin-only.
+                            </p>
+                        </button>
+
+                    )}
 
                     <button type="button" className="settings-hub-tile" onClick={() => setView("access-levels")}>
                         <h2>Access Levels</h2>
@@ -1314,7 +1327,7 @@ export default function Settings() {
 
             )}
 
-            {view === "activity-log" && (
+            {view === "activity-log" && isAdmin && (
 
             <>
 
