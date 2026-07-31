@@ -66,11 +66,12 @@
       (function () {
         try {
           var stored = localStorage.getItem('theme');
-          var theme = stored === 'light' || stored === 'dark'
-            ? stored
-            : (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
-          document.documentElement.setAttribute('data-theme', theme);
-        } catch (e) {}
+          var systemTheme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+          var theme = stored === 'light' || stored === 'dark' ? stored : systemTheme;
+          document.documentElement.dataset.theme = theme;
+        } catch (e) {
+          console.warn('Unable to read persisted theme preference', e);
+        }
       })();
     </script>
   </head>
