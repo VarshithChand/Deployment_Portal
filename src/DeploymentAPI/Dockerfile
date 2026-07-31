@@ -22,7 +22,15 @@ COPY --from=build /app/publish .
 
 # $APP_UID is a non-root user (UID 64198) the official aspnet image already
 # creates for exactly this — switched to after copying files (which needs
-# root) since the app itself only ever needs to read them, not write.
+# root). Unlike the other three APIs' in-memory-only stores, this one's
+# SettingsService actually creates/writes appsettings.Local.json under
+# this same WORKDIR at runtime (it's gitignored, so it's never in the
+# image to begin with) - without this chown, $APP_UID has no permission
+# to create that file at all and the app crashes on its very first boot
+# whenever DATABASE_URL is set (confirmed in production: "Access to the
+# path '/app/appsettings.Local.json' is denied").
+RUN chown -R $APP_UID:$APP_UID /app
+
 USER $APP_UID
 
 ENV ASPNETCORE_URLS=http://+:8080
