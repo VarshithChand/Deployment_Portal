@@ -247,12 +247,15 @@ app.Use(async (context, next) =>
 
 //
 // Swagger
+// Enabled in every environment (not just Development) so the API surface
+// is checkable on the deployed instance too - it only documents request/
+// response shapes, the same ones already visible to anyone using the
+// portal's own frontend; every actual action still goes through the same
+// AdminGate/auth checks regardless of whether it was called via Swagger
+// or the real UI.
 //
-if (app.Environment.IsDevelopment())
-{
-    app.UseSwagger();
-    app.UseSwaggerUI();
-}
+app.UseSwagger();
+app.UseSwaggerUI();
 
 //
 // HTTPS
