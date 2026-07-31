@@ -100,7 +100,11 @@ jobs:
 
       - name: Install Dependencies
         working-directory: deployment-ui
-        run: npm ci
+        # No dependency in this tree needs an install-time script -
+        # verified empirically (installed + built with and without this
+        # flag, byte-identical output) when the same flag was added to
+        # deployment-ui/Dockerfile earlier.
+        run: npm ci --ignore-scripts
 
       - name: Build
         working-directory: deployment-ui
