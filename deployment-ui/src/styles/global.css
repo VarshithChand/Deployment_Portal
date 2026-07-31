@@ -4135,6 +4135,39 @@ textarea{
     border-bottom:none;
 }
 
+.smoke-test-connection{
+    margin:4px 0 14px;
+    padding:12px 14px;
+    background:var(--bg);
+    border:1px solid var(--border);
+    border-radius:8px;
+}
+
+.smoke-test-connection-header{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    margin-bottom:8px;
+    font-size:12px;
+    font-weight:600;
+    text-transform:uppercase;
+    letter-spacing:.04em;
+    color:var(--text-muted);
+}
+
+.smoke-test-connection-header .copy-button{
+    margin-left:0;
+}
+
+.smoke-test-connection-value{
+    display:block;
+    font-family:'Courier New',Courier,monospace;
+    font-size:13px;
+    color:var(--text);
+    word-break:break-all;
+    line-height:1.5;
+}
+
 .smoke-test-metric dt{
     color:var(--text-muted);
 }

@@ -1,6 +1,7 @@
 import { useState } from "react";
 
 import StatusBadge from "../StatusBadge";
+import CopyButton from "../common/CopyButton";
 import { getBackendHealth, getDatabaseHealth } from "../../services/healthService";
 
 // Backend/Database expand into a live "check right now" call against
@@ -149,8 +150,11 @@ function HealthDetails({ kind, loading, error, health, onRetry }) {
     }
 
     const responseGood = health.httpStatus >= 200 && health.httpStatus < 300;
+    const connectionString = health.host ? `${health.host}:${health.port}/${health.database}` : null;
 
     return (
+
+        <>
 
         <dl className="smoke-test-metrics">
 
@@ -196,16 +200,48 @@ function HealthDetails({ kind, loading, error, health, onRetry }) {
                     )}
 
                     {health.host && (
-                        <div className="smoke-test-metric">
-                            <dt>Connection</dt>
-                            <dd className="smoke-test-metric-mono">{health.host}:{health.port}/{health.database}</dd>
-                        </div>
+                        <>
+                            <div className="smoke-test-metric">
+                                <dt>Host</dt>
+                                <dd className="smoke-test-metric-mono">{health.host}</dd>
+                            </div>
+                            <div className="smoke-test-metric">
+                                <dt>Port</dt>
+                                <dd className="smoke-test-metric-mono">{health.port}</dd>
+                            </div>
+                            <div className="smoke-test-metric">
+                                <dt>Database</dt>
+                                <dd className="smoke-test-metric-mono">{health.database}</dd>
+                            </div>
+                        </>
                     )}
                 </>
 
             )}
 
         </dl>
+
+        {/* Its own block, not another metric row — a full "host:port/db"
+            string is long enough that squeezing it into the same
+            label-left/value-right row as everything above just wraps
+            awkwardly and breaks alignment. Username/password are never
+            part of this — see DatabaseHealthDto. */}
+        {connectionString && (
+
+            <div className="smoke-test-connection">
+
+                <div className="smoke-test-connection-header">
+                    <span>Connection string</span>
+                    <CopyButton value={connectionString} label="Copy connection string" />
+                </div>
+
+                <code className="smoke-test-connection-value">{connectionString}</code>
+
+            </div>
+
+        )}
+
+        </>
 
     );
 
