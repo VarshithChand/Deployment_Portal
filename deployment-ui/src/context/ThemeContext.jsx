@@ -24,7 +24,7 @@ export default function ThemeProvider({ children }) {
 
     useEffect(() => {
 
-        document.documentElement.setAttribute("data-theme", theme);
+        document.documentElement.dataset.theme = theme;
         localStorage.setItem(STORAGE_KEY, theme);
 
     }, [theme]);

@@ -884,57 +884,69 @@ public class GitHubApiService
         var deserializer = new DeserializerBuilder().Build();
         var root = deserializer.Deserialize<Dictionary<object, object>>(yamlText);
 
-        // YAML 1.1 (which YamlDotNet follows by default) treats a bare "on" as
-        // the boolean `true` — GitHub Actions always uses it as the trigger
-        // key regardless, so check for both forms the parser might produce.
+        if (!TryGetDispatchInputsMap(root, out var inputsMap))
+            return new List<WorkflowInputDto>();
+
+        return inputsMap.Select(ParseWorkflowInput).ToList();
+    }
+
+    // YAML 1.1 (which YamlDotNet follows by default) treats a bare "on" as
+    // the boolean `true` — GitHub Actions always uses it as the trigger
+    // key regardless, so check for both forms the parser might produce.
+    // False whenever any step of on -> workflow_dispatch -> inputs isn't
+    // shaped the way GitHub Actions requires (workflow simply declares no
+    // dispatch inputs at all, which is the common case).
+    private static bool TryGetDispatchInputsMap(Dictionary<object, object> root, out IDictionary<object, object> inputsMap)
+    {
+        inputsMap = new Dictionary<object, object>();
+
         object? onValue = root.TryGetValue("on", out var onByString)
             ? onByString
             : root.TryGetValue(true, out var onByBool) ? onByBool : null;
 
         if (onValue is not IDictionary<object, object> onMap)
-            return new List<WorkflowInputDto>();
+            return false;
 
         if (!onMap.TryGetValue("workflow_dispatch", out var dispatchValue)
             || dispatchValue is not IDictionary<object, object> dispatchMap)
-            return new List<WorkflowInputDto>();
+            return false;
 
         if (!dispatchMap.TryGetValue("inputs", out var inputsValue)
-            || inputsValue is not IDictionary<object, object> inputsMap)
-            return new List<WorkflowInputDto>();
+            || inputsValue is not IDictionary<object, object> resolvedInputsMap)
+            return false;
 
-        var result = new List<WorkflowInputDto>();
+        inputsMap = resolvedInputsMap;
+        return true;
+    }
 
-        foreach (var entry in inputsMap)
+    private static WorkflowInputDto ParseWorkflowInput(KeyValuePair<object, object> entry)
+    {
+        var spec = entry.Value as IDictionary<object, object>;
+
+        var required =
+            spec != null
+            && spec.TryGetValue("required", out var requiredRaw)
+            && bool.TryParse(requiredRaw?.ToString(), out var requiredBool)
+            && requiredBool;
+
+        List<string>? options = null;
+
+        if (spec != null
+            && spec.TryGetValue("options", out var optionsRaw)
+            && optionsRaw is IEnumerable<object> optionsList)
         {
-            var spec = entry.Value as IDictionary<object, object>;
-
-            var required =
-                spec != null
-                && spec.TryGetValue("required", out var requiredRaw)
-                && bool.TryParse(requiredRaw?.ToString(), out var requiredBool)
-                && requiredBool;
-
-            List<string>? options = null;
-
-            if (spec != null
-                && spec.TryGetValue("options", out var optionsRaw)
-                && optionsRaw is IEnumerable<object> optionsList)
-            {
-                options = optionsList.Select(o => o?.ToString() ?? "").ToList();
-            }
-
-            result.Add(new WorkflowInputDto
-            {
-                Name = entry.Key?.ToString() ?? "",
-                Type = spec != null && spec.TryGetValue("type", out var type) ? type?.ToString() ?? "string" : "string",
-                Required = required,
-                Default = spec != null && spec.TryGetValue("default", out var def) ? def?.ToString() : null,
-                Description = spec != null && spec.TryGetValue("description", out var desc) ? desc?.ToString() : null,
-                Options = options
-            });
+            options = optionsList.Select(o => o?.ToString() ?? "").ToList();
         }
 
-        return result;
+        return new WorkflowInputDto
+        {
+            Name = entry.Key?.ToString() ?? "",
+            Type = spec != null && spec.TryGetValue("type", out var type) ? type?.ToString() ?? "string" : "string",
+            Required = required,
+            Default = spec != null && spec.TryGetValue("default", out var def) ? def?.ToString() : null,
+            Description = spec != null && spec.TryGetValue("description", out var desc) ? desc?.ToString() : null,
+            Options = options
+        };
     }
 
     //===========================================================

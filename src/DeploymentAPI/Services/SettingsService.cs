@@ -600,7 +600,7 @@ public class SettingsService
     // section columns to keep in sync with BuildView/SaveXAsync, no
     // migrations to write when a new section is added (see SidebarAccess,
     // added well after this table would have first been created).
-    private async Task EnsureTableAsync(NpgsqlConnection connection)
+    private static async Task EnsureTableAsync(NpgsqlConnection connection)
     {
         if (_tableEnsured)
             return;

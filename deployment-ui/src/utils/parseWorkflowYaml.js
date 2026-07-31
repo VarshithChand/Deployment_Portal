@@ -74,16 +74,7 @@ export function parseWorkflowYaml(yamlText) {
         throw new Error("No jobs could be found in this pipeline.");
     }
 
-    const knownIds = new Set(jobs.map((job) => job.id));
-
-    for (const job of jobs) {
-        for (const dep of job.needs) {
-            if (!knownIds.has(dep)) {
-                const depLabel = dep.includes("::") ? dep.split("::").pop() : dep;
-                throw new Error(`Job "${job.name}" depends on "${depLabel}", which doesn't exist in this pipeline.`);
-            }
-        }
-    }
+    validateJobDependencies(jobs);
 
     const layers = computeLayers(jobs);
 
@@ -97,6 +88,25 @@ export function parseWorkflowYaml(yamlText) {
         runParameters: flavor === "github" ? resolveGitHubDispatchInputs(doc) : resolveRunParameters(doc),
         defaultBranch: resolveDefaultBranch(doc, flavor)
     };
+
+}
+
+// Every job's "needs"/"dependsOn" has to point at a job that actually
+// exists in this same pipeline, or computeLayers would silently strand it
+// in no layer at all — pulled out of parseWorkflowYaml so this validation
+// pass stops counting toward its cognitive complexity.
+function validateJobDependencies(jobs) {
+
+    const knownIds = new Set(jobs.map((job) => job.id));
+
+    for (const job of jobs) {
+        for (const dep of job.needs) {
+            if (!knownIds.has(dep)) {
+                const depLabel = dep.includes("::") ? dep.split("::").pop() : dep;
+                throw new Error(`Job "${job.name}" depends on "${depLabel}", which doesn't exist in this pipeline.`);
+            }
+        }
+    }
 
 }
 
@@ -597,6 +607,91 @@ function resolveIfConditionRefs(conditionText, loopVar, loopItem) {
 
 }
 
+// The one key of a single-key mapping entry (an each-loop or if-block
+// marker is always written as a lone "${{ ... }}:" key with the loop/if
+// body as its value) — null for anything else, which just means "not one
+// of those two special forms".
+function soleKeyOf(entry) {
+    return entry && typeof entry === "object" && !Array.isArray(entry) && Object.keys(entry).length === 1
+        ? Object.keys(entry)[0]
+        : null;
+}
+
+// eachMatch's loop body, one expansion per source item — null when the
+// loop source isn't a fixed array (e.g. only known at run time), which
+// tells expandEntry to fall back to treating the entry as ordinary.
+function expandEachMatch(eachMatch, body, doc, paramsMap) {
+
+    const [, newLoopVar, path] = eachMatch;
+    const source = resolveLoopSource(path, paramsMap);
+
+    if (!Array.isArray(source)) return null;
+
+    const result = [];
+
+    source.forEach((sourceItem) => {
+
+        const substituted = deepSubstitute(body, newLoopVar, sourceItem);
+        const expanded = expandEachLoops(substituted, doc, paramsMap, newLoopVar, sourceItem);
+
+        if (Array.isArray(expanded)) result.push(...expanded);
+        else result.push(expanded);
+
+    });
+
+    return result;
+
+}
+
+// ifMatch's body — dropped entirely when statically excluded, otherwise
+// expanded with the condition text attached to each resulting item so the
+// existing referencedParams skip mechanism picks it up.
+function expandIfMatch(ifMatch, body, doc, paramsMap, loopVar, loopItem) {
+
+    if (isStaticallyExcluded(ifMatch[1], loopVar, loopItem)) {
+        return [];
+    }
+
+    const conditionText = resolveIfConditionRefs(ifMatch[1], loopVar, loopItem);
+    const expanded = expandEachLoops(body, doc, paramsMap, loopVar, loopItem);
+    const bodyArray = Array.isArray(expanded) ? expanded : [expanded];
+
+    bodyArray.forEach((item) => {
+
+        if (item && typeof item === "object" && !Array.isArray(item)) {
+            item.condition = item.condition ? `${item.condition} ${conditionText}` : conditionText;
+        }
+
+    });
+
+    return bodyArray;
+
+}
+
+// The zero-or-more expanded items a single node-array entry produces: an
+// each-loop entry expands to one item per source element, an if-block
+// entry expands to its (possibly empty) body, and an ordinary entry just
+// expands to itself.
+function expandEntry(entry, doc, paramsMap, loopVar, loopItem) {
+
+    const soleKey = soleKeyOf(entry);
+    const eachMatch = soleKey ? soleKey.match(EACH_LOOP_KEY) : null;
+
+    if (eachMatch) {
+        const expanded = expandEachMatch(eachMatch, entry[soleKey], doc, paramsMap);
+        if (expanded) return expanded;
+    }
+
+    const ifMatch = !eachMatch && soleKey ? soleKey.match(IF_BLOCK_KEY) : null;
+
+    if (ifMatch) {
+        return expandIfMatch(ifMatch, entry[soleKey], doc, paramsMap, loopVar, loopItem);
+    }
+
+    return [expandEachLoops(entry, doc, paramsMap, loopVar, loopItem)];
+
+}
+
 // loopVar/loopItem carry the enclosing each-loop's binding (if any) down
 // into nested "${{ if }}:" blocks, which commonly sit directly inside an
 // each-loop's body and reference the loop item in their condition (e.g.
@@ -604,73 +699,7 @@ function resolveIfConditionRefs(conditionText, loopVar, loopItem) {
 function expandEachLoops(node, doc, paramsMap, loopVar = null, loopItem = null) {
 
     if (Array.isArray(node)) {
-
-        const result = [];
-
-        for (const entry of node) {
-
-            const soleKey = entry && typeof entry === "object" && !Array.isArray(entry) && Object.keys(entry).length === 1
-                ? Object.keys(entry)[0]
-                : null;
-
-            const eachMatch = soleKey ? soleKey.match(EACH_LOOP_KEY) : null;
-            const ifMatch = !eachMatch && soleKey ? soleKey.match(IF_BLOCK_KEY) : null;
-
-            if (eachMatch) {
-
-                const [, newLoopVar, path] = eachMatch;
-                const source = resolveLoopSource(path, paramsMap);
-
-                if (Array.isArray(source)) {
-
-                    const body = entry[soleKey];
-
-                    source.forEach((sourceItem) => {
-
-                        const substituted = deepSubstitute(body, newLoopVar, sourceItem);
-                        const expanded = expandEachLoops(substituted, doc, paramsMap, newLoopVar, sourceItem);
-
-                        if (Array.isArray(expanded)) result.push(...expanded);
-                        else result.push(expanded);
-
-                    });
-
-                    continue;
-
-                }
-
-            }
-            else if (ifMatch) {
-
-                if (isStaticallyExcluded(ifMatch[1], loopVar, loopItem)) {
-                    continue;
-                }
-
-                const conditionText = resolveIfConditionRefs(ifMatch[1], loopVar, loopItem);
-                const body = entry[soleKey];
-                const expanded = expandEachLoops(body, doc, paramsMap, loopVar, loopItem);
-                const bodyArray = Array.isArray(expanded) ? expanded : [expanded];
-
-                bodyArray.forEach((item) => {
-
-                    if (item && typeof item === "object" && !Array.isArray(item)) {
-                        item.condition = item.condition ? `${item.condition} ${conditionText}` : conditionText;
-                    }
-
-                    result.push(item);
-
-                });
-
-                continue;
-
-            }
-
-            result.push(expandEachLoops(entry, doc, paramsMap, loopVar, loopItem));
-
-        }
-
-        return result;
-
+        return node.flatMap((entry) => expandEntry(entry, doc, paramsMap, loopVar, loopItem));
     }
 
     if (node && typeof node === "object") {
