@@ -172,6 +172,10 @@ jobs:
           ASPNETCORE_URLS: http://localhost:5279
           ASPNETCORE_ENVIRONMENT: Production
           DATABASE_URL: postgres://smoketest:smoketest@localhost:5432/smoketest
+          # This throwaway service container has no SSL configured at all -
+          # see SettingsService.BuildConnectionString. Render itself never
+          # sets this, so production still always requires SSL.
+          DATABASE_SSL_MODE: Disable
         run: |
           dotnet src/DeploymentAPI/bin/Release/net10.0/DeploymentAPI.dll > app.log 2>&1 &
           APP_PID=$!

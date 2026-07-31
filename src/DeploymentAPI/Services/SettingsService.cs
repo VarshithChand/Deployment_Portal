@@ -46,13 +46,23 @@ public class SettingsService
     // Render (and Heroku before it) hand out Postgres connections as a
     // "postgres://user:pass@host:port/dbname" URI rather than Npgsql's own
     // "Host=...;Username=...;..." format, so this bridges the two. SSL is
-    // required outright — Render's Postgres instances reject plain
-    // connections, and there's no local-dev case to accommodate here since
-    // DATABASE_URL is only ever set when a real Postgres is meant to be used.
+    // required outright by default — Render's Postgres instances reject
+    // plain connections. DATABASE_SSL_MODE exists solely for the Database
+    // Smoke Test job's own throwaway Postgres service container (see
+    // .github/workflows/smoke-tests.yml), which has no SSL configured at
+    // all - Render itself never sets this, so production behavior is
+    // unchanged.
     private static string BuildConnectionString(string databaseUrl)
     {
         var uri = new Uri(databaseUrl);
         var userInfo = uri.UserInfo.Split(':', 2);
+
+        var sslMode = Environment.GetEnvironmentVariable("DATABASE_SSL_MODE") switch
+        {
+            "Disable" => SslMode.Disable,
+            "Prefer" => SslMode.Prefer,
+            _ => SslMode.Require
+        };
 
         var builder = new NpgsqlConnectionStringBuilder
         {
@@ -61,7 +71,7 @@ public class SettingsService
             Username = Uri.UnescapeDataString(userInfo[0]),
             Password = userInfo.Length > 1 ? Uri.UnescapeDataString(userInfo[1]) : string.Empty,
             Database = uri.AbsolutePath.TrimStart('/'),
-            SslMode = SslMode.Require
+            SslMode = sslMode
         };
 
         return builder.ConnectionString;
