@@ -1,17 +1,18 @@
 import { useEffect, useState } from "react";
 
 import { getLatestSmokeTest, runSmokeTests, getSmokeTestRun } from "../../services/smokeTestService";
-import StatusBadge from "../StatusBadge";
+import SmokeTestCard from "./SmokeTestCard";
 
 const POLL_INTERVAL = 3000;
 
 // Job names have to match the "name:" fields set on each job in
 // .github/workflows/smoke-tests.yml exactly - that's the only way to
-// tell GitHub's per-job results apart from here.
+// tell GitHub's per-job results apart from here. "kind" picks what a
+// card's expanded view shows (see SmokeTestCard).
 const KNOWN_JOBS = [
-    { name: "Backend Smoke Test", label: "Backend" },
-    { name: "Frontend Smoke Test", label: "Frontend" },
-    { name: "Database Smoke Test", label: "Database" }
+    { name: "Backend Smoke Test", label: "Backend", kind: "backend" },
+    { name: "Frontend Smoke Test", label: "Frontend", kind: "frontend" },
+    { name: "Database Smoke Test", label: "Database", kind: "database" }
 ];
 
 const ACTIVE_STATUSES = new Set(["queued", "in_progress"]);
@@ -143,43 +144,13 @@ export default function SmokeTestsView() {
 
             ) : (
 
-                <div className="grid">
+                <div className="smoke-test-grid">
 
-                    {KNOWN_JOBS.map(({ name, label }) => {
+                    {KNOWN_JOBS.map(({ name, label, kind }) => (
 
-                        const job = jobsByName.get(name);
-                        const status = job ? (job.status === "completed" ? job.conclusion : job.status) : "queued";
+                        <SmokeTestCard key={name} kind={kind} label={label} job={jobsByName.get(name)} />
 
-                        return (
-
-                            <div className="card dashboard-card" key={name}>
-
-                                <h2 className="card-title">{label}</h2>
-
-                                <div className="info-row">
-                                    <span>Status</span>
-                                    <StatusBadge status={status} />
-                                </div>
-
-                                {job?.htmlUrl && (
-
-                                    <a
-                                        href={job.htmlUrl}
-                                        target="_blank"
-                                        rel="noreferrer"
-                                        className="btn btn-secondary btn-sm"
-                                        style={{ marginTop: 10 }}
-                                    >
-                                        View Job &rarr;
-                                    </a>
-
-                                )}
-
-                            </div>
-
-                        );
-
-                    })}
+                    ))}
 
                 </div>
 

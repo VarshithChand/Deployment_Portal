@@ -28,4 +28,8 @@ public class SmokeTestJobDto
     public string? Conclusion { get; set; }
 
     public string? HtmlUrl { get; set; }
+
+    public DateTime? StartedAt { get; set; }
+
+    public DateTime? CompletedAt { get; set; }
 }

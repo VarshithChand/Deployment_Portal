@@ -80,7 +80,9 @@ public class SmokeTestService
                 Name = j.Name,
                 Status = j.Status,
                 Conclusion = j.Conclusion,
-                HtmlUrl = j.HtmlUrl
+                HtmlUrl = j.HtmlUrl,
+                StartedAt = j.StartedAt,
+                CompletedAt = j.CompletedAt
             }).ToList()
         };
     }

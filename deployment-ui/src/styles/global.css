@@ -4042,3 +4042,124 @@ textarea{
 .setup-gate-form .btn{
     width:100%;
 }
+
+/* ==========================================
+   SMOKE TEST CARDS
+   Each of the three result cards (Backend/Frontend/Database) doubles as
+   its own disclosure widget — click the header to expand a live health
+   check (Backend/Database) or the job's own timing (Frontend).
+========================================== */
+
+.smoke-test-grid{
+    display:grid;
+    grid-template-columns:repeat(auto-fit,minmax(min(240px, 100%),1fr));
+    gap:16px;
+}
+
+.smoke-test-card{
+    background:var(--card-bg);
+    border:1px solid var(--border);
+    border-radius:12px;
+    overflow:hidden;
+    transition:box-shadow .15s ease, border-color .15s ease;
+}
+
+.smoke-test-card-expanded{
+    box-shadow:0 10px 26px var(--card-shadow);
+    border-color:var(--heading-accent);
+}
+
+.smoke-test-card-header{
+    width:100%;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:12px;
+    padding:16px 18px;
+    background:none;
+    border:none;
+    cursor:pointer;
+    font-family:inherit;
+    text-align:left;
+}
+
+.smoke-test-card-title{
+    font-size:16px;
+    font-weight:600;
+    color:var(--text);
+}
+
+.smoke-test-card-header-right{
+    display:flex;
+    align-items:center;
+    gap:10px;
+}
+
+.smoke-test-chevron{
+    display:inline-block;
+    color:var(--text-muted);
+    font-size:11px;
+    transition:transform .15s ease;
+}
+
+.smoke-test-card-expanded .smoke-test-chevron{
+    transform:rotate(180deg);
+    color:var(--heading-accent);
+}
+
+.smoke-test-card-body{
+    padding:4px 18px 18px;
+    border-top:1px solid var(--border);
+    animation:smoke-test-body-in .15s ease both;
+}
+
+@keyframes smoke-test-body-in{
+    from{ opacity:0; transform:translateY(-4px); }
+    to{ opacity:1; transform:translateY(0); }
+}
+
+.smoke-test-metrics{
+    margin:14px 0 4px;
+}
+
+.smoke-test-metric{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    padding:7px 0;
+    border-bottom:1px solid var(--border);
+    font-size:14px;
+}
+
+.smoke-test-metric:last-child{
+    border-bottom:none;
+}
+
+.smoke-test-metric dt{
+    color:var(--text-muted);
+}
+
+.smoke-test-metric dd{
+    font-weight:600;
+    color:var(--text);
+}
+
+.smoke-test-metric-mono{
+    font-family:'Courier New',Courier,monospace;
+    font-size:13px;
+    font-weight:400;
+}
+
+.smoke-test-card-link{
+    margin-top:10px;
+}
+
+@media (prefers-reduced-motion: reduce){
+    .smoke-test-chevron,
+    .smoke-test-card{
+        transition:none;
+    }
+    .smoke-test-card-body{
+        animation:none;
+    }
+}

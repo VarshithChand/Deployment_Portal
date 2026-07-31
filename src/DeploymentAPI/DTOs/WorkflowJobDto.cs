@@ -9,4 +9,8 @@ public class WorkflowJobDto
     public string? Conclusion { get; set; }
 
     public string HtmlUrl { get; set; } = string.Empty;
+
+    public DateTime? StartedAt { get; set; }
+
+    public DateTime? CompletedAt { get; set; }
 }

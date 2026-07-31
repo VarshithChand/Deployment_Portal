@@ -1014,9 +1014,19 @@ public class GitHubApiService
             Name = j["name"]?.ToString() ?? string.Empty,
             Status = j["status"]?.ToString() ?? string.Empty,
             Conclusion = j["conclusion"]?.ToString(),
-            HtmlUrl = j["html_url"]?.ToString() ?? string.Empty
+            HtmlUrl = j["html_url"]?.ToString() ?? string.Empty,
+            StartedAt = ParseGitHubDate(j["started_at"]),
+            CompletedAt = ParseGitHubDate(j["completed_at"])
         }).ToList();
     }
+
+    // A job that hasn't started/finished yet reports these as null (queued)
+    // or, for completed_at specifically, GitHub's own zero-value
+    // "0001-01-01T00:00:00Z" placeholder rather than an absent field.
+    private static DateTime? ParseGitHubDate(JToken? value) =>
+        DateTime.TryParse(value?.ToString(), out var parsed) && parsed.Year > 1
+            ? parsed
+            : null;
 
     //===========================================================
     // Pending Approvals (protected-environment review gate)

@@ -592,25 +592,42 @@ public class SettingsService
     // query against whatever DATABASE_URL points at, independent of the
     // read/write JSONB path everything else here uses. "local-file" isn't
     // a failure: plenty of deployments (local dev, a single always-on
-    // host) intentionally never set DATABASE_URL at all.
-    public async Task<(bool Healthy, string Mode, string? Error)> CheckDatabaseHealthAsync()
+    // host) intentionally never set DATABASE_URL at all. Host/Port/Database
+    // (not the username/password half of the connection string) and a real
+    // measured query time are what let the Smoke Tests page show this is a
+    // live database, not a stub.
+    public async Task<DatabaseHealthDto> CheckDatabaseHealthAsync()
     {
         if (_connectionString == null)
-            return (true, "local-file", null);
+            return new DatabaseHealthDto { Healthy = true, Mode = "local-file" };
+
+        var builder = new NpgsqlConnectionStringBuilder(_connectionString);
 
         try
         {
+            var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+
             await using var connection = new NpgsqlConnection(_connectionString);
             await connection.OpenAsync();
 
             await using var command = new NpgsqlCommand("SELECT 1", connection);
             await command.ExecuteScalarAsync();
 
-            return (true, "postgres", null);
+            stopwatch.Stop();
+
+            return new DatabaseHealthDto
+            {
+                Healthy = true,
+                Mode = "postgres",
+                ResponseTimeMs = Math.Round(stopwatch.Elapsed.TotalMilliseconds, 1),
+                Host = builder.Host,
+                Port = builder.Port,
+                Database = builder.Database
+            };
         }
         catch (Exception ex)
         {
-            return (false, "postgres", ex.Message);
+            return new DatabaseHealthDto { Healthy = false, Mode = "postgres", Error = ex.Message };
         }
     }
 
