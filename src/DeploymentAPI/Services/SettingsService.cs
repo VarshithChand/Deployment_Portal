@@ -578,6 +578,32 @@ public class SettingsService
             : JObject.Parse(text);
     }
 
+    // Used by the /api/health/db smoke-test endpoint - a genuine connect +
+    // query against whatever DATABASE_URL points at, independent of the
+    // read/write JSONB path everything else here uses. "local-file" isn't
+    // a failure: plenty of deployments (local dev, a single always-on
+    // host) intentionally never set DATABASE_URL at all.
+    public async Task<(bool Healthy, string Mode, string? Error)> CheckDatabaseHealthAsync()
+    {
+        if (_connectionString == null)
+            return (true, "local-file", null);
+
+        try
+        {
+            await using var connection = new NpgsqlConnection(_connectionString);
+            await connection.OpenAsync();
+
+            await using var command = new NpgsqlCommand("SELECT 1", connection);
+            await command.ExecuteScalarAsync();
+
+            return (true, "postgres", null);
+        }
+        catch (Exception ex)
+        {
+            return (false, "postgres", ex.Message);
+        }
+    }
+
     private async Task WriteRootAsync(JObject root)
     {
         if (_connectionString != null)

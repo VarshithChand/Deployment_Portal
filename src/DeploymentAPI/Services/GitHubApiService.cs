@@ -990,6 +990,34 @@ public class GitHubApiService
             return (WorkflowDto?)MapRun(JObject.Parse(json));
         });
 
+    // Per-job status/conclusion within a run - e.g. the Smoke Tests
+    // workflow's separate Backend/Frontend/Database jobs, which the
+    // run-level Status/Conclusion above can't distinguish between.
+    // Deliberately uncached: this only ever backs an admin manually
+    // watching one just-triggered run, at a few-second poll interval, so a
+    // 20s-stale cache would make the results feel stuck rather than live.
+    public async Task<List<WorkflowJobDto>> GetWorkflowRunJobsAsync(long runId)
+    {
+        var client = _auth.CreateClient();
+
+        var url =
+            $"https://api.github.com/repos/{Uri.EscapeDataString(_auth.Owner)}/{Uri.EscapeDataString(_auth.Repository)}/actions/runs/{runId}/jobs";
+
+        var json = await HttpClientHelper.GetAsync(client, url);
+        var jobs = JObject.Parse(json)["jobs"] as JArray;
+
+        if (jobs == null)
+            return new List<WorkflowJobDto>();
+
+        return jobs.Select(j => new WorkflowJobDto
+        {
+            Name = j["name"]?.ToString() ?? string.Empty,
+            Status = j["status"]?.ToString() ?? string.Empty,
+            Conclusion = j["conclusion"]?.ToString(),
+            HtmlUrl = j["html_url"]?.ToString() ?? string.Empty
+        }).ToList();
+    }
+
     //===========================================================
     // Pending Approvals (protected-environment review gate)
     //===========================================================

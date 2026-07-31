@@ -1,0 +1,182 @@
+name: Smoke Tests
+
+###############################################################
+# Three independent jobs, each verifying its own piece of the stack
+# actually works end to end - not just that it builds:
+#   - Backend:  boots DeploymentAPI for real and hits its own /api/health
+#   - Frontend: builds the Vite app, serves the real dist/ output, and
+#               curls it for the expected markup
+#   - Database: boots DeploymentAPI against a throwaway Postgres service
+#               container and hits /api/health/db, exercising the exact
+#               connection/query path SettingsService uses in production
+#
+# Triggered automatically on every push to master, or on demand from the
+# portal's Settings > Smoke Tests page (workflow_dispatch) - which also
+# reads each job's own status/conclusion back via GitHub's API to show
+# Backend/Frontend/Database as three separate results.
+###############################################################
+
+on:
+  workflow_dispatch:
+
+  push:
+    branches:
+      - master
+
+jobs:
+
+  backend:
+
+    name: Backend Smoke Test
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+
+    steps:
+
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Restore
+        run: dotnet restore src/DeploymentAPI/DeploymentAPI.csproj
+
+      - name: Build
+        run: dotnet build src/DeploymentAPI/DeploymentAPI.csproj --configuration Release --no-restore
+
+      - name: Boot The App And Check /api/health
+        env:
+          ASPNETCORE_URLS: http://localhost:5279
+          ASPNETCORE_ENVIRONMENT: Production
+        run: |
+          dotnet src/DeploymentAPI/bin/Release/net10.0/DeploymentAPI.dll &
+          APP_PID=$!
+
+          for i in $(seq 1 30); do
+            if curl -fs http://localhost:5279/api/health > /dev/null; then
+              echo "Backend is healthy."
+              kill "$APP_PID" 2>/dev/null || true
+              exit 0
+            fi
+            sleep 1
+          done
+
+          echo "::error::Backend did not become healthy within 30s."
+          kill "$APP_PID" 2>/dev/null || true
+          exit 1
+
+  frontend:
+
+    name: Frontend Smoke Test
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+
+    steps:
+
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: deployment-ui/package-lock.json
+
+      - name: Install Dependencies
+        working-directory: deployment-ui
+        run: npm ci
+
+      - name: Build
+        working-directory: deployment-ui
+        run: npm run build
+
+      - name: Serve The Real Build Output And Check It
+        working-directory: deployment-ui/dist
+        run: |
+          python3 -m http.server 4173 &
+          SERVER_PID=$!
+          sleep 2
+
+          if curl -fs http://localhost:4173/ | grep -q '<div id="root">'; then
+            echo "Frontend build serves the expected markup."
+            kill "$SERVER_PID" 2>/dev/null || true
+            exit 0
+          fi
+
+          echo "::error::Built frontend did not serve the expected markup."
+          kill "$SERVER_PID" 2>/dev/null || true
+          exit 1
+
+  database:
+
+    name: Database Smoke Test
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+
+    # A throwaway Postgres for this run only - never touches the real
+    # production database. Exercises the exact same connect/query path
+    # SettingsService.CheckDatabaseHealthAsync uses in production, so a
+    # pass here means that code path genuinely works, not just that it
+    # compiles.
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: smoketest
+          POSTGRES_PASSWORD: smoketest
+          POSTGRES_DB: smoketest
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U smoketest"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Restore
+        run: dotnet restore src/DeploymentAPI/DeploymentAPI.csproj
+
+      - name: Build
+        run: dotnet build src/DeploymentAPI/DeploymentAPI.csproj --configuration Release --no-restore
+
+      - name: Boot The App Against Postgres And Check /api/health/db
+        env:
+          ASPNETCORE_URLS: http://localhost:5279
+          ASPNETCORE_ENVIRONMENT: Production
+          DATABASE_URL: postgres://smoketest:smoketest@localhost:5432/smoketest
+        run: |
+          dotnet src/DeploymentAPI/bin/Release/net10.0/DeploymentAPI.dll &
+          APP_PID=$!
+
+          for i in $(seq 1 30); do
+            if curl -fs http://localhost:5279/api/health/db > /dev/null; then
+              echo "Database is reachable."
+              kill "$APP_PID" 2>/dev/null || true
+              exit 0
+            fi
+            sleep 1
+          done
+
+          echo "::error::Database did not become reachable within 30s."
+          kill "$APP_PID" 2>/dev/null || true
+          exit 1

@@ -27,6 +27,7 @@ import SettingsHubView from "../components/settings/SettingsHubView";
 import CredentialsView from "../components/settings/CredentialsView";
 import SidebarAccessView from "../components/settings/SidebarAccessView";
 import ActivityLogView from "../components/settings/ActivityLogView";
+import SmokeTestsView from "../components/settings/SmokeTestsView";
 import useToast from "../hooks/useToast";
 import useConfirm from "../hooks/useConfirm";
 import useAuth from "../hooks/useAuth";
@@ -34,7 +35,13 @@ import useNavigation from "../hooks/useNavigation";
 import usePagination from "../hooks/usePagination";
 import parseRepoUrl from "../utils/parseRepoUrl";
 
-const VIEWS = ["hub", "credentials", "activity-log", "access-levels", "branches", "sidebar-access"];
+const VIEWS = ["hub", "credentials", "activity-log", "access-levels", "branches", "sidebar-access", "smoke-tests"];
+
+// Every one of these requires Admin server-side (LogsController,
+// SmokeTestController, and the /sidebar/* endpoints all run through
+// AdminGate) - showing any of them to a non-admin would just be an
+// empty/failed page.
+const ADMIN_ONLY_VIEWS = new Set(["sidebar-access", "activity-log", "smoke-tests"]);
 
 // Every restrictable sidebar tab except "settings" and "dashboard" — the
 // backend refuses those two entries regardless of what's sent (locking
@@ -66,7 +73,8 @@ const VIEW_TITLES = {
     "activity-log": "Activity Log",
     "access-levels": "Access Levels",
     branches: "Branches",
-    "sidebar-access": "Sidebar Access"
+    "sidebar-access": "Sidebar Access",
+    "smoke-tests": "Smoke Tests"
 };
 
 // Mirrors the same "?tab=" pattern NavigationContext uses for the top-level
@@ -223,18 +231,16 @@ export default function Settings() {
 
     }
 
-    // Bounces away from Sidebar Access or Activity Log if either is ever
-    // reached without admin access — a raw "?view=..." URL, or an admin
-    // session that expired while this page was already open. Both now
-    // require Admin server-side (see LogsController/AdminGate), so showing
-    // either to a non-admin would just be an empty/failed page.
+    // Bounces away from an admin-only view if it's ever reached without
+    // admin access — a raw "?view=..." URL, or an admin session that
+    // expired while this page was already open.
     // isAdminSession (part of isAdmin) starts false and only becomes
     // reliable once oauthStatusChecked flips true — without that guard
     // this bounced a real admin back to "hub" on every hard reload of
-    // "?view=sidebar-access", since the check hadn't resolved yet.
+    // an admin-only view, since the check hadn't resolved yet.
     useEffect(() => {
 
-        if ((view === "sidebar-access" || view === "activity-log") && oauthStatusChecked && !isAdmin) {
+        if (ADMIN_ONLY_VIEWS.has(view) && oauthStatusChecked && !isAdmin) {
             setView("hub");
         }
 
@@ -906,6 +912,12 @@ export default function Settings() {
                     logsEndIndex={logsEndIndex}
                     setLogsPage={setLogsPage}
                 />
+
+            )}
+
+            {view === "smoke-tests" && isAdmin && (
+
+                <SmokeTestsView />
 
             )}
 

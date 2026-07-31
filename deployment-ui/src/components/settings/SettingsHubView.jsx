@@ -57,6 +57,18 @@ export default function SettingsHubView({ isAdmin, setView, handleClearAll, clea
 
             )}
 
+            {isAdmin && (
+
+                <button type="button" className="settings-hub-tile" onClick={() => setView("smoke-tests")}>
+                    <h2>Smoke Tests</h2>
+                    <p>
+                        Backend, frontend, and database results from the smoke-test pipeline —
+                        re-run it on demand.
+                    </p>
+                </button>
+
+            )}
+
         </div>
 
         <div className="card card-danger-zone">
