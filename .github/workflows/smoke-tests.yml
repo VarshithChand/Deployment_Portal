@@ -54,19 +54,27 @@ jobs:
           ASPNETCORE_URLS: http://localhost:5279
           ASPNETCORE_ENVIRONMENT: Production
         run: |
-          dotnet src/DeploymentAPI/bin/Release/net10.0/DeploymentAPI.dll &
+          dotnet src/DeploymentAPI/bin/Release/net10.0/DeploymentAPI.dll > app.log 2>&1 &
           APP_PID=$!
 
-          for i in $(seq 1 30); do
+          for i in $(seq 1 60); do
+            if ! kill -0 "$APP_PID" 2>/dev/null; then
+              echo "::error::Backend process exited early."
+              cat app.log
+              exit 1
+            fi
+
             if curl -fs http://localhost:5279/api/health > /dev/null; then
               echo "Backend is healthy."
               kill "$APP_PID" 2>/dev/null || true
               exit 0
             fi
-            sleep 1
+
+            sleep 2
           done
 
-          echo "::error::Backend did not become healthy within 30s."
+          echo "::error::Backend did not become healthy within 120s."
+          cat app.log
           kill "$APP_PID" 2>/dev/null || true
           exit 1
 
@@ -165,18 +173,32 @@ jobs:
           ASPNETCORE_ENVIRONMENT: Production
           DATABASE_URL: postgres://smoketest:smoketest@localhost:5432/smoketest
         run: |
-          dotnet src/DeploymentAPI/bin/Release/net10.0/DeploymentAPI.dll &
+          dotnet src/DeploymentAPI/bin/Release/net10.0/DeploymentAPI.dll > app.log 2>&1 &
           APP_PID=$!
 
-          for i in $(seq 1 30); do
-            if curl -fs http://localhost:5279/api/health/db > /dev/null; then
+          # A longer budget than the plain Backend job's: HydrateLocalFileFromDatabaseAsync
+          # (Program.cs) does a real round trip to Postgres - connect, CREATE
+          # TABLE IF NOT EXISTS, SELECT - before Kestrel even starts
+          # listening, on top of normal cold-start time.
+          for i in $(seq 1 60); do
+            if ! kill -0 "$APP_PID" 2>/dev/null; then
+              echo "::error::Backend process exited early."
+              cat app.log
+              exit 1
+            fi
+
+            status=$(curl -s -o response.txt -w "%{http_code}" http://localhost:5279/api/health/db || echo "000")
+
+            if [ "$status" = "200" ]; then
               echo "Database is reachable."
               kill "$APP_PID" 2>/dev/null || true
               exit 0
             fi
-            sleep 1
+
+            sleep 2
           done
 
-          echo "::error::Database did not become reachable within 30s."
+          echo "::error::Database did not become reachable within 120s (last response: $status $(cat response.txt 2>/dev/null))."
+          cat app.log
           kill "$APP_PID" 2>/dev/null || true
           exit 1
