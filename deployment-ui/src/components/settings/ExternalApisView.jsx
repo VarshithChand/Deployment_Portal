@@ -26,6 +26,20 @@ function summarize(results) {
 
 }
 
+// A result-less endpoint (never checked yet) matches neither "healthy"
+// nor "unhealthy" - only "all" - so toggling a status filter before any
+// check has run just shows nothing rather than something misleading.
+function matchesStatusFilter(endpoint, results, statusFilter) {
+
+    if (statusFilter === "all") return true;
+
+    const result = results?.get(endpoint.url);
+    if (!result) return false;
+
+    return statusFilter === "healthy" ? result.ok : !result.ok;
+
+}
+
 export default function ExternalApisView() {
 
     const [endpointsText, setEndpointsText] = useState("");
@@ -36,6 +50,8 @@ export default function ExternalApisView() {
     const [error, setError] = useState("");
     const [versionFilter, setVersionFilter] = useState("all");
     const [clusterFilter, setClusterFilter] = useState("all");
+    const [statusFilter, setStatusFilter] = useState("all");
+    const [retryingUrls, setRetryingUrls] = useState(() => new Set());
 
     useEffect(() => {
 
@@ -126,6 +142,40 @@ export default function ExternalApisView() {
 
     }
 
+    // Re-checks just the one endpoint that failed, instead of re-running
+    // the whole batch - merges its fresh result into the existing map so
+    // every other endpoint's last-known status is left untouched.
+    async function handleRetryOne(url) {
+
+        setRetryingUrls((prev) => new Set(prev).add(url));
+
+        try {
+
+            const data = await checkExternalHealth([url]);
+            const fresh = data[0];
+
+            if (fresh) {
+                setResults((prev) => new Map(prev || []).set(url, fresh));
+            }
+
+        }
+        catch (err) {
+
+            console.error(err);
+
+        }
+        finally {
+
+            setRetryingUrls((prev) => {
+                const next = new Set(prev);
+                next.delete(url);
+                return next;
+            });
+
+        }
+
+    }
+
     const summary = results && summarize(results);
 
     return (
@@ -176,8 +226,23 @@ export default function ExternalApisView() {
                 {summary && (
 
                     <span className="button-row" style={{ marginLeft: "auto" }}>
-                        <span className="badge badge-success">{summary.healthy} healthy</span>
-                        <span className="badge badge-danger">{summary.unhealthy} unhealthy</span>
+
+                        <button
+                            type="button"
+                            className={`badge badge-success external-health-status-filter ${statusFilter === "healthy" ? "external-health-status-filter-active" : ""}`}
+                            onClick={() => setStatusFilter((current) => (current === "healthy" ? "all" : "healthy"))}
+                        >
+                            {summary.healthy} healthy
+                        </button>
+
+                        <button
+                            type="button"
+                            className={`badge badge-danger external-health-status-filter ${statusFilter === "unhealthy" ? "external-health-status-filter-active" : ""}`}
+                            onClick={() => setStatusFilter((current) => (current === "unhealthy" ? "all" : "unhealthy"))}
+                        >
+                            {summary.unhealthy} unhealthy
+                        </button>
+
                     </span>
 
                 )}
@@ -231,29 +296,38 @@ export default function ExternalApisView() {
                     const sections = visibleVersions
                         .map((versionKey) => ({
                             versionKey,
-                            clusterKeys: Object.keys(grouped[versionKey])
+                            clusters: Object.keys(grouped[versionKey])
                                 .filter((key) => clusterFilter === "all" || key === clusterFilter)
                                 .sort()
+                                .map((clusterKey) => ({
+                                    clusterKey,
+                                    endpoints: grouped[versionKey][clusterKey].filter(
+                                        (endpoint) => matchesStatusFilter(endpoint, results, statusFilter)
+                                    )
+                                }))
+                                .filter((cluster) => cluster.endpoints.length > 0)
                         }))
-                        .filter((section) => section.clusterKeys.length > 0);
+                        .filter((section) => section.clusters.length > 0);
 
                     if (sections.length === 0) {
                         return <p className="empty-state">No endpoints match the selected filters.</p>;
                     }
 
-                    return sections.map(({ versionKey, clusterKeys }) => (
+                    return sections.map(({ versionKey, clusters }) => (
 
                         <div key={versionKey} className="settings-subsection">
 
                             <h3 className="settings-subhead">{VERSION_LABELS[versionKey]}</h3>
 
-                            {clusterKeys.map((clusterKey) => (
+                            {clusters.map(({ clusterKey, endpoints }) => (
 
                                 <ExternalHealthClusterTable
                                     key={clusterKey}
                                     title={clusterKey}
-                                    endpoints={grouped[versionKey][clusterKey]}
+                                    endpoints={endpoints}
                                     results={results}
+                                    onRetry={handleRetryOne}
+                                    retryingUrls={retryingUrls}
                                 />
 
                             ))}

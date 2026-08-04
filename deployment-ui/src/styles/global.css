@@ -4239,3 +4239,22 @@ textarea{
     max-height:300px;
     overflow-y:auto;
 }
+
+.external-health-status-cell{
+    display:inline-flex;
+    align-items:center;
+    gap:8px;
+}
+
+/* Turns the healthy/unhealthy summary badges into toggleable filter
+   buttons — same visual weight as a plain .badge when idle, a ring when
+   the filter they represent is the active one. */
+.external-health-status-filter{
+    border:none;
+    cursor:pointer;
+    font-family:inherit;
+}
+
+.external-health-status-filter-active{
+    box-shadow:0 0 0 2px var(--card-bg), 0 0 0 4px var(--heading-accent);
+}

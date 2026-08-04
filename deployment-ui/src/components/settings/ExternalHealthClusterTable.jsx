@@ -5,7 +5,7 @@ import { Fragment, useState } from "react";
 // chosen over individual cards (see SmokeTestCard) because a real fleet
 // here runs into dozens of endpoints, where stacked cards would be
 // unusable.
-export default function ExternalHealthClusterTable({ title, endpoints, results }) {
+export default function ExternalHealthClusterTable({ title, endpoints, results, onRetry, retryingUrls }) {
 
     const [expandedUrl, setExpandedUrl] = useState(null);
 
@@ -55,12 +55,32 @@ export default function ExternalHealthClusterTable({ title, endpoints, results }
 
                                     {result ? (
 
-                                        <span className={`badge ${result.ok ? "badge-success" : "badge-danger"}`}>
-                                            {result.ok
-                                                ? `${result.statusCode} OK`
-                                                : result.statusCode
-                                                    ? `HTTP ${result.statusCode}`
-                                                    : "Unreachable"}
+                                        <span className="external-health-status-cell">
+
+                                            <span className={`badge ${result.ok ? "badge-success" : "badge-danger"}`}>
+                                                {result.ok
+                                                    ? `${result.statusCode} OK`
+                                                    : result.statusCode
+                                                        ? `HTTP ${result.statusCode}`
+                                                        : "Unreachable"}
+                                            </span>
+
+                                            {!result.ok && (
+
+                                                <button
+                                                    type="button"
+                                                    className="btn btn-secondary btn-sm"
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        onRetry(endpoint.url);
+                                                    }}
+                                                    disabled={retryingUrls?.has(endpoint.url)}
+                                                >
+                                                    {retryingUrls?.has(endpoint.url) ? "Retrying..." : "Retry"}
+                                                </button>
+
+                                            )}
+
                                         </span>
 
                                     ) : (
