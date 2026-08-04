@@ -1,28 +1,82 @@
-notify-failure:
-  name: Notify Dev Team
-  needs: build
-  runs-on: ubuntu-latest
+name: Notify Dev Team On Pipeline Failure
 
-  if: always()
+###############################################################
+# The previous version of this file was just a bare job fragment - no
+# top-level "on:"/"jobs:" wrapper at all, so GitHub Actions never
+# recognized it as a runnable workflow in the first place, and its
+# "needs: build" referenced a job that doesn't exist anywhere in this
+# same file (a job can only depend on another job in its OWN workflow,
+# never one in a different file) - no email was ever actually possible.
+#
+# Fixed by watching every OTHER pipeline in this repo via
+# "workflow_run", which fires once each one finishes regardless of how
+# it was triggered (push, workflow_dispatch, schedule, ...) - a single
+# centralized notifier instead of copy-pasting a notify job into every
+# individual workflow file. Add a new pipeline's exact "name:" value to
+# the list below to have it covered too.
+#
+# Needs three repository secrets (Settings > Secrets and variables > Actions):
+#   MAIL_USERNAME    - the Gmail address to send from (also the SMTP username)
+#   MAIL_PASSWORD    - a Gmail App Password (Gmail requires 2FA + an App
+#                      Password for SMTP - the account password itself won't work)
+#   DEV_TEAM_EMAILS  - comma-separated recipient list
+###############################################################
 
-  steps:
-    - name: Send email only if build failed
-      if: needs.build.result == 'failure'
-      uses: dawidd6/action-send-mail@v3
-      with:
-        server_address: smtp.gmail.com
-        server_port: 465
-        secure: true
-        username: ${{ secrets.MAIL_USERNAME }}
-        password: ${{ secrets.MAIL_PASSWORD }}
-        subject: "❌ Pipeline Failed"
-        to: ${{ secrets.DEV_TEAM_EMAILS }}
-        from: GitHub Actions <${{ secrets.MAIL_USERNAME }}>
-        body: |
-          Build failed.
-          Repository: ${{ github.repository }}
-          Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+on:
+  workflow_run:
+    workflows:
+      - "DeploymentAPI CI"
+      - "Admin API CI"
+      - "PMSCore API CI"
+      - "Security API CI"
+      - "Smoke Tests"
+      - "SonarCloud Analysis"
+      - "Docker Build and Push"
+      - "Test Docker Image"
+      - "Admin API - Build & Release"
+      - "Build & Release"
+      - "Release API"
+      - "Release PMSCore API"
+      - "Release Security API"
+      - "Release Admin API"
+      - "Revert Admin API Artifact"
+      - "Clean Artifacts"
+    types:
+      - completed
 
-    - name: No failure
-      if: needs.build.result == 'success'
-      run: echo "Build succeeded. No email sent."
+jobs:
+
+  notify-on-failure:
+
+    name: Notify Dev Team
+    runs-on: ubuntu-latest
+
+    # timed_out counts as a failure too (a pipeline that never finished is
+    # exactly as broken as one that finished with an error); cancelled/
+    # skipped/neutral are deliberately excluded - someone stopping a run
+    # on purpose isn't a failure worth paging anyone over.
+    if: github.event.workflow_run.conclusion == 'failure' || github.event.workflow_run.conclusion == 'timed_out'
+
+    permissions:
+      contents: read
+
+    steps:
+
+      - name: Send failure email
+        uses: dawidd6/action-send-mail@62a2d05b79935ad4fb90ce9079928099579c14ac # v9
+        with:
+          server_address: smtp.gmail.com
+          server_port: 465
+          secure: true
+          username: ${{ secrets.MAIL_USERNAME }}
+          password: ${{ secrets.MAIL_PASSWORD }}
+          subject: "❌ Pipeline Failed: ${{ github.event.workflow_run.name }}"
+          to: ${{ secrets.DEV_TEAM_EMAILS }}
+          from: GitHub Actions <${{ secrets.MAIL_USERNAME }}>
+          body: |
+            A pipeline run failed and needs attention.
+
+            Workflow:   ${{ github.event.workflow_run.name }}
+            Branch:     ${{ github.event.workflow_run.head_branch }}
+            Conclusion: ${{ github.event.workflow_run.conclusion }}
+            Run:        ${{ github.event.workflow_run.html_url }}
