@@ -13,7 +13,10 @@ name: Notify Dev Team On Pipeline Failure
 # it was triggered (push, workflow_dispatch, schedule, ...) - a single
 # centralized notifier instead of copy-pasting a notify job into every
 # individual workflow file. Add a new pipeline's exact "name:" value to
-# the list below to have it covered too.
+# the list below to have it covered too — "Check Failure-Notification
+# Coverage" (see check-notify-coverage.yml) fails loudly on any push/PR
+# that adds a workflow file without also updating this list, so a new
+# pipeline can't silently go uncovered.
 #
 # Needs three repository secrets (Settings > Secrets and variables > Actions):
 #   MAIL_USERNAME    - the Gmail address to send from (also the SMTP username)
@@ -41,6 +44,7 @@ on:
       - "Release Admin API"
       - "Revert Admin API Artifact"
       - "Clean Artifacts"
+      - "Check Failure-Notification Coverage"
     types:
       - completed
 

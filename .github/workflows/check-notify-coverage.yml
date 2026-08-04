@@ -1,0 +1,46 @@
+name: Check Failure-Notification Coverage
+
+###############################################################
+# "Notify Dev Team On Pipeline Failure" (fail&passcheck.yml) watches
+# every pipeline via workflow_run, which has no wildcard - it can only
+# watch an explicit list of names, so a brand new pipeline added later
+# would silently NOT be covered unless someone remembers to add it to
+# that list by hand.
+#
+# This catches that automatically: it fails loudly, right on the PR/
+# push that adds (or renames) a workflow file, if any pipeline's
+# "name:" is missing from fail&passcheck.yml's watch list - "each and
+# every pipeline notifies the dev team on failure" stays true without
+# relying on anyone remembering.
+###############################################################
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - '.github/workflows/**'
+
+  pull_request:
+    branches:
+      - master
+    paths:
+      - '.github/workflows/**'
+
+jobs:
+
+  check-coverage:
+
+    name: Verify Every Pipeline Is Covered
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+
+    steps:
+
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Compare workflow files against the notify watch list
+        run: python .github/scripts/check_notify_coverage.py
