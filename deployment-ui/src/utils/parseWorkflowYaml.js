@@ -562,37 +562,198 @@ function deepSubstitute(node, loopVar, item) {
 
 }
 
-// A "${{ if <condition> }}:" block conditionally includes its body on a
-// real run — but the condition is only decidable once the user actually
-// picks run parameter values, which happens later (the Run dialog), not
-// while parsing. So this always includes the body (same "show it, let
-// the run decide" approach as an ordinary job's "condition:" field) and
-// instead resolves any parameter references in the condition text into
-// {{param:name}} markers, attached onto each resulting job/stage so the
-// existing referencedParams skip mechanism picks them up too — a job
-// nested inside "${{ each project }}: ${{ if ...deploy_{project} }}:"
-// ends up with exactly the same skip behavior as one with a plain
-// "condition: eq('${{ parameters.deploy_X }}', 'True')" field.
-// Unlike a parameter checkbox (only known once the user runs the
-// pipeline), "in(project.name, 'A', 'B', 'C')" is fully decidable right
-// now — it only depends on which loop item this particular expansion is
-// for. Returns true when the condition definitively excludes this item,
-// so it can be dropped from the graph entirely instead of shown as a
-// skippable job that could never actually run.
-function isStaticallyExcluded(conditionText, loopVar, loopItem) {
+// A small recursive-descent evaluator for the subset of Azure DevOps
+// template-expression syntax actually seen in real "${{ if ... }}:"
+// conditions: eq/ne/and/or/not/in/notIn calls over string/bool/number
+// literals and dotted identifiers. Resolves each identifier against
+// what a static preview can actually know — the current each-loop
+// item's fields, and every declared parameter's default value — the
+// same "decide it now using what's knowable" approach the old loop-
+// source/in() check already used for its one narrow case, generalized
+// instead of pattern-matched with single-purpose regexes (which
+// produced the WRONG answer, not just no answer, for anything wrapped
+// in not(...), and no answer at all for eq()/ne() or a bare boolean
+// parameter — all of which show up in real pipelines that pick one of
+// several near-identical blocks via "${{ if eq(item.field,
+// parameters.someChoice) }}:").
+//
+// Returns true/false when the whole expression is decidable, or
+// undefined when some part of it depends on something a static preview
+// can't know (a pipeline variable, a runtime output, an unparseable
+// expression) — undefined means "don't decide, fall back to showing it
+// as skippable" (see expandIfMatch).
+function evaluateCondition(conditionText, loopVar, loopItem, paramsMap) {
 
-    if (!loopVar || !loopItem) return false;
+    const text = conditionText.trim();
+    let pos = 0;
 
-    const match = conditionText.match(new RegExp(`\\bin\\(\\s*${loopVar}\\.(\\w+)\\s*,\\s*([^)]+)\\)`));
-    if (!match) return false;
+    function skipWs() {
+        while (pos < text.length && /\s/.test(text[pos])) pos++;
+    }
 
-    const [, field, rawValues] = match;
-    const actual = loopItem[field];
-    if (actual === undefined) return false;
+    function parseValue() {
 
-    const allowed = rawValues.split(",").map((v) => v.trim().replace(/^'(.*)'$/, "$1"));
+        skipWs();
 
-    return !allowed.includes(String(actual));
+        if (text[pos] === "'") {
+
+            pos++;
+            let value = "";
+
+            while (pos < text.length && text[pos] !== "'") {
+                value += text[pos];
+                pos++;
+            }
+
+            pos++; // closing quote
+            return value;
+
+        }
+
+        const identMatch = /^[A-Za-z_][\w.]*/.exec(text.slice(pos));
+
+        if (identMatch) {
+            return parseIdentifierOrCall(identMatch[0]);
+        }
+
+        const boolMatch = /^(true|false)\b/i.exec(text.slice(pos));
+
+        if (boolMatch) {
+            pos += boolMatch[0].length;
+            return boolMatch[0].toLowerCase() === "true";
+        }
+
+        const numMatch = /^-?\d+(\.\d+)?/.exec(text.slice(pos));
+
+        if (numMatch) {
+            pos += numMatch[0].length;
+            return Number(numMatch[0]);
+        }
+
+        return undefined;
+
+    }
+
+    function parseIdentifierOrCall(ident) {
+
+        const afterIdentPos = pos + ident.length;
+        let lookaheadPos = afterIdentPos;
+
+        while (lookaheadPos < text.length && /\s/.test(text[lookaheadPos])) lookaheadPos++;
+
+        // A bare identifier followed by "(" — not a dotted path like
+        // "project.name" — is a function call (eq/ne/and/or/not/in/notIn).
+        if (text[lookaheadPos] === "(" && /^[A-Za-z_]\w*$/.test(ident)) {
+            pos = lookaheadPos + 1;
+            return applyFunction(ident, parseArgs());
+        }
+
+        pos = afterIdentPos;
+        return resolveIdentifier(ident);
+
+    }
+
+    function parseArgs() {
+
+        const args = [];
+
+        skipWs();
+
+        if (text[pos] !== ")") {
+
+            args.push(parseValue());
+            skipWs();
+
+            while (text[pos] === ",") {
+                pos++;
+                args.push(parseValue());
+                skipWs();
+            }
+
+        }
+
+        skipWs();
+        if (text[pos] === ")") pos++;
+
+        return args;
+
+    }
+
+    function resolveIdentifier(ident) {
+
+        if (loopVar && ident === loopVar) return loopItem;
+
+        if (loopVar && ident.startsWith(`${loopVar}.`)) {
+
+            const path = ident.slice(loopVar.length + 1).split(".");
+            let value = loopItem;
+
+            for (const key of path) {
+                if (value == null) return undefined;
+                value = value[key];
+            }
+
+            return value;
+
+        }
+
+        if (ident.startsWith("parameters.")) {
+            const name = ident.slice("parameters.".length);
+            return Object.prototype.hasOwnProperty.call(paramsMap, name) ? paramsMap[name] : undefined;
+        }
+
+        // variables.*, job/stage outputs, etc. — genuinely only known at
+        // real run time, not something this static preview can resolve.
+        return undefined;
+
+    }
+
+    function applyFunction(name, args) {
+
+        switch (name.toLowerCase()) {
+
+            case "eq":
+                if (args.length !== 2 || args.some((a) => a === undefined)) return undefined;
+                return String(args[0]) === String(args[1]);
+
+            case "ne":
+                if (args.length !== 2 || args.some((a) => a === undefined)) return undefined;
+                return String(args[0]) !== String(args[1]);
+
+            case "not":
+                if (args.length !== 1 || args[0] === undefined) return undefined;
+                return !args[0];
+
+            case "in":
+                if (args.length < 1 || args[0] === undefined) return undefined;
+                return args.slice(1).some((v) => String(v) === String(args[0]));
+
+            case "notin":
+                if (args.length < 1 || args[0] === undefined) return undefined;
+                return !args.slice(1).some((v) => String(v) === String(args[0]));
+
+            // and()/or() use three-valued logic (like SQL NULL) rather than
+            // bailing out on the first unknown operand: "and(false, X)" is
+            // decidably false and "or(true, X)" is decidably true no matter
+            // what the undecidable X turns out to be.
+            case "and":
+                if (args.some((a) => a === false)) return false;
+                if (args.some((a) => a === undefined)) return undefined;
+                return args.every(Boolean);
+
+            case "or":
+                if (args.some((a) => a === true)) return true;
+                if (args.some((a) => a === undefined)) return undefined;
+                return args.some(Boolean);
+
+            default:
+                return undefined;
+
+        }
+
+    }
+
+    return parseValue();
 
 }
 
@@ -643,26 +804,39 @@ function expandEachMatch(eachMatch, body, doc, paramsMap) {
 
 }
 
-// ifMatch's body — dropped entirely when statically excluded, otherwise
-// expanded with the condition text attached to each resulting item so the
-// existing referencedParams skip mechanism picks it up.
+// ifMatch's body — dropped entirely when the condition is decidably
+// false (e.g. "eq(project.name, parameters.apiToDeploy)" for every
+// project but the selected one), included with no runtime marker at all
+// when decidably true, and otherwise expanded with the condition text
+// attached to each resulting item so the existing referencedParams skip
+// mechanism picks it up — a job nested inside "${{ each project }}: ${{
+// if <undecidable> }}:" ends up with exactly the same skip behavior as
+// one with a plain "condition: eq('${{ parameters.deploy_X }}', 'True')"
+// field.
 function expandIfMatch(ifMatch, body, doc, paramsMap, loopVar, loopItem) {
 
-    if (isStaticallyExcluded(ifMatch[1], loopVar, loopItem)) {
+    const decision = evaluateCondition(ifMatch[1], loopVar, loopItem, paramsMap);
+
+    if (decision === false) {
         return [];
     }
 
-    const conditionText = resolveIfConditionRefs(ifMatch[1], loopVar, loopItem);
     const expanded = expandEachLoops(body, doc, paramsMap, loopVar, loopItem);
     const bodyArray = Array.isArray(expanded) ? expanded : [expanded];
 
-    bodyArray.forEach((item) => {
+    if (decision !== true) {
 
-        if (item && typeof item === "object" && !Array.isArray(item)) {
-            item.condition = item.condition ? `${item.condition} ${conditionText}` : conditionText;
-        }
+        const conditionText = resolveIfConditionRefs(ifMatch[1], loopVar, loopItem);
 
-    });
+        bodyArray.forEach((item) => {
+
+            if (item && typeof item === "object" && !Array.isArray(item)) {
+                item.condition = item.condition ? `${item.condition} ${conditionText}` : conditionText;
+            }
+
+        });
+
+    }
 
     return bodyArray;
 
