@@ -14,10 +14,17 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Test
+      # Replace these steps with your real build
+      - name: Build
         run: |
-          echo "Simulating pipeline failure..."
-          exit 1
+          echo "Starting Build..."
+          echo "Build completed successfully."
+
+      # Uncomment this only to test email notifications
+      # - name: Force Failure
+      #   run: |
+      #     echo "Testing failure notification"
+      #     exit 1
 
   notify-failure:
     name: Notify Dev Team
@@ -27,7 +34,7 @@ jobs:
     if: failure()
 
     steps:
-      - name: Send Email
+      - name: Send Failure Email
         uses: dawidd6/action-send-mail@v3
         with:
           server_address: smtp.gmail.com
@@ -37,8 +44,7 @@ jobs:
           username: ${{ secrets.MAIL_USERNAME }}
           password: ${{ secrets.MAIL_PASSWORD }}
 
-          subject: |
-            ❌ GitHub Pipeline Failed - ${{ github.repository }}
+          subject: "❌ Pipeline Failed - ${{ github.repository }}"
 
           to: ${{ secrets.DEV_TEAM_EMAILS }}
 
@@ -49,7 +55,7 @@ jobs:
 
             The GitHub Actions pipeline has FAILED.
 
-            ---------------------------------------
+            ------------------------------------------
             Repository : ${{ github.repository }}
             Workflow   : ${{ github.workflow }}
             Branch     : ${{ github.ref_name }}
@@ -57,12 +63,12 @@ jobs:
             Event      : ${{ github.event_name }}
             Commit     : ${{ github.sha }}
             Run Number : ${{ github.run_number }}
-            ---------------------------------------
+            ------------------------------------------
 
-            View Pipeline Logs:
+            Pipeline URL:
             ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
 
-            Please investigate the failure.
+            Please review the pipeline logs and resolve the issue.
 
             Regards,
             GitHub Actions
