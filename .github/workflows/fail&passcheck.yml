@@ -7,18 +7,24 @@ on:
 
 jobs:
   build:
+    name: Build
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout Repository
+        uses: actions/checkout@v4
 
       - name: Test
-        run: exit 1
+        run: |
+          echo "Simulating pipeline failure..."
+          exit 1
 
   notify-failure:
-    needs: build
-    if: failure()
+    name: Notify Dev Team
     runs-on: ubuntu-latest
+    needs: build
+
+    if: failure()
 
     steps:
       - name: Send Email
@@ -27,17 +33,36 @@ jobs:
           server_address: smtp.gmail.com
           server_port: 465
           secure: true
+
           username: ${{ secrets.MAIL_USERNAME }}
           password: ${{ secrets.MAIL_PASSWORD }}
-          subject: "Pipeline Failed"
+
+          subject: |
+            ❌ GitHub Pipeline Failed - ${{ github.repository }}
+
           to: ${{ secrets.DEV_TEAM_EMAILS }}
-          from: ${{ secrets.MAIL_USERNAME }}
+
+          from: GitHub Actions <${{ secrets.MAIL_USERNAME }}>
+
           body: |
-            Pipeline failed.
+            Hello Team,
 
-            Workflow: ${{ github.workflow }}
+            The GitHub Actions pipeline has FAILED.
 
-            Repository: ${{ github.repository }}
+            ---------------------------------------
+            Repository : ${{ github.repository }}
+            Workflow   : ${{ github.workflow }}
+            Branch     : ${{ github.ref_name }}
+            Triggered By : ${{ github.actor }}
+            Event      : ${{ github.event_name }}
+            Commit     : ${{ github.sha }}
+            Run Number : ${{ github.run_number }}
+            ---------------------------------------
 
-            Run:
+            View Pipeline Logs:
             ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
+            Please investigate the failure.
+
+            Regards,
+            GitHub Actions
