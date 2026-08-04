@@ -28,6 +28,7 @@ import CredentialsView from "../components/settings/CredentialsView";
 import SidebarAccessView from "../components/settings/SidebarAccessView";
 import ActivityLogView from "../components/settings/ActivityLogView";
 import SmokeTestsView from "../components/settings/SmokeTestsView";
+import ExternalApisView from "../components/settings/ExternalApisView";
 import useToast from "../hooks/useToast";
 import useConfirm from "../hooks/useConfirm";
 import useAuth from "../hooks/useAuth";
@@ -35,13 +36,13 @@ import useNavigation from "../hooks/useNavigation";
 import usePagination from "../hooks/usePagination";
 import parseRepoUrl from "../utils/parseRepoUrl";
 
-const VIEWS = ["hub", "credentials", "activity-log", "access-levels", "branches", "sidebar-access", "smoke-tests"];
+const VIEWS = ["hub", "credentials", "activity-log", "access-levels", "branches", "sidebar-access", "smoke-tests", "external-apis"];
 
 // Every one of these requires Admin server-side (LogsController,
-// SmokeTestController, and the /sidebar/* endpoints all run through
-// AdminGate) - showing any of them to a non-admin would just be an
-// empty/failed page.
-const ADMIN_ONLY_VIEWS = new Set(["sidebar-access", "activity-log", "smoke-tests"]);
+// SmokeTestController, ExternalHealthController, and the /sidebar/*
+// endpoints all run through AdminGate) - showing any of them to a
+// non-admin would just be an empty/failed page.
+const ADMIN_ONLY_VIEWS = new Set(["sidebar-access", "activity-log", "smoke-tests", "external-apis"]);
 
 // Every restrictable sidebar tab except "settings" and "dashboard" — the
 // backend refuses those two entries regardless of what's sent (locking
@@ -74,7 +75,8 @@ const VIEW_TITLES = {
     "access-levels": "Access Levels",
     branches: "Branches",
     "sidebar-access": "Sidebar Access",
-    "smoke-tests": "Smoke Tests"
+    "smoke-tests": "Smoke Tests",
+    "external-apis": "External APIs"
 };
 
 // Mirrors the same "?tab=" pattern NavigationContext uses for the top-level
@@ -918,6 +920,12 @@ export default function Settings() {
             {view === "smoke-tests" && isAdmin && (
 
                 <SmokeTestsView />
+
+            )}
+
+            {view === "external-apis" && isAdmin && (
+
+                <ExternalApisView />
 
             )}
 

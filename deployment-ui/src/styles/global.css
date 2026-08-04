@@ -4196,3 +4196,46 @@ textarea{
         animation:none;
     }
 }
+
+/* Standalone open state — used outside a .smoke-test-card (see
+   ExternalHealthClusterTable, whose rows use the same chevron without
+   the card wrapper it's normally nested in). */
+.smoke-test-chevron-open{
+    transform:rotate(180deg);
+    color:var(--heading-accent);
+}
+
+/* ==========================================
+   EXTERNAL API HEALTH
+========================================== */
+
+.external-health-textarea{
+    font-family:'Courier New',Courier,monospace;
+    font-size:13px;
+    resize:vertical;
+    min-height:160px;
+}
+
+.external-health-cluster-heading{
+    background:var(--bg) !important;
+    color:var(--text) !important;
+    font-size:13px;
+    font-weight:600;
+    text-transform:none;
+    letter-spacing:normal;
+    border-bottom:1px solid var(--border);
+}
+
+.external-health-body{
+    margin-top:10px;
+    padding:12px;
+    background:var(--bg);
+    border:1px solid var(--border);
+    border-radius:8px;
+    font-family:'Courier New',Courier,monospace;
+    font-size:12px;
+    white-space:pre-wrap;
+    word-break:break-all;
+    max-height:300px;
+    overflow-y:auto;
+}

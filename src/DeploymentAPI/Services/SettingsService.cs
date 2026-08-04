@@ -399,6 +399,37 @@ public class SettingsService
         return await GetSidebarAccessAsync(key);
     }
 
+    // Settings > External APIs — a portal-wide, admin-pasted list of
+    // external health-check URLs (one per line) to monitor, stored as raw
+    // text rather than a parsed structure since grouping by version/
+    // cluster/service is display-only logic that lives entirely on the
+    // frontend (see parseHealthEndpoint.js) and can evolve without a
+    // storage migration.
+    public async Task<string> GetExternalHealthEndpointsAsync()
+    {
+        var root = await ReadRootAsync();
+        return root["ExternalHealth"]?["EndpointsText"]?.ToString() ?? string.Empty;
+    }
+
+    public async Task<string> SaveExternalHealthEndpointsAsync(string endpointsText)
+    {
+        var root = await ReadRootAsync();
+        var section = root["ExternalHealth"] as JObject ?? new JObject();
+
+        section["EndpointsText"] = endpointsText ?? string.Empty;
+        root["ExternalHealth"] = section;
+
+        await WriteRootAsync(root);
+
+        var count = (endpointsText ?? string.Empty)
+            .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Length;
+
+        _log.LogInfo("Settings", $"External API endpoint list saved ({count} line(s)).");
+
+        return await GetExternalHealthEndpointsAsync();
+    }
+
     // The list an admin picks from in Settings > Sidebar Access — every
     // browser/device that has ever configured a Personal Access Token here,
     // regardless of which repo. Only PAT users are listed (not every

@@ -117,6 +117,7 @@ builder.Services.AddScoped<SettingsService>();
 builder.Services.AddScoped<AuthService>();
 builder.Services.AddScoped<SonarApiService>();
 builder.Services.AddScoped<SmokeTestService>();
+builder.Services.AddScoped<ExternalHealthCheckService>();
 
 //
 // CORS

@@ -69,6 +69,18 @@ export default function SettingsHubView({ isAdmin, setView, handleClearAll, clea
 
             )}
 
+            {isAdmin && (
+
+                <button type="button" className="settings-hub-tile" onClick={() => setView("external-apis")}>
+                    <h2>External APIs</h2>
+                    <p>
+                        Paste in a fleet of health-check URLs — grouped by version and cluster,
+                        checked from the server on demand.
+                    </p>
+                </button>
+
+            )}
+
         </div>
 
         <div className="card card-danger-zone">
