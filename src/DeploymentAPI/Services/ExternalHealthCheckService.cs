@@ -11,7 +11,14 @@ namespace DeploymentAPI.Services;
 // admin-gated action regardless of who's watching.
 public class ExternalHealthCheckService
 {
-    private static readonly TimeSpan RequestTimeout = TimeSpan.FromSeconds(10);
+    // Some of these (Azure App Service instances that spun down/are cold-
+    // starting, for instance) take noticeably longer than a typical health
+    // check to respond - 10s was flagging genuinely-healthy-but-slow
+    // endpoints as unreachable. Every check still runs concurrently (see
+    // CheckAllAsync), so this only affects how long the single slowest
+    // endpoint in a batch gets before being marked unreachable, not how
+    // long the whole "Check All" click takes when most respond quickly.
+    private static readonly TimeSpan RequestTimeout = TimeSpan.FromSeconds(30);
     private const int MaxBodyLength = 4000;
 
     private readonly IHttpClientFactory _httpClientFactory;
