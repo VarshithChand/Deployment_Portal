@@ -66,6 +66,15 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
+      # TEMPORARY - deliberately fails this run to test that
+      # "Notify Dev Team On Pipeline Failure" actually emails on a real
+      # failure. Remove this step right after confirming the email
+      # arrives - see chat history for context.
+      - name: Force Failure (TEMPORARY TEST - remove me)
+        run: |
+          echo "::error::Intentional failure to test the pipeline-failure email notification."
+          exit 1
+
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
