@@ -1,0 +1,46 @@
+notify-failure:
+  name: Notify Dev Team
+  runs-on: ubuntu-latest
+
+  needs:
+    - cycle
+    - daily_aws
+
+  if: always() && contains(needs.*.result, 'failure')
+
+  steps:
+    - name: Send Email
+      uses: dawidd6/action-send-mail@v3
+      with:
+        server_address: smtp.gmail.com
+        server_port: 465
+        secure: true
+
+        username: ${{ secrets.MAIL_USERNAME }}
+        password: ${{ secrets.MAIL_PASSWORD }}
+
+        subject: "❌ GitHub Pipeline Failed - ${{ github.repository }}"
+
+        to: ${{ secrets.DEV_TEAM_EMAILS }}
+
+        from: GitHub Actions <${{ secrets.MAIL_USERNAME }}>
+
+        body: |
+          Hello Team,
+
+          The GitHub Actions workflow has failed.
+
+          Repository: ${{ github.repository }}
+          Workflow: ${{ github.workflow }}
+          Branch: ${{ github.ref_name }}
+          Triggered By: ${{ github.actor }}
+          Event: ${{ github.event_name }}
+          Run Number: ${{ github.run_number }}
+
+          View Logs:
+          ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
+          Please investigate the failure.
+
+          Regards,
+          GitHub Actions
