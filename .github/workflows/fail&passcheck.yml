@@ -1,28 +1,43 @@
-notify-failure:
-  name: Notify Dev Team
-  runs-on: ubuntu-latest
+name: Fail and Pass Check
 
-  needs:
-    - handle_issue
-    - cycle
-    - daily_aws
+on:
+  push:
+    branches:
+      - master
 
-  if: always() && contains(needs.*.result, 'failure')
+jobs:
+  build:
+    runs-on: ubuntu-latest
 
-  steps:
-    - name: Send Email
-      uses: dawidd6/action-send-mail@v3
-      with:
-        server_address: smtp.gmail.com
-        server_port: 465
-        secure: true
-        username: ${{ secrets.MAIL_USERNAME }}
-        password: ${{ secrets.MAIL_PASSWORD }}
-        subject: "❌ Pipeline Failed - ${{ github.workflow }}"
-        to: ${{ secrets.DEV_TEAM_EMAILS }}
-        from: GitHub Actions <${{ secrets.MAIL_USERNAME }}>
-        body: |
-          Workflow: ${{ github.workflow }}
-          Repository: ${{ github.repository }}
-          Branch: ${{ github.ref_name }}
-          Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Test
+        run: exit 1
+
+  notify-failure:
+    needs: build
+    if: failure()
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Send Email
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: smtp.gmail.com
+          server_port: 465
+          secure: true
+          username: ${{ secrets.MAIL_USERNAME }}
+          password: ${{ secrets.MAIL_PASSWORD }}
+          subject: "Pipeline Failed"
+          to: ${{ secrets.DEV_TEAM_EMAILS }}
+          from: ${{ secrets.MAIL_USERNAME }}
+          body: |
+            Pipeline failed.
+
+            Workflow: ${{ github.workflow }}
+
+            Repository: ${{ github.repository }}
+
+            Run:
+            ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
