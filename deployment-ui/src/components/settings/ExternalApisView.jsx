@@ -34,6 +34,8 @@ export default function ExternalApisView() {
     const [checking, setChecking] = useState(false);
     const [results, setResults] = useState(null);
     const [error, setError] = useState("");
+    const [versionFilter, setVersionFilter] = useState("all");
+    const [clusterFilter, setClusterFilter] = useState("all");
 
     useEffect(() => {
 
@@ -56,6 +58,19 @@ export default function ExternalApisView() {
 
     const parsed = parseHealthEndpointList(endpointsText);
     const grouped = groupHealthEndpoints(parsed);
+
+    // Options only ever list what's actually present in the pasted list -
+    // no point offering "Version B" or "Cluster 02" to pick from when
+    // nothing parsed into them.
+    const availableVersions = VERSION_ORDER.filter((key) => Object.keys(grouped[key]).length > 0);
+
+    const availableClusters = [...new Set(
+        parsed.map((endpoint) => (endpoint.cluster ? `Cluster ${endpoint.cluster}` : "Unknown Cluster"))
+    )].sort();
+
+    const visibleVersions = availableVersions.filter(
+        (key) => versionFilter === "all" || key === versionFilter
+    );
 
     async function handleSave() {
 
@@ -181,14 +196,52 @@ export default function ExternalApisView() {
 
             ) : (
 
-                VERSION_ORDER.map((versionKey) => {
+                <>
 
-                    const clusters = grouped[versionKey];
-                    const clusterKeys = Object.keys(clusters).sort();
+                <div className="access-filters-row">
 
-                    if (clusterKeys.length === 0) return null;
+                    <select
+                        className="form-control access-level-filter"
+                        value={versionFilter}
+                        onChange={(e) => setVersionFilter(e.target.value)}
+                        aria-label="Filter by version"
+                    >
+                        <option value="all">All versions</option>
+                        {availableVersions.map((key) => (
+                            <option key={key} value={key}>{VERSION_LABELS[key]}</option>
+                        ))}
+                    </select>
 
-                    return (
+                    <select
+                        className="form-control access-level-filter"
+                        value={clusterFilter}
+                        onChange={(e) => setClusterFilter(e.target.value)}
+                        aria-label="Filter by cluster"
+                    >
+                        <option value="all">All clusters</option>
+                        {availableClusters.map((cluster) => (
+                            <option key={cluster} value={cluster}>{cluster}</option>
+                        ))}
+                    </select>
+
+                </div>
+
+                {(() => {
+
+                    const sections = visibleVersions
+                        .map((versionKey) => ({
+                            versionKey,
+                            clusterKeys: Object.keys(grouped[versionKey])
+                                .filter((key) => clusterFilter === "all" || key === clusterFilter)
+                                .sort()
+                        }))
+                        .filter((section) => section.clusterKeys.length > 0);
+
+                    if (sections.length === 0) {
+                        return <p className="empty-state">No endpoints match the selected filters.</p>;
+                    }
+
+                    return sections.map(({ versionKey, clusterKeys }) => (
 
                         <div key={versionKey} className="settings-subsection">
 
@@ -199,7 +252,7 @@ export default function ExternalApisView() {
                                 <ExternalHealthClusterTable
                                     key={clusterKey}
                                     title={clusterKey}
-                                    endpoints={clusters[clusterKey]}
+                                    endpoints={grouped[versionKey][clusterKey]}
                                     results={results}
                                 />
 
@@ -207,9 +260,11 @@ export default function ExternalApisView() {
 
                         </div>
 
-                    );
+                    ));
 
-                })
+                })()}
+
+                </>
 
             )}
 
