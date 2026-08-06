@@ -37,3 +37,22 @@ export const getRunById = async (runId) => {
     }
 
 };
+
+export const getRunErrors = async (runId) => {
+
+    try {
+
+        const response = await historyApi.get(`/run/${runId}/errors`);
+
+        return response.data;
+
+    }
+    catch (error) {
+
+        console.error("Unable to fetch run errors:", error);
+
+        return null;
+
+    }
+
+};

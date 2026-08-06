@@ -1028,6 +1028,82 @@ public class GitHubApiService
             ? parsed
             : null;
 
+    // What History's row expansion shows for a failed/cancelled run - one
+    // entry per non-successful job, naming the specific step that failed
+    // and pulling the actual error text from GitHub's Check Run
+    // Annotations API (the same "::error::"-style messages GitHub's own
+    // UI highlights in red) rather than scraping raw log output, which
+    // both needs elevated permissions this app's PAT may not have and is
+    // far messier to parse reliably.
+    public async Task<List<WorkflowRunErrorDto>> GetWorkflowRunErrorsAsync(long runId)
+    {
+        var client = _auth.CreateClient();
+
+        var jobsUrl =
+            $"https://api.github.com/repos/{Uri.EscapeDataString(_auth.Owner)}/{Uri.EscapeDataString(_auth.Repository)}/actions/runs/{runId}/jobs";
+
+        var jobsJson = await HttpClientHelper.GetAsync(client, jobsUrl);
+        var jobs = JObject.Parse(jobsJson)["jobs"] as JArray;
+
+        if (jobs == null)
+            return new List<WorkflowRunErrorDto>();
+
+        var result = new List<WorkflowRunErrorDto>();
+
+        foreach (var job in jobs)
+        {
+            var conclusion = job["conclusion"]?.ToString();
+
+            if (string.IsNullOrEmpty(conclusion) || conclusion is "success" or "skipped")
+                continue;
+
+            var steps = job["steps"] as JArray;
+
+            var failedStepName = steps?
+                .FirstOrDefault(s => s["conclusion"]?.ToString() == "failure")?["name"]?
+                .ToString();
+
+            result.Add(new WorkflowRunErrorDto
+            {
+                JobName = job["name"]?.ToString() ?? string.Empty,
+                Conclusion = conclusion,
+                FailedStep = failedStepName,
+                HtmlUrl = job["html_url"]?.ToString() ?? string.Empty,
+                Messages = await GetCheckRunFailureMessagesAsync(client, job["check_run_url"]?.ToString())
+            });
+        }
+
+        return result;
+    }
+
+    // Annotations aren't always retrievable (a token without the checks
+    // read permission, or a run old enough that GitHub no longer keeps
+    // them) - falling back to an empty list rather than failing the whole
+    // request just means the job/step name alone is shown instead of the
+    // detailed message.
+    private static async Task<List<string>> GetCheckRunFailureMessagesAsync(HttpClient client, string? checkRunUrl)
+    {
+        if (string.IsNullOrEmpty(checkRunUrl))
+            return new List<string>();
+
+        try
+        {
+            var json = await HttpClientHelper.GetAsync(client, $"{checkRunUrl}/annotations");
+            var annotations = JArray.Parse(json);
+
+            return annotations
+                .Where(a => a["annotation_level"]?.ToString() == "failure")
+                .Select(a => a["message"]?.ToString() ?? string.Empty)
+                .Where(m => !string.IsNullOrWhiteSpace(m))
+                .Distinct()
+                .ToList();
+        }
+        catch
+        {
+            return new List<string>();
+        }
+    }
+
     //===========================================================
     // Pending Approvals (protected-environment review gate)
     //===========================================================
