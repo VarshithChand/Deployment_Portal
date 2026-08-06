@@ -587,14 +587,34 @@ export default function Settings() {
 
     async function handleSaveAdmins() {
 
+        const usernames = adminUsernamesText
+            .split(",")
+            .map((u) => u.trim())
+            .filter(Boolean);
+
+        // An empty allowlist isn't just "no admins" - it's bootstrap mode
+        // (see AdminGate), which grants Admin to every single visitor to
+        // this portal, including total strangers, until it's configured
+        // again. That's the right behavior for a brand new, never-
+        // configured install; saving it empty on a portal that's already
+        // live is almost always a mistake (a blank field submitted by
+        // accident), so this asks first instead of silently reopening the
+        // whole site to anyone.
+        if (usernames.length === 0 && !(await confirm({
+            title: "Clear the admin allowlist?",
+            message:
+                "This allowlist is currently empty in the field below, so saving it will leave " +
+                "NO admins configured — every visitor to this portal (including strangers) will " +
+                "be treated as Admin until someone configures this again.",
+            confirmLabel: "Save Empty Allowlist",
+            danger: true
+        }))) {
+            return;
+        }
+
         try {
 
             setSavingAdmins(true);
-
-            const usernames = adminUsernamesText
-                .split(",")
-                .map((u) => u.trim())
-                .filter(Boolean);
 
             await saveAdminUsernames({ adminGitHubUsernames: usernames });
 
@@ -706,9 +726,19 @@ export default function Settings() {
 
     async function handleClear(section, label) {
 
+        // Same bootstrap-mode consequence as the empty-allowlist save
+        // guard above (see handleSaveAdmins) - this button skips that
+        // check entirely since it doesn't go through the text field at
+        // all, so it needs its own specific warning.
+        const message = section === "admins"
+            ? "This removes every username from the admin allowlist — every visitor to this " +
+              "portal (including strangers) will be treated as Admin until someone configures " +
+              "this again. This cannot be undone."
+            : `Clear all saved ${label}? This cannot be undone.`;
+
         if (!(await confirm({
             title: "Clear saved data?",
-            message: `Clear all saved ${label}? This cannot be undone.`,
+            message,
             confirmLabel: "Clear",
             danger: true
         }))) {
@@ -761,8 +791,10 @@ export default function Settings() {
             title: "Clear all data?",
             message:
                 "Clear ALL saved data? This removes your GitHub repository URL and token, the " +
-                "Docker credentials, OAuth settings, and the admin allowlist. Other users' own " +
-                "GitHub repo/token are untouched — this only clears yours. This cannot be undone.",
+                "Docker credentials, OAuth settings, and the admin allowlist — clearing the " +
+                "allowlist means every visitor to this portal (including strangers) will be " +
+                "treated as Admin until someone configures it again. Other users' own GitHub " +
+                "repo/token are untouched — this only clears yours. This cannot be undone.",
             confirmLabel: "Clear All Data",
             danger: true
         }))) {
