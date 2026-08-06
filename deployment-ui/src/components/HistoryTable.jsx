@@ -54,7 +54,7 @@ export default function HistoryTable({ runs = [] }) {
             </h2>
 
             <p className="empty-state" style={{ padding: "0 0 15px", textAlign: "left" }}>
-                Click a run to see why it succeeded or failed.
+                Open a run to see exactly why it succeeded or failed.
             </p>
 
             <div className="table-scroll">
@@ -72,6 +72,7 @@ export default function HistoryTable({ runs = [] }) {
                         <th>Conclusion</th>
                         <th>Triggered By</th>
                         <th>Created</th>
+                        <th></th>
 
                     </tr>
 
@@ -84,6 +85,7 @@ export default function HistoryTable({ runs = [] }) {
                         const isFailed = FAILURE_CONCLUSIONS.includes((run.conclusion || "").toLowerCase());
                         const runErrors = errorsByRun[run.id];
                         const isLoading = loadingRunId === run.id;
+                        const expanded = expandedId === run.id;
 
                         return (
 
@@ -123,13 +125,33 @@ export default function HistoryTable({ runs = [] }) {
 
                             </td>
 
+                            <td className="num">
+
+                                <button
+                                    type="button"
+                                    className="btn btn-secondary btn-sm"
+                                    style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        toggleExpanded(run);
+                                    }}
+                                    aria-expanded={expanded}
+                                >
+                                    {expanded ? "Hide details" : "View details"}
+                                    <span className={`smoke-test-chevron ${expanded ? "smoke-test-chevron-open" : ""}`} aria-hidden="true">
+                                        &#9662;
+                                    </span>
+                                </button>
+
+                            </td>
+
                         </tr>
 
-                        {expandedId === run.id && (
+                        {expanded && (
 
                             <tr className="table-row-details">
 
-                                <td colSpan={7}>
+                                <td colSpan={8}>
 
                                     <div className="info-row">
                                         <span>Commit message</span>
@@ -146,24 +168,50 @@ export default function HistoryTable({ runs = [] }) {
 
                                             <p className="error-message">
                                                 This run {run.conclusion === "cancelled" ? "was cancelled" : "failed"},
-                                                but GitHub didn't return a detailed error message for it. Open the run
-                                                on GitHub for the full log.
+                                                but GitHub didn't return a detailed error message for any job in it.
+                                                That usually means the failure happened before the job's own steps ran
+                                                (for example GitHub's runners being temporarily unavailable) rather
+                                                than a step in the pipeline itself failing. Open the run on GitHub for
+                                                the full log.
                                             </p>
 
                                         ) : (
 
-                                            runErrors.map((jobError, index) => (
+                                            <>
+
+                                            <p className="empty-state" style={{ textAlign: "left", padding: "10px 0 4px" }}>
+                                                {runErrors.length === 1
+                                                    ? "1 job in this run didn't succeed:"
+                                                    : `${runErrors.length} jobs in this run didn't succeed:`}
+                                            </p>
+
+                                            {runErrors.map((jobError, index) => (
 
                                                 <div key={index} className="error-message">
 
                                                     <strong>
                                                         {jobError.jobName}
-                                                        {jobError.failedStep ? ` — failed at "${jobError.failedStep}"` : ""}
+                                                        {" "}
+                                                        <StatusBadge status={jobError.conclusion} />
                                                     </strong>
+
+                                                    {jobError.failedStep && (
+
+                                                        <p style={{ margin: "6px 0 0" }}>
+                                                            It failed on the <strong>"{jobError.failedStep}"</strong> step.
+                                                        </p>
+
+                                                    )}
 
                                                     {jobError.messages && jobError.messages.length > 0 ? (
 
-                                                        <ul style={{ margin: "8px 0 0", paddingLeft: "18px" }}>
+                                                        <>
+
+                                                        <p style={{ margin: "10px 0 4px" }}>
+                                                            What GitHub reported:
+                                                        </p>
+
+                                                        <ul style={{ margin: "0", paddingLeft: "18px" }}>
 
                                                             {jobError.messages.map((message, messageIndex) => (
 
@@ -173,11 +221,13 @@ export default function HistoryTable({ runs = [] }) {
 
                                                         </ul>
 
+                                                        </>
+
                                                     ) : (
 
                                                         <p style={{ margin: "8px 0 0" }}>
-                                                            No detailed message available for this job — open it on
-                                                            GitHub for the full log.
+                                                            GitHub didn't attach a detailed error message to this
+                                                            step — open it on GitHub below for the full log.
                                                         </p>
 
                                                     )}
@@ -197,14 +247,16 @@ export default function HistoryTable({ runs = [] }) {
 
                                                 </div>
 
-                                            ))
+                                            ))}
+
+                                            </>
 
                                         )
 
                                     ) : (
 
                                         <p className="empty-state" style={{ textAlign: "left" }}>
-                                            This run completed successfully.
+                                            This run completed successfully — every job in it finished without error.
                                         </p>
 
                                     )}
