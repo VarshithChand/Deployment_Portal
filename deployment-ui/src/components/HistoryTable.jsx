@@ -4,6 +4,7 @@ import StatusBadge from "./StatusBadge";
 import usePagination from "../hooks/usePagination";
 import Pagination from "./common/Pagination";
 import CopyButton from "./common/CopyButton";
+import HistoryErrorDialog from "./HistoryErrorDialog";
 import { getRunErrors } from "../services/historyService";
 
 const FAILURE_CONCLUSIONS = ["failure", "cancelled", "timed_out", "startup_failure", "action_required"];
@@ -16,6 +17,7 @@ export default function HistoryTable({ runs = [] }) {
     const [expandedId, setExpandedId] = useState(null);
     const [errorsByRun, setErrorsByRun] = useState({});
     const [loadingRunId, setLoadingRunId] = useState(null);
+    const [dialogJobError, setDialogJobError] = useState(null);
 
     async function toggleExpanded(run) {
 
@@ -189,11 +191,23 @@ export default function HistoryTable({ runs = [] }) {
 
                                                 <div key={index} className="error-message">
 
-                                                    <strong>
-                                                        {jobError.jobName}
-                                                        {" "}
-                                                        <StatusBadge status={jobError.conclusion} />
-                                                    </strong>
+                                                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", flexWrap: "wrap" }}>
+
+                                                        <strong>
+                                                            {jobError.jobName}
+                                                            {" "}
+                                                            <StatusBadge status={jobError.conclusion} />
+                                                        </strong>
+
+                                                        <button
+                                                            type="button"
+                                                            className="btn btn-secondary btn-sm"
+                                                            onClick={() => setDialogJobError(jobError)}
+                                                        >
+                                                            View full message
+                                                        </button>
+
+                                                    </div>
 
                                                     {jobError.failedStep && (
 
@@ -227,21 +241,8 @@ export default function HistoryTable({ runs = [] }) {
 
                                                         <p style={{ margin: "8px 0 0" }}>
                                                             GitHub didn't attach a detailed error message to this
-                                                            step — open it on GitHub below for the full log.
+                                                            step — click "View full message" above for more context.
                                                         </p>
-
-                                                    )}
-
-                                                    {jobError.htmlUrl && (
-
-                                                        <a
-                                                            href={jobError.htmlUrl}
-                                                            target="_blank"
-                                                            rel="noreferrer"
-                                                            className="token-help-link"
-                                                        >
-                                                            View this job on GitHub →
-                                                        </a>
 
                                                     )}
 
@@ -299,6 +300,12 @@ export default function HistoryTable({ runs = [] }) {
                 startIndex={startIndex}
                 endIndex={endIndex}
                 onPageChange={setPage}
+            />
+
+            <HistoryErrorDialog
+                open={!!dialogJobError}
+                jobError={dialogJobError}
+                onClose={() => setDialogJobError(null)}
             />
 
         </div>
