@@ -16,11 +16,13 @@ public class GitHubController : ControllerBase
 {
     private readonly GitHubApiService _service;
     private readonly SettingsService _settings;
+    private readonly PipelineExplanationService _pipelineExplanation;
 
-    public GitHubController(GitHubApiService service, SettingsService settings)
+    public GitHubController(GitHubApiService service, SettingsService settings, PipelineExplanationService pipelineExplanation)
     {
         _service = service;
         _settings = settings;
+        _pipelineExplanation = pipelineExplanation;
     }
 
     [HttpGet("repository")]
@@ -121,6 +123,24 @@ public class GitHubController : ControllerBase
 
         var yaml = await _service.GetWorkflowYamlAsync(path, branch);
         return Ok(new { path, branch, content = yaml });
+    }
+
+    // Deploy page's "Explain Pipeline" — reads the same YAML "View YAML"
+    // shows raw, and turns it into a plain-English summary of what will
+    // actually happen before someone commits to running it.
+    [HttpGet("explain-pipeline")]
+    public async Task<IActionResult> ExplainPipeline([FromQuery] string path, [FromQuery] string? branch)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            return BadRequest("path is required.");
+
+        if (!GitHubNameValidator.IsValidRepoPath(path))
+            return BadRequest(new { message = "path must be a valid repository-relative file path." });
+
+        var yaml = await _service.GetWorkflowYamlAsync(path, branch);
+        var workflowName = path.Contains('/') ? path[(path.LastIndexOf('/') + 1)..] : path;
+
+        return Ok(await _pipelineExplanation.ExplainAsync(workflowName, yaml));
     }
 
     [HttpGet("workflows/last-run")]

@@ -119,6 +119,7 @@ builder.Services.AddScoped<SonarApiService>();
 builder.Services.AddScoped<SmokeTestService>();
 builder.Services.AddScoped<ExternalHealthCheckService>();
 builder.Services.AddScoped<ErrorAnalysisService>();
+builder.Services.AddScoped<PipelineExplanationService>();
 // Stateless (holds a static shared HttpClient for the Azure REST calls,
 // same reuse rationale as DockerApiService) — every AWS/Azure credential
 // it uses is passed in per-call, never held on the instance itself.

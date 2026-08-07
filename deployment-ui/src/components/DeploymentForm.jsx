@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
 import { deploy } from "../services/deploymentService";
-import { getWorkflowInputs, getWorkflowYaml, getLastRun } from "../services/githubService";
+import { getWorkflowInputs, getWorkflowYaml, getLastRun, explainPipeline } from "../services/githubService";
 
 import ConfirmDialog from "./ConfirmDialog";
 import YamlViewerDialog from "./YamlViewerDialog";
+import PipelineExplanationDialog from "./PipelineExplanationDialog";
 import ProgressBar from "./ProgressBar";
 import SearchBox from "./common/SearchBox";
 import ComboBox from "./common/ComboBox";
@@ -64,6 +65,14 @@ export default function DeploymentForm({
     const [yamlLoading, setYamlLoading] = useState(false);
     const [yamlError, setYamlError] = useState("");
     const [yamlContent, setYamlContent] = useState("");
+
+    // "Explain Pipeline" dialog — a plain-English summary of the same
+    // workflow file, fetched only when actually opened (see PipelineExplanationService).
+    const [explainOpen, setExplainOpen] = useState(false);
+    const [explainLoading, setExplainLoading] = useState(false);
+    const [explainError, setExplainError] = useState("");
+    const [explanation, setExplanation] = useState("");
+    const [explanationSource, setExplanationSource] = useState("");
 
     /* -----------------------------
        Search States
@@ -315,6 +324,36 @@ export default function DeploymentForm({
             })
             .finally(() => {
                 setYamlLoading(false);
+            });
+
+    }
+
+    /* -----------------------------
+       Explain Pipeline
+    ------------------------------*/
+
+    function handleExplainPipeline() {
+
+        if (!workflow) {
+            return;
+        }
+
+        setExplainOpen(true);
+        setExplainLoading(true);
+        setExplainError("");
+        setExplanation("");
+
+        explainPipeline(workflow, branch)
+            .then((response) => {
+                setExplanation(response.data?.explanation || "");
+                setExplanationSource(response.data?.source || "");
+            })
+            .catch((err) => {
+                console.error(err);
+                setExplainError(err.response?.data?.message || "Unable to explain this pipeline.");
+            })
+            .finally(() => {
+                setExplainLoading(false);
             });
 
     }
@@ -774,6 +813,8 @@ export default function DeploymentForm({
 
                     {workflow && (
 
+                        <>
+
                         <button
                             type="button"
                             className="btn btn-link"
@@ -781,6 +822,16 @@ export default function DeploymentForm({
                         >
                             View YAML
                         </button>
+
+                        <button
+                            type="button"
+                            className="btn btn-link"
+                            onClick={handleExplainPipeline}
+                        >
+                            Explain Pipeline
+                        </button>
+
+                        </>
 
                     )}
 
@@ -881,6 +932,18 @@ export default function DeploymentForm({
                 error={yamlError}
                 content={yamlContent}
                 onClose={() => setYamlOpen(false)}
+
+            />
+
+            <PipelineExplanationDialog
+
+                open={explainOpen}
+                workflowName={modeWorkflows.find((item) => item.path === workflow)?.name}
+                loading={explainLoading}
+                error={explainError}
+                explanation={explanation}
+                source={explanationSource}
+                onClose={() => setExplainOpen(false)}
 
             />
 
