@@ -122,15 +122,9 @@ export default function AwsLoginSection() {
                 )}
             </h3>
 
-            <p className="empty-state" style={{ padding: "0 0 15px", textAlign: "left" }}>
-                Powers the Environments page's live ECS service and ECR image status. AWS has no
-                username/password API — an IAM user's access key is the real equivalent, and MFA
-                below (optional) is verified against AWS itself via STS before anything is saved.
-            </p>
-
             {mfaSessionExpired && (
                 <p className="error-message">
-                    Your MFA session has expired. Enter a fresh 6-digit code below to sign in again.
+                    MFA session expired — enter a fresh code below.
                 </p>
             )}
 
@@ -179,7 +173,18 @@ export default function AwsLoginSection() {
                     </div>
 
                     <div className="form-group">
-                        <label>MFA Device Serial Number (ARN)</label>
+                        <label>
+                            MFA Serial Number (ARN)
+                            {" "}
+                            <a
+                                href="https://console.aws.amazon.com/iam/home#/security_credentials"
+                                target="_blank"
+                                rel="noreferrer"
+                                className="token-help-link"
+                            >
+                                Find it →
+                            </a>
+                        </label>
                         <ClearableInput
                             placeholder="arn:aws:iam::123456789012:mfa/your-username"
                             value={form.mfaSerialNumber}
@@ -188,21 +193,6 @@ export default function AwsLoginSection() {
                             autoComplete="off"
                             name="aws-mfa-serial"
                         />
-                        <a
-                            href="https://console.aws.amazon.com/iam/home#/security_credentials"
-                            target="_blank"
-                            rel="noreferrer"
-                            className="token-help-link"
-                            style={{ display: "inline-block", marginTop: "6px" }}
-                        >
-                            Find my MFA device on AWS →
-                        </a>
-                        <p className="field-hint" style={{ marginTop: "4px" }}>
-                            Opens AWS's own Security Credentials page in a new tab — under "Multi-factor
-                            authentication (MFA)", copy the ARN next to your device, then come back here
-                            and paste it in. Leave both this and the code below blank entirely if your
-                            IAM user has no MFA device enrolled.
-                        </p>
                     </div>
 
                     <div className="form-group">
@@ -219,7 +209,7 @@ export default function AwsLoginSection() {
                         />
                         {missingSerialForCode && (
                             <p className="field-hint field-hint-bad" style={{ marginTop: "4px" }}>
-                                Enter the device's serial number above too — a code alone can't be verified.
+                                Enter the serial number above too.
                             </p>
                         )}
                     </div>
