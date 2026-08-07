@@ -835,7 +835,19 @@ export default function Settings() {
 
             toast.show("All data cleared — reconnect your GitHub repository to continue.", "success");
 
-            setTimeout(() => window.location.reload(), 900);
+            // A full navigation (not just reload()) so this lands on the
+            // Dashboard instead of reloading back into Settings - RequireGitHubSetup's
+            // "connect your repo" gate still shows on top of it either way,
+            // since that's driven by whether GitHub credentials are
+            // configured, not which tab is active.
+            setTimeout(() => {
+
+                const url = new URL(window.location.href);
+                url.searchParams.set("tab", "dashboard");
+                url.searchParams.delete("view");
+                window.location.href = url.toString();
+
+            }, 900);
 
         }
         catch (err) {
