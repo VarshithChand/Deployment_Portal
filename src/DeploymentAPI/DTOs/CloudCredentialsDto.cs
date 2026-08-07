@@ -36,6 +36,24 @@ public class AzureCredentialsUpdateDto
     public string ClientSecret { get; set; } = string.Empty;
 }
 
+// Stored for future use — no feature in this portal reads GCP credentials
+// yet (unlike AWS/Azure, which back the Environments cloud-status panel).
+// A service account key (the JSON key file's raw contents) rather than a
+// bare API key since that's what every GCP server-to-server API actually
+// authenticates with.
+public record UserGcpCredentials(string? ProjectId, string? ServiceAccountKeyJson)
+{
+    public bool IsConfigured =>
+        !string.IsNullOrWhiteSpace(ProjectId) && !string.IsNullOrWhiteSpace(ServiceAccountKeyJson);
+}
+
+public class GcpCredentialsUpdateDto
+{
+    public string ProjectId { get; set; } = string.Empty;
+
+    public string ServiceAccountKeyJson { get; set; } = string.Empty;
+}
+
 // What the Environment detail view's cloud panel renders — deliberately
 // loose/nullable across both providers rather than two separate response
 // shapes, since the caller already knows which provider it asked about.

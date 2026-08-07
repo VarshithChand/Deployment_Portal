@@ -240,18 +240,25 @@ public class SettingsService
             entry?["Region"]?.ToString());
     }
 
+    // Blank fields keep whatever was already saved (same as
+    // SaveUserGitHubCredentialsAsync's token) - lets the region be updated
+    // without retyping the secret key, or vice versa.
     public async Task SaveUserAwsCredentialsAsync(string key, AwsCredentialsUpdateDto update)
     {
         var root = await ReadRootAsync();
         var users = root["UserAwsCredentials"] as JObject ?? new JObject();
+        var entry = users[key] as JObject ?? new JObject();
 
-        users[key] = new JObject
-        {
-            ["AccessKeyId"] = update.AccessKeyId?.Trim() ?? string.Empty,
-            ["SecretAccessKey"] = update.SecretAccessKey?.Trim() ?? string.Empty,
-            ["Region"] = update.Region?.Trim() ?? string.Empty
-        };
+        if (!string.IsNullOrWhiteSpace(update.AccessKeyId))
+            entry["AccessKeyId"] = update.AccessKeyId.Trim();
 
+        if (!string.IsNullOrWhiteSpace(update.SecretAccessKey))
+            entry["SecretAccessKey"] = update.SecretAccessKey.Trim();
+
+        if (!string.IsNullOrWhiteSpace(update.Region))
+            entry["Region"] = update.Region.Trim();
+
+        users[key] = entry;
         root["UserAwsCredentials"] = users;
         await WriteRootAsync(root);
 
@@ -282,18 +289,23 @@ public class SettingsService
             entry?["ClientSecret"]?.ToString());
     }
 
+    // Blank fields keep whatever was already saved - see SaveUserAwsCredentialsAsync.
     public async Task SaveUserAzureCredentialsAsync(string key, AzureCredentialsUpdateDto update)
     {
         var root = await ReadRootAsync();
         var users = root["UserAzureCredentials"] as JObject ?? new JObject();
+        var entry = users[key] as JObject ?? new JObject();
 
-        users[key] = new JObject
-        {
-            ["TenantId"] = update.TenantId?.Trim() ?? string.Empty,
-            ["ClientId"] = update.ClientId?.Trim() ?? string.Empty,
-            ["ClientSecret"] = update.ClientSecret?.Trim() ?? string.Empty
-        };
+        if (!string.IsNullOrWhiteSpace(update.TenantId))
+            entry["TenantId"] = update.TenantId.Trim();
 
+        if (!string.IsNullOrWhiteSpace(update.ClientId))
+            entry["ClientId"] = update.ClientId.Trim();
+
+        if (!string.IsNullOrWhiteSpace(update.ClientSecret))
+            entry["ClientSecret"] = update.ClientSecret.Trim();
+
+        users[key] = entry;
         root["UserAzureCredentials"] = users;
         await WriteRootAsync(root);
 
@@ -310,6 +322,49 @@ public class SettingsService
             await WriteRootAsync(root);
 
             _log.LogInfo("Settings", "Azure credentials cleared for a session.");
+        }
+    }
+
+    public async Task<UserGcpCredentials> GetUserGcpCredentialsAsync(string key)
+    {
+        var root = await ReadRootAsync();
+        var entry = (root["UserGcpCredentials"] as JObject)?[key] as JObject;
+
+        return new UserGcpCredentials(
+            entry?["ProjectId"]?.ToString(),
+            entry?["ServiceAccountKeyJson"]?.ToString());
+    }
+
+    // Blank fields keep whatever was already saved - see SaveUserAwsCredentialsAsync.
+    public async Task SaveUserGcpCredentialsAsync(string key, GcpCredentialsUpdateDto update)
+    {
+        var root = await ReadRootAsync();
+        var users = root["UserGcpCredentials"] as JObject ?? new JObject();
+        var entry = users[key] as JObject ?? new JObject();
+
+        if (!string.IsNullOrWhiteSpace(update.ProjectId))
+            entry["ProjectId"] = update.ProjectId.Trim();
+
+        if (!string.IsNullOrWhiteSpace(update.ServiceAccountKeyJson))
+            entry["ServiceAccountKeyJson"] = update.ServiceAccountKeyJson.Trim();
+
+        users[key] = entry;
+        root["UserGcpCredentials"] = users;
+        await WriteRootAsync(root);
+
+        _log.LogInfo("Settings", "GCP credentials saved for a session.");
+    }
+
+    public async Task ClearUserGcpCredentialsAsync(string key)
+    {
+        var root = await ReadRootAsync();
+
+        if (root["UserGcpCredentials"] is JObject users && users[key] != null)
+        {
+            users.Remove(key);
+            await WriteRootAsync(root);
+
+            _log.LogInfo("Settings", "GCP credentials cleared for a session.");
         }
     }
 

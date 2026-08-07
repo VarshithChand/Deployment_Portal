@@ -141,10 +141,19 @@ public class SettingsController : ControllerBase
     [HttpPost("me/aws")]
     public async Task<IActionResult> SaveMyAws(AwsCredentialsUpdateDto request)
     {
-        if (string.IsNullOrWhiteSpace(request.AccessKeyId) || string.IsNullOrWhiteSpace(request.SecretAccessKey))
+        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+
+        // A blank field keeps whatever's already saved (see
+        // SaveUserAwsCredentialsAsync) - only reject if the access key or
+        // secret would still be missing after that merge.
+        var existing = await _settings.GetUserAwsCredentialsAsync(key);
+
+        var hasAccessKey = !string.IsNullOrWhiteSpace(request.AccessKeyId) || !string.IsNullOrWhiteSpace(existing.AccessKeyId);
+        var hasSecret = !string.IsNullOrWhiteSpace(request.SecretAccessKey) || !string.IsNullOrWhiteSpace(existing.SecretAccessKey);
+
+        if (!hasAccessKey || !hasSecret)
             return BadRequest(new { message = "Access key ID and secret access key are required." });
 
-        var key = PortalIdentity.GetOrCreateKey(HttpContext);
         await _settings.SaveUserAwsCredentialsAsync(key, request);
 
         return Ok(new { Configured = true });
@@ -172,10 +181,18 @@ public class SettingsController : ControllerBase
     [HttpPost("me/azure")]
     public async Task<IActionResult> SaveMyAzure(AzureCredentialsUpdateDto request)
     {
-        if (string.IsNullOrWhiteSpace(request.TenantId) || string.IsNullOrWhiteSpace(request.ClientId) || string.IsNullOrWhiteSpace(request.ClientSecret))
+        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+
+        // A blank field keeps whatever's already saved - see SaveMyAws above.
+        var existing = await _settings.GetUserAzureCredentialsAsync(key);
+
+        var hasTenant = !string.IsNullOrWhiteSpace(request.TenantId) || !string.IsNullOrWhiteSpace(existing.TenantId);
+        var hasClient = !string.IsNullOrWhiteSpace(request.ClientId) || !string.IsNullOrWhiteSpace(existing.ClientId);
+        var hasSecret = !string.IsNullOrWhiteSpace(request.ClientSecret) || !string.IsNullOrWhiteSpace(existing.ClientSecret);
+
+        if (!hasTenant || !hasClient || !hasSecret)
             return BadRequest(new { message = "Tenant ID, client ID, and client secret are required." });
 
-        var key = PortalIdentity.GetOrCreateKey(HttpContext);
         await _settings.SaveUserAzureCredentialsAsync(key, request);
 
         return Ok(new { Configured = true });
@@ -186,6 +203,44 @@ public class SettingsController : ControllerBase
     {
         var key = PortalIdentity.GetOrCreateKey(HttpContext);
         await _settings.ClearUserAzureCredentialsAsync(key);
+        return Ok();
+    }
+
+    // Same per-visitor isolation, for GCP — stored for future use, nothing
+    // in this portal reads it yet.
+    [HttpGet("me/gcp")]
+    public async Task<IActionResult> GetMyGcp()
+    {
+        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var creds = await _settings.GetUserGcpCredentialsAsync(key);
+
+        return Ok(new { Configured = creds.IsConfigured, ProjectId = creds.ProjectId });
+    }
+
+    [HttpPost("me/gcp")]
+    public async Task<IActionResult> SaveMyGcp(GcpCredentialsUpdateDto request)
+    {
+        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+
+        // A blank field keeps whatever's already saved - see SaveMyAws above.
+        var existing = await _settings.GetUserGcpCredentialsAsync(key);
+
+        var hasProjectId = !string.IsNullOrWhiteSpace(request.ProjectId) || !string.IsNullOrWhiteSpace(existing.ProjectId);
+        var hasKey = !string.IsNullOrWhiteSpace(request.ServiceAccountKeyJson) || !string.IsNullOrWhiteSpace(existing.ServiceAccountKeyJson);
+
+        if (!hasProjectId || !hasKey)
+            return BadRequest(new { message = "Project ID and service account key are required." });
+
+        await _settings.SaveUserGcpCredentialsAsync(key, request);
+
+        return Ok(new { Configured = true });
+    }
+
+    [HttpDelete("me/gcp")]
+    public async Task<IActionResult> ClearMyGcp()
+    {
+        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        await _settings.ClearUserGcpCredentialsAsync(key);
         return Ok();
     }
 

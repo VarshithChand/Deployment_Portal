@@ -54,6 +54,23 @@ export const clearMyAzureCredentials = async () => {
     return response.data;
 };
 
+// Same per-visitor isolation, for GCP — stored for future use, no feature
+// in this portal reads it yet.
+export const getMyGcpSettings = async () => {
+    const response = await settingsApi.get("/me/gcp");
+    return response.data;
+};
+
+export const saveMyGcpSettings = async (payload) => {
+    const response = await settingsApi.post("/me/gcp", payload);
+    return response.data;
+};
+
+export const clearMyGcpCredentials = async () => {
+    const response = await settingsApi.delete("/me/gcp");
+    return response.data;
+};
+
 export const saveDockerSettings = async (payload) => {
     const response = await settingsApi.post("/docker", payload);
     return response.data;

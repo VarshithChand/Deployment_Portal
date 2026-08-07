@@ -1,9 +1,28 @@
+import { useState } from "react";
+
 import ClearableInput from "../common/ClearableInput";
 import GitHubAccessSection from "./GitHubAccessSection";
+import AwsLoginSection from "./credentials/AwsLoginSection";
+import AzureLoginSection from "./credentials/AzureLoginSection";
+import GcpLoginSection from "./credentials/GcpLoginSection";
+
+const MODES = [
+    { key: "github", label: "GitHub" },
+    { key: "aws", label: "AWS" },
+    { key: "azure", label: "Azure" },
+    { key: "gcp", label: "GCP" },
+    { key: "sonarqube", label: "SonarQube" },
+    { key: "docker", label: "Docker" },
+    { key: "oauth", label: "GitHub OAuth" },
+    { key: "admin", label: "Admin Allowlist" }
+];
 
 // Pulled out of Settings.jsx's "credentials" view - its own nested
 // loading/repo-preview conditionals were the single largest contributor
-// to that page's cognitive complexity.
+// to that page's cognitive complexity. Split into one "login mode" per
+// provider (rather than one long scroll of every section stacked) so
+// picking, say, AWS doesn't require scrolling past GitHub/Docker/OAuth/
+// Sonar/Admin first.
 export default function CredentialsView({
     githubTokenConfigured,
     loadingAccountRepos,
@@ -51,6 +70,8 @@ export default function CredentialsView({
     savingAdmins
 }) {
 
+    const [mode, setMode] = useState("github");
+
     return (
 
         <>
@@ -62,27 +83,56 @@ export default function CredentialsView({
             </h2>
 
             <p className="empty-state" style={{ padding: "0 0 15px", textAlign: "left" }}>
-                Saved server-side in a gitignored local config file — never stored in the
-                browser. Your GitHub repo and token below are yours alone; every other
-                user of this portal configures their own. Docker, OAuth, and the admin
-                allowlist further down are shared by the whole portal instead.
+                GitHub, AWS, and Azure below are yours alone — kept for your own browser
+                session, isolated from every other user of this portal. GCP is stored the
+                same way, for future use. SonarQube, Docker, OAuth, and the admin allowlist
+                are shared by the whole portal instead.
             </p>
 
-            <GitHubAccessSection
-                githubTokenConfigured={githubTokenConfigured}
-                loadingAccountRepos={loadingAccountRepos}
-                accountRepos={accountRepos}
-                githubRepoUrl={githubRepoUrl}
-                setGithubRepoUrl={setGithubRepoUrl}
-                repoPreviewLoading={repoPreviewLoading}
-                repoPreview={repoPreview}
-                isRateLimited={isRateLimited}
-                githubToken={githubToken}
-                setGithubToken={setGithubToken}
-                handleSaveGitHub={handleSaveGitHub}
-                savingGitHub={savingGitHub}
-                handleClear={handleClear}
-            />
+            <div className="button-row" style={{ marginBottom: "20px" }}>
+
+                {MODES.map((m) => (
+
+                    <button
+                        key={m.key}
+                        type="button"
+                        className={`btn btn-sm ${mode === m.key ? "btn-primary" : "btn-secondary"}`}
+                        onClick={() => setMode(m.key)}
+                    >
+                        {m.label}
+                    </button>
+
+                ))}
+
+            </div>
+
+            {mode === "github" && (
+
+                <GitHubAccessSection
+                    githubTokenConfigured={githubTokenConfigured}
+                    loadingAccountRepos={loadingAccountRepos}
+                    accountRepos={accountRepos}
+                    githubRepoUrl={githubRepoUrl}
+                    setGithubRepoUrl={setGithubRepoUrl}
+                    repoPreviewLoading={repoPreviewLoading}
+                    repoPreview={repoPreview}
+                    isRateLimited={isRateLimited}
+                    githubToken={githubToken}
+                    setGithubToken={setGithubToken}
+                    handleSaveGitHub={handleSaveGitHub}
+                    savingGitHub={savingGitHub}
+                    handleClear={handleClear}
+                />
+
+            )}
+
+            {mode === "aws" && <AwsLoginSection />}
+
+            {mode === "azure" && <AzureLoginSection />}
+
+            {mode === "gcp" && <GcpLoginSection />}
+
+            {mode === "docker" && (
 
             <div className="settings-subsection">
 
@@ -147,6 +197,10 @@ export default function CredentialsView({
 
             </div>
 
+            )}
+
+            {mode === "oauth" && (
+
             <div className="settings-subsection">
 
             <h3 className="settings-subhead">GitHub OAuth Login</h3>
@@ -199,9 +253,13 @@ export default function CredentialsView({
 
             </div>
 
+            )}
+
+            {mode === "sonarqube" && (
+
             <div className="settings-subsection">
 
-            <h3 className="settings-subhead">Sonar (Code Quality)</h3>
+            <h3 className="settings-subhead">SonarQube (Code Quality)</h3>
 
             <p className="empty-state" style={{ padding: "0 0 15px", textAlign: "left" }}>
                 Powers the Code Quality page — a SonarCloud (or self-hosted SonarQube)
@@ -277,6 +335,10 @@ export default function CredentialsView({
 
             </div>
 
+            )}
+
+            {mode === "admin" && (
+
             <div className="settings-subsection">
 
             <h3 className="settings-subhead">Admin Allowlist</h3>
@@ -310,6 +372,8 @@ export default function CredentialsView({
             </div>
 
             </div>
+
+            )}
 
         </div>
 
