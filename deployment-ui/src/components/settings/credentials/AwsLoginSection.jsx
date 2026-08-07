@@ -38,9 +38,21 @@ export default function AwsLoginSection() {
 
     useEffect(refresh, []);
 
+    // A code with no serial (and no already-enrolled device to fall back
+    // on) can never verify - catching that here, before the request even
+    // goes out, is what a plain "optional" label failed to make obvious.
+    const missingSerialForCode =
+        form.mfaCode.length > 0 && !form.mfaSerialNumber && !status?.mfaEnrolled;
+
     async function handleSave(e) {
 
         e.preventDefault();
+
+        if (missingSerialForCode) {
+            toast.show("Enter the MFA device's serial number (ARN) along with the code.", "error");
+            return;
+        }
+
         setSaving(true);
 
         try {
@@ -167,7 +179,7 @@ export default function AwsLoginSection() {
                     </div>
 
                     <div className="form-group">
-                        <label>MFA Device Serial Number (ARN) — optional</label>
+                        <label>MFA Device Serial Number (ARN)</label>
                         <ClearableInput
                             placeholder="arn:aws:iam::123456789012:mfa/your-username"
                             value={form.mfaSerialNumber}
@@ -176,10 +188,15 @@ export default function AwsLoginSection() {
                             autoComplete="off"
                             name="aws-mfa-serial"
                         />
+                        <p className="field-hint" style={{ marginTop: "4px" }}>
+                            Find this in the AWS Console under IAM → Users → your user → Security
+                            credentials → Assigned MFA device. Leave both this and the code below
+                            blank entirely if your IAM user has no MFA device enrolled.
+                        </p>
                     </div>
 
                     <div className="form-group">
-                        <label>MFA Code (6 digits) — enter to sign in / refresh your session</label>
+                        <label>MFA Code (6 digits)</label>
                         <ClearableInput
                             placeholder="123456"
                             inputMode="numeric"
@@ -190,11 +207,16 @@ export default function AwsLoginSection() {
                             autoComplete="off"
                             name="aws-mfa-code"
                         />
+                        {missingSerialForCode && (
+                            <p className="field-hint field-hint-bad" style={{ marginTop: "4px" }}>
+                                Enter the device's serial number above too — a code alone can't be verified.
+                            </p>
+                        )}
                     </div>
 
                     <div className="button-row">
 
-                        <button type="submit" className="btn btn-primary" disabled={saving}>
+                        <button type="submit" className="btn btn-primary" disabled={saving || missingSerialForCode}>
                             {saving
                                 ? "Signing in..."
                                 : form.mfaCode
