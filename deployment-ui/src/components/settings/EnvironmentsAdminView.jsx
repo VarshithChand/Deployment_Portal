@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 
-import { getEnvironments, saveEnvironments } from "../../services/environmentsService";
+import { getEnvironments, saveEnvironments, detectDeploymentTarget } from "../../services/environmentsService";
 import useToast from "../../hooks/useToast";
 
 const EMPTY_ENVIRONMENT = {
@@ -29,6 +29,8 @@ export default function EnvironmentsAdminView() {
     const [environments, setEnvironments] = useState([]);
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
+    const [detectingIndex, setDetectingIndex] = useState(null);
+    const [evidenceByIndex, setEvidenceByIndex] = useState({});
 
     useEffect(() => {
 
@@ -55,6 +57,67 @@ export default function EnvironmentsAdminView() {
 
     function removeEnvironment(index) {
         setEnvironments((current) => current.filter((_, i) => i !== index));
+    }
+
+    // Reads the CD workflow's actual YAML to fill in what it really
+    // deploys to, instead of the admin having to already know the exact
+    // ECS cluster/service or Azure Web App name.
+    async function handleDetect(index) {
+
+        const workflowName = environments[index].workflowName.trim();
+
+        if (!workflowName) {
+            toast.show("Enter the CD workflow name first.", "error");
+            return;
+        }
+
+        setDetectingIndex(index);
+
+        try {
+
+            const detected = await detectDeploymentTarget(workflowName);
+
+            if (detected.cloudProvider === "none") {
+                toast.show("No AWS or Azure deploy step found in that workflow.", "error");
+                setEvidenceByIndex((current) => ({ ...current, [index]: [] }));
+                return;
+            }
+
+            setEnvironments((current) =>
+                current.map((env, i) => {
+
+                    if (i !== index) return env;
+
+                    return {
+                        ...env,
+                        cloudProvider: detected.cloudProvider,
+                        awsRegion: detected.awsRegion || env.awsRegion,
+                        ecsCluster: detected.ecsCluster || env.ecsCluster,
+                        ecsService: detected.ecsService || env.ecsService,
+                        ecrRepository: detected.ecrRepository || env.ecrRepository,
+                        azureResourceGroup: detected.azureResourceGroup || env.azureResourceGroup,
+                        azureWebAppName: detected.azureWebAppName || env.azureWebAppName
+                    };
+
+                })
+            );
+
+            setEvidenceByIndex((current) => ({ ...current, [index]: detected.evidence || [] }));
+            toast.show("Deployment target detected — review and save.", "success");
+
+        }
+        catch (err) {
+
+            console.error(err);
+            toast.show(err.response?.data?.message || "Unable to read that workflow.", "error");
+
+        }
+        finally {
+
+            setDetectingIndex(null);
+
+        }
+
     }
 
     async function handleSave() {
@@ -147,6 +210,26 @@ export default function EnvironmentsAdminView() {
                             onChange={(e) => updateField(index, "workflowName", e.target.value)}
                         />
                     </div>
+
+                    <button
+                        type="button"
+                        className="btn btn-secondary btn-sm"
+                        style={{ marginBottom: "16px" }}
+                        onClick={() => handleDetect(index)}
+                        disabled={detectingIndex === index}
+                    >
+                        {detectingIndex === index ? "Reading pipeline..." : "Detect from Pipeline"}
+                    </button>
+
+                    {evidenceByIndex[index]?.length > 0 && (
+
+                        <ul className="field-hint" style={{ margin: "0 0 16px", paddingLeft: "18px" }}>
+                            {evidenceByIndex[index].map((line, i) => (
+                                <li key={i}>{line}</li>
+                            ))}
+                        </ul>
+
+                    )}
 
                     <div className="form-group">
                         <label>Cloud Target</label>

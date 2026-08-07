@@ -55,3 +55,10 @@ export const getEnvironmentCloudStatus = async (name) => {
     }
 
 };
+
+// Reads the CD workflow's actual YAML to find its real AWS/Azure
+// deployment target, instead of requiring it typed in by hand.
+export const detectDeploymentTarget = async (workflowName) => {
+    const response = await environmentsApi.get("/detect-target", { params: { workflowName } });
+    return response.data;
+};

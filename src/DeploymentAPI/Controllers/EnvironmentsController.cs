@@ -2,6 +2,7 @@ using DeploymentAPI.DTOs;
 using DeploymentAPI.Helpers;
 using DeploymentAPI.Services;
 using Microsoft.AspNetCore.Mvc;
+using Newtonsoft.Json.Linq;
 
 namespace DeploymentAPI.Controllers;
 
@@ -135,6 +136,38 @@ public class EnvironmentsController : ControllerBase
         }
 
         return Ok(new CloudStatusDto { Provider = "none", Configured = false });
+    }
+
+    // Reads the CD workflow's actual YAML to answer "what is this really
+    // deploying to" — the admin editor calls this to auto-fill the cloud
+    // target fields instead of requiring them typed in by hand. Takes the
+    // workflow name directly (not an existing environment's) so it also
+    // works while adding a brand-new environment row that hasn't been
+    // saved yet.
+    [HttpGet("detect-target")]
+    public async Task<IActionResult> DetectTarget([FromQuery] string workflowName)
+    {
+        if (string.IsNullOrWhiteSpace(workflowName))
+            return BadRequest(new { message = "workflowName is required." });
+
+        var workflowsJson = await _github.GetWorkflows();
+        var workflows = JObject.Parse(workflowsJson)["workflows"] as JArray;
+
+        var match = workflows?.FirstOrDefault(w =>
+            string.Equals(w["name"]?.ToString(), workflowName, StringComparison.OrdinalIgnoreCase));
+
+        if (match == null)
+            return NotFound(new { message = $"No workflow named \"{workflowName}\" found in this repository." });
+
+        var path = match["path"]?.ToString();
+
+        if (string.IsNullOrWhiteSpace(path))
+            return NotFound(new { message = "That workflow's file path could not be resolved." });
+
+        var yaml = await _github.GetWorkflowYamlAsync(path, null);
+        var detected = DeploymentTargetDetector.Detect(yaml);
+
+        return Ok(detected);
     }
 
     private static EnvironmentSummaryDto BuildSummary(EnvironmentDefinitionDto def, List<WorkflowDto> runs)
