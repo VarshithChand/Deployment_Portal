@@ -188,10 +188,20 @@ export default function AwsLoginSection() {
                             autoComplete="off"
                             name="aws-mfa-serial"
                         />
+                        <a
+                            href="https://console.aws.amazon.com/iam/home#/security_credentials"
+                            target="_blank"
+                            rel="noreferrer"
+                            className="token-help-link"
+                            style={{ display: "inline-block", marginTop: "6px" }}
+                        >
+                            Find my MFA device on AWS →
+                        </a>
                         <p className="field-hint" style={{ marginTop: "4px" }}>
-                            Find this in the AWS Console under IAM → Users → your user → Security
-                            credentials → Assigned MFA device. Leave both this and the code below
-                            blank entirely if your IAM user has no MFA device enrolled.
+                            Opens AWS's own Security Credentials page in a new tab — under "Multi-factor
+                            authentication (MFA)", copy the ARN next to your device, then come back here
+                            and paste it in. Leave both this and the code below blank entirely if your
+                            IAM user has no MFA device enrolled.
                         </p>
                     </div>
 
