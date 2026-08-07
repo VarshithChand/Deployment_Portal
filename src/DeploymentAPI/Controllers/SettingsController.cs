@@ -143,7 +143,11 @@ public class SettingsController : ControllerBase
             Region = creds.Region,
             MfaEnrolled = creds.MfaEnrolled,
             MfaSessionActive = creds.HasValidSession,
-            MfaSessionExpiresAtUtc = creds.ExpiresAtUtc
+            MfaSessionExpiresAtUtc = creds.ExpiresAtUtc,
+            IsSsoSession = creds.IsSsoSession,
+            SsoAccountName = creds.SsoAccountName,
+            SsoRoleName = creds.SsoRoleName,
+            RequiresSsoSignIn = creds.RequiresSsoSignIn
         });
     }
 

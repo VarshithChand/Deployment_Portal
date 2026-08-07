@@ -123,6 +123,9 @@ builder.Services.AddScoped<ErrorAnalysisService>();
 // same reuse rationale as DockerApiService) — every AWS/Azure credential
 // it uses is passed in per-call, never held on the instance itself.
 builder.Services.AddSingleton<CloudStatusService>();
+// Its only state is IMemoryCache-backed pending sign-ins, already a
+// Singleton itself - safe to share the same way.
+builder.Services.AddSingleton<AwsSsoService>();
 
 //
 // CORS

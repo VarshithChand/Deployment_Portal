@@ -242,15 +242,19 @@ public class SettingsService
             entry?["SessionAccessKeyId"]?.ToString(),
             entry?["SessionSecretAccessKey"]?.ToString(),
             entry?["SessionToken"]?.ToString(),
-            DateTime.TryParse(entry?["ExpiresAtUtc"]?.ToString(), out var expiresAt) ? expiresAt : null);
+            DateTime.TryParse(entry?["ExpiresAtUtc"]?.ToString(), out var expiresAt) ? expiresAt : null,
+            entry?["SsoAccountId"]?.ToString(),
+            entry?["SsoAccountName"]?.ToString(),
+            entry?["SsoRoleName"]?.ToString());
     }
 
     // Blank fields keep whatever was already saved (same as
     // SaveUserGitHubCredentialsAsync's token) - lets the region be updated
     // without retyping the secret key, or vice versa. `session` is the
-    // temporary, MFA-verified credential set from a successful STS
-    // GetSessionToken call (see CloudStatusService/EnvironmentsController) -
-    // null when this save didn't involve MFA at all.
+    // temporary credential set from either a successful STS GetSessionToken
+    // (MFA path) or AWS SSO's GetRoleCredentials (SSO path, carries the
+    // Sso* display fields too) - null when this save didn't establish a
+    // new session at all.
     public async Task SaveUserAwsCredentialsAsync(string key, AwsCredentialsUpdateDto update, AwsSessionCredentials? session = null)
     {
         var root = await ReadRootAsync();
@@ -275,13 +279,16 @@ public class SettingsService
             entry["SessionSecretAccessKey"] = session.SecretAccessKey;
             entry["SessionToken"] = session.SessionToken;
             entry["ExpiresAtUtc"] = session.ExpiresAtUtc.ToString("o");
+            entry["SsoAccountId"] = session.SsoAccountId;
+            entry["SsoAccountName"] = session.SsoAccountName;
+            entry["SsoRoleName"] = session.SsoRoleName;
         }
 
         users[key] = entry;
         root["UserAwsCredentials"] = users;
         await WriteRootAsync(root);
 
-        _log.LogInfo("Settings", "AWS credentials saved for a session." + (session != null ? " (MFA session verified)" : ""));
+        _log.LogInfo("Settings", "AWS credentials saved for a session." + (session != null ? " (new session established)" : ""));
     }
 
     public async Task ClearUserAwsCredentialsAsync(string key)

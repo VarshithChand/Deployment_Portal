@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 
 import ClearableInput from "../../common/ClearableInput";
+import AwsSsoSignIn from "./AwsSsoSignIn";
 import useToast from "../../../hooks/useToast";
 import { getMyAwsSettings, saveMyAwsSettings, clearMyAwsCredentials } from "../../../services/settingsService";
 
@@ -11,11 +12,10 @@ const EMPTY_FORM = { accessKeyId: "", secretAccessKey: "", region: "", mfaSerial
 // live AWS ECS/ECR status panel, which reads the exact same saved
 // credentials — entering them once here covers both.
 //
-// AWS has no username/password sign-in API - that only exists for the
-// Console web UI. Access Key ID + Secret Access Key are the real API-side
-// login; MFA Device + Code below are optional and, when used, are verified
-// against AWS itself (via STS) before anything is saved - a wrong code is
-// rejected exactly like a failed login, not silently stored.
+// Two ways in: "Sign in with AWS" (AwsSsoSignIn, below) is the real thing
+// for orgs on IAM Identity Center — your username/password/MFA happen on
+// AWS's own page, never here. The access key + optional MFA-code form
+// further down is the fallback for a plain IAM user with no SSO.
 export default function AwsLoginSection() {
 
     const toast = useToast();
@@ -24,6 +24,7 @@ export default function AwsLoginSection() {
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [form, setForm] = useState(EMPTY_FORM);
+    const [showAccessKeyForm, setShowAccessKeyForm] = useState(false);
 
     function refresh() {
 
@@ -103,8 +104,11 @@ export default function AwsLoginSection() {
     }
 
     const mfaSessionExpired = !loading && status?.mfaEnrolled && !status?.mfaSessionActive;
+    const ssoSessionExpired = !loading && status?.requiresSsoSignIn;
 
     return (
+
+        <>
 
         <div className="settings-subsection">
 
@@ -115,6 +119,12 @@ export default function AwsLoginSection() {
                     <span className="badge badge-success">Configured</span>
                 )}
                 {" "}
+                {!loading && status?.isSsoSession && (
+                    <span className="badge badge-success">
+                        SSO: {status.ssoAccountName} / {status.ssoRoleName}
+                    </span>
+                )}
+                {" "}
                 {!loading && status?.mfaEnrolled && (
                     status.mfaSessionActive
                         ? <span className="badge badge-success">MFA Session Active</span>
@@ -122,123 +132,149 @@ export default function AwsLoginSection() {
                 )}
             </h3>
 
-            {mfaSessionExpired && (
+            {ssoSessionExpired && (
                 <p className="error-message">
+                    Your AWS SSO session expired — sign in again below.
+                </p>
+            )}
+
+        </div>
+
+        <AwsSsoSignIn onConnected={refresh} />
+
+        <div className="settings-subsection">
+
+            <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                onClick={() => setShowAccessKeyForm((v) => !v)}
+            >
+                {showAccessKeyForm ? "Hide" : "Use an IAM access key instead"}
+            </button>
+
+            {mfaSessionExpired && (
+                <p className="error-message" style={{ marginTop: "12px" }}>
                     MFA session expired — enter a fresh code below.
                 </p>
             )}
 
-            {loading ? (
+            {showAccessKeyForm && (
 
-                <p className="field-hint">Loading...</p>
+                loading ? (
 
-            ) : (
+                    <p className="field-hint">Loading...</p>
 
-                <form onSubmit={handleSave}>
+                ) : (
 
-                    <div className="form-group">
-                        <label>Access Key ID</label>
-                        <ClearableInput
-                            placeholder={status?.configured ? "Leave blank to keep current key" : ""}
-                            value={form.accessKeyId}
-                            onChange={(e) => setForm({ ...form, accessKeyId: e.target.value })}
-                            onClear={() => setForm({ ...form, accessKeyId: "" })}
-                            autoComplete="off"
-                            name="aws-access-key-id"
-                        />
-                    </div>
+                    <form onSubmit={handleSave} style={{ marginTop: "16px" }}>
 
-                    <div className="form-group">
-                        <label>Secret Access Key</label>
-                        <ClearableInput
-                            type="password"
-                            placeholder={status?.configured ? "Leave blank to keep current secret" : ""}
-                            value={form.secretAccessKey}
-                            onChange={(e) => setForm({ ...form, secretAccessKey: e.target.value })}
-                            onClear={() => setForm({ ...form, secretAccessKey: "" })}
-                            autoComplete="new-password"
-                        />
-                    </div>
+                        <div className="form-group">
+                            <label>Access Key ID</label>
+                            <ClearableInput
+                                placeholder={status?.configured ? "Leave blank to keep current key" : ""}
+                                value={form.accessKeyId}
+                                onChange={(e) => setForm({ ...form, accessKeyId: e.target.value })}
+                                onClear={() => setForm({ ...form, accessKeyId: "" })}
+                                autoComplete="off"
+                                name="aws-access-key-id"
+                            />
+                        </div>
 
-                    <div className="form-group">
-                        <label>Region</label>
-                        <ClearableInput
-                            placeholder={status?.region ? `Leave blank to keep "${status.region}"` : "us-east-1"}
-                            value={form.region}
-                            onChange={(e) => setForm({ ...form, region: e.target.value })}
-                            onClear={() => setForm({ ...form, region: "" })}
-                            autoComplete="off"
-                            name="aws-region"
-                        />
-                    </div>
+                        <div className="form-group">
+                            <label>Secret Access Key</label>
+                            <ClearableInput
+                                type="password"
+                                placeholder={status?.configured ? "Leave blank to keep current secret" : ""}
+                                value={form.secretAccessKey}
+                                onChange={(e) => setForm({ ...form, secretAccessKey: e.target.value })}
+                                onClear={() => setForm({ ...form, secretAccessKey: "" })}
+                                autoComplete="new-password"
+                            />
+                        </div>
 
-                    <div className="form-group">
-                        <label>
-                            MFA Serial Number (ARN)
-                            {" "}
-                            <a
-                                href="https://console.aws.amazon.com/iam/home#/security_credentials"
-                                target="_blank"
-                                rel="noreferrer"
-                                className="token-help-link"
-                            >
-                                Find it →
-                            </a>
-                        </label>
-                        <ClearableInput
-                            placeholder="arn:aws:iam::123456789012:mfa/your-username"
-                            value={form.mfaSerialNumber}
-                            onChange={(e) => setForm({ ...form, mfaSerialNumber: e.target.value })}
-                            onClear={() => setForm({ ...form, mfaSerialNumber: "" })}
-                            autoComplete="off"
-                            name="aws-mfa-serial"
-                        />
-                    </div>
+                        <div className="form-group">
+                            <label>Region</label>
+                            <ClearableInput
+                                placeholder={status?.region ? `Leave blank to keep "${status.region}"` : "us-east-1"}
+                                value={form.region}
+                                onChange={(e) => setForm({ ...form, region: e.target.value })}
+                                onClear={() => setForm({ ...form, region: "" })}
+                                autoComplete="off"
+                                name="aws-region"
+                            />
+                        </div>
 
-                    <div className="form-group">
-                        <label>MFA Code (6 digits)</label>
-                        <ClearableInput
-                            placeholder="123456"
-                            inputMode="numeric"
-                            maxLength={6}
-                            value={form.mfaCode}
-                            onChange={(e) => setForm({ ...form, mfaCode: e.target.value.replace(/\D/g, "") })}
-                            onClear={() => setForm({ ...form, mfaCode: "" })}
-                            autoComplete="off"
-                            name="aws-mfa-code"
-                        />
-                        {missingSerialForCode && (
-                            <p className="field-hint field-hint-bad" style={{ marginTop: "4px" }}>
-                                Enter the serial number above too.
-                            </p>
-                        )}
-                    </div>
+                        <div className="form-group">
+                            <label>
+                                MFA Serial Number (ARN)
+                                {" "}
+                                <a
+                                    href="https://console.aws.amazon.com/iam/home#/security_credentials"
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="token-help-link"
+                                >
+                                    Find it →
+                                </a>
+                            </label>
+                            <ClearableInput
+                                placeholder="arn:aws:iam::123456789012:mfa/your-username"
+                                value={form.mfaSerialNumber}
+                                onChange={(e) => setForm({ ...form, mfaSerialNumber: e.target.value })}
+                                onClear={() => setForm({ ...form, mfaSerialNumber: "" })}
+                                autoComplete="off"
+                                name="aws-mfa-serial"
+                            />
+                        </div>
 
-                    <div className="button-row">
+                        <div className="form-group">
+                            <label>MFA Code (6 digits)</label>
+                            <ClearableInput
+                                placeholder="123456"
+                                inputMode="numeric"
+                                maxLength={6}
+                                value={form.mfaCode}
+                                onChange={(e) => setForm({ ...form, mfaCode: e.target.value.replace(/\D/g, "") })}
+                                onClear={() => setForm({ ...form, mfaCode: "" })}
+                                autoComplete="off"
+                                name="aws-mfa-code"
+                            />
+                            {missingSerialForCode && (
+                                <p className="field-hint field-hint-bad" style={{ marginTop: "4px" }}>
+                                    Enter the serial number above too.
+                                </p>
+                            )}
+                        </div>
 
-                        <button type="submit" className="btn btn-primary" disabled={saving || missingSerialForCode}>
-                            {saving
-                                ? "Signing in..."
-                                : form.mfaCode
-                                    ? "Verify Code & Sign In"
-                                    : "Save AWS Credentials"}
-                        </button>
+                        <div className="button-row">
 
-                        {status?.configured && (
-
-                            <button type="button" className="btn btn-danger" onClick={handleClear}>
-                                Clear Credentials
+                            <button type="submit" className="btn btn-primary" disabled={saving || missingSerialForCode}>
+                                {saving
+                                    ? "Signing in..."
+                                    : form.mfaCode
+                                        ? "Verify Code & Sign In"
+                                        : "Save AWS Credentials"}
                             </button>
 
-                        )}
+                            {status?.configured && (
 
-                    </div>
+                                <button type="button" className="btn btn-danger" onClick={handleClear}>
+                                    Clear Credentials
+                                </button>
 
-                </form>
+                            )}
+
+                        </div>
+
+                    </form>
+
+                )
 
             )}
 
         </div>
+
+        </>
 
     );
 

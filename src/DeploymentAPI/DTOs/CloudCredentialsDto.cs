@@ -6,13 +6,23 @@ namespace DeploymentAPI.DTOs;
 // session key.
 //
 // AWS has no API for username/password sign-in — that only exists for the
-// Console web UI. AccessKeyId/SecretAccessKey (the long-term IAM user key)
-// are the real API-side equivalent of a "login." When an MFA device is
-// enrolled (MfaSerialNumber set), that long-term key is used only to call
-// STS GetSessionToken (see CloudStatusService.GetSessionTokenAsync) — the
-// resulting temporary, MFA-verified SessionAccessKeyId/SessionSecretKey/
-// SessionToken is what every actual ECS/ECR call uses, until ExpiresAtUtc
-// passes and the visitor has to re-enter a fresh 6-digit code.
+// Console web UI (and, for organizations on IAM Identity Center, their own
+// SSO login page). Two different paths lead here:
+//
+// 1. A plain IAM user's long-term AccessKeyId/SecretAccessKey, optionally
+//    stepped up with MFA (MfaSerialNumber set) via STS GetSessionToken -
+//    see CloudStatusService.GetSessionTokenAsync.
+// 2. AWS SSO's device-authorization flow (see AwsSsoService) - the visitor
+//    signs in on AWS's own real page (their actual username, password, and
+//    MFA, entered on AWS's domain, never this app's), picks an account and
+//    role, and this backend exchanges that for temporary credentials via
+//    GetRoleCredentials. There's no long-term key in this path at all -
+//    AccessKeyId/SecretAccessKey stay blank, only the session fields below
+//    are set.
+//
+// Either way, SessionAccessKeyId/SessionSecretAccessKey/SessionToken is
+// what every actual ECS/ECR call uses (see CloudStatusService.
+// BuildCredentials) until ExpiresAtUtc passes.
 public record UserAwsCredentials(
     string? AccessKeyId,
     string? SecretAccessKey,
@@ -21,19 +31,35 @@ public record UserAwsCredentials(
     string? SessionAccessKeyId,
     string? SessionSecretAccessKey,
     string? SessionToken,
-    DateTime? ExpiresAtUtc)
+    DateTime? ExpiresAtUtc,
+    string? SsoAccountId,
+    string? SsoAccountName,
+    string? SsoRoleName)
 {
-    public bool IsConfigured =>
+    public bool HasLongTermKey =>
         !string.IsNullOrWhiteSpace(AccessKeyId) && !string.IsNullOrWhiteSpace(SecretAccessKey);
-
-    public bool MfaEnrolled => !string.IsNullOrWhiteSpace(MfaSerialNumber);
 
     public bool HasValidSession =>
         !string.IsNullOrWhiteSpace(SessionToken) && ExpiresAtUtc is not null && ExpiresAtUtc > DateTime.UtcNow;
 
+    // A long-term key (MFA-optional path) counts even once its session has
+    // lapsed, since RequiresMfaRefresh below tells the caller how to renew
+    // it. A pure SSO session (no long-term key at all) only counts while
+    // still valid - once it expires there's nothing left to fall back to
+    // except signing in again from scratch.
+    public bool IsConfigured => HasLongTermKey || HasValidSession;
+
+    public bool MfaEnrolled => !string.IsNullOrWhiteSpace(MfaSerialNumber);
+
     // MFA enrolled but no live session — the visitor needs to re-enter a
     // fresh code before any AWS call can be made on their behalf.
     public bool RequiresMfaRefresh => MfaEnrolled && !HasValidSession;
+
+    public bool IsSsoSession => !HasLongTermKey && !string.IsNullOrWhiteSpace(SsoAccountId);
+
+    // A pure SSO session that's run out - the only way back is signing in
+    // again, there's no key to silently refresh from.
+    public bool RequiresSsoSignIn => !HasLongTermKey && !string.IsNullOrWhiteSpace(SessionToken) && !HasValidSession;
 }
 
 public class AwsCredentialsUpdateDto
@@ -130,10 +156,19 @@ public class EcrImageDto
     public long SizeBytes { get; set; }
 }
 
-// The temporary credential set STS hands back for a successful MFA
-// verification (CloudStatusService.GetSessionTokenAsync) — everything
-// needed to make AWS calls as that session until it expires.
-public record AwsSessionCredentials(string AccessKeyId, string SecretAccessKey, string SessionToken, DateTime ExpiresAtUtc);
+// The temporary credential set STS (MFA path) or AWS SSO's
+// GetRoleCredentials (SSO path) hands back — everything needed to make AWS
+// calls as that session until it expires. The Sso* fields are only set by
+// the SSO path, purely for display (which account/role you're signed in
+// as) - they don't affect how the credentials are used.
+public record AwsSessionCredentials(
+    string AccessKeyId,
+    string SecretAccessKey,
+    string SessionToken,
+    DateTime ExpiresAtUtc,
+    string? SsoAccountId = null,
+    string? SsoAccountName = null,
+    string? SsoRoleName = null);
 
 // Result of attempting the MFA verification itself — kept separate from
 // AwsSessionCredentials so a failure (wrong code, wrong serial, expired
