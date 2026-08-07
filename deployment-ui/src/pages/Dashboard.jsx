@@ -7,6 +7,7 @@ import RepositoryCard from "../components/dashboard/RepositoryCard";
 import StatisticsCard from "../components/dashboard/StatisticsCard";
 import QuickActions from "../components/dashboard/QuickActions";
 import RecentDeployments from "../components/dashboard/RecentDeployments";
+import EnvironmentsCard from "../components/dashboard/EnvironmentsCard";
 import PublicRepoLookup from "../components/dashboard/PublicRepoLookup";
 
 export default function Dashboard() {
@@ -73,6 +74,10 @@ export default function Dashboard() {
             <br />
 
             <RecentDeployments />
+
+            <br />
+
+            <EnvironmentsCard />
 
             <br />
 

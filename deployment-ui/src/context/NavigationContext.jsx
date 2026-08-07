@@ -2,7 +2,7 @@ import { createContext, useCallback, useEffect, useState } from "react";
 
 import { getSidebarAccess } from "../services/settingsService";
 
-const TABS = ["dashboard", "deploy", "approvals", "pullRequests", "storage", "analytics", "timeline", "history", "templates", "services", "docker", "codeQuality", "settings"];
+const TABS = ["dashboard", "deploy", "approvals", "pullRequests", "storage", "analytics", "timeline", "history", "environments", "templates", "services", "docker", "codeQuality", "settings"];
 
 // Read the starting tab from the URL so a hard reload (or a bookmarked/
 // shared link) lands back on the same page instead of always resetting
@@ -21,6 +21,12 @@ export default function NavigationProvider({ children }) {
 
     const [tab, setTabState] = useState(readTabFromUrl);
     const [pendingRepoUrl, setPendingRepoUrl] = useState(null);
+
+    // Which environment the Environments page should open straight into —
+    // set when the Dashboard's Environments card is clicked, cleared once
+    // the page has consumed it (see Environments.jsx), same hand-off shape
+    // as pendingRepoUrl/goToSettingsWithRepo above.
+    const [pendingEnvironmentName, setPendingEnvironmentName] = useState(null);
 
     // The mobile drawer (Sidebar becomes an off-canvas panel below the
     // 768px breakpoint — see global.css) and its hamburger trigger (TopBar)
@@ -76,11 +82,19 @@ export default function NavigationProvider({ children }) {
 
     }
 
+    function goToEnvironment(name) {
+
+        setPendingEnvironmentName(name);
+        setTab("environments");
+
+    }
+
     return (
 
         <NavigationContext.Provider
             value={{
                 tab, setTab, pendingRepoUrl, setPendingRepoUrl, goToSettingsWithRepo,
+                pendingEnvironmentName, setPendingEnvironmentName, goToEnvironment,
                 mobileNavOpen, setMobileNavOpen,
                 sidebarAccess, refreshSidebarAccess
             }}

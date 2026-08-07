@@ -178,6 +178,141 @@ public class SettingsService
         }
     }
 
+    // Reference defaults so the Dashboard's Environments card shows
+    // something useful before an admin has configured anything — one per
+    // existing release/CD workflow, cloud target left unset ("none") since
+    // there's no real AWS/Azure target to assume. An admin edits these
+    // (including renaming or removing them) in Settings > Environments;
+    // once anything is saved there, these defaults are never shown again.
+    private static List<EnvironmentDefinitionDto> DefaultEnvironments() => new()
+    {
+        new EnvironmentDefinitionDto { Name = "API", WorkflowName = "Release API" },
+        new EnvironmentDefinitionDto { Name = "Admin API", WorkflowName = "Release Admin API" },
+        new EnvironmentDefinitionDto { Name = "PMSCore API", WorkflowName = "Release PMSCore API" },
+        new EnvironmentDefinitionDto { Name = "Security API", WorkflowName = "Release Security API" }
+    };
+
+    // Portal-wide (not per-visitor) — which deployment targets exist and
+    // what each maps to is a shared, admin-managed fact about the portal,
+    // same as the External APIs endpoint list.
+    public async Task<List<EnvironmentDefinitionDto>> GetEnvironmentDefinitionsAsync()
+    {
+        var root = await ReadRootAsync();
+        var array = root["Environments"]?["Definitions"] as JArray;
+
+        if (array == null)
+            return DefaultEnvironments();
+
+        return array
+            .Select(x => x.ToObject<EnvironmentDefinitionDto>())
+            .Where(x => x != null)
+            .Select(x => x!)
+            .ToList();
+    }
+
+    public async Task<List<EnvironmentDefinitionDto>> SaveEnvironmentDefinitionsAsync(List<EnvironmentDefinitionDto> environments)
+    {
+        var root = await ReadRootAsync();
+
+        var section = root["Environments"] as JObject ?? new JObject();
+        section["Definitions"] = JArray.FromObject(environments ?? new List<EnvironmentDefinitionDto>());
+        root["Environments"] = section;
+
+        await WriteRootAsync(root);
+
+        _log.LogInfo("Settings", $"Environment list saved ({environments?.Count ?? 0} environment(s)).");
+
+        return await GetEnvironmentDefinitionsAsync();
+    }
+
+    // AWS/Azure credentials, one visitor at a time — same isolation as
+    // UserGitHubCredentials (see PortalIdentity): keyed by session, never
+    // shared portal-wide, since these are secrets that authorize real
+    // cloud-account access.
+    public async Task<UserAwsCredentials> GetUserAwsCredentialsAsync(string key)
+    {
+        var root = await ReadRootAsync();
+        var entry = (root["UserAwsCredentials"] as JObject)?[key] as JObject;
+
+        return new UserAwsCredentials(
+            entry?["AccessKeyId"]?.ToString(),
+            entry?["SecretAccessKey"]?.ToString(),
+            entry?["Region"]?.ToString());
+    }
+
+    public async Task SaveUserAwsCredentialsAsync(string key, AwsCredentialsUpdateDto update)
+    {
+        var root = await ReadRootAsync();
+        var users = root["UserAwsCredentials"] as JObject ?? new JObject();
+
+        users[key] = new JObject
+        {
+            ["AccessKeyId"] = update.AccessKeyId?.Trim() ?? string.Empty,
+            ["SecretAccessKey"] = update.SecretAccessKey?.Trim() ?? string.Empty,
+            ["Region"] = update.Region?.Trim() ?? string.Empty
+        };
+
+        root["UserAwsCredentials"] = users;
+        await WriteRootAsync(root);
+
+        _log.LogInfo("Settings", "AWS credentials saved for a session.");
+    }
+
+    public async Task ClearUserAwsCredentialsAsync(string key)
+    {
+        var root = await ReadRootAsync();
+
+        if (root["UserAwsCredentials"] is JObject users && users[key] != null)
+        {
+            users.Remove(key);
+            await WriteRootAsync(root);
+
+            _log.LogInfo("Settings", "AWS credentials cleared for a session.");
+        }
+    }
+
+    public async Task<UserAzureCredentials> GetUserAzureCredentialsAsync(string key)
+    {
+        var root = await ReadRootAsync();
+        var entry = (root["UserAzureCredentials"] as JObject)?[key] as JObject;
+
+        return new UserAzureCredentials(
+            entry?["TenantId"]?.ToString(),
+            entry?["ClientId"]?.ToString(),
+            entry?["ClientSecret"]?.ToString());
+    }
+
+    public async Task SaveUserAzureCredentialsAsync(string key, AzureCredentialsUpdateDto update)
+    {
+        var root = await ReadRootAsync();
+        var users = root["UserAzureCredentials"] as JObject ?? new JObject();
+
+        users[key] = new JObject
+        {
+            ["TenantId"] = update.TenantId?.Trim() ?? string.Empty,
+            ["ClientId"] = update.ClientId?.Trim() ?? string.Empty,
+            ["ClientSecret"] = update.ClientSecret?.Trim() ?? string.Empty
+        };
+
+        root["UserAzureCredentials"] = users;
+        await WriteRootAsync(root);
+
+        _log.LogInfo("Settings", "Azure credentials saved for a session.");
+    }
+
+    public async Task ClearUserAzureCredentialsAsync(string key)
+    {
+        var root = await ReadRootAsync();
+
+        if (root["UserAzureCredentials"] is JObject users && users[key] != null)
+        {
+            users.Remove(key);
+            await WriteRootAsync(root);
+
+            _log.LogInfo("Settings", "Azure credentials cleared for a session.");
+        }
+    }
+
     public async Task<SettingsViewDto> SaveDockerAsync(DockerSettingsUpdateDto update)
     {
         var root = await ReadRootAsync();

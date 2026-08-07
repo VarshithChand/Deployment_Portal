@@ -22,6 +22,38 @@ export const clearMyGitHubToken = async () => {
     return response.data;
 };
 
+// Session-scoped AWS/Azure credentials for the Environments detail view's
+// live cloud lookups — same per-visitor isolation as GitHub above.
+export const getMyAwsSettings = async () => {
+    const response = await settingsApi.get("/me/aws");
+    return response.data;
+};
+
+export const saveMyAwsSettings = async (payload) => {
+    const response = await settingsApi.post("/me/aws", payload);
+    return response.data;
+};
+
+export const clearMyAwsCredentials = async () => {
+    const response = await settingsApi.delete("/me/aws");
+    return response.data;
+};
+
+export const getMyAzureSettings = async () => {
+    const response = await settingsApi.get("/me/azure");
+    return response.data;
+};
+
+export const saveMyAzureSettings = async (payload) => {
+    const response = await settingsApi.post("/me/azure", payload);
+    return response.data;
+};
+
+export const clearMyAzureCredentials = async () => {
+    const response = await settingsApi.delete("/me/azure");
+    return response.data;
+};
+
 export const saveDockerSettings = async (payload) => {
     const response = await settingsApi.post("/docker", payload);
     return response.data;

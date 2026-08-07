@@ -126,6 +126,69 @@ public class SettingsController : ControllerBase
         return Ok();
     }
 
+    // Same per-visitor isolation as GitHub above, for the Environments
+    // detail view's live AWS ECS/ECR lookup — the credentials never leave
+    // this browser's own session slot.
+    [HttpGet("me/aws")]
+    public async Task<IActionResult> GetMyAws()
+    {
+        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var creds = await _settings.GetUserAwsCredentialsAsync(key);
+
+        return Ok(new { Configured = creds.IsConfigured, Region = creds.Region });
+    }
+
+    [HttpPost("me/aws")]
+    public async Task<IActionResult> SaveMyAws(AwsCredentialsUpdateDto request)
+    {
+        if (string.IsNullOrWhiteSpace(request.AccessKeyId) || string.IsNullOrWhiteSpace(request.SecretAccessKey))
+            return BadRequest(new { message = "Access key ID and secret access key are required." });
+
+        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        await _settings.SaveUserAwsCredentialsAsync(key, request);
+
+        return Ok(new { Configured = true });
+    }
+
+    [HttpDelete("me/aws")]
+    public async Task<IActionResult> ClearMyAws()
+    {
+        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        await _settings.ClearUserAwsCredentialsAsync(key);
+        return Ok();
+    }
+
+    // Same per-visitor isolation, for the Environments detail view's live
+    // Azure Web App lookup.
+    [HttpGet("me/azure")]
+    public async Task<IActionResult> GetMyAzure()
+    {
+        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var creds = await _settings.GetUserAzureCredentialsAsync(key);
+
+        return Ok(new { Configured = creds.IsConfigured });
+    }
+
+    [HttpPost("me/azure")]
+    public async Task<IActionResult> SaveMyAzure(AzureCredentialsUpdateDto request)
+    {
+        if (string.IsNullOrWhiteSpace(request.TenantId) || string.IsNullOrWhiteSpace(request.ClientId) || string.IsNullOrWhiteSpace(request.ClientSecret))
+            return BadRequest(new { message = "Tenant ID, client ID, and client secret are required." });
+
+        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        await _settings.SaveUserAzureCredentialsAsync(key, request);
+
+        return Ok(new { Configured = true });
+    }
+
+    [HttpDelete("me/azure")]
+    public async Task<IActionResult> ClearMyAzure()
+    {
+        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        await _settings.ClearUserAzureCredentialsAsync(key);
+        return Ok();
+    }
+
     // Changing shared, portal-wide credentials or the admin allowlist is
     // restricted to admins — without this, any anonymous visitor could
     // point the Docker registry at their own account, point the OAuth app

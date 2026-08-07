@@ -149,6 +149,19 @@ export function ServicesIcon() {
     );
 }
 
+// Three ascending step bars — reads as "stages/tiers" (Dev < Staging <
+// Prod) rather than ServicesIcon's evenly-stacked rows, which already
+// means "list of equal peers."
+export function EnvironmentsIcon() {
+    return (
+        <svg {...common}>
+            <rect x="2.5" y="11" width="4" height="4.5" rx="1" stroke="currentColor" strokeWidth="1.3" />
+            <rect x="7" y="7" width="4" height="8.5" rx="1" stroke="currentColor" strokeWidth="1.3" />
+            <rect x="11.5" y="2.5" width="4" height="13" rx="1" stroke="currentColor" strokeWidth="1.3" />
+        </svg>
+    );
+}
+
 export function TemplatesIcon() {
     return (
         <svg {...common}>

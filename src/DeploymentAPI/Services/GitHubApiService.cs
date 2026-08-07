@@ -1285,6 +1285,8 @@ public class GitHubApiService
 
         CommitMessage = x["head_commit"]?["message"]?.ToString() ?? string.Empty,
 
+        CommitSha = x["head_sha"]?.ToString() ?? string.Empty,
+
         HtmlUrl = x["html_url"]?.ToString() ?? string.Empty
     };
 

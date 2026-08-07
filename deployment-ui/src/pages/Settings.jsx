@@ -29,6 +29,7 @@ import SidebarAccessView from "../components/settings/SidebarAccessView";
 import ActivityLogView from "../components/settings/ActivityLogView";
 import SmokeTestsView from "../components/settings/SmokeTestsView";
 import ExternalApisView from "../components/settings/ExternalApisView";
+import EnvironmentsAdminView from "../components/settings/EnvironmentsAdminView";
 import useToast from "../hooks/useToast";
 import useConfirm from "../hooks/useConfirm";
 import useAuth from "../hooks/useAuth";
@@ -36,13 +37,13 @@ import useNavigation from "../hooks/useNavigation";
 import usePagination from "../hooks/usePagination";
 import parseRepoUrl from "../utils/parseRepoUrl";
 
-const VIEWS = ["hub", "credentials", "activity-log", "access-levels", "branches", "sidebar-access", "smoke-tests", "external-apis"];
+const VIEWS = ["hub", "credentials", "activity-log", "access-levels", "branches", "sidebar-access", "smoke-tests", "external-apis", "environments"];
 
 // Every one of these requires Admin server-side (LogsController,
-// SmokeTestController, ExternalHealthController, and the /sidebar/*
-// endpoints all run through AdminGate) - showing any of them to a
-// non-admin would just be an empty/failed page.
-const ADMIN_ONLY_VIEWS = new Set(["sidebar-access", "activity-log", "smoke-tests", "external-apis"]);
+// SmokeTestController, ExternalHealthController, EnvironmentsController's
+// save action, and the /sidebar/* endpoints all run through AdminGate) -
+// showing any of them to a non-admin would just be an empty/failed page.
+const ADMIN_ONLY_VIEWS = new Set(["sidebar-access", "activity-log", "smoke-tests", "external-apis", "environments"]);
 
 // Every restrictable sidebar tab except "settings" and "dashboard" — the
 // backend refuses those two entries regardless of what's sent (locking
@@ -58,6 +59,7 @@ const SIDEBAR_TABS = [
     { key: "analytics", label: "Analytics" },
     { key: "timeline", label: "Timeline" },
     { key: "history", label: "History" },
+    { key: "environments", label: "Environments" },
     { key: "templates", label: "Template Tester" },
     { key: "services", label: "Services" },
     { key: "docker", label: "Docker" }
@@ -76,7 +78,8 @@ const VIEW_TITLES = {
     branches: "Branches",
     "sidebar-access": "Sidebar Access",
     "smoke-tests": "Smoke Tests",
-    "external-apis": "External APIs"
+    "external-apis": "External APIs",
+    environments: "Environments"
 };
 
 // Mirrors the same "?tab=" pattern NavigationContext uses for the top-level
@@ -958,6 +961,12 @@ export default function Settings() {
             {view === "external-apis" && isAdmin && (
 
                 <ExternalApisView />
+
+            )}
+
+            {view === "environments" && isAdmin && (
+
+                <EnvironmentsAdminView />
 
             )}
 

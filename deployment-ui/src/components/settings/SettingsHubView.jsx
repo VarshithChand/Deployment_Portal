@@ -81,6 +81,18 @@ export default function SettingsHubView({ isAdmin, setView, handleClearAll, clea
 
             )}
 
+            {isAdmin && (
+
+                <button type="button" className="settings-hub-tile" onClick={() => setView("environments")}>
+                    <h2>Environments</h2>
+                    <p>
+                        Which CD workflow each deployment target tracks, and the AWS ECS/ECR or
+                        Azure Web App it maps to.
+                    </p>
+                </button>
+
+            )}
+
         </div>
 
         <div className="card card-danger-zone">

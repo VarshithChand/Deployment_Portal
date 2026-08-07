@@ -18,5 +18,7 @@ public class WorkflowDto
 
     public string CommitMessage { get; set; } = string.Empty;
 
+    public string CommitSha { get; set; } = string.Empty;
+
     public string HtmlUrl { get; set; } = string.Empty;
 }
