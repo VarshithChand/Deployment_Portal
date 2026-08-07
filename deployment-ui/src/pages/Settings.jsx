@@ -789,20 +789,24 @@ export default function Settings() {
     }
 
     // Unlike handleClear, this wipes the repository URL/owner too (not
-    // just the token) plus Docker, OAuth, and the admin allowlist — a
-    // full reset back to first-run, not just rotating a credential. Every
-    // other page already loaded data for whatever repo was configured
-    // before this, so a reload is what actually clears that everywhere.
+    // just the token) plus Docker, OAuth, and Sonar — a full reset of
+    // everything EXCEPT the admin allowlist, which is deliberately kept so
+    // this can never drop the portal into bootstrap mode (see
+    // ClearAllAsync). Every other page already loaded data for whatever
+    // repo was configured before this, so a reload is what actually clears
+    // that everywhere — and with this session's own GitHub token gone,
+    // that reload lands back on RequireGitHubSetup's "connect your repo"
+    // gate automatically.
     async function handleClearAll() {
 
         if (!(await confirm({
             title: "Clear all data?",
             message:
-                "Clear ALL saved data? This removes your GitHub repository URL and token, the " +
-                "Docker credentials, OAuth settings, and the admin allowlist — clearing the " +
-                "allowlist means every visitor to this portal (including strangers) will be " +
-                "treated as Admin until someone configures it again. Other users' own GitHub " +
-                "repo/token are untouched — this only clears yours. This cannot be undone.",
+                "Clear ALL saved data? This removes your GitHub repository URL and token, your " +
+                "AWS/Azure/GCP credentials, the Docker credentials, OAuth settings, and Sonar " +
+                "settings. The admin allowlist is kept as-is — this won't affect who has admin " +
+                "access. Other users' own GitHub repo/token are untouched — this only clears " +
+                "yours. This cannot be undone.",
             confirmLabel: "Clear All Data",
             danger: true
         }))) {
@@ -815,7 +819,7 @@ export default function Settings() {
 
             await clearSettings("all");
 
-            toast.show("All settings cleared.", "success");
+            toast.show("All data cleared — reconnect your GitHub repository to continue.", "success");
 
             setTimeout(() => window.location.reload(), 900);
 

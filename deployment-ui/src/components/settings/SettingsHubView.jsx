@@ -98,10 +98,10 @@ export default function SettingsHubView({ isAdmin, setView, handleClearAll, clea
             </h2>
 
             <p className="empty-state" style={{ padding: "0 0 15px", textAlign: "left" }}>
-                Wipes everything on the Credentials page at once — the repository URL, the
-                GitHub token, Docker credentials, OAuth settings, and the admin allowlist —
-                instead of clearing one section at a time. The portal goes back to its
-                unconfigured, first-run state.
+                Wipes everything on the Credentials page at once — your repository URL, GitHub
+                token, AWS/Azure/GCP credentials, Docker credentials, OAuth settings, and Sonar
+                settings — instead of clearing one section at a time. The admin allowlist is kept
+                as-is. You'll land back on the "connect your repository" screen afterward.
             </p>
 
             <button

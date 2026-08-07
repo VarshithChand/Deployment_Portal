@@ -509,25 +509,41 @@ public class SettingsService
 
     // Unlike a per-section clear (which only removes the secret, leaving the
     // registry / client ID in place), "all" wipes every shared, portal-wide
-    // section entirely, plus the caller's own GitHub repo/token — resetting
-    // both back to unconfigured, first-run state. Only the CALLER's own
-    // entry in UserGitHubCredentials is removed (other users' stay intact —
-    // "all" for one visitor never reaches into another's data). Jwt is
-    // deliberately left alone so existing sessions/cookies stay valid.
+    // section entirely, plus the caller's own GitHub/AWS/Azure/GCP
+    // credentials — resetting everything back to unconfigured, first-run
+    // state. "Auth" (the admin allowlist) is deliberately the one exception:
+    // wiping it used to drop the whole portal into bootstrap mode (anyone
+    // is Admin until it's reconfigured), which is a much bigger blast
+    // radius than "reset my own data" implies - keeping it intact means
+    // whoever is already admin stays admin, and everyone else still lands
+    // back on RequireGitHubSetup's repo/token gate once their own
+    // UserGitHubCredentials entry is gone. Only the CALLER's own entries
+    // in the per-user credential maps are removed (other users' stay
+    // intact - "all" for one visitor never reaches into another's data).
+    // Jwt is deliberately left alone so existing sessions/cookies stay valid.
     public async Task<SettingsViewDto> ClearAllAsync(string callerKey)
     {
         var root = await ReadRootAsync();
 
         root.Remove("Docker");
         root.Remove("GitHubOAuth");
-        root.Remove("Auth");
+        root.Remove("Sonar");
 
-        if (root["UserGitHubCredentials"] is JObject users)
-            users.Remove(callerKey);
+        if (root["UserGitHubCredentials"] is JObject githubUsers)
+            githubUsers.Remove(callerKey);
+
+        if (root["UserAwsCredentials"] is JObject awsUsers)
+            awsUsers.Remove(callerKey);
+
+        if (root["UserAzureCredentials"] is JObject azureUsers)
+            azureUsers.Remove(callerKey);
+
+        if (root["UserGcpCredentials"] is JObject gcpUsers)
+            gcpUsers.Remove(callerKey);
 
         await WriteRootAsync(root);
 
-        _log.LogInfo("Settings", "All settings cleared — portal reset to unconfigured state.");
+        _log.LogInfo("Settings", "All settings cleared (admin allowlist kept) — this session reset to unconfigured state.");
 
         return BuildView(root);
     }
