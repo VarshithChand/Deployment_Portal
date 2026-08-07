@@ -40,10 +40,15 @@ import parseRepoUrl from "../utils/parseRepoUrl";
 const VIEWS = ["hub", "credentials", "activity-log", "access-levels", "branches", "sidebar-access", "smoke-tests", "external-apis", "environments"];
 
 // Every one of these requires Admin server-side (LogsController,
-// SmokeTestController, ExternalHealthController, EnvironmentsController's
-// save action, and the /sidebar/* endpoints all run through AdminGate) -
-// showing any of them to a non-admin would just be an empty/failed page.
-const ADMIN_ONLY_VIEWS = new Set(["sidebar-access", "activity-log", "smoke-tests", "external-apis", "environments"]);
+// SmokeTestController, ExternalHealthController, and the /sidebar/*
+// endpoints all run through AdminGate) - showing any of them to a
+// non-admin would just be an empty/failed page. "environments" is
+// deliberately NOT here: GET /api/environments has always been open to
+// any visitor (it's the same data the Dashboard card and Environments
+// page already show everyone) - only saving changes is admin-gated
+// server-side, which EnvironmentsAdminView enforces itself by disabling
+// its edit controls for non-admins rather than hiding the whole page.
+const ADMIN_ONLY_VIEWS = new Set(["sidebar-access", "activity-log", "smoke-tests", "external-apis"]);
 
 // Every restrictable sidebar tab except "settings" and "dashboard" — the
 // backend refuses those two entries regardless of what's sent (locking
@@ -964,9 +969,9 @@ export default function Settings() {
 
             )}
 
-            {view === "environments" && isAdmin && (
+            {view === "environments" && (
 
-                <EnvironmentsAdminView />
+                <EnvironmentsAdminView isAdmin={isAdmin} />
 
             )}
 

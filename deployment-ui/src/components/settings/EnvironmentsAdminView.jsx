@@ -16,13 +16,17 @@ const EMPTY_ENVIRONMENT = {
     azureWebAppName: ""
 };
 
-// Admin editor for the Dashboard/Environments card's deployment-target
-// list — which CD workflow each environment tracks, and (optionally)
-// which AWS ECS/ECR or Azure Web App it maps to. The cloud target names
-// here are plain configuration, not secrets — the credentials that
-// authenticate against them are entered per-visitor on the environment's
-// own detail page instead (see CloudStatusPanel), never here.
-export default function EnvironmentsAdminView() {
+// Visible to every visitor (the same data the Dashboard card already
+// shows everyone) — editing is what's restricted. Non-admins get every
+// field read-only and none of the mutating controls, rather than the page
+// being hidden outright; the backend enforces the same restriction on
+// POST /api/environments regardless, this just avoids a confusing "Admin
+// login required" error after someone who can't save fills the form in.
+// The cloud target names here are plain configuration, not secrets — the
+// credentials that authenticate against them are entered per-visitor on
+// the environment's own detail page instead (see CloudStatusPanel), never
+// here.
+export default function EnvironmentsAdminView({ isAdmin }) {
 
     const toast = useToast();
 
@@ -167,6 +171,7 @@ export default function EnvironmentsAdminView() {
                 Each environment tracks one CD/release workflow's latest run for its commit and
                 artifacts. Optionally point it at a real AWS ECS/ECR or Azure Web App — whoever
                 opens that environment then enters their own cloud credentials to see live status.
+                {!isAdmin && " Only admins can change this list."}
             </p>
 
             {environments.length === 0 && (
@@ -181,13 +186,17 @@ export default function EnvironmentsAdminView() {
 
                         <h3 className="settings-subhead">Environment {index + 1}</h3>
 
-                        <button
-                            type="button"
-                            className="btn btn-danger btn-sm"
-                            onClick={() => removeEnvironment(index)}
-                        >
-                            Remove
-                        </button>
+                        {isAdmin && (
+
+                            <button
+                                type="button"
+                                className="btn btn-danger btn-sm"
+                                onClick={() => removeEnvironment(index)}
+                            >
+                                Remove
+                            </button>
+
+                        )}
 
                     </div>
 
@@ -198,6 +207,7 @@ export default function EnvironmentsAdminView() {
                             placeholder="Production"
                             value={env.name}
                             onChange={(e) => updateField(index, "name", e.target.value)}
+                            disabled={!isAdmin}
                         />
                     </div>
 
@@ -208,18 +218,23 @@ export default function EnvironmentsAdminView() {
                             placeholder="Release API"
                             value={env.workflowName}
                             onChange={(e) => updateField(index, "workflowName", e.target.value)}
+                            disabled={!isAdmin}
                         />
                     </div>
 
-                    <button
-                        type="button"
-                        className="btn btn-secondary btn-sm"
-                        style={{ marginBottom: "16px" }}
-                        onClick={() => handleDetect(index)}
-                        disabled={detectingIndex === index}
-                    >
-                        {detectingIndex === index ? "Reading pipeline..." : "Detect from Pipeline"}
-                    </button>
+                    {isAdmin && (
+
+                        <button
+                            type="button"
+                            className="btn btn-secondary btn-sm"
+                            style={{ marginBottom: "16px" }}
+                            onClick={() => handleDetect(index)}
+                            disabled={detectingIndex === index}
+                        >
+                            {detectingIndex === index ? "Reading pipeline..." : "Detect from Pipeline"}
+                        </button>
+
+                    )}
 
                     {evidenceByIndex[index]?.length > 0 && (
 
@@ -237,6 +252,7 @@ export default function EnvironmentsAdminView() {
                             className="form-control"
                             value={env.cloudProvider}
                             onChange={(e) => updateField(index, "cloudProvider", e.target.value)}
+                            disabled={!isAdmin}
                         >
                             <option value="none">Not configured</option>
                             <option value="aws">AWS (ECS / ECR)</option>
@@ -255,6 +271,7 @@ export default function EnvironmentsAdminView() {
                                 placeholder="us-east-1"
                                 value={env.awsRegion || ""}
                                 onChange={(e) => updateField(index, "awsRegion", e.target.value)}
+                                disabled={!isAdmin}
                             />
                         </div>
 
@@ -264,6 +281,7 @@ export default function EnvironmentsAdminView() {
                                 className="form-control"
                                 value={env.ecsCluster || ""}
                                 onChange={(e) => updateField(index, "ecsCluster", e.target.value)}
+                                disabled={!isAdmin}
                             />
                         </div>
 
@@ -273,6 +291,7 @@ export default function EnvironmentsAdminView() {
                                 className="form-control"
                                 value={env.ecsService || ""}
                                 onChange={(e) => updateField(index, "ecsService", e.target.value)}
+                                disabled={!isAdmin}
                             />
                         </div>
 
@@ -282,6 +301,7 @@ export default function EnvironmentsAdminView() {
                                 className="form-control"
                                 value={env.ecrRepository || ""}
                                 onChange={(e) => updateField(index, "ecrRepository", e.target.value)}
+                                disabled={!isAdmin}
                             />
                         </div>
 
@@ -299,6 +319,7 @@ export default function EnvironmentsAdminView() {
                                 className="form-control"
                                 value={env.azureSubscriptionId || ""}
                                 onChange={(e) => updateField(index, "azureSubscriptionId", e.target.value)}
+                                disabled={!isAdmin}
                             />
                         </div>
 
@@ -308,6 +329,7 @@ export default function EnvironmentsAdminView() {
                                 className="form-control"
                                 value={env.azureResourceGroup || ""}
                                 onChange={(e) => updateField(index, "azureResourceGroup", e.target.value)}
+                                disabled={!isAdmin}
                             />
                         </div>
 
@@ -317,6 +339,7 @@ export default function EnvironmentsAdminView() {
                                 className="form-control"
                                 value={env.azureWebAppName || ""}
                                 onChange={(e) => updateField(index, "azureWebAppName", e.target.value)}
+                                disabled={!isAdmin}
                             />
                         </div>
 
@@ -328,17 +351,21 @@ export default function EnvironmentsAdminView() {
 
             ))}
 
-            <div className="button-row">
+            {isAdmin && (
 
-                <button type="button" className="btn btn-secondary" onClick={addEnvironment}>
-                    Add Environment
-                </button>
+                <div className="button-row">
 
-                <button type="button" className="btn btn-primary" onClick={handleSave} disabled={saving}>
-                    {saving ? "Saving..." : "Save Environments"}
-                </button>
+                    <button type="button" className="btn btn-secondary" onClick={addEnvironment}>
+                        Add Environment
+                    </button>
 
-            </div>
+                    <button type="button" className="btn btn-primary" onClick={handleSave} disabled={saving}>
+                        {saving ? "Saving..." : "Save Environments"}
+                    </button>
+
+                </div>
+
+            )}
 
         </div>
 
