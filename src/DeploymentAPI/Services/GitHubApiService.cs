@@ -257,6 +257,63 @@ public class GitHubApiService
     }
 
     //===========================================================
+    // Token Preview (RequireGitHubSetup's two-step "Connect your
+    // repository" flow — paste a token, see whose it is and every repo it
+    // can see, then pick one, instead of already knowing an exact repo URL)
+    //===========================================================
+
+    // Deliberately independent of GitHubAuthService/_auth: this previews a
+    // token that hasn't been saved anywhere yet, using it directly and
+    // discarding the client afterward. Nothing here touches stored settings.
+    public async Task<TokenPreviewResponseDto> PreviewTokenAsync(string token)
+    {
+        if (string.IsNullOrWhiteSpace(token))
+            return new TokenPreviewResponseDto { Success = false, Error = "A Personal Access Token is required." };
+
+        using var client = new HttpClient();
+        client.DefaultRequestHeaders.Add("Authorization", $"Bearer {token.Trim()}");
+        client.DefaultRequestHeaders.Add("User-Agent", "DeploymentPortal");
+        client.DefaultRequestHeaders.Add("Accept", "application/vnd.github+json");
+
+        try
+        {
+            var userJson = await HttpClientHelper.GetAsync(client, "https://api.github.com/user");
+            var user = JObject.Parse(userJson);
+
+            var reposJson = await HttpClientHelper.GetAsync(
+                client,
+                "https://api.github.com/user/repos?per_page=100&sort=updated&affiliation=owner,collaborator,organization_member");
+
+            var repos = JArray.Parse(reposJson);
+
+            return new TokenPreviewResponseDto
+            {
+                Success = true,
+                Username = user["login"]?.ToString(),
+                AvatarUrl = user["avatar_url"]?.ToString(),
+                Repositories = repos.Select(x => new AccountRepositoryDto
+                {
+                    FullName = x["full_name"]?.ToString() ?? string.Empty,
+                    Owner = x["owner"]?["login"]?.ToString() ?? string.Empty,
+                    Name = x["name"]?.ToString() ?? string.Empty,
+                    Private = (bool?)x["private"] ?? false,
+                    HtmlUrl = x["html_url"]?.ToString() ?? string.Empty
+                }).ToList()
+            };
+        }
+        catch (HttpRequestException ex)
+        {
+            return new TokenPreviewResponseDto
+            {
+                Success = false,
+                Error = ex.StatusCode == HttpStatusCode.Unauthorized
+                    ? "That token was rejected by GitHub — check it's correct and hasn't expired."
+                    : ex.Message
+            };
+        }
+    }
+
+    //===========================================================
     // Repository
     //===========================================================
 

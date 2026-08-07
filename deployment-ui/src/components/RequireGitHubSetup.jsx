@@ -1,17 +1,48 @@
 import { useEffect, useState } from "react";
 
-import { getMyGitHubSettings, saveMyGitHubSettings, getMyGitHubUsername } from "../services/settingsService";
+import {
+    getMyGitHubSettings,
+    saveMyGitHubSettings,
+    getMyGitHubUsername,
+    previewGitHubToken
+} from "../services/settingsService";
 import parseRepoUrl from "../utils/parseRepoUrl";
 import useToast from "../hooks/useToast";
+import usePagination from "../hooks/usePagination";
 import ClearableInput from "./common/ClearableInput";
+import SearchBox from "./common/SearchBox";
 import Logo from "./common/Logo";
 import LoadingSpinner from "./LoadingSpinner";
 
-// Blocks every other page behind a one-time "point this at your repo" form.
+const PAGE_SIZE = 9;
+
+// A plain rounded rectangle with a spine down the left edge — same "repo"
+// glyph SwitchRepositoryModal uses, duplicated rather than shared since
+// both are a few lines and this is the only other place that needs it.
+function RepoIcon() {
+
+    return (
+
+        <svg className="repo-picker-icon" width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+            <rect x="2.5" y="2.5" width="11" height="11" rx="1.5" stroke="currentColor" strokeWidth="1.3" />
+            <line x1="5.5" y1="2.5" x2="5.5" y2="13.5" stroke="currentColor" strokeWidth="1.3" />
+        </svg>
+
+    );
+
+}
+
+// Blocks every other page behind a one-time "point this at your repo" flow.
 // Every portal visitor brings their own GitHub repo + token now (see
 // SettingsController's api/settings/me/github) instead of the whole portal
 // sharing one — this is where anyone who hasn't set theirs up yet is asked
 // for it, before they can reach anything else.
+//
+// Two steps: paste a token, then pick a repo from whatever that token can
+// actually see (via /me/github/preview — nothing's saved yet at that
+// point) instead of needing to already know and correctly type an exact
+// repository URL. A manual URL entry is still there as a fallback for a
+// repo the preview's affiliation filter doesn't surface.
 //
 // Not gated on GitHub OAuth login: api/settings/me/github works for anyone,
 // logged in or not — PortalIdentity resolves an isolated anonymous session
@@ -24,14 +55,21 @@ export default function RequireGitHubSetup({ children }) {
     const [checking, setChecking] = useState(true);
     const [configured, setConfigured] = useState(true);
 
-    const [repoUrl, setRepoUrl] = useState("");
-    const [token, setToken] = useState("");
-    const [saving, setSaving] = useState(false);
+    // "token" -> "pick-repo" -> "connected"
+    const [step, setStep] = useState("token");
 
-    // Set once the token's saved and its owner looked up — shown in place
-    // of the form for a beat before the reload, so "Continue" doesn't just
-    // silently vanish into a page refresh with no confirmation of whose
-    // account actually got connected.
+    const [token, setToken] = useState("");
+    const [previewing, setPreviewing] = useState(false);
+    const [previewError, setPreviewError] = useState("");
+
+    const [tokenOwner, setTokenOwner] = useState(null);
+    const [repos, setRepos] = useState([]);
+    const [search, setSearch] = useState("");
+
+    const [manualUrl, setManualUrl] = useState("");
+    const [showManualUrl, setShowManualUrl] = useState(false);
+
+    const [connecting, setConnecting] = useState(false);
     const [connectedAs, setConnectedAs] = useState(null);
 
     useEffect(() => {
@@ -56,48 +94,68 @@ export default function RequireGitHubSetup({ children }) {
 
     }, []);
 
-    async function handleSave(e) {
+    async function handlePreviewToken(e) {
 
         e.preventDefault();
-
-        const parsed = parseRepoUrl(repoUrl);
-
-        if (!parsed) {
-            toast.show("Enter a valid GitHub repository URL, e.g. https://github.com/owner/repo", "error");
-            return;
-        }
 
         if (!token.trim()) {
             toast.show("A Personal Access Token is required to continue.", "error");
             return;
         }
 
+        setPreviewing(true);
+        setPreviewError("");
+
         try {
 
-            setSaving(true);
+            const result = await previewGitHubToken(token.trim());
+
+            if (!result.success) {
+                setPreviewError(result.error || "That token was rejected by GitHub.");
+                return;
+            }
+
+            setTokenOwner({ username: result.username, avatarUrl: result.avatarUrl });
+            setRepos(result.repositories || []);
+            setStep("pick-repo");
+
+        }
+        catch (err) {
+
+            console.error(err);
+            toast.show(err.response?.data?.message || "Unable to check that token.", "error");
+
+        }
+        finally {
+
+            setPreviewing(false);
+
+        }
+
+    }
+
+    async function connectTo(owner, repository) {
+
+        setConnecting(true);
+
+        try {
 
             await saveMyGitHubSettings({
-                owner: parsed.owner,
-                repository: parsed.repository,
-                personalAccessToken: token
+                owner,
+                repository,
+                personalAccessToken: token.trim()
             });
 
-            // A separate request from the save above — GitHubAuthService
-            // loads credentials once per request, so this has to ask again
-            // to see what was just saved rather than reusing the save's
-            // own response.
+            // Separate request from the save above on purpose — see
+            // getMyGitHubUsername's own note on why this can't just reuse
+            // tokenOwner from the preview step (belt-and-suspenders here
+            // since we already know it, but confirms what actually saved).
             const username = await getMyGitHubUsername();
 
-            toast.show(`Connected to ${parsed.owner}/${parsed.repository}.`, "success");
-            setConnectedAs({ username, owner: parsed.owner, repository: parsed.repository });
+            toast.show(`Connected to ${owner}/${repository}.`, "success");
+            setConnectedAs({ username: username || tokenOwner?.username, owner, repository });
+            setStep("connected");
 
-            // Full reload, not just dismissing the popup — Dashboard and
-            // every other page already mounted and fetched (and failed,
-            // with no repo configured yet) the moment this popup appeared
-            // behind it, and none of them know to refetch on their own just
-            // because this component's local state changes. Same reasoning
-            // as Settings.jsx's own save button. Held a beat longer than
-            // before so there's time to actually read who/what connected.
             setTimeout(() => window.location.reload(), 1600);
 
         }
@@ -105,14 +163,36 @@ export default function RequireGitHubSetup({ children }) {
 
             console.error(err);
             toast.show(err.response?.data?.message || "Failed to save GitHub settings.", "error");
-            setSaving(false);
+            setConnecting(false);
 
         }
 
     }
 
+    function handleManualConnect(e) {
+
+        e.preventDefault();
+
+        const parsed = parseRepoUrl(manualUrl);
+
+        if (!parsed) {
+            toast.show("Enter a valid GitHub repository URL, e.g. https://github.com/owner/repo", "error");
+            return;
+        }
+
+        connectTo(parsed.owner, parsed.repository);
+
+    }
+
+    const filteredRepos = repos.filter((repo) =>
+        repo.fullName.toLowerCase().includes(search.toLowerCase())
+    );
+
+    const { page, setPage, pageCount, pageItems, totalCount, startIndex, endIndex } =
+        usePagination(filteredRepos, PAGE_SIZE);
+
     // Renders behind the popup rather than being replaced by it — the app
-    // shell mounts normally (so there's no jarring swap once the form is
+    // shell mounts normally (so there's no jarring swap once the flow is
     // done), the modal on top is what actually blocks interacting with it.
     return (
 
@@ -125,15 +205,18 @@ export default function RequireGitHubSetup({ children }) {
                 <div className="dialog-backdrop">
 
                     <div
-                        className="dialog setup-gate-dialog"
+                        className={`dialog setup-gate-dialog ${step === "pick-repo" ? "dialog-wide" : ""}`}
+                        style={step === "pick-repo" ? { alignItems: "stretch" } : undefined}
                         role="dialog"
                         aria-modal="true"
                         aria-labelledby="github-setup-title"
                     >
 
-                        <Logo showEyebrow={false} size={40} />
+                        <div style={{ alignSelf: "center" }}>
+                            <Logo showEyebrow={false} size={40} />
+                        </div>
 
-                        {connectedAs ? (
+                        {step === "connected" && connectedAs && (
 
                             <>
 
@@ -153,68 +236,204 @@ export default function RequireGitHubSetup({ children }) {
 
                             </>
 
-                        ) : (
+                        )}
 
-                        <>
+                        {step === "token" && (
 
-                        <h1 id="github-setup-title" className="setup-gate-title">
-                            Connect your GitHub repository
-                        </h1>
+                            <>
 
-                        <p className="field-hint" style={{ textAlign: "center" }}>
-                            Every user of this portal points at their own repo with their own token —
-                            this is saved to your account only, and is required before you can use
-                            anything else here.
-                        </p>
+                            <h1 id="github-setup-title" className="setup-gate-title">
+                                Connect your GitHub repository
+                            </h1>
 
-                        <form onSubmit={handleSave} className="setup-gate-form">
+                            <p className="field-hint" style={{ textAlign: "center" }}>
+                                Every user of this portal points at their own repo with their own token —
+                                this is saved to your account only. Paste a token below and pick from
+                                whatever repos it can see.
+                            </p>
 
-                            <div className="form-group">
-                                <label>Repository URL</label>
-                                <ClearableInput
-                                    placeholder="https://github.com/owner/repo"
-                                    value={repoUrl}
-                                    onChange={(e) => setRepoUrl(e.target.value)}
-                                    onClear={() => setRepoUrl("")}
-                                    autoComplete="off"
-                                    name="repository-url"
-                                    autoFocus
-                                />
-                                {repoUrl.trim() && !parseRepoUrl(repoUrl) && (
-                                    <p className="field-hint field-hint-bad">
-                                        Doesn't look like a GitHub repository URL yet — expecting something like
-                                        https://github.com/owner/repo
+                            <form onSubmit={handlePreviewToken} className="setup-gate-form">
+
+                                <div className="form-group">
+                                    <label>Personal Access Token</label>
+                                    <input
+                                        type="password"
+                                        className="form-control"
+                                        placeholder="ghp_..."
+                                        value={token}
+                                        onChange={(e) => setToken(e.target.value)}
+                                        autoComplete="new-password"
+                                        autoFocus
+                                    />
+                                    <a
+                                        href="https://github.com/settings/tokens"
+                                        target="_blank"
+                                        rel="noreferrer"
+                                        className="token-help-link"
+                                    >
+                                        Generate a token on GitHub &rarr;
+                                    </a>
+                                </div>
+
+                                {previewError && (
+                                    <p className="field-hint field-hint-bad">{previewError}</p>
+                                )}
+
+                                <button type="submit" className="btn btn-primary" disabled={previewing}>
+                                    {previewing ? "Checking..." : "Continue"}
+                                </button>
+
+                            </form>
+
+                            </>
+
+                        )}
+
+                        {step === "pick-repo" && (
+
+                            <>
+
+                            <div className="repo-picker-header">
+
+                                <div>
+                                    <h1 id="github-setup-title" className="setup-gate-title" style={{ textAlign: "left" }}>
+                                        {tokenOwner?.username ? `Hi, @${tokenOwner.username} — pick a repository` : "Pick a repository"}
+                                    </h1>
+                                    <p className="field-hint">
+                                        Every repo this token can see. Not seeing the one you want?{" "}
+                                        <button
+                                            type="button"
+                                            className="token-help-link"
+                                            style={{ background: "none", border: "none", padding: 0, cursor: "pointer" }}
+                                            onClick={() => setShowManualUrl((v) => !v)}
+                                        >
+                                            Enter a URL directly
+                                        </button>
+                                    </p>
+                                </div>
+
+                                {repos.length > 0 && (
+                                    <span className="repo-picker-count">
+                                        {totalCount} {totalCount === 1 ? "repository" : "repositories"}
+                                    </span>
+                                )}
+
+                            </div>
+
+                            {showManualUrl && (
+
+                                <form onSubmit={handleManualConnect} className="setup-gate-form" style={{ marginBottom: "16px" }}>
+
+                                    <div className="form-group">
+                                        <ClearableInput
+                                            placeholder="https://github.com/owner/repo"
+                                            value={manualUrl}
+                                            onChange={(e) => setManualUrl(e.target.value)}
+                                            onClear={() => setManualUrl("")}
+                                            autoComplete="off"
+                                            autoFocus
+                                        />
+                                    </div>
+
+                                    <button type="submit" className="btn btn-primary" disabled={connecting}>
+                                        {connecting ? "Connecting..." : "Use this URL"}
+                                    </button>
+
+                                </form>
+
+                            )}
+
+                            <SearchBox
+                                placeholder="Search repositories..."
+                                value={search}
+                                onChange={setSearch}
+                            />
+
+                            <div className="repo-picker-grid">
+
+                                {repos.length === 0 && (
+                                    <p className="empty-state">
+                                        That token can't see any repositories — check its scopes on GitHub,
+                                        or enter a repository URL directly above.
                                     </p>
                                 )}
+
+                                {repos.length > 0 && filteredRepos.length === 0 && (
+                                    <p className="empty-state">No repositories match "{search}".</p>
+                                )}
+
+                                {pageItems.map((repo) => (
+
+                                    <button
+                                        type="button"
+                                        key={repo.fullName}
+                                        className="repo-picker-card"
+                                        disabled={connecting}
+                                        onClick={() => connectTo(repo.owner, repo.name)}
+                                    >
+
+                                        <div className="repo-picker-title">
+                                            <RepoIcon />
+                                            <span className="repo-picker-name">
+                                                <span className="repo-picker-owner">{repo.owner}/</span>
+                                                {repo.name}
+                                            </span>
+                                        </div>
+
+                                        <div className="repo-picker-meta">
+                                            <span className={`badge ${repo.private ? "badge-secondary" : "badge-info"}`}>
+                                                {repo.private ? "Private" : "Public"}
+                                            </span>
+                                        </div>
+
+                                    </button>
+
+                                ))}
+
                             </div>
 
-                            <div className="form-group">
-                                <label>Personal Access Token</label>
-                                <input
-                                    type="password"
-                                    className="form-control"
-                                    placeholder="ghp_..."
-                                    value={token}
-                                    onChange={(e) => setToken(e.target.value)}
-                                    autoComplete="new-password"
-                                />
-                                <a
-                                    href="https://github.com/settings/tokens"
-                                    target="_blank"
-                                    rel="noreferrer"
-                                    className="token-help-link"
+                            {filteredRepos.length > PAGE_SIZE && (
+
+                                <div className="button-row" style={{ justifyContent: "center", margin: "8px 0" }}>
+
+                                    <button
+                                        type="button"
+                                        className="btn btn-secondary btn-sm"
+                                        disabled={page <= 1}
+                                        onClick={() => setPage(page - 1)}
+                                    >
+                                        ← Prev
+                                    </button>
+
+                                    <span className="field-hint">
+                                        {startIndex}–{endIndex} of {totalCount}
+                                    </span>
+
+                                    <button
+                                        type="button"
+                                        className="btn btn-secondary btn-sm"
+                                        disabled={page >= pageCount}
+                                        onClick={() => setPage(page + 1)}
+                                    >
+                                        Next →
+                                    </button>
+
+                                </div>
+
+                            )}
+
+                            <div>
+                                <button
+                                    type="button"
+                                    className="btn"
+                                    onClick={() => { setStep("token"); setPreviewError(""); }}
+                                    disabled={connecting}
                                 >
-                                    Generate a token on GitHub &rarr;
-                                </a>
+                                    ← Back
+                                </button>
                             </div>
 
-                            <button type="submit" className="btn btn-primary" disabled={saving}>
-                                {saving ? "Connecting..." : "Continue"}
-                            </button>
-
-                        </form>
-
-                        </>
+                            </>
 
                         )}
 

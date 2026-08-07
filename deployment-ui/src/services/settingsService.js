@@ -42,6 +42,15 @@ export const getMyGitHubUsername = async () => {
 
 };
 
+// Step 1 of RequireGitHubSetup's "Connect your repository" flow — previews
+// a token before it's saved anywhere, returning whose it is and every repo
+// it can see, so step 2 can offer "pick a repo" instead of requiring an
+// exact URL already known.
+export const previewGitHubToken = async (personalAccessToken) => {
+    const response = await settingsApi.post("/me/github/preview", { personalAccessToken });
+    return response.data;
+};
+
 // Session-scoped AWS/Azure credentials for the Environments detail view's
 // live cloud lookups — same per-visitor isolation as GitHub above.
 export const getMyAwsSettings = async () => {

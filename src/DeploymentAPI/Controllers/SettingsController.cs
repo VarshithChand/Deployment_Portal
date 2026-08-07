@@ -143,6 +143,18 @@ public class SettingsController : ControllerBase
         return Ok(new { Username = username });
     }
 
+    // Step 1 of RequireGitHubSetup's "Connect your repository" flow -
+    // previews a token that hasn't been saved anywhere yet (whose it is,
+    // every repo it can see) so step 2 can offer "pick a repo" instead of
+    // requiring an exact URL already known. No AdminGate: previewing your
+    // own not-yet-saved token needs no more permission than saving it does.
+    [HttpPost("me/github/preview")]
+    public async Task<IActionResult> PreviewMyGitHubToken(TokenPreviewRequestDto request)
+    {
+        var result = await _github.PreviewTokenAsync(request.PersonalAccessToken);
+        return Ok(result);
+    }
+
     // Same per-visitor isolation as GitHub above, for the Environments
     // detail view's live AWS ECS/ECR lookup — the credentials never leave
     // this browser's own session slot.
