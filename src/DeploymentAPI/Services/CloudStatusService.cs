@@ -4,6 +4,8 @@ using Amazon.ECR.Model;
 using Amazon.ECS;
 using Amazon.ECS.Model;
 using Amazon.Runtime;
+using Amazon.SecurityToken;
+using Amazon.SecurityToken.Model;
 using DeploymentAPI.DTOs;
 using Newtonsoft.Json.Linq;
 
@@ -21,6 +23,55 @@ public class CloudStatusService
 {
     private static readonly HttpClient AzureHttpClient = new();
 
+    // AWS has no username/password API — this is the real equivalent for
+    // an MFA-enrolled IAM user: their long-term access key authenticates
+    // to STS, the 6-digit device code proves the second factor, and STS
+    // hands back a temporary session that's what every subsequent AWS call
+    // actually uses (see BuildCredentials below). The code itself is never
+    // stored - only this resulting session is.
+    public async Task<AwsMfaVerificationResult> GetSessionTokenAsync(
+        string accessKeyId, string secretAccessKey, string region, string mfaSerialNumber, string mfaCode)
+    {
+        try
+        {
+            using var stsClient = new AmazonSecurityTokenServiceClient(
+                new BasicAWSCredentials(accessKeyId, secretAccessKey),
+                RegionEndpoint.GetBySystemName(region));
+
+            var response = await stsClient.GetSessionTokenAsync(new GetSessionTokenRequest
+            {
+                SerialNumber = mfaSerialNumber,
+                TokenCode = mfaCode,
+                DurationSeconds = 3600 * 12
+            });
+
+            var credentials = response.Credentials;
+
+            return new AwsMfaVerificationResult
+            {
+                Success = true,
+                Session = new AwsSessionCredentials(
+                    credentials.AccessKeyId,
+                    credentials.SecretAccessKey,
+                    credentials.SessionToken,
+                    credentials.Expiration ?? DateTime.UtcNow.AddHours(12))
+            };
+        }
+        catch (Exception ex)
+        {
+            return new AwsMfaVerificationResult
+            {
+                Success = false,
+                Error = $"MFA verification failed: {ex.Message}"
+            };
+        }
+    }
+
+    private static AWSCredentials BuildCredentials(UserAwsCredentials credentials) =>
+        credentials.HasValidSession
+            ? new SessionAWSCredentials(credentials.SessionAccessKeyId, credentials.SessionSecretAccessKey, credentials.SessionToken)
+            : new BasicAWSCredentials(credentials.AccessKeyId, credentials.SecretAccessKey);
+
     public async Task<CloudStatusDto> GetEcsAndEcrStatusAsync(
         UserAwsCredentials credentials,
         string? region,
@@ -33,6 +84,13 @@ public class CloudStatusService
 
         var result = new CloudStatusDto { Provider = "aws", Configured = true };
 
+        if (credentials.RequiresMfaRefresh)
+        {
+            result.Found = false;
+            result.Error = "Your MFA session has expired — re-enter your 6-digit code in Settings → Credentials → AWS.";
+            return result;
+        }
+
         var effectiveRegion = string.IsNullOrWhiteSpace(region) ? credentials.Region : region;
 
         if (string.IsNullOrWhiteSpace(effectiveRegion))
@@ -42,7 +100,7 @@ public class CloudStatusService
             return result;
         }
 
-        var awsCredentials = new BasicAWSCredentials(credentials.AccessKeyId, credentials.SecretAccessKey);
+        var awsCredentials = BuildCredentials(credentials);
         var regionEndpoint = RegionEndpoint.GetBySystemName(effectiveRegion);
 
         var anyTarget = false;

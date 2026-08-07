@@ -4,12 +4,18 @@ import ClearableInput from "../../common/ClearableInput";
 import useToast from "../../../hooks/useToast";
 import { getMyAwsSettings, saveMyAwsSettings, clearMyAwsCredentials } from "../../../services/settingsService";
 
-const EMPTY_FORM = { accessKeyId: "", secretAccessKey: "", region: "" };
+const EMPTY_FORM = { accessKeyId: "", secretAccessKey: "", region: "", mfaSerialNumber: "", mfaCode: "" };
 
 // Session-scoped (see PortalIdentity) — same isolation as your GitHub
 // token, kept only for this browser. Also powers the Environments page's
 // live AWS ECS/ECR status panel, which reads the exact same saved
 // credentials — entering them once here covers both.
+//
+// AWS has no username/password sign-in API - that only exists for the
+// Console web UI. Access Key ID + Secret Access Key are the real API-side
+// login; MFA Device + Code below are optional and, when used, are verified
+// against AWS itself (via STS) before anything is saved - a wrong code is
+// rejected exactly like a failed login, not silently stored.
 export default function AwsLoginSection() {
 
     const toast = useToast();
@@ -39,8 +45,15 @@ export default function AwsLoginSection() {
 
         try {
 
-            await saveMyAwsSettings(form);
-            toast.show("AWS credentials saved for this session.", "success");
+            const result = await saveMyAwsSettings(form);
+
+            toast.show(
+                result.mfaSessionActive
+                    ? "AWS MFA code verified — session active for the next 12 hours."
+                    : "AWS credentials saved for this session.",
+                "success"
+            );
+
             setForm(EMPTY_FORM);
             refresh();
 
@@ -77,6 +90,8 @@ export default function AwsLoginSection() {
 
     }
 
+    const mfaSessionExpired = !loading && status?.mfaEnrolled && !status?.mfaSessionActive;
+
     return (
 
         <div className="settings-subsection">
@@ -87,13 +102,25 @@ export default function AwsLoginSection() {
                 {!loading && status?.configured && (
                     <span className="badge badge-success">Configured</span>
                 )}
+                {" "}
+                {!loading && status?.mfaEnrolled && (
+                    status.mfaSessionActive
+                        ? <span className="badge badge-success">MFA Session Active</span>
+                        : <span className="badge badge-danger">MFA Session Expired</span>
+                )}
             </h3>
 
             <p className="empty-state" style={{ padding: "0 0 15px", textAlign: "left" }}>
-                Powers the Environments page's live ECS service and ECR image status. An IAM
-                user's access key with read access to ECS/ECR is enough — never sent anywhere
-                except this backend's own AWS calls made on your behalf.
+                Powers the Environments page's live ECS service and ECR image status. AWS has no
+                username/password API — an IAM user's access key is the real equivalent, and MFA
+                below (optional) is verified against AWS itself via STS before anything is saved.
             </p>
+
+            {mfaSessionExpired && (
+                <p className="error-message">
+                    Your MFA session has expired. Enter a fresh 6-digit code below to sign in again.
+                </p>
+            )}
 
             {loading ? (
 
@@ -139,10 +166,40 @@ export default function AwsLoginSection() {
                         />
                     </div>
 
+                    <div className="form-group">
+                        <label>MFA Device Serial Number (ARN) — optional</label>
+                        <ClearableInput
+                            placeholder="arn:aws:iam::123456789012:mfa/your-username"
+                            value={form.mfaSerialNumber}
+                            onChange={(e) => setForm({ ...form, mfaSerialNumber: e.target.value })}
+                            onClear={() => setForm({ ...form, mfaSerialNumber: "" })}
+                            autoComplete="off"
+                            name="aws-mfa-serial"
+                        />
+                    </div>
+
+                    <div className="form-group">
+                        <label>MFA Code (6 digits) — enter to sign in / refresh your session</label>
+                        <ClearableInput
+                            placeholder="123456"
+                            inputMode="numeric"
+                            maxLength={6}
+                            value={form.mfaCode}
+                            onChange={(e) => setForm({ ...form, mfaCode: e.target.value.replace(/\D/g, "") })}
+                            onClear={() => setForm({ ...form, mfaCode: "" })}
+                            autoComplete="off"
+                            name="aws-mfa-code"
+                        />
+                    </div>
+
                     <div className="button-row">
 
                         <button type="submit" className="btn btn-primary" disabled={saving}>
-                            {saving ? "Saving..." : "Save AWS Credentials"}
+                            {saving
+                                ? "Signing in..."
+                                : form.mfaCode
+                                    ? "Verify Code & Sign In"
+                                    : "Save AWS Credentials"}
                         </button>
 
                         {status?.configured && (

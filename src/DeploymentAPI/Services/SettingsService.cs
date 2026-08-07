@@ -237,13 +237,21 @@ public class SettingsService
         return new UserAwsCredentials(
             entry?["AccessKeyId"]?.ToString(),
             entry?["SecretAccessKey"]?.ToString(),
-            entry?["Region"]?.ToString());
+            entry?["Region"]?.ToString(),
+            entry?["MfaSerialNumber"]?.ToString(),
+            entry?["SessionAccessKeyId"]?.ToString(),
+            entry?["SessionSecretAccessKey"]?.ToString(),
+            entry?["SessionToken"]?.ToString(),
+            DateTime.TryParse(entry?["ExpiresAtUtc"]?.ToString(), out var expiresAt) ? expiresAt : null);
     }
 
     // Blank fields keep whatever was already saved (same as
     // SaveUserGitHubCredentialsAsync's token) - lets the region be updated
-    // without retyping the secret key, or vice versa.
-    public async Task SaveUserAwsCredentialsAsync(string key, AwsCredentialsUpdateDto update)
+    // without retyping the secret key, or vice versa. `session` is the
+    // temporary, MFA-verified credential set from a successful STS
+    // GetSessionToken call (see CloudStatusService/EnvironmentsController) -
+    // null when this save didn't involve MFA at all.
+    public async Task SaveUserAwsCredentialsAsync(string key, AwsCredentialsUpdateDto update, AwsSessionCredentials? session = null)
     {
         var root = await ReadRootAsync();
         var users = root["UserAwsCredentials"] as JObject ?? new JObject();
@@ -258,11 +266,22 @@ public class SettingsService
         if (!string.IsNullOrWhiteSpace(update.Region))
             entry["Region"] = update.Region.Trim();
 
+        if (!string.IsNullOrWhiteSpace(update.MfaSerialNumber))
+            entry["MfaSerialNumber"] = update.MfaSerialNumber.Trim();
+
+        if (session != null)
+        {
+            entry["SessionAccessKeyId"] = session.AccessKeyId;
+            entry["SessionSecretAccessKey"] = session.SecretAccessKey;
+            entry["SessionToken"] = session.SessionToken;
+            entry["ExpiresAtUtc"] = session.ExpiresAtUtc.ToString("o");
+        }
+
         users[key] = entry;
         root["UserAwsCredentials"] = users;
         await WriteRootAsync(root);
 
-        _log.LogInfo("Settings", "AWS credentials saved for a session.");
+        _log.LogInfo("Settings", "AWS credentials saved for a session." + (session != null ? " (MFA session verified)" : ""));
     }
 
     public async Task ClearUserAwsCredentialsAsync(string key)

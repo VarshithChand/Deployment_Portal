@@ -21,11 +21,13 @@ public class SettingsController : ControllerBase
 {
     private readonly SettingsService _settings;
     private readonly GitHubApiService _github;
+    private readonly CloudStatusService _cloud;
 
-    public SettingsController(SettingsService settings, GitHubApiService github)
+    public SettingsController(SettingsService settings, GitHubApiService github, CloudStatusService cloud)
     {
         _settings = settings;
         _github = github;
+        _cloud = cloud;
     }
 
     [HttpGet]
@@ -135,9 +137,21 @@ public class SettingsController : ControllerBase
         var key = PortalIdentity.GetOrCreateKey(HttpContext);
         var creds = await _settings.GetUserAwsCredentialsAsync(key);
 
-        return Ok(new { Configured = creds.IsConfigured, Region = creds.Region });
+        return Ok(new
+        {
+            Configured = creds.IsConfigured,
+            Region = creds.Region,
+            MfaEnrolled = creds.MfaEnrolled,
+            MfaSessionActive = creds.HasValidSession,
+            MfaSessionExpiresAtUtc = creds.ExpiresAtUtc
+        });
     }
 
+    // AWS has no username/password sign-in API - the access key/secret is
+    // the real "login," and when MfaSerialNumber+MfaCode are both present
+    // this verifies that second factor via STS GetSessionToken before
+    // saving anything, exactly like a real login would reject a wrong MFA
+    // code rather than silently storing bad credentials.
     [HttpPost("me/aws")]
     public async Task<IActionResult> SaveMyAws(AwsCredentialsUpdateDto request)
     {
@@ -148,15 +162,36 @@ public class SettingsController : ControllerBase
         // secret would still be missing after that merge.
         var existing = await _settings.GetUserAwsCredentialsAsync(key);
 
-        var hasAccessKey = !string.IsNullOrWhiteSpace(request.AccessKeyId) || !string.IsNullOrWhiteSpace(existing.AccessKeyId);
-        var hasSecret = !string.IsNullOrWhiteSpace(request.SecretAccessKey) || !string.IsNullOrWhiteSpace(existing.SecretAccessKey);
+        var effectiveAccessKey = string.IsNullOrWhiteSpace(request.AccessKeyId) ? existing.AccessKeyId : request.AccessKeyId;
+        var effectiveSecret = string.IsNullOrWhiteSpace(request.SecretAccessKey) ? existing.SecretAccessKey : request.SecretAccessKey;
+        var effectiveRegion = string.IsNullOrWhiteSpace(request.Region) ? existing.Region : request.Region;
 
-        if (!hasAccessKey || !hasSecret)
+        if (string.IsNullOrWhiteSpace(effectiveAccessKey) || string.IsNullOrWhiteSpace(effectiveSecret))
             return BadRequest(new { message = "Access key ID and secret access key are required." });
 
-        await _settings.SaveUserAwsCredentialsAsync(key, request);
+        AwsSessionCredentials? session = null;
 
-        return Ok(new { Configured = true });
+        if (!string.IsNullOrWhiteSpace(request.MfaCode))
+        {
+            var mfaSerial = string.IsNullOrWhiteSpace(request.MfaSerialNumber) ? existing.MfaSerialNumber : request.MfaSerialNumber;
+
+            if (string.IsNullOrWhiteSpace(mfaSerial))
+                return BadRequest(new { message = "An MFA device serial number is required to verify a code." });
+
+            if (string.IsNullOrWhiteSpace(effectiveRegion))
+                return BadRequest(new { message = "A region is required to verify an MFA code." });
+
+            var verification = await _cloud.GetSessionTokenAsync(effectiveAccessKey, effectiveSecret, effectiveRegion, mfaSerial, request.MfaCode);
+
+            if (!verification.Success)
+                return BadRequest(new { message = verification.Error ?? "MFA verification failed." });
+
+            session = verification.Session;
+        }
+
+        await _settings.SaveUserAwsCredentialsAsync(key, request, session);
+
+        return Ok(new { Configured = true, MfaSessionActive = session != null });
     }
 
     [HttpDelete("me/aws")]
