@@ -110,6 +110,55 @@ public class GitHubApiService
     }
 
     //===========================================================
+    // User Repositories (Dashboard's "Public Repository Lookup" —
+    // typing a bare username instead of a full repo URL)
+    //===========================================================
+
+    public async Task<UserRepositoriesPreviewDto> PreviewUserRepositoriesAsync(string username)
+    {
+        var client = _auth.CreateClient();
+
+        var encodedUsername = Uri.EscapeDataString(username);
+
+        try
+        {
+            var reposJson = await HttpClientHelper.GetAsync(
+                client,
+                $"https://api.github.com/users/{encodedUsername}/repos?per_page=100&sort=updated");
+
+            var repos = JArray.Parse(reposJson);
+
+            return new UserRepositoriesPreviewDto
+            {
+                Found = true,
+                Username = username,
+                Repositories = repos.Select(repo => new UserRepoSummaryDto
+                {
+                    Owner = repo["owner"]?["login"]?.ToString() ?? username,
+                    Name = repo["name"]?.ToString() ?? string.Empty,
+                    Description = repo["description"]?.ToString() ?? string.Empty,
+                    Private = (bool?)repo["private"] ?? false,
+                    Stars = (int?)repo["stargazers_count"] ?? 0,
+                    DefaultBranch = repo["default_branch"]?.ToString() ?? string.Empty,
+                    HtmlUrl = repo["html_url"]?.ToString() ?? string.Empty,
+                    UpdatedAt = ParseGitHubDate(repo["updated_at"])
+                }).ToList()
+            };
+        }
+        catch (HttpRequestException ex)
+        {
+            return new UserRepositoriesPreviewDto
+            {
+                Found = false,
+                Username = username,
+                Error = ex.StatusCode == HttpStatusCode.NotFound
+                    ? "No GitHub user found with that username."
+                    : ex.Message
+            };
+        }
+    }
+
+    //===========================================================
     // Rate Limit (shown next to "Public view" in the top bar)
     //===========================================================
 

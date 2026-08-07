@@ -82,3 +82,10 @@ export const previewGitHubRepository = async (owner, repository) => {
     });
     return response.data;
 };
+
+export const previewGitHubUserRepositories = async (username) => {
+    const response = await settingsApi.get("/github/preview-user", {
+        params: { username }
+    });
+    return response.data;
+};

@@ -61,6 +61,18 @@ public class SettingsController : ControllerBase
         return Ok(await _github.PreviewRepositoryAsync(owner, repository));
     }
 
+    // Dashboard's "Public Repository Lookup" — typing a bare GitHub
+    // username instead of a full repo URL, listing every public repo
+    // that username owns so the caller can pick one.
+    [HttpGet("github/preview-user")]
+    public async Task<IActionResult> PreviewGitHubUser([FromQuery] string username)
+    {
+        if (string.IsNullOrWhiteSpace(username))
+            return BadRequest("username is required.");
+
+        return Ok(await _github.PreviewUserRepositoriesAsync(username));
+    }
+
     // Every visitor manages their own GitHub repo + token — no AdminGate,
     // no [Authorize], no GitHub OAuth login required at all. PortalIdentity
     // resolves who's asking: a real GitHub login if one exists, otherwise
