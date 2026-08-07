@@ -283,6 +283,19 @@ public class SettingsController : ControllerBase
         return Ok();
     }
 
+    // "Clear All Data" for a non-admin - resets only the caller's own
+    // credentials (GitHub, AWS, Azure, GCP). No AdminGate here, same
+    // reasoning as every /me/* endpoint above: nobody needs admin rights
+    // to reset data that's already scoped to their own session. Clearing
+    // the shared, portal-wide sections (Docker/OAuth/Sonar) stays behind
+    // Clear("all") below, which does require admin.
+    [HttpDelete("me/all")]
+    public async Task<IActionResult> ClearMyAll()
+    {
+        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        return Ok(await _settings.ClearMyCredentialsAsync(key));
+    }
+
     // Changing shared, portal-wide credentials or the admin allowlist is
     // restricted to admins — without this, any anonymous visitor could
     // point the Docker registry at their own account, point the OAuth app

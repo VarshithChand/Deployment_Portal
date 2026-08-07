@@ -14,6 +14,7 @@ import {
     saveUserSidebarAccess,
     clearUserSidebarAccess,
     clearSettings,
+    clearMySettings,
     previewGitHubRepository
 } from "../services/settingsService";
 import { getAccountRepositories } from "../services/githubService";
@@ -797,16 +798,29 @@ export default function Settings() {
     // that everywhere — and with this session's own GitHub token gone,
     // that reload lands back on RequireGitHubSetup's "connect your repo"
     // gate automatically.
+    //
+    // Non-admins get a narrower version: only their own GitHub/AWS/Azure/
+    // GCP credentials, via /me/all (no AdminGate - resetting your own data
+    // never needed admin rights for any of these individually either).
+    // The shared, portal-wide sections (Docker/OAuth/Sonar) only an admin
+    // can touch, via clearSettings("all") - previously this whole button
+    // was wired to that admin-only endpoint regardless of who clicked it,
+    // so a normal user resetting just their own token hit "Admin login
+    // required" for no reason.
     async function handleClearAll() {
+
+        const message = isAdmin
+            ? "Clear ALL saved data? This removes your GitHub repository URL and token, your " +
+              "AWS/Azure/GCP credentials, the Docker credentials, OAuth settings, and Sonar " +
+              "settings. The admin allowlist is kept as-is — this won't affect who has admin " +
+              "access. Other users' own GitHub repo/token are untouched — this only clears " +
+              "yours. This cannot be undone."
+            : "Clear all your saved data? This removes your GitHub repository URL and token, " +
+              "plus your AWS/Azure/GCP credentials. This cannot be undone.";
 
         if (!(await confirm({
             title: "Clear all data?",
-            message:
-                "Clear ALL saved data? This removes your GitHub repository URL and token, your " +
-                "AWS/Azure/GCP credentials, the Docker credentials, OAuth settings, and Sonar " +
-                "settings. The admin allowlist is kept as-is — this won't affect who has admin " +
-                "access. Other users' own GitHub repo/token are untouched — this only clears " +
-                "yours. This cannot be undone.",
+            message,
             confirmLabel: "Clear All Data",
             danger: true
         }))) {
@@ -817,7 +831,7 @@ export default function Settings() {
 
             setClearingAll(true);
 
-            await clearSettings("all");
+            await (isAdmin ? clearSettings("all") : clearMySettings());
 
             toast.show("All data cleared — reconnect your GitHub repository to continue.", "success");
 

@@ -96,6 +96,15 @@ export const clearSettings = async (section) => {
     return response.data;
 };
 
+// "Clear All Data" for a non-admin — resets only the caller's own
+// GitHub/AWS/Azure/GCP credentials, no admin required. The shared,
+// portal-wide sections (Docker/OAuth/Sonar) are what clearSettings("all")
+// additionally wipes, which stays admin-only.
+export const clearMySettings = async () => {
+    const response = await settingsApi.delete("/me/all");
+    return response.data;
+};
+
 // The caller's own restrictions — used by Sidebar/App's route guard, safe
 // for anyone to read since it can only ever resolve to their own session.
 export const getSidebarAccess = async () => {

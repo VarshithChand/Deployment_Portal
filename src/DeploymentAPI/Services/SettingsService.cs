@@ -507,27 +507,14 @@ public class SettingsService
         ["sonar"] = ("Sonar", "Token")
     };
 
-    // Unlike a per-section clear (which only removes the secret, leaving the
-    // registry / client ID in place), "all" wipes every shared, portal-wide
-    // section entirely, plus the caller's own GitHub/AWS/Azure/GCP
-    // credentials — resetting everything back to unconfigured, first-run
-    // state. "Auth" (the admin allowlist) is deliberately the one exception:
-    // wiping it used to drop the whole portal into bootstrap mode (anyone
-    // is Admin until it's reconfigured), which is a much bigger blast
-    // radius than "reset my own data" implies - keeping it intact means
-    // whoever is already admin stays admin, and everyone else still lands
-    // back on RequireGitHubSetup's repo/token gate once their own
-    // UserGitHubCredentials entry is gone. Only the CALLER's own entries
-    // in the per-user credential maps are removed (other users' stay
-    // intact - "all" for one visitor never reaches into another's data).
-    // Jwt is deliberately left alone so existing sessions/cookies stay valid.
-    public async Task<SettingsViewDto> ClearAllAsync(string callerKey)
+    // Resets just the CALLER's own credentials (GitHub, AWS, Azure, GCP) -
+    // no admin required to call this, same as saving any one of them isn't
+    // admin-gated either (see SaveUserGitHubCredentialsAsync etc.). Other
+    // visitors' own entries are untouched - this never reaches into
+    // another session's data.
+    public async Task<SettingsViewDto> ClearMyCredentialsAsync(string callerKey)
     {
         var root = await ReadRootAsync();
-
-        root.Remove("Docker");
-        root.Remove("GitHubOAuth");
-        root.Remove("Sonar");
 
         if (root["UserGitHubCredentials"] is JObject githubUsers)
             githubUsers.Remove(callerKey);
@@ -543,9 +530,35 @@ public class SettingsService
 
         await WriteRootAsync(root);
 
-        _log.LogInfo("Settings", "All settings cleared (admin allowlist kept) — this session reset to unconfigured state.");
+        _log.LogInfo("Settings", "One visitor's own credentials cleared (GitHub/AWS/Azure/GCP).");
 
         return BuildView(root);
+    }
+
+    // The admin version of the button above: everything ClearMyCredentialsAsync
+    // does, PLUS every shared, portal-wide section (Docker, GitHubOAuth,
+    // Sonar) - resetting the whole portal back to unconfigured, first-run
+    // state for everyone, not just the caller. Admin-gated at the
+    // controller because those sections affect every visitor, not just
+    // whoever clicked the button. "Auth" (the admin allowlist) is
+    // deliberately the one exception even here: wiping it used to drop the
+    // whole portal into bootstrap mode (anyone is Admin until it's
+    // reconfigured) as a side effect of a reset button - a much bigger
+    // blast radius than intended. Jwt is deliberately left alone too, so
+    // existing sessions/cookies stay valid.
+    public async Task<SettingsViewDto> ClearAllAsync(string callerKey)
+    {
+        var root = await ReadRootAsync();
+
+        root.Remove("Docker");
+        root.Remove("GitHubOAuth");
+        root.Remove("Sonar");
+
+        await WriteRootAsync(root);
+
+        _log.LogInfo("Settings", "Shared portal-wide settings cleared (admin allowlist kept).");
+
+        return await ClearMyCredentialsAsync(callerKey);
     }
 
     public async Task<SettingsViewDto> ClearAsync(string section)
