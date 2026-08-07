@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 
-import { getMyGitHubSettings, saveMyGitHubSettings } from "../services/settingsService";
+import { getMyGitHubSettings, saveMyGitHubSettings, getMyGitHubUsername } from "../services/settingsService";
 import parseRepoUrl from "../utils/parseRepoUrl";
 import useToast from "../hooks/useToast";
 import ClearableInput from "./common/ClearableInput";
@@ -27,6 +27,12 @@ export default function RequireGitHubSetup({ children }) {
     const [repoUrl, setRepoUrl] = useState("");
     const [token, setToken] = useState("");
     const [saving, setSaving] = useState(false);
+
+    // Set once the token's saved and its owner looked up — shown in place
+    // of the form for a beat before the reload, so "Continue" doesn't just
+    // silently vanish into a page refresh with no confirmation of whose
+    // account actually got connected.
+    const [connectedAs, setConnectedAs] = useState(null);
 
     useEffect(() => {
 
@@ -76,15 +82,23 @@ export default function RequireGitHubSetup({ children }) {
                 personalAccessToken: token
             });
 
+            // A separate request from the save above — GitHubAuthService
+            // loads credentials once per request, so this has to ask again
+            // to see what was just saved rather than reusing the save's
+            // own response.
+            const username = await getMyGitHubUsername();
+
             toast.show(`Connected to ${parsed.owner}/${parsed.repository}.`, "success");
+            setConnectedAs({ username, owner: parsed.owner, repository: parsed.repository });
 
             // Full reload, not just dismissing the popup — Dashboard and
             // every other page already mounted and fetched (and failed,
             // with no repo configured yet) the moment this popup appeared
             // behind it, and none of them know to refetch on their own just
             // because this component's local state changes. Same reasoning
-            // as Settings.jsx's own save button.
-            setTimeout(() => window.location.reload(), 900);
+            // as Settings.jsx's own save button. Held a beat longer than
+            // before so there's time to actually read who/what connected.
+            setTimeout(() => window.location.reload(), 1600);
 
         }
         catch (err) {
@@ -118,6 +132,30 @@ export default function RequireGitHubSetup({ children }) {
                     >
 
                         <Logo showEyebrow={false} size={40} />
+
+                        {connectedAs ? (
+
+                            <>
+
+                            <h1 id="github-setup-title" className="setup-gate-title">
+                                Connected
+                            </h1>
+
+                            <p className="field-hint" style={{ textAlign: "center" }}>
+                                {connectedAs.username ? (
+                                    <>Signed in as <strong>@{connectedAs.username}</strong>, connected to{" "}</>
+                                ) : (
+                                    <>Connected to{" "}</>
+                                )}
+                                <strong>{connectedAs.owner}/{connectedAs.repository}</strong>.
+                                Loading the portal...
+                            </p>
+
+                            </>
+
+                        ) : (
+
+                        <>
 
                         <h1 id="github-setup-title" className="setup-gate-title">
                             Connect your GitHub repository
@@ -175,6 +213,10 @@ export default function RequireGitHubSetup({ children }) {
                             </button>
 
                         </form>
+
+                        </>
+
+                        )}
 
                     </div>
 

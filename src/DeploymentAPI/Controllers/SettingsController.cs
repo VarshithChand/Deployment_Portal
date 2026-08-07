@@ -22,12 +22,14 @@ public class SettingsController : ControllerBase
     private readonly SettingsService _settings;
     private readonly GitHubApiService _github;
     private readonly CloudStatusService _cloud;
+    private readonly GitHubAuthService _githubAuth;
 
-    public SettingsController(SettingsService settings, GitHubApiService github, CloudStatusService cloud)
+    public SettingsController(SettingsService settings, GitHubApiService github, CloudStatusService cloud, GitHubAuthService githubAuth)
     {
         _settings = settings;
         _github = github;
         _cloud = cloud;
+        _githubAuth = githubAuth;
     }
 
     [HttpGet]
@@ -126,6 +128,19 @@ public class SettingsController : ControllerBase
         var key = PortalIdentity.GetOrCreateKey(HttpContext);
         await _settings.ClearUserGitHubTokenAsync(key);
         return Ok();
+    }
+
+    // Read-only confirmation of whose token this actually is - GitHubAuthService
+    // is loaded fresh per request (see the middleware in Program.cs), so
+    // calling this right after SaveMyGitHub (a separate request) picks up
+    // whatever was just saved. Not folded into GetMyGitHub itself: that one's
+    // called on every page load, and this costs a real GitHub API call each
+    // time, worth paying only when RequireGitHubSetup actually wants to show it.
+    [HttpGet("me/github/username")]
+    public async Task<IActionResult> GetMyGitHubUsername()
+    {
+        var username = await _githubAuth.GetAuthenticatedLoginAsync();
+        return Ok(new { Username = username });
     }
 
     // Same per-visitor isolation as GitHub above, for the Environments

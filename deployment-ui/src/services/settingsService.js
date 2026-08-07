@@ -22,6 +22,26 @@ export const clearMyGitHubToken = async () => {
     return response.data;
 };
 
+// Read-only confirmation of whose token is actually configured — a real
+// GitHub API call, so this is only fetched when actually shown (right
+// after connecting), not on every page load the way getMyGitHubSettings is.
+export const getMyGitHubUsername = async () => {
+
+    try {
+
+        const response = await settingsApi.get("/me/github/username");
+        return response.data.username;
+
+    }
+    catch (error) {
+
+        console.error("Unable to fetch GitHub username:", error);
+        return null;
+
+    }
+
+};
+
 // Session-scoped AWS/Azure credentials for the Environments detail view's
 // live cloud lookups — same per-visitor isolation as GitHub above.
 export const getMyAwsSettings = async () => {
