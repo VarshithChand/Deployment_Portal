@@ -15,6 +15,12 @@ namespace DeploymentAPI.Services;
 // `with:` block) isn't overwritten by a looser text match.
 public static class DeploymentTargetDetector
 {
+    // Every Regex.Match call below gets this explicit timeout (SonarCloud
+    // S6444) — the patterns are simple and non-backtracking by design, but
+    // an explicit bound means a workflow YAML crafted to trigger
+    // catastrophic backtracking fails fast instead of hanging the request.
+    private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(2);
+
     public static DetectedDeploymentTargetDto Detect(string yamlText)
     {
         var result = new DetectedDeploymentTargetDto();
@@ -125,7 +131,8 @@ public static class DeploymentTargetDetector
         }
 
         // <account-id>.dkr.ecr.<region>.amazonaws.com/<repository>[:tag]
-        var ecrImage = Regex.Match(yamlText, @"\d{6,}\.dkr\.ecr\.([\w-]+)\.amazonaws\.com/([\w./-]+)");
+        var ecrImage = Regex.Match(
+            yamlText, @"\d{6,}\.dkr\.ecr\.([\w-]+)\.amazonaws\.com/([\w./-]+)", RegexOptions.None, RegexTimeout);
 
         if (ecrImage.Success)
         {
@@ -159,7 +166,7 @@ public static class DeploymentTargetDetector
     // belonging to some later, unrelated command can't get pulled in.
     private static string? ExtractCommandWindow(string text, string commandPattern)
     {
-        var start = Regex.Match(text, commandPattern);
+        var start = Regex.Match(text, commandPattern, RegexOptions.None, RegexTimeout);
 
         if (!start.Success)
             return null;
@@ -172,7 +179,7 @@ public static class DeploymentTargetDetector
     // searched for independently rather than assuming a fixed sequence.
     private static string? ExtractFlag(string commandText, string flag)
     {
-        var match = Regex.Match(commandText, $@"{Regex.Escape(flag)}[\s=]+(\S+)");
+        var match = Regex.Match(commandText, $@"{Regex.Escape(flag)}[\s=]+(\S+)", RegexOptions.None, RegexTimeout);
         return match.Success ? match.Groups[1].Value.Trim('"', '\'', '\\') : null;
     }
 }

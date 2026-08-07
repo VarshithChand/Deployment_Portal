@@ -82,7 +82,7 @@ export default function ExternalApisView() {
 
     const availableClusters = [...new Set(
         parsed.map((endpoint) => (endpoint.cluster ? `Cluster ${endpoint.cluster}` : "Unknown Cluster"))
-    )].sort();
+    )].sort((a, b) => a.localeCompare(b));
 
     const visibleVersions = availableVersions.filter(
         (key) => versionFilter === "all" || key === versionFilter
@@ -298,7 +298,7 @@ export default function ExternalApisView() {
                             versionKey,
                             clusters: Object.keys(grouped[versionKey])
                                 .filter((key) => clusterFilter === "all" || key === clusterFilter)
-                                .sort()
+                                .sort((a, b) => a.localeCompare(b))
                                 .map((clusterKey) => ({
                                     clusterKey,
                                     endpoints: grouped[versionKey][clusterKey].filter(
