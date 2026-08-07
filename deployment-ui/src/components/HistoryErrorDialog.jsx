@@ -16,6 +16,7 @@ export default function HistoryErrorDialog({ open, jobError, onClose }) {
 
     const [analysis, setAnalysis] = useState(null);
     const [analyzing, setAnalyzing] = useState(false);
+    const [analyzeFailed, setAnalyzeFailed] = useState(false);
 
     useEffect(() => {
 
@@ -23,6 +24,7 @@ export default function HistoryErrorDialog({ open, jobError, onClose }) {
 
             setAnalysis(null);
             setAnalyzing(false);
+            setAnalyzeFailed(false);
             return;
 
         }
@@ -30,6 +32,7 @@ export default function HistoryErrorDialog({ open, jobError, onClose }) {
         let cancelled = false;
 
         setAnalysis(null);
+        setAnalyzeFailed(false);
         setAnalyzing(true);
 
         analyzeRunError(jobError).then((result) => {
@@ -37,6 +40,7 @@ export default function HistoryErrorDialog({ open, jobError, onClose }) {
             if (!cancelled) {
 
                 setAnalysis(result);
+                setAnalyzeFailed(!result?.explanation);
                 setAnalyzing(false);
 
             }
@@ -123,6 +127,14 @@ export default function HistoryErrorDialog({ open, jobError, onClose }) {
                         </strong>
 
                     </div>
+
+                )}
+
+                {!analyzing && analyzeFailed && (
+
+                    <p className="field-hint" style={{ marginBottom: "16px" }}>
+                        Couldn't reach the explanation service just now — the raw message below is still complete.
+                    </p>
 
                 )}
 
