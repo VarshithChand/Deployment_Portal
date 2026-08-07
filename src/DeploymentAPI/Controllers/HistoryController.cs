@@ -1,3 +1,4 @@
+using DeploymentAPI.DTOs;
 using DeploymentAPI.Services;
 using Microsoft.AspNetCore.Mvc;
 
@@ -8,10 +9,12 @@ namespace DeploymentAPI.Controllers;
 public class HistoryController : ControllerBase
 {
     private readonly GitHubApiService _service;
+    private readonly ErrorAnalysisService _analysis;
 
-    public HistoryController(GitHubApiService service)
+    public HistoryController(GitHubApiService service, ErrorAnalysisService analysis)
     {
         _service = service;
+        _analysis = analysis;
     }
 
     [HttpGet("runs")]
@@ -40,5 +43,16 @@ public class HistoryController : ControllerBase
     {
         var errors = await _service.GetWorkflowRunErrorsAsync(id);
         return Ok(errors);
+    }
+
+    // Backs the "View full message" popup's plain-English explanation -
+    // tries GitHub Models against this visitor's own PAT first, falls
+    // back to a built-in heuristic when that's unavailable. See
+    // ErrorAnalysisService for why this never just errors out instead.
+    [HttpPost("errors/analyze")]
+    public async Task<IActionResult> AnalyzeError(AnalyzeErrorRequestDto request)
+    {
+        var result = await _analysis.AnalyzeAsync(request);
+        return Ok(result);
     }
 }

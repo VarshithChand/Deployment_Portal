@@ -56,3 +56,26 @@ export const getRunErrors = async (runId) => {
     }
 
 };
+
+export const analyzeRunError = async (jobError) => {
+
+    try {
+
+        const response = await historyApi.post("/errors/analyze", {
+            jobName: jobError.jobName,
+            failedStep: jobError.failedStep,
+            messages: jobError.messages || []
+        });
+
+        return response.data;
+
+    }
+    catch (error) {
+
+        console.error("Unable to analyze run error:", error);
+
+        return null;
+
+    }
+
+};

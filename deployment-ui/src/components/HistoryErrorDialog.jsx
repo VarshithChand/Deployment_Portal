@@ -1,12 +1,54 @@
+import { useEffect, useState } from "react";
+
 import useToast from "../hooks/useToast";
 import StatusBadge from "./StatusBadge";
+import { analyzeRunError } from "../services/historyService";
 
 // Shows a job's full failure detail in-app - the inline row already
 // summarizes it, but long/multi-line annotation text gets cramped there.
-// This is the "don't make me open GitHub" escape hatch.
+// This is the "don't make me open GitHub" escape hatch. It also kicks off
+// a plain-English explanation of the raw text on open (GitHub Models
+// against this visitor's own token, falling back to a built-in pattern
+// library server-side when that's unavailable - see ErrorAnalysisService).
 export default function HistoryErrorDialog({ open, jobError, onClose }) {
 
     const toast = useToast();
+
+    const [analysis, setAnalysis] = useState(null);
+    const [analyzing, setAnalyzing] = useState(false);
+
+    useEffect(() => {
+
+        if (!open || !jobError) {
+
+            setAnalysis(null);
+            setAnalyzing(false);
+            return;
+
+        }
+
+        let cancelled = false;
+
+        setAnalysis(null);
+        setAnalyzing(true);
+
+        analyzeRunError(jobError).then((result) => {
+
+            if (!cancelled) {
+
+                setAnalysis(result);
+                setAnalyzing(false);
+
+            }
+
+        });
+
+        return () => {
+            cancelled = true;
+        };
+
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [open, jobError?.jobName, jobError?.failedStep]);
 
     if (!open || !jobError) {
         return null;
@@ -16,6 +58,7 @@ export default function HistoryErrorDialog({ open, jobError, onClose }) {
 
         jobError.jobName,
         jobError.failedStep ? `Failed step: ${jobError.failedStep}` : null,
+        analysis?.explanation ? `\nExplanation: ${analysis.explanation}` : null,
         "",
         jobError.messages && jobError.messages.length > 0
             ? jobError.messages.join("\n\n")
@@ -57,6 +100,30 @@ export default function HistoryErrorDialog({ open, jobError, onClose }) {
                     <p className="field-hint">
                         Failed on the <strong>"{jobError.failedStep}"</strong> step.
                     </p>
+                )}
+
+                {analyzing && (
+
+                    <p className="empty-state" style={{ textAlign: "left" }}>
+                        Analyzing what went wrong...
+                    </p>
+
+                )}
+
+                {!analyzing && analysis?.explanation && (
+
+                    <div className="info-row" style={{ display: "block", border: "none", padding: "0 0 16px" }}>
+
+                        <span style={{ display: "block", marginBottom: "6px" }}>
+                            {analysis.source === "ai" ? "AI explanation" : "Explanation"}
+                        </span>
+
+                        <strong style={{ fontWeight: 400, display: "block" }}>
+                            {analysis.explanation}
+                        </strong>
+
+                    </div>
+
                 )}
 
                 {jobError.messages && jobError.messages.length > 0 ? (
