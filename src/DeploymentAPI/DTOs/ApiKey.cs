@@ -17,4 +17,9 @@ public class ApiKey
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
     public bool Revoked { get; set; }
+
+    // The PortalIdentity session key of whoever created this key - resolved
+    // to a friendly GitHub login for display (see
+    // SecurityApiKeysController.GetAll), same as the Users tab's PAT owners.
+    public string OwnerKey { get; set; } = string.Empty;
 }

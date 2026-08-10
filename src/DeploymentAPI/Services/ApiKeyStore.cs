@@ -25,7 +25,10 @@ public class ApiKeyStore
     // Generates a cryptographically random key (RandomNumberGenerator, not
     // Random), returns it exactly once, and stores only its SHA-256 hash
     // plus a short prefix — the raw key can't be recovered after this call.
-    public CreatedApiKeyDto Create(CreateApiKeyRequest request)
+    // ownerKey is the creating session's PortalIdentity key (see
+    // SecurityApiKeysController.Create), resolved to a friendly GitHub
+    // login for display whenever this list is read back.
+    public CreatedApiKeyDto Create(CreateApiKeyRequest request, string ownerKey)
     {
         var rawKey = "sk_" + Convert.ToHexString(RandomNumberGenerator.GetBytes(24)).ToLowerInvariant();
         var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(rawKey))).ToLowerInvariant();
@@ -39,7 +42,8 @@ public class ApiKeyStore
                 Prefix = rawKey[..11], // "sk_" + 8 hex chars — enough to tell keys apart
                 HashedKey = hash,
                 CreatedAt = DateTime.UtcNow,
-                Revoked = false
+                Revoked = false,
+                OwnerKey = ownerKey
             };
 
             _keys.Add(key);
@@ -52,6 +56,7 @@ public class ApiKeyStore
                 Prefix = dto.Prefix,
                 CreatedAt = dto.CreatedAt,
                 Revoked = dto.Revoked,
+                OwnerKey = dto.OwnerKey,
                 Key = rawKey
             };
         }
@@ -81,12 +86,17 @@ public class ApiKeyStore
         }
     }
 
+    // OwnerLogin isn't filled in here - ApiKeyStore has no way to resolve a
+    // session key to a GitHub identity itself (that needs SettingsService).
+    // SecurityApiKeysController.GetAll does that resolution afterward,
+    // using ApiKeyDto's own OwnerKey field as the lookup key.
     private static ApiKeyDto ToDto(ApiKey key) => new()
     {
         Id = key.Id,
         Name = key.Name,
         Prefix = key.Prefix,
         CreatedAt = key.CreatedAt,
-        Revoked = key.Revoked
+        Revoked = key.Revoked,
+        OwnerKey = key.OwnerKey
     };
 }

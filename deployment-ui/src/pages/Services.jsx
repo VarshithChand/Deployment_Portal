@@ -522,51 +522,43 @@ export default function Services() {
 
                     ) : (
 
-                        <div className="table-scroll">
+                        <div className="api-key-grid">
 
-                        <table className="table">
+                        {apiKeys.map((k) => (
 
-                            <thead>
-                                <tr>
-                                    <th>Name</th>
-                                    <th>Prefix</th>
-                                    <th>Status</th>
-                                    <th>Created</th>
-                                    <th></th>
-                                </tr>
-                            </thead>
+                            <div key={k.id} className="repo-preview api-key-card">
 
-                            <tbody>
+                                <div className="api-key-card-header">
 
-                                {apiKeys.map((k) => (
+                                    <strong>{k.name}</strong>
 
-                                    <tr key={k.id}>
-                                        <td>{k.name}</td>
-                                        <td className="commit-sha">{k.prefix}...</td>
-                                        <td>
-                                            <span className={`badge ${k.revoked ? "badge-danger" : "badge-success"}`}>
-                                                {k.revoked ? "revoked" : "active"}
-                                            </span>
-                                        </td>
-                                        <td>{new Date(k.createdAt).toLocaleDateString()}</td>
-                                        <td>
-                                            {!k.revoked && (
-                                                <button
-                                                    type="button"
-                                                    className="btn btn-danger btn-sm"
-                                                    onClick={() => handleRevokeKey(k.id, k.name)}
-                                                >
-                                                    Revoke
-                                                </button>
-                                            )}
-                                        </td>
-                                    </tr>
+                                    <span className={`badge ${k.revoked ? "badge-danger" : "badge-success"}`}>
+                                        {k.revoked ? "revoked" : "active"}
+                                    </span>
 
-                                ))}
+                                </div>
 
-                            </tbody>
+                                <code className="commit-sha">{k.prefix}...</code>
 
-                        </table>
+                                <p className="api-key-card-meta">
+                                    Owner: {k.ownerLogin}
+                                    <br />
+                                    Created {new Date(k.createdAt).toLocaleDateString()}
+                                </p>
+
+                                {!k.revoked && (
+                                    <button
+                                        type="button"
+                                        className="btn btn-danger btn-sm"
+                                        onClick={() => handleRevokeKey(k.id, k.name)}
+                                    >
+                                        Revoke
+                                    </button>
+                                )}
+
+                            </div>
+
+                        ))}
 
                         </div>
 
