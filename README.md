@@ -422,6 +422,32 @@ To build everything in the repo at once instead of one project at a time:
 dotnet build Demo-Patch-CICD.slnx
 ```
 
+### Reaching them from a separately-hosted frontend (e.g. Cloudflare Workers)
+
+The Services page's AdminAPI/PMSCoreAPI/SecurityAPI tabs call these three by a relative
+path (`/admin-api/api`, `/pmscore-api/api`, `/security-api/api`), which only resolves via
+the Vite dev proxy or `nginx.conf`'s reverse proxy above — a plain static host (Cloudflare
+Workers/Pages with no server-side proxy, as in section 7b) has neither, so those tabs fail
+with "Unable to reach AdminAPI. Is it running?" there by default.
+
+To fix that, deploy each service somewhere reachable (Fly.io, same as section 7a), then at
+frontend build time set:
+```
+VITE_ADMIN_API_BASE_URL = https://YOUR-ADMIN-API.fly.dev
+VITE_PMSCORE_API_BASE_URL = https://YOUR-PMSCORE-API.fly.dev
+VITE_SECURITY_API_BASE_URL = https://YOUR-SECURITY-API.fly.dev
+```
+(no trailing slash on any of them), and point each service's own CORS at the frontend's
+origin, the same way section 7c does for the main backend:
+```bash
+fly secrets set Cors__AllowedOrigins__0=https://your-project.pages.dev -a YOUR-ADMIN-API
+fly secrets set Cors__AllowedOrigins__0=https://your-project.pages.dev -a YOUR-PMSCORE-API
+fly secrets set Cors__AllowedOrigins__0=https://your-project.pages.dev -a YOUR-SECURITY-API
+```
+Leaving any of the three `VITE_*_BASE_URL` variables unset keeps that service on the old
+relative-path behavior (dev proxy / Docker only) — set only the ones you've actually
+deployed.
+
 ---
 
 ## Troubleshooting

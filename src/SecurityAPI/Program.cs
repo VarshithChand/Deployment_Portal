@@ -8,6 +8,23 @@ builder.Services.AddSwaggerGen();
 builder.Services.AddSingleton<AuditLogStore>();
 builder.Services.AddSingleton<ApiKeyStore>();
 
+// See AdminAPI/Program.cs for why this exists - same reasoning, needed
+// once frontend and this API are on different origins.
+var corsOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>()
+    ?? new[] { "http://localhost:5173" };
+
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("ReactPolicy", policy =>
+    {
+        policy
+            .WithOrigins(corsOrigins)
+            .AllowAnyHeader()
+            .AllowAnyMethod()
+            .AllowCredentials();
+    });
+});
+
 var app = builder.Build();
 
 if (app.Environment.IsDevelopment())
@@ -17,6 +34,8 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
+
+app.UseCors("ReactPolicy");
 
 app.UseAuthorization();
 
