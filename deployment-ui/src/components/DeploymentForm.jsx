@@ -484,7 +484,7 @@ export default function DeploymentForm({
 
             toast.show(
 
-                "Deployment Failed",
+                error.response?.data?.message || "Deployment Failed",
 
                 "error"
 
