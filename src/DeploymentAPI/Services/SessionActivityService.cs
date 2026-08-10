@@ -13,13 +13,17 @@ public class SessionActivityService
     private readonly ConcurrentDictionary<string, DateTime> _lastSeen = new();
     private readonly ConcurrentDictionary<string, DateTime> _forceLogoutAfter = new();
     private readonly ConcurrentDictionary<string, string> _lastUserAgent = new();
+    private readonly ConcurrentDictionary<string, string> _lastIpAddress = new();
 
-    public void Touch(string key, string? userAgent = null)
+    public void Touch(string key, string? userAgent = null, string? ipAddress = null)
     {
         _lastSeen[key] = DateTime.UtcNow;
 
         if (!string.IsNullOrWhiteSpace(userAgent))
             _lastUserAgent[key] = userAgent;
+
+        if (!string.IsNullOrWhiteSpace(ipAddress))
+            _lastIpAddress[key] = ipAddress;
     }
 
     public DateTime? GetLastSeen(string key) =>
@@ -29,6 +33,12 @@ public class SessionActivityService
     // into the "Windows · Chrome" style label the Users tab shows.
     public string? GetLastUserAgent(string key) =>
         _lastUserAgent.TryGetValue(key, out var ua) ? ua : null;
+
+    // Resolved from X-Forwarded-For via ASP.NET Core's own forwarded-
+    // headers middleware (see Program.cs's UseForwardedHeaders) - the
+    // real client address, not Render's own proxy.
+    public string? GetLastIpAddress(string key) =>
+        _lastIpAddress.TryGetValue(key, out var ip) ? ip : null;
 
     // Stamped "now" - GlobalLogoutMonitor treats any change to this value
     // (polled per-session via GET /api/auth/session-epoch) as "sign out,"

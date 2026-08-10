@@ -321,7 +321,8 @@ app.Use(async (context, next) =>
     }
 
     var userAgent = context.Request.Headers.UserAgent.ToString();
-    context.RequestServices.GetRequiredService<SessionActivityService>().Touch(key, userAgent);
+    var ipAddress = context.Connection.RemoteIpAddress?.ToString();
+    context.RequestServices.GetRequiredService<SessionActivityService>().Touch(key, userAgent, ipAddress);
 
     await next();
 });

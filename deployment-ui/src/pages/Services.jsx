@@ -44,6 +44,7 @@ export default function Services() {
 
     const [users, setUsers] = useState([]);
     const [accessModalUser, setAccessModalUser] = useState(null);
+    const [deviceInfoUser, setDeviceInfoUser] = useState(null);
 
     async function loadUsers() {
 
@@ -243,7 +244,11 @@ export default function Services() {
     function switchSection(next) {
 
         setSection(next);
-        if (next !== "users") setAccessModalUser(null);
+
+        if (next !== "users") {
+            setAccessModalUser(null);
+            setDeviceInfoUser(null);
+        }
 
         if (next === "users") loadUsers();
         else if (next === "projects") loadProjects();
@@ -329,7 +334,16 @@ export default function Services() {
                                                 <span className="badge badge-success">Fully visible</span>
                                             )}
                                         </td>
-                                        <td>{u.device}</td>
+                                        <td>
+                                            <button
+                                                type="button"
+                                                className="btn btn-link"
+                                                onClick={() => setDeviceInfoUser(u)}
+                                                title="Show IP address"
+                                            >
+                                                {u.device}
+                                            </button>
+                                        </td>
                                         <td>
                                             {u.lastActiveUtc
                                                 ? new Date(u.lastActiveUtc).toLocaleString()
@@ -409,6 +423,47 @@ export default function Services() {
                         onClose={() => setAccessModalUser(null)}
                         onSaved={loadUsers}
                     />
+
+                )}
+
+                {deviceInfoUser && (
+
+                    <div
+                        className="dialog-backdrop"
+                        role="presentation"
+                        onClick={() => setDeviceInfoUser(null)}
+                        onKeyDown={(e) => { if (e.key === "Escape") setDeviceInfoUser(null); }}
+                    >
+
+                        <div
+                            className="dialog"
+                            role="alertdialog"
+                            aria-modal="true"
+                            aria-labelledby="device-info-title"
+                            onClick={(e) => e.stopPropagation()}
+                            onKeyDown={(e) => e.stopPropagation()}
+                        >
+
+                            <h2 id="device-info-title">
+                                {deviceInfoUser.patOwnerLogin}
+                            </h2>
+
+                            <p>
+                                <strong>Device:</strong> {deviceInfoUser.device}
+                                <br />
+                                <strong>IP address:</strong>{" "}
+                                {deviceInfoUser.ipAddress || "Unknown — not seen since restart"}
+                            </p>
+
+                            <div>
+                                <button type="button" className="btn" onClick={() => setDeviceInfoUser(null)}>
+                                    Close
+                                </button>
+                            </div>
+
+                        </div>
+
+                    </div>
 
                 )}
 

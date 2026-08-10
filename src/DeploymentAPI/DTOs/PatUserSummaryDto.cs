@@ -38,4 +38,9 @@ public class PatUserSummaryDto
     // Helpers.DeviceInfo.Describe) - same in-memory/reset-on-restart
     // caveat as LastActiveUtc.
     public string Device { get; set; } = "Unknown device";
+
+    // The real client address (via X-Forwarded-For, see
+    // SessionActivityService.GetLastIpAddress) from that session's last
+    // request - same in-memory/reset-on-restart caveat as LastActiveUtc.
+    public string? IpAddress { get; set; }
 }
