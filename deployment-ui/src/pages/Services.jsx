@@ -36,7 +36,6 @@ export default function Services() {
     const { confirm, dialog } = useConfirm();
 
     const [section, setSection] = useState("users");
-    const [loaded, setLoaded] = useState({ users: false, projects: false, security: false });
 
     // ---------- Users ----------
     // Real PAT users (see AdminUsersController) - read-only, since a PAT
@@ -60,11 +59,6 @@ export default function Services() {
             toast.show(err.response?.data?.message || "Failed to load PAT users.", "error");
 
         }
-        finally {
-
-            setLoaded((l) => ({ ...l, users: true }));
-
-        }
 
     }
 
@@ -83,6 +77,7 @@ export default function Services() {
 
             await forceLogoutUser(user.key);
             toast.show(`Signed out '${user.patOwnerLogin}'.`, "success");
+            loadUsers();
 
         }
         catch (err) {
@@ -161,11 +156,6 @@ export default function Services() {
             toast.show(err.response?.data?.message || "Failed to load environments.", "error");
 
         }
-        finally {
-
-            setLoaded((l) => ({ ...l, projects: true }));
-
-        }
 
     }
 
@@ -189,11 +179,6 @@ export default function Services() {
 
             console.error(err);
             toast.show(err.response?.data?.message || "Failed to load security data.", "error");
-
-        }
-        finally {
-
-            setLoaded((l) => ({ ...l, security: true }));
 
         }
 
@@ -247,13 +232,20 @@ export default function Services() {
 
     }
 
+    // Always refetches on switch rather than caching "already loaded once"
+    // - a section whose first load failed (a transient blip, a moment of
+    // session flux around login/admin status) used to stay stuck empty
+    // forever, since nothing ever retried it. Also closes the sidebar-
+    // access popup if it was left open when navigating away from Users,
+    // so it doesn't keep floating over whichever section you switch to.
     function switchSection(next) {
 
         setSection(next);
+        if (next !== "users") setAccessModalUser(null);
 
-        if (next === "users" && !loaded.users) loadUsers();
-        else if (next === "projects" && !loaded.projects) loadProjects();
-        else if (next === "security" && !loaded.security) loadSecurity();
+        if (next === "users") loadUsers();
+        else if (next === "projects") loadProjects();
+        else if (next === "security") loadSecurity();
 
     }
 
