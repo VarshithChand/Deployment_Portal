@@ -129,13 +129,6 @@ builder.Services.AddSingleton<CloudStatusService>();
 // Singleton itself - safe to share the same way.
 builder.Services.AddSingleton<AwsSsoService>();
 
-// Backs the Services page's "Security (SecurityAPI)" tab's API Keys
-// panel — the one sample-data panel left on that page without a real
-// portal equivalent to point at instead (Users/Projects/Audit Log now
-// read PAT users, Environments, and the real activity log respectively -
-// see AdminUsersController/PmsCoreProjectsController/SecurityAuditLogController).
-builder.Services.AddSingleton<ApiKeyStore>();
-
 // Per-session last-active/force-logout state for the Services page's
 // Users tab (see AdminUsersController) - in-memory, same lifetime
 // rationale as ActivityLogService.

@@ -1,3 +1,5 @@
+using System.Security.Cryptography;
+using System.Text;
 using DeploymentAPI.DTOs;
 using Newtonsoft.Json.Linq;
 using Npgsql;
@@ -800,6 +802,92 @@ public class SettingsService
         }
 
         _log.LogInfo("Settings", $"PAT user '{key}' unblocked by admin.");
+    }
+
+    // Backs the Services page's "Security" tab's API Keys panel — persisted
+    // like everything else here now, so a redeploy/restart doesn't wipe
+    // them the way the old purely in-memory ApiKeyStore did.
+    public async Task<List<ApiKey>> GetApiKeysAsync()
+    {
+        var root = await ReadRootAsync();
+        var array = root["ApiKeys"] as JArray;
+
+        return array?
+            .Select(x => x.ToObject<ApiKey>())
+            .Where(x => x != null)
+            .Select(x => x!)
+            .ToList() ?? new List<ApiKey>();
+    }
+
+    // Generates a cryptographically random key (RandomNumberGenerator, not
+    // Random) and returns the raw value exactly once — only its SHA-256
+    // hash plus a short prefix are ever persisted, the same as GitHub/
+    // Stripe-style tokens. ownerKey is the creating session's
+    // PortalIdentity key, resolved to a friendly GitHub login by
+    // SecurityApiKeysController whenever this list is read back.
+    public async Task<(ApiKey Entry, string RawKey)> CreateApiKeyAsync(string name, string ownerKey)
+    {
+        var rawKey = "sk_" + Convert.ToHexString(RandomNumberGenerator.GetBytes(24)).ToLowerInvariant();
+        var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(rawKey))).ToLowerInvariant();
+
+        var root = await ReadRootAsync();
+        var array = root["ApiKeys"] as JArray ?? new JArray();
+
+        var nextId = array.Count == 0
+            ? 1
+            : array.Max(x => x["Id"]?.Value<int>() ?? 0) + 1;
+
+        var entry = new ApiKey
+        {
+            Id = nextId,
+            Name = string.IsNullOrWhiteSpace(name) ? "Unnamed key" : name,
+            Prefix = rawKey[..11], // "sk_" + 8 hex chars — enough to tell keys apart
+            HashedKey = hash,
+            CreatedAt = DateTime.UtcNow,
+            Revoked = false,
+            OwnerKey = ownerKey
+        };
+
+        array.Add(JObject.FromObject(entry));
+        root["ApiKeys"] = array;
+        await WriteRootAsync(root);
+
+        _log.LogInfo("Settings", $"API key '{entry.Name}' created.");
+
+        return (entry, rawKey);
+    }
+
+    public async Task<bool> RevokeApiKeyAsync(int id)
+    {
+        var root = await ReadRootAsync();
+
+        if (root["ApiKeys"] is not JArray array)
+            return false;
+
+        var entry = array.FirstOrDefault(x => x["Id"]?.Value<int>() == id) as JObject;
+
+        if (entry == null)
+            return false;
+
+        entry["Revoked"] = true;
+        await WriteRootAsync(root);
+
+        _log.LogInfo("Settings", $"API key #{id} revoked.");
+
+        return true;
+    }
+
+    // Would be how an incoming request's key gets checked against what's
+    // stored — hash the presented key and compare, never the raw values.
+    // Nothing in this app calls this yet (no endpoint actually requires
+    // one of these keys) - kept as the validation path anything that
+    // later does would use.
+    public async Task<bool> IsApiKeyValidAsync(string presentedKey)
+    {
+        var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(presentedKey))).ToLowerInvariant();
+        var keys = await GetApiKeysAsync();
+
+        return keys.Any(k => !k.Revoked && k.HashedKey == hash);
     }
 
     private static async Task<string?> ResolvePatOwnerLoginAsync(string token)

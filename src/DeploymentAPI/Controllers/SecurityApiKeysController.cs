@@ -5,26 +5,25 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace DeploymentAPI.Controllers;
 
-// Backs the Services page's "Security (SecurityAPI)" tab's API Keys
-// panel — see ApiKeyStore for why this lives in DeploymentAPI itself
-// rather than a separate origin.
+// Backs the Services page's "Security" tab's API Keys panel — persisted
+// through SettingsService (see SettingsService.GetApiKeysAsync) rather
+// than an in-memory store, so keys survive a redeploy/restart the same
+// way every other admin-managed setting in this app already does.
 [ApiController]
 [Route("api/security/api-keys")]
 public class SecurityApiKeysController : ControllerBase
 {
-    private readonly ApiKeyStore _keys;
     private readonly SettingsService _settings;
 
-    public SecurityApiKeysController(ApiKeyStore keys, SettingsService settings)
+    public SecurityApiKeysController(SettingsService settings)
     {
-        _keys = keys;
         _settings = settings;
     }
 
     [HttpGet]
     public async Task<IActionResult> GetAll()
     {
-        var keys = _keys.GetAll();
+        var keys = await _settings.GetApiKeysAsync();
 
         // One batched lookup instead of one GitHub API call per key -
         // GetPatUsersAsync already resolves every PAT user's real GitHub
@@ -32,26 +31,56 @@ public class SecurityApiKeysController : ControllerBase
         // same list rather than resolving anything itself.
         var patUsers = await _settings.GetPatUsersAsync();
 
-        foreach (var key in keys)
-        {
-            var owner = patUsers.FirstOrDefault(u => u.Key == key.OwnerKey);
-            if (owner != null) key.OwnerLogin = owner.PatOwnerLogin;
-        }
+        var dtos = keys
+            .OrderBy(k => k.Id)
+            .Select(k => ToDto(k, patUsers))
+            .ToList();
 
-        return Ok(keys);
+        return Ok(dtos);
     }
 
-    // Returns the raw key exactly once — see ApiKeyStore.Create.
+    // Returns the raw key exactly once — see SettingsService.CreateApiKeyAsync.
     [HttpPost]
-    public IActionResult Create(CreateApiKeyRequest request)
+    public async Task<IActionResult> Create(CreateApiKeyRequest request)
     {
         var ownerKey = PortalIdentity.GetOrCreateKey(HttpContext);
-        return Ok(_keys.Create(request, ownerKey));
+        var (entry, rawKey) = await _settings.CreateApiKeyAsync(request.Name, ownerKey);
+
+        var patUsers = await _settings.GetPatUsersAsync();
+        var dto = ToDto(entry, patUsers);
+
+        return Ok(new CreatedApiKeyDto
+        {
+            Id = dto.Id,
+            Name = dto.Name,
+            Prefix = dto.Prefix,
+            CreatedAt = dto.CreatedAt,
+            Revoked = dto.Revoked,
+            OwnerKey = dto.OwnerKey,
+            OwnerLogin = dto.OwnerLogin,
+            Key = rawKey
+        });
     }
 
     [HttpDelete("{id}")]
-    public IActionResult Revoke(int id)
+    public async Task<IActionResult> Revoke(int id)
     {
-        return _keys.Revoke(id) ? NoContent() : NotFound();
+        return await _settings.RevokeApiKeyAsync(id) ? NoContent() : NotFound();
+    }
+
+    private static ApiKeyDto ToDto(ApiKey key, List<PatUserSummaryDto> patUsers)
+    {
+        var owner = patUsers.FirstOrDefault(u => u.Key == key.OwnerKey);
+
+        return new ApiKeyDto
+        {
+            Id = key.Id,
+            Name = key.Name,
+            Prefix = key.Prefix,
+            CreatedAt = key.CreatedAt,
+            Revoked = key.Revoked,
+            OwnerKey = key.OwnerKey,
+            OwnerLogin = owner?.PatOwnerLogin ?? "Unknown owner"
+        };
     }
 }
