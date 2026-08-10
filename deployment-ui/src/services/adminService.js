@@ -6,10 +6,10 @@ export const getUsers = async () => await api.get("/users");
 
 // Ends that one session immediately - see GlobalLogoutMonitor's
 // mySessionForceLogoutEpoch handling for how it takes effect.
-export const forceLogoutUser = async (key) => await api.post(`/${encodeURIComponent(key)}/logout`);
+export const forceLogoutUser = async (key) => await api.post(`/users/${encodeURIComponent(key)}/logout`);
 
 // Rejected outright on every request from then on, even with a still-
 // valid token - see the block-check middleware in Program.cs.
-export const blockUser = async (key) => await api.post(`/${encodeURIComponent(key)}/block`);
+export const blockUser = async (key) => await api.post(`/users/${encodeURIComponent(key)}/block`);
 
-export const unblockUser = async (key) => await api.post(`/${encodeURIComponent(key)}/unblock`);
+export const unblockUser = async (key) => await api.post(`/users/${encodeURIComponent(key)}/unblock`);
