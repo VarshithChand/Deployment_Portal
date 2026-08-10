@@ -1,4 +1,7 @@
+using System.Security.Cryptography;
+using System.Text;
 using DeploymentAPI.Helpers;
+using Microsoft.Extensions.Caching.Memory;
 using Newtonsoft.Json.Linq;
 
 namespace DeploymentAPI.Services;
@@ -20,16 +23,28 @@ public class GitHubAuthService
 {
     private readonly SettingsService _settings;
     private readonly IHttpContextAccessor _httpContextAccessor;
+    private readonly IMemoryCache _cache;
 
     private string _owner = string.Empty;
     private string _repository = string.Empty;
     private string? _personalAccessToken;
     private bool _loaded;
 
-    public GitHubAuthService(SettingsService settings, IHttpContextAccessor httpContextAccessor)
+    // Every admin-gated action (Deploy, Block/Unblock/Delete a PAT user,
+    // Sidebar Access, ...) calls GetAuthenticatedLoginAsync below to check
+    // "is this token's owner an admin" - uncached, that's a live GitHub
+    // call on literally every one of those, which both burns through the
+    // token's own rate limit fast under heavy admin use and means a
+    // transient rate-limit hit on THIS specific call (even from unrelated
+    // traffic sharing the same limit) makes every admin action fail with
+    // "Admin login required," despite the token being perfectly valid.
+    private static readonly TimeSpan LoginCacheDuration = TimeSpan.FromSeconds(60);
+
+    public GitHubAuthService(SettingsService settings, IHttpContextAccessor httpContextAccessor, IMemoryCache cache)
     {
         _settings = settings;
         _httpContextAccessor = httpContextAccessor;
+        _cache = cache;
     }
 
     public async Task LoadAsync()
@@ -85,15 +100,20 @@ public class GitHubAuthService
     // Who this request's configured Personal Access Token actually belongs
     // to, per GitHub itself — used by AdminGate to let someone act as admin
     // through their own per-session PAT instead of also requiring a
-    // separate GitHub OAuth login. Deliberately uncached and per-request:
-    // GitHubApiService's caches are keyed by owner/repo, not by session or
-    // token, so two sessions configured for the same repo with two
-    // different accounts' tokens could otherwise read each other's cached
-    // identity — fine for repo metadata, not for an admin decision.
+    // separate GitHub OAuth login. Cached for LoginCacheDuration, keyed by
+    // a hash of the token itself rather than owner/repo or session - two
+    // sessions with two different accounts' tokens naturally land on two
+    // different cache keys, so this can't leak one session's resolved
+    // identity into another's the way keying by owner/repo could.
     public async Task<string?> GetAuthenticatedLoginAsync()
     {
         if (!HasToken)
             return null;
+
+        var cacheKey = $"gh-login:{ComputeTokenFingerprint(_personalAccessToken!)}";
+
+        if (_cache.TryGetValue(cacheKey, out string? cachedLogin))
+            return cachedLogin;
 
         using var client = CreateClient();
 
@@ -105,11 +125,21 @@ public class GitHubAuthService
                 return null;
 
             var json = await response.Content.ReadAsStringAsync();
-            return JObject.Parse(json)["login"]?.ToString();
+            var login = JObject.Parse(json)["login"]?.ToString();
+
+            _cache.Set(cacheKey, login, LoginCacheDuration);
+
+            return login;
         }
         catch
         {
             return null;
         }
     }
+
+    // A cache key derived from the token, never the raw token itself - so
+    // a memory dump or the IMemoryCache's own key enumeration never
+    // exposes an actual valid credential, just an opaque fingerprint of one.
+    private static string ComputeTokenFingerprint(string token) =>
+        Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(token)))[..16];
 }
