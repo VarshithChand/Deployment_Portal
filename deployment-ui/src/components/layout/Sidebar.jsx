@@ -52,8 +52,11 @@ const TABS = [
 // Admin-only, same as Settings > Sidebar Access / Activity Log — there's
 // one shared Sonar project for the whole repo (not scoped per PAT user),
 // and the backend rejects a non-admin outright (see SonarController), so
-// showing this tab to anyone else would just be a dead end.
-const ADMIN_ONLY_TABS = new Set(["codeQuality"]);
+// showing this tab to anyone else would just be a dead end. Services is
+// admin-only for the same reason: its Users/Audit Log tabs now read the
+// real PAT-users list and activity log (see AdminUsersController/
+// SecurityAuditLogController), both already admin-gated server-side.
+const ADMIN_ONLY_TABS = new Set(["codeQuality", "services"]);
 
 const STORAGE_KEY = "sidebar-collapsed";
 

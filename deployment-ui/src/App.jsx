@@ -26,11 +26,10 @@ import useNavigation from "./hooks/useNavigation";
 import useAuth from "./hooks/useAuth";
 import useToast from "./hooks/useToast";
 
-// Admin-only regardless of Sidebar Access state — there's one shared Sonar
-// project for the whole repo, and the backend rejects a non-admin outright
-// (see SonarController), so a direct/bookmarked link needs the same guard
-// the Sidebar tab itself already gets (see Sidebar.jsx's ADMIN_ONLY_TABS).
-const ADMIN_ONLY_TABS = new Set(["codeQuality"]);
+// Admin-only regardless of Sidebar Access state — same guard the Sidebar
+// tabs themselves already get (see Sidebar.jsx's ADMIN_ONLY_TABS), needed
+// here too so a direct/bookmarked link can't bypass it.
+const ADMIN_ONLY_TABS = new Set(["codeQuality", "services"]);
 
 function App(){
 
