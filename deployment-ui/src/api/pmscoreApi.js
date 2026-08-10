@@ -1,10 +1,5 @@
-import axios from "axios";
+import { createApiClient } from "./apiBase";
 
-// Relative path by default, proxied to PMSCoreAPI — see adminApi.js for
-// why, and for what VITE_PMSCORE_API_BASE_URL is for.
-const PMSCORE_API_BASE = import.meta.env.VITE_PMSCORE_API_BASE_URL || "/pmscore-api";
-
-export default axios.create({
-    baseURL: `${PMSCORE_API_BASE}/api`,
-    withCredentials: true
-});
+// See adminApi.js for why this is a plain API_BASE-routed client now
+// instead of a separately-hosted PMSCoreAPI.
+export default createApiClient("/api/pmscore");

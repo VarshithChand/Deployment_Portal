@@ -1,10 +1,5 @@
-import axios from "axios";
+import { createApiClient } from "./apiBase";
 
-// Relative path by default, proxied to SecurityAPI — see adminApi.js for
-// why, and for what VITE_SECURITY_API_BASE_URL is for.
-const SECURITY_API_BASE = import.meta.env.VITE_SECURITY_API_BASE_URL || "/security-api";
-
-export default axios.create({
-    baseURL: `${SECURITY_API_BASE}/api`,
-    withCredentials: true
-});
+// See adminApi.js for why this is a plain API_BASE-routed client now
+// instead of a separately-hosted SecurityAPI.
+export default createApiClient("/api/security");

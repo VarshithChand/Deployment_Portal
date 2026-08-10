@@ -422,31 +422,19 @@ To build everything in the repo at once instead of one project at a time:
 dotnet build Demo-Patch-CICD.slnx
 ```
 
-### Reaching them from a separately-hosted frontend (e.g. Cloudflare Workers)
+### The Services page doesn't need any of the above running
 
-The Services page's AdminAPI/PMSCoreAPI/SecurityAPI tabs call these three by a relative
-path (`/admin-api/api`, `/pmscore-api/api`, `/security-api/api`), which only resolves via
-the Vite dev proxy or `nginx.conf`'s reverse proxy above — a plain static host (Cloudflare
-Workers/Pages with no server-side proxy, as in section 7b) has neither, so those tabs fail
-with "Unable to reach AdminAPI. Is it running?" there by default.
+The Services page's "Users / Projects / Security" tabs (the sample admin-panel-style demo)
+call `/api/admin/*`, `/api/pmscore/*`, and `/api/security/*` on DeploymentAPI itself —
+DeploymentAPI has its own small in-memory copy of the same sample data (see
+`Services/UserStore.cs`, `ProjectStore.cs`, `ApiKeyStore.cs`, `AuditLogStore.cs`), so that
+page works out of the box wherever DeploymentAPI itself is reachable, with no separate
+proxy, deployment, or CORS setup for AdminAPI/PMSCoreAPI/SecurityAPI required.
 
-To fix that, deploy each service somewhere reachable (Fly.io, same as section 7a), then at
-frontend build time set:
-```
-VITE_ADMIN_API_BASE_URL = https://YOUR-ADMIN-API.fly.dev
-VITE_PMSCORE_API_BASE_URL = https://YOUR-PMSCORE-API.fly.dev
-VITE_SECURITY_API_BASE_URL = https://YOUR-SECURITY-API.fly.dev
-```
-(no trailing slash on any of them), and point each service's own CORS at the frontend's
-origin, the same way section 7c does for the main backend:
-```bash
-fly secrets set Cors__AllowedOrigins__0=https://your-project.pages.dev -a YOUR-ADMIN-API
-fly secrets set Cors__AllowedOrigins__0=https://your-project.pages.dev -a YOUR-PMSCORE-API
-fly secrets set Cors__AllowedOrigins__0=https://your-project.pages.dev -a YOUR-SECURITY-API
-```
-Leaving any of the three `VITE_*_BASE_URL` variables unset keeps that service on the old
-relative-path behavior (dev proxy / Docker only) — set only the ones you've actually
-deployed.
+The three standalone projects above are unrelated to that page — they exist purely as real,
+independently deployable sample apps for this portal's actual CI/CD pipelines to build and
+release (the `Release Admin API` / `Release PMSCore API` / `Release Security API` workflows,
+the Environments page defaults, `Docker Build and Push.yml`, etc.).
 
 ---
 

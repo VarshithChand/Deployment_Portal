@@ -1,16 +1,9 @@
-import axios from "axios";
+import { createApiClient } from "./apiBase";
 
-// Relative path by default, proxied to AdminAPI by vite.config.js in dev
-// and by nginx.conf in a Docker build - same-origin there, so no CORS
-// needed. Set VITE_ADMIN_API_BASE_URL at build time when AdminAPI is
-// hosted separately from the frontend (e.g. this Cloudflare-hosted
-// frontend calling an AdminAPI deployed on its own, with no proxy in
-// between) - see apiBase.js's VITE_API_BASE_URL for the same pattern on
-// the main backend. AdminAPI's own CORS (see AdminAPI/Program.cs) must
-// then list this frontend's origin.
-const ADMIN_API_BASE = import.meta.env.VITE_ADMIN_API_BASE_URL || "/admin-api";
-
-export default axios.create({
-    baseURL: `${ADMIN_API_BASE}/api`,
-    withCredentials: true
-});
+// Same origin as every other client here now — the Services page's
+// "Users (AdminAPI)" tab used to call a separately-hosted AdminAPI via a
+// relative /admin-api/api path that only worked behind a dev/Docker
+// proxy; DeploymentAPI now has its own built-in copy of these endpoints
+// (see Services/UserStore.cs), so this is just a normal API_BASE-routed
+// client like the rest of the app.
+export default createApiClient("/api/admin");
