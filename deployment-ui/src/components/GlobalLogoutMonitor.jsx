@@ -6,9 +6,9 @@ import performLogout from "../utils/performLogout";
 
 const POLL_MS = 15000;
 
-// Runs for every visitor, logged in or not - unlike IdleLogoutMonitor
-// (which only has an OAuth `user` to expire), this reacts to two portal-
-// side signals from GET /api/auth/session-epoch:
+// Runs for every visitor, logged in or not - unlike PeriodicSignOutMonitor
+// (which only runs for a session with something worth protecting), this
+// reacts to two portal-side signals from GET /api/auth/session-epoch:
 //   - forceLogoutEpoch: portal-wide, bumped whenever someone triggers a
 //     deployment (see SettingsService.BumpForceLogoutEpochAsync).
 //   - mySessionForceLogoutEpoch: scoped to just this caller's own session,

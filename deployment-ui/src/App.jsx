@@ -20,7 +20,7 @@ import Sidebar from "./components/layout/Sidebar";
 import Footer from "./components/layout/Footer";
 import ErrorBoundary from "./components/common/ErrorBoundary";
 import RequireGitHubSetup from "./components/RequireGitHubSetup";
-import IdleLogoutMonitor from "./components/IdleLogoutMonitor";
+import PeriodicSignOutMonitor from "./components/PeriodicSignOutMonitor";
 import GlobalLogoutMonitor from "./components/GlobalLogoutMonitor";
 import useNavigation from "./hooks/useNavigation";
 import useAuth from "./hooks/useAuth";
@@ -74,7 +74,7 @@ function App(){
 
             <TopBar />
 
-            <IdleLogoutMonitor />
+            <PeriodicSignOutMonitor />
             <GlobalLogoutMonitor />
 
             <RequireGitHubSetup>

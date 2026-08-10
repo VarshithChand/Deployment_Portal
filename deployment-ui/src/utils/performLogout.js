@@ -3,11 +3,12 @@ import { logout as logoutRequest } from "../services/authService";
 // Clears the auth cookie (a harmless no-op when there wasn't one - e.g. a
 // PAT-only/Public view session was never OAuth-logged-in to begin with)
 // then forces a full navigation back to Dashboard, so nothing already
-// rendered on screen survives. Shared by IdleLogoutMonitor (inactivity/
-// backgrounding) and GlobalLogoutMonitor (a pipeline run signaling every
-// session to sign out) - both want the same clean-slate landing that
-// Settings' own "Clear All Data" uses. `reason` is carried as a query
-// param so AuthContext can toast a specific explanation after the reload.
+// rendered on screen survives. Used by GlobalLogoutMonitor (a pipeline
+// run, or an admin's force-logout, signaling this session to sign out) -
+// unlike utils/performSelfClear.js, this never clears any saved
+// credentials, since neither of those situations means anything was
+// actually lost. `reason` is carried as a query param so AuthContext can
+// toast a specific explanation after the reload.
 export default async function performLogout(reason) {
 
     try {

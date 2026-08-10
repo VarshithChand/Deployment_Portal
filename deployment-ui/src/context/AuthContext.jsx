@@ -125,10 +125,10 @@ export default function AuthProvider({ children }) {
 
         }
 
-        // Left behind by performLogout() (see IdleLogoutMonitor and
-        // GlobalLogoutMonitor) after the hard reload it triggers, so
-        // whoever lands back here understands why they're signed out
-        // instead of it looking like an unexplained reset.
+        // Left behind by performLogout()/performSelfClear() (see
+        // GlobalLogoutMonitor and PeriodicSignOutMonitor) after the hard
+        // reload either one triggers, so whoever lands back here
+        // understands why instead of it looking like an unexplained reset.
         const loggedOut = params.get("loggedOut");
 
         if (loggedOut) {
@@ -138,9 +138,9 @@ export default function AuthProvider({ children }) {
                     ? "You were signed out — a deployment was just triggered."
                     : loggedOut === "admin"
                     ? "You were signed out by the portal admin."
-                    : loggedOut === "background"
-                    ? "You were signed out after switching away for a while."
-                    : "You were signed out after a period of inactivity."
+                    : loggedOut === "cleared"
+                    ? "You were signed out and your saved credentials were cleared."
+                    : "You were signed out."
             );
 
             params.delete("loggedOut");
