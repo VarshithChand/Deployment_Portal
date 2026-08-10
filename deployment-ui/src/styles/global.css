@@ -3147,6 +3147,81 @@ textarea{
 
 }
 
+/* ==========================================
+   BLOCKED OVERLAY
+   Full-screen frosted-glass lockout shown by GlobalLogoutMonitor while
+   an admin has this session blocked - above everything else on the
+   page, including toasts (.toast-stack is z-index:1100), since the
+   point is to visibly and completely stop interaction, not add one more
+   thing competing for attention.
+========================================== */
+
+.blocked-overlay{
+
+    position:fixed;
+
+    inset:0;
+
+    z-index:1400;
+
+    display:flex;
+
+    align-items:center;
+
+    justify-content:center;
+
+    padding:20px;
+
+    background:rgba(15,23,42,.6);
+
+    backdrop-filter:blur(10px);
+
+    -webkit-backdrop-filter:blur(10px);
+
+    animation:overlay-in .25s ease both;
+
+}
+
+.blocked-overlay-content{
+
+    background:var(--card-bg);
+
+    color:var(--text);
+
+    border-radius:12px;
+
+    padding:32px;
+
+    width:100%;
+
+    max-width:420px;
+
+    text-align:center;
+
+    box-shadow:0 10px 30px rgba(0,0,0,.35);
+
+    animation:dialog-in .25s cubic-bezier(0.4,0,0.2,1) both;
+
+}
+
+.blocked-overlay-content h2{
+
+    font-size:20px;
+
+    margin-bottom:12px;
+
+    color:var(--heading-accent);
+
+}
+
+.blocked-overlay-content p{
+
+    color:var(--text-muted);
+
+    margin:0;
+
+}
+
 .yaml-viewer{
 
     background:var(--code-bg, #0d1117);

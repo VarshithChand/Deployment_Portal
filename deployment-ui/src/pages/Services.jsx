@@ -96,8 +96,8 @@ export default function Services() {
         if (!(await confirm({
             title: "Block this user?",
             message: `Block '${user.patOwnerLogin}'? Every request from their session will be ` +
-                "rejected from now on, even with their existing token, until you unblock them. " +
-                "They'll also be signed out immediately.",
+                "rejected from now on, even with their existing token, until you unblock them - " +
+                "their screen will show a blocked overlay within about 15 seconds.",
             confirmLabel: "Block",
             danger: true
         }))) {

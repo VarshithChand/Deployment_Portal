@@ -64,9 +64,13 @@ public class AdminUsersController : ControllerBase
         return Ok();
     }
 
-    // Also forces an immediate sign-out (see above) so the blocked
-    // session doesn't sit there erroring out on its next request instead
-    // of getting a clean "you've been signed out."
+    // No force-logout bump here (unlike ForceLogout above) - the block-
+    // check middleware in Program.cs already 403s every request from this
+    // key from this point on, including its own polling of
+    // GET /api/auth/session-epoch, and GlobalLogoutMonitor treats that
+    // 403 itself as the "show the blocked overlay" signal. A forced
+    // reload would just fight with that smooth in-place transition for no
+    // benefit.
     [HttpPost("{key}/block")]
     public async Task<IActionResult> Block(string key)
     {
@@ -74,8 +78,6 @@ public class AdminUsersController : ControllerBase
             return denied;
 
         await _settings.BlockPatUserAsync(key);
-        _activity.ForceLogout(key);
-
         return Ok();
     }
 
