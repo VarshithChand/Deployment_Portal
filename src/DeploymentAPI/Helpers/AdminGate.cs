@@ -48,8 +48,35 @@ public static class AdminGate
         if (IsAdminOrBootstrap(controller, view))
             return null;
 
-        if (await IsAdminViaPersonalAccessTokenAsync(controller, view))
-            return null;
+        // Resolved once here (not via IsAdminViaPersonalAccessTokenAsync,
+        // which only returns a bool) so a denial can say WHY: no token at
+        // all, a token GitHub itself couldn't verify right now (invalid,
+        // or rate-limited - see GitHubAuthService's cache on this exact
+        // call), or a verified identity that just isn't on the allowlist.
+        // Those are three different problems with three different fixes,
+        // and a generic "Admin login required" couldn't tell them apart -
+        // including for someone whose token IS genuinely an admin's, but
+        // couldn't be confirmed in the moment.
+        if (view.AdminGitHubUsernames.Count > 0)
+        {
+            var auth = controller.HttpContext.RequestServices.GetRequiredService<GitHubAuthService>();
+
+            if (auth.HasToken)
+            {
+                var login = await auth.GetAuthenticatedLoginAsync();
+
+                if (login != null && view.AdminGitHubUsernames.Any(u => string.Equals(u, login, StringComparison.OrdinalIgnoreCase)))
+                    return null;
+
+                var detail = login == null
+                    ? "Unable to verify your Personal Access Token with GitHub right now (it may be invalid, " +
+                      "or GitHub's API may be rate-limited) — admin access couldn't be confirmed. Try again " +
+                      "shortly, or check your token in Settings."
+                    : $"The GitHub account this Personal Access Token belongs to (@{login}) isn't in the admin allowlist.";
+
+                return controller.StatusCode(403, new { message = $"Admin login required to {action}. {detail}" });
+            }
+        }
 
         return controller.StatusCode(403, new { message = $"Admin login required to {action}." });
     }
