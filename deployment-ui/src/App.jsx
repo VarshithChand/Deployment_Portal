@@ -20,6 +20,7 @@ import Sidebar from "./components/layout/Sidebar";
 import Footer from "./components/layout/Footer";
 import ErrorBoundary from "./components/common/ErrorBoundary";
 import RequireGitHubSetup from "./components/RequireGitHubSetup";
+import IdleLogoutMonitor from "./components/IdleLogoutMonitor";
 import useNavigation from "./hooks/useNavigation";
 import useAuth from "./hooks/useAuth";
 import useToast from "./hooks/useToast";
@@ -72,6 +73,8 @@ function App(){
         <>
 
             <TopBar />
+
+            <IdleLogoutMonitor />
 
             <RequireGitHubSetup>
 
