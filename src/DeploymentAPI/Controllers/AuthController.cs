@@ -13,11 +13,13 @@ public class AuthController : ControllerBase
 {
     private readonly AuthService _auth;
     private readonly IOptionsMonitor<GitHubOAuthSettings> _oauthOptions;
+    private readonly SettingsService _settings;
 
-    public AuthController(AuthService auth, IOptionsMonitor<GitHubOAuthSettings> oauthOptions)
+    public AuthController(AuthService auth, IOptionsMonitor<GitHubOAuthSettings> oauthOptions, SettingsService settings)
     {
         _auth = auth;
         _oauthOptions = oauthOptions;
+        _settings = settings;
     }
 
     // Local dev serves frontend and backend from the same origin (via the
@@ -85,6 +87,16 @@ public class AuthController : ControllerBase
         });
 
         return Ok();
+    }
+
+    // Anonymous and unconditional (same as /me being callable while
+    // logged out) - every visitor, logged in or just browsing Public
+    // view, needs to be able to poll this to know a pipeline just ran.
+    [HttpGet("session-epoch")]
+    public async Task<IActionResult> SessionEpoch()
+    {
+        var epoch = await _settings.GetForceLogoutEpochAsync();
+        return Ok(new { forceLogoutEpoch = epoch });
     }
 
     [Authorize]

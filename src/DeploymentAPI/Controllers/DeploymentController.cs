@@ -37,6 +37,14 @@ public class DeploymentController : ControllerBase
         var result =
             await _service.DeployAsync(request);
 
+        // Every active session (admin or not, OAuth or PAT-only) gets
+        // signed out once a pipeline actually runs - see
+        // SettingsService.BumpForceLogoutEpochAsync for why a bumped
+        // timestamp is how that's broadcast. A failed dispatch didn't
+        // actually run anything, so it doesn't earn a forced logout.
+        if (result.Success)
+            await _settings.BumpForceLogoutEpochAsync();
+
         return Ok(result);
     }
 }

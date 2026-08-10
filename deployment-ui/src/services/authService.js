@@ -21,3 +21,12 @@ export const logout = async () => {
     await authApi.post("/logout");
 
 };
+
+// Anonymous, cheap, no external calls - safe to poll frequently. See
+// SettingsService.BumpForceLogoutEpochAsync for what changes this value.
+export const getSessionEpoch = async () => {
+
+    const response = await authApi.get("/session-epoch");
+    return response.data.forceLogoutEpoch;
+
+};

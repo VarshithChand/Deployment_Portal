@@ -21,6 +21,7 @@ import Footer from "./components/layout/Footer";
 import ErrorBoundary from "./components/common/ErrorBoundary";
 import RequireGitHubSetup from "./components/RequireGitHubSetup";
 import IdleLogoutMonitor from "./components/IdleLogoutMonitor";
+import GlobalLogoutMonitor from "./components/GlobalLogoutMonitor";
 import useNavigation from "./hooks/useNavigation";
 import useAuth from "./hooks/useAuth";
 import useToast from "./hooks/useToast";
@@ -75,6 +76,7 @@ function App(){
             <TopBar />
 
             <IdleLogoutMonitor />
+            <GlobalLogoutMonitor />
 
             <RequireGitHubSetup>
 
