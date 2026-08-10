@@ -2175,20 +2175,43 @@ textarea{
 
 }
 
-/* RequireGitHubSetup's "signed out by admin" explanation - deliberately
-   at the bottom, below the reconnect form itself, and quiet rather than
-   alarming: the form above it is the actual call to action. */
-.signed-out-notice{
+/* RequireGitHubSetup's "signed out by admin" explanation - a fixed
+   banner pinned to the actual bottom of the viewport (not just the
+   bottom of the centered dialog card, which can still land in the upper
+   half of a tall screen), above the dialog backdrop's own z-index so it
+   isn't dimmed by the overlay. Quiet rather than alarming - the
+   reconnect form in the dialog above it is the actual call to action. */
+.signed-out-banner{
 
-    margin-top:18px;
+    position:fixed;
 
-    padding-top:14px;
+    left:50%;
 
-    border-top:1px solid var(--border);
+    bottom:24px;
+
+    transform:translateX(-50%);
+
+    z-index:1050;
+
+    max-width:min(90vw, 480px);
+
+    padding:12px 20px;
+
+    border-radius:10px;
+
+    background:var(--card-bg);
+
+    border:1px solid var(--border);
+
+    box-shadow:0 8px 24px rgba(0,0,0,.25);
+
+    color:var(--text-muted);
+
+    font-size:13px;
 
     text-align:center;
 
-    color:var(--text-muted);
+    animation:overlay-in .25s ease both;
 
 }
 

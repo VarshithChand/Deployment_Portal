@@ -211,6 +211,15 @@ export default function RequireGitHubSetup({ children }) {
 
             {checking ? <LoadingSpinner /> : children}
 
+            {!checking && !configured && wasSignedOut && (
+
+                <div className="signed-out-banner">
+                    Your session was signed out by the portal admin. Reconnect a token above to
+                    continue.
+                </div>
+
+            )}
+
             {!checking && !configured && (
 
                 <div className="dialog-backdrop">
@@ -295,13 +304,6 @@ export default function RequireGitHubSetup({ children }) {
                                 </button>
 
                             </form>
-
-                            {wasSignedOut && (
-                                <p className="field-hint signed-out-notice">
-                                    Your session was signed out by the portal admin. Reconnect a token
-                                    above to continue.
-                                </p>
-                            )}
 
                             </>
 

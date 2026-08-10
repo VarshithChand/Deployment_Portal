@@ -6,5 +6,11 @@ public record UserGitHubCredentials(string Owner, string Repository, string? Per
 {
     public bool TokenConfigured => !string.IsNullOrWhiteSpace(PersonalAccessToken);
 
-    public bool IsConfigured => !string.IsNullOrWhiteSpace(Owner) && !string.IsNullOrWhiteSpace(Repository);
+    // Requires a token, not just Owner/Repository - a soft-signed-out
+    // session (see SettingsService.SoftSignOutPatUserAsync) reports no
+    // token while leaving Owner/Repository exactly as they were, and
+    // this is what RequireGitHubSetup's blocking gate keys off. Without
+    // the token check here, Owner/Repository surviving the soft delete
+    // meant IsConfigured stayed true and the gate never reappeared at all.
+    public bool IsConfigured => !string.IsNullOrWhiteSpace(Owner) && !string.IsNullOrWhiteSpace(Repository) && TokenConfigured;
 }
