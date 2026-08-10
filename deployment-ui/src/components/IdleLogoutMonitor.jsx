@@ -26,6 +26,31 @@ export default function IdleLogoutMonitor() {
     const [warning, setWarning] = useState(false);
     const [secondsLeft, setSecondsLeft] = useState(WARNING_SECONDS);
 
+    // A plain `logout()` only clears the auth cookie and flips `user` to
+    // null in React state - anything already loaded on screen (deployment
+    // history, credentials forms, etc.) stays rendered until its own
+    // component happens to unmount. For an idle/background timeout that's
+    // not enough: the whole point is that walking away shouldn't leave
+    // your data sitting there for the next person, so this forces a real
+    // navigation after the cookie clears, wiping all in-memory state and
+    // landing back on Dashboard with TopBar's "Login with GitHub" showing
+    // - the same clean-slate landing Settings' own "Clear All Data" uses.
+    async function performLogout() {
+
+        try {
+            await logout();
+        }
+        finally {
+
+            const url = new URL(window.location.href);
+            url.searchParams.set("tab", "dashboard");
+            url.searchParams.delete("view");
+            window.location.href = url.toString();
+
+        }
+
+    }
+
     const idleTimerRef = useRef(null);
 
     // Read from the activity listener below instead of `warning` itself,
@@ -123,7 +148,7 @@ export default function IdleLogoutMonitor() {
 
                 backgroundTimerRef.current = setTimeout(() => {
                     setWarning(false);
-                    logout();
+                    performLogout();
                 }, IDLE_TIMEOUT_MS);
 
                 return;
@@ -139,7 +164,7 @@ export default function IdleLogoutMonitor() {
             hiddenSinceRef.current = null;
 
             if (hiddenSince && Date.now() - hiddenSince >= IDLE_TIMEOUT_MS) {
-                logout();
+                performLogout();
             }
 
         }
@@ -176,7 +201,7 @@ export default function IdleLogoutMonitor() {
         if (warning && secondsLeft === 0) {
 
             setWarning(false);
-            logout();
+            performLogout();
 
         }
 
@@ -193,7 +218,7 @@ export default function IdleLogoutMonitor() {
     function handleLogoutNow() {
 
         setWarning(false);
-        logout();
+        performLogout();
 
     }
 
