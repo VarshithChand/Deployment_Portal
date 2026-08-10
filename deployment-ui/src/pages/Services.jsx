@@ -319,7 +319,7 @@ export default function Services() {
                                         <td>
                                             <button
                                                 type="button"
-                                                className="btn-link"
+                                                className="btn btn-link"
                                                 onClick={() => setAccessModalUser(u)}
                                                 title="Manage sidebar access"
                                             >
