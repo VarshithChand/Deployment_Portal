@@ -3,8 +3,8 @@ import { useEffect, useRef, useState } from "react";
 import useAuth from "../hooks/useAuth";
 import useNavigation from "../hooks/useNavigation";
 
-const IDLE_TIMEOUT_MS = 2 * 60 * 1000;
-const WARNING_SECONDS = 30;
+const IDLE_TIMEOUT_MS = 1 * 60 * 1000;
+const WARNING_SECONDS = 20;
 
 // Deliberately narrow: a click (covers touch taps too, via the browser's
 // own synthesized click event) or switching tabs — not mouse movement,
