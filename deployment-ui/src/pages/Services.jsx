@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 
 import useToast from "../hooks/useToast";
 import useConfirm from "../hooks/useConfirm";
@@ -6,24 +6,8 @@ import PageLayout from "../components/layout/PageLayout";
 import CopyButton from "../components/common/CopyButton";
 import SectionTabs from "../components/common/SectionTabs";
 
-import {
-    getUsers,
-    createUser,
-    updateUser,
-    removeUser,
-    getRoles
-} from "../services/adminService";
-
-import {
-    getProjects,
-    createProject,
-    updateProject,
-    removeProject,
-    getProjectTasks,
-    createTask,
-    updateTask,
-    removeTask
-} from "../services/pmscoreService";
+import { getUsers } from "../services/adminService";
+import { getProjects } from "../services/pmscoreService";
 
 import {
     getAuditLogs,
@@ -33,13 +17,10 @@ import {
 } from "../services/securityService";
 
 const SECTIONS = [
-    { key: "users", label: "Users (AdminAPI)" },
-    { key: "projects", label: "Projects (PMSCoreAPI)" },
-    { key: "security", label: "Security (SecurityAPI)" }
+    { key: "users", label: "Users" },
+    { key: "projects", label: "Environments" },
+    { key: "security", label: "Security" }
 ];
-
-const PROJECT_STATUSES = ["Planning", "Active", "OnHold", "Completed"];
-const TASK_STATUSES = ["Todo", "InProgress", "Done"];
 
 export default function Services() {
 
@@ -50,25 +31,24 @@ export default function Services() {
     const [loaded, setLoaded] = useState({ users: false, projects: false, security: false });
 
     // ---------- Users ----------
+    // Real PAT users (see AdminUsersController) - read-only, since a PAT
+    // user isn't an account created/edited here; it exists only because
+    // someone configured a token in Settings > GitHub.
 
     const [users, setUsers] = useState([]);
-    const [roles, setRoles] = useState([]);
-    const [showNewUser, setShowNewUser] = useState(false);
-    const [newUser, setNewUser] = useState({ username: "", email: "", role: "Viewer" });
 
     async function loadUsers() {
 
         try {
 
-            const [usersRes, rolesRes] = await Promise.all([getUsers(), getRoles()]);
-            setUsers(Array.isArray(usersRes.data) ? usersRes.data : []);
-            setRoles(Array.isArray(rolesRes.data) ? rolesRes.data : []);
+            const response = await getUsers();
+            setUsers(Array.isArray(response.data) ? response.data : []);
 
         }
         catch (err) {
 
             console.error(err);
-            toast.show("Unable to reach AdminAPI. Is it running?", "error");
+            toast.show(err.response?.data?.message || "Failed to load PAT users.", "error");
 
         }
         finally {
@@ -79,105 +59,11 @@ export default function Services() {
 
     }
 
-    async function handleCreateUser(e) {
-
-        e.preventDefault();
-
-        if (!newUser.username.trim()) {
-            toast.show("A username is required.", "error");
-            return;
-        }
-
-        try {
-
-            await createUser(newUser);
-            toast.show(`User '${newUser.username}' created.`, "success");
-            setNewUser({ username: "", email: "", role: "Viewer" });
-            setShowNewUser(false);
-            loadUsers();
-
-        }
-        catch (err) {
-
-            console.error(err);
-            toast.show(err.response?.data?.message || "Failed to create user.", "error");
-
-        }
-
-    }
-
-    async function handleRoleChange(id, role) {
-
-        try {
-
-            await updateUser(id, { role });
-            toast.show("Role updated.", "success");
-            loadUsers();
-
-        }
-        catch (err) {
-
-            console.error(err);
-            toast.show("Failed to update role.", "error");
-
-        }
-
-    }
-
-    async function handleToggleActive(user) {
-
-        try {
-
-            await updateUser(user.id, { active: !user.active });
-            loadUsers();
-
-        }
-        catch (err) {
-
-            console.error(err);
-            toast.show("Failed to update user.", "error");
-
-        }
-
-    }
-
-    async function handleRemoveUser(id, username) {
-
-        if (!(await confirm({
-            title: "Remove user?",
-            message: `Remove '${username}'? This cannot be undone.`,
-            confirmLabel: "Remove",
-            danger: true
-        }))) {
-            return;
-        }
-
-        try {
-
-            await removeUser(id);
-            toast.show(`Removed '${username}'.`, "success");
-            loadUsers();
-
-        }
-        catch (err) {
-
-            console.error(err);
-            toast.show("Failed to remove user.", "error");
-
-        }
-
-    }
-
     // ---------- Projects ----------
+    // The real environment list (see PmsCoreProjectsController) - read-
+    // only, since editing already lives in Settings > Environments.
 
     const [projects, setProjects] = useState([]);
-    const [expandedProject, setExpandedProject] = useState(null);
-    const [tasks, setTasks] = useState([]);
-    const [loadingTasks, setLoadingTasks] = useState(false);
-    const [showNewProject, setShowNewProject] = useState(false);
-    const [newProject, setNewProject] = useState({ name: "", description: "" });
-    const [newTaskTitle, setNewTaskTitle] = useState("");
-    const [newTaskAssignee, setNewTaskAssignee] = useState("");
 
     async function loadProjects() {
 
@@ -190,174 +76,12 @@ export default function Services() {
         catch (err) {
 
             console.error(err);
-            toast.show("Unable to reach PMSCoreAPI. Is it running?", "error");
+            toast.show(err.response?.data?.message || "Failed to load environments.", "error");
 
         }
         finally {
 
             setLoaded((l) => ({ ...l, projects: true }));
-
-        }
-
-    }
-
-    async function handleCreateProject(e) {
-
-        e.preventDefault();
-
-        if (!newProject.name.trim()) {
-            toast.show("A project name is required.", "error");
-            return;
-        }
-
-        try {
-
-            await createProject(newProject);
-            toast.show(`Project '${newProject.name}' created.`, "success");
-            setNewProject({ name: "", description: "" });
-            setShowNewProject(false);
-            loadProjects();
-
-        }
-        catch (err) {
-
-            console.error(err);
-            toast.show("Failed to create project.", "error");
-
-        }
-
-    }
-
-    async function handleProjectStatusChange(id, status) {
-
-        try {
-
-            await updateProject(id, { status });
-            loadProjects();
-
-        }
-        catch (err) {
-
-            console.error(err);
-            toast.show("Failed to update project.", "error");
-
-        }
-
-    }
-
-    async function handleRemoveProject(id, name) {
-
-        if (!(await confirm({
-            title: "Remove project?",
-            message: `Remove '${name}' and all of its tasks? This cannot be undone.`,
-            confirmLabel: "Remove",
-            danger: true
-        }))) {
-            return;
-        }
-
-        try {
-
-            await removeProject(id);
-            toast.show(`Removed '${name}'.`, "success");
-            if (expandedProject === id) setExpandedProject(null);
-            loadProjects();
-
-        }
-        catch (err) {
-
-            console.error(err);
-            toast.show("Failed to remove project.", "error");
-
-        }
-
-    }
-
-    async function toggleProjectTasks(id) {
-
-        if (expandedProject === id) {
-            setExpandedProject(null);
-            return;
-        }
-
-        setExpandedProject(id);
-        setLoadingTasks(true);
-
-        try {
-
-            const response = await getProjectTasks(id);
-            setTasks(Array.isArray(response.data) ? response.data : []);
-
-        }
-        catch (err) {
-
-            console.error(err);
-            toast.show("Failed to load tasks.", "error");
-
-        }
-        finally {
-
-            setLoadingTasks(false);
-
-        }
-
-    }
-
-    async function handleCreateTask(e, projectId) {
-
-        e.preventDefault();
-
-        if (!newTaskTitle.trim()) return;
-
-        try {
-
-            await createTask(projectId, { title: newTaskTitle.trim(), assignee: newTaskAssignee.trim() });
-            setNewTaskTitle("");
-            setNewTaskAssignee("");
-            const response = await getProjectTasks(projectId);
-            setTasks(Array.isArray(response.data) ? response.data : []);
-
-        }
-        catch (err) {
-
-            console.error(err);
-            toast.show("Failed to create task.", "error");
-
-        }
-
-    }
-
-    async function handleTaskStatusChange(taskId, projectId, status) {
-
-        try {
-
-            await updateTask(taskId, { status });
-            const response = await getProjectTasks(projectId);
-            setTasks(Array.isArray(response.data) ? response.data : []);
-
-        }
-        catch (err) {
-
-            console.error(err);
-            toast.show("Failed to update task.", "error");
-
-        }
-
-    }
-
-    async function handleRemoveTask(taskId, projectId) {
-
-        try {
-
-            await removeTask(taskId);
-            const response = await getProjectTasks(projectId);
-            setTasks(Array.isArray(response.data) ? response.data : []);
-
-        }
-        catch (err) {
-
-            console.error(err);
-            toast.show("Failed to remove task.", "error");
 
         }
 
@@ -382,7 +106,7 @@ export default function Services() {
         catch (err) {
 
             console.error(err);
-            toast.show("Unable to reach SecurityAPI. Is it running?", "error");
+            toast.show(err.response?.data?.message || "Failed to load security data.", "error");
 
         }
         finally {
@@ -473,62 +197,20 @@ export default function Services() {
 
                     <>
 
-                    <div className="access-panel-header">
-                        <h2 className="card-title">Users</h2>
-                        <button
-                            type="button"
-                            className="btn btn-secondary btn-sm"
-                            onClick={() => setShowNewUser((v) => !v)}
-                        >
-                            {showNewUser ? "Cancel" : "+ New User"}
-                        </button>
-                    </div>
+                    <h2 className="card-title">Users</h2>
 
-                    {showNewUser && (
-
-                        <form className="card" style={{ marginBottom: 20 }} onSubmit={handleCreateUser}>
-
-                            <div className="form-group">
-                                <label>Username</label>
-                                <input
-                                    className="form-control"
-                                    value={newUser.username}
-                                    onChange={(e) => setNewUser({ ...newUser, username: e.target.value })}
-                                />
-                            </div>
-
-                            <div className="form-group">
-                                <label>Email</label>
-                                <input
-                                    className="form-control"
-                                    type="email"
-                                    value={newUser.email}
-                                    onChange={(e) => setNewUser({ ...newUser, email: e.target.value })}
-                                />
-                            </div>
-
-                            <div className="form-group">
-                                <label>Role</label>
-                                <select
-                                    className="form-control"
-                                    value={newUser.role}
-                                    onChange={(e) => setNewUser({ ...newUser, role: e.target.value })}
-                                >
-                                    {(roles.length > 0 ? roles : ["Admin", "Manager", "Viewer"]).map((r) => (
-                                        <option key={r} value={r}>{r}</option>
-                                    ))}
-                                </select>
-                            </div>
-
-                            <button type="submit" className="btn btn-primary">Create User</button>
-
-                        </form>
-
-                    )}
+                    <p className="empty-state" style={{ padding: "0 0 15px", textAlign: "left" }}>
+                        Real PAT users — every browser/session that has configured a Personal
+                        Access Token on this portal. Restrictions are managed from{" "}
+                        <strong>Settings → Sidebar Access</strong>, not here.
+                    </p>
 
                     {users.length === 0 ? (
 
-                        <p className="empty-state">No users yet — or AdminAPI isn't reachable.</p>
+                        <p className="empty-state">
+                            No PAT users yet — nobody has configured a Personal Access Token on
+                            this portal.
+                        </p>
 
                     ) : (
 
@@ -538,12 +220,9 @@ export default function Services() {
 
                             <thead>
                                 <tr>
-                                    <th>Username</th>
-                                    <th>Email</th>
-                                    <th>Role</th>
-                                    <th>Status</th>
-                                    <th>Created</th>
-                                    <th></th>
+                                    <th>PAT Owner</th>
+                                    <th>Repository</th>
+                                    <th>Restricted</th>
                                 </tr>
                             </thead>
 
@@ -551,41 +230,15 @@ export default function Services() {
 
                                 {users.map((u) => (
 
-                                    <tr key={u.id}>
-                                        <td>{u.username}</td>
-                                        <td>{u.email}</td>
+                                    <tr key={u.key}>
+                                        <td>{u.patOwnerLogin}</td>
+                                        <td>{u.owner}/{u.repository}</td>
                                         <td>
-                                            <select
-                                                className="form-control"
-                                                style={{ maxWidth: 130 }}
-                                                value={u.role}
-                                                onChange={(e) => handleRoleChange(u.id, e.target.value)}
-                                            >
-                                                {(roles.length > 0 ? roles : ["Admin", "Manager", "Viewer"]).map((r) => (
-                                                    <option key={r} value={r}>{r}</option>
-                                                ))}
-                                            </select>
-                                        </td>
-                                        <td>
-                                            <button
-                                                type="button"
-                                                className={`badge ${u.active ? "badge-success" : "badge-secondary"}`}
-                                                style={{ border: "none", cursor: "pointer" }}
-                                                onClick={() => handleToggleActive(u)}
-                                                title="Click to toggle"
-                                            >
-                                                {u.active ? "active" : "inactive"}
-                                            </button>
-                                        </td>
-                                        <td>{new Date(u.createdAt).toLocaleDateString()}</td>
-                                        <td>
-                                            <button
-                                                type="button"
-                                                className="btn btn-danger btn-sm"
-                                                onClick={() => handleRemoveUser(u.id, u.username)}
-                                            >
-                                                Remove
-                                            </button>
+                                            {u.restrictedTabCount > 0 ? (
+                                                <span className="badge badge-danger">{u.restrictedTabCount} restricted</span>
+                                            ) : (
+                                                <span className="badge badge-success">Fully visible</span>
+                                            )}
                                         </td>
                                     </tr>
 
@@ -607,48 +260,18 @@ export default function Services() {
 
                     <>
 
-                    <div className="access-panel-header">
-                        <h2 className="card-title">Projects</h2>
-                        <button
-                            type="button"
-                            className="btn btn-secondary btn-sm"
-                            onClick={() => setShowNewProject((v) => !v)}
-                        >
-                            {showNewProject ? "Cancel" : "+ New Project"}
-                        </button>
-                    </div>
+                    <h2 className="card-title">Environments</h2>
 
-                    {showNewProject && (
-
-                        <form className="card" style={{ marginBottom: 20 }} onSubmit={handleCreateProject}>
-
-                            <div className="form-group">
-                                <label>Name</label>
-                                <input
-                                    className="form-control"
-                                    value={newProject.name}
-                                    onChange={(e) => setNewProject({ ...newProject, name: e.target.value })}
-                                />
-                            </div>
-
-                            <div className="form-group">
-                                <label>Description</label>
-                                <input
-                                    className="form-control"
-                                    value={newProject.description}
-                                    onChange={(e) => setNewProject({ ...newProject, description: e.target.value })}
-                                />
-                            </div>
-
-                            <button type="submit" className="btn btn-primary">Create Project</button>
-
-                        </form>
-
-                    )}
+                    <p className="empty-state" style={{ padding: "0 0 15px", textAlign: "left" }}>
+                        The portal's real environment list. Editing lives in{" "}
+                        <strong>Settings → Environments</strong>, not here.
+                    </p>
 
                     {projects.length === 0 ? (
 
-                        <p className="empty-state">No projects yet — or PMSCoreAPI isn't reachable.</p>
+                        <p className="empty-state">
+                            No environments configured yet — add one in Settings → Environments.
+                        </p>
 
                     ) : (
 
@@ -659,10 +282,8 @@ export default function Services() {
                             <thead>
                                 <tr>
                                     <th>Name</th>
-                                    <th>Description</th>
-                                    <th>Status</th>
-                                    <th>Created</th>
-                                    <th></th>
+                                    <th>Workflow</th>
+                                    <th>Cloud Provider</th>
                                 </tr>
                             </thead>
 
@@ -670,148 +291,17 @@ export default function Services() {
 
                                 {projects.map((p) => (
 
-                                    <Fragment key={p.id}>
-
-                                    <tr>
+                                    <tr key={p.name}>
                                         <td>{p.name}</td>
-                                        <td>{p.description}</td>
+                                        <td>{p.workflowName}</td>
                                         <td>
-                                            <select
-                                                className="form-control"
-                                                style={{ maxWidth: 130 }}
-                                                value={p.status}
-                                                onChange={(e) => handleProjectStatusChange(p.id, e.target.value)}
-                                            >
-                                                {PROJECT_STATUSES.map((s) => (
-                                                    <option key={s} value={s}>{s}</option>
-                                                ))}
-                                            </select>
-                                        </td>
-                                        <td>{new Date(p.createdAt).toLocaleDateString()}</td>
-                                        <td>
-
-                                            <div className="button-row">
-
-                                                <button
-                                                    type="button"
-                                                    className="btn btn-secondary btn-sm"
-                                                    onClick={() => toggleProjectTasks(p.id)}
-                                                >
-                                                    {expandedProject === p.id ? "Hide Tasks" : "Tasks"}
-                                                </button>
-
-                                                <button
-                                                    type="button"
-                                                    className="btn btn-danger btn-sm"
-                                                    onClick={() => handleRemoveProject(p.id, p.name)}
-                                                >
-                                                    Remove
-                                                </button>
-
-                                            </div>
-
+                                            {p.cloudProvider === "none" ? (
+                                                <span className="badge badge-secondary">none</span>
+                                            ) : (
+                                                <span className="badge badge-info">{p.cloudProvider}</span>
+                                            )}
                                         </td>
                                     </tr>
-
-                                    {expandedProject === p.id && (
-
-                                        <tr>
-                                            <td colSpan={5}>
-
-                                                {loadingTasks ? (
-
-                                                    <p className="field-hint">Loading tasks...</p>
-
-                                                ) : (
-
-                                                    <>
-
-                                                    <form
-                                                        style={{ display: "flex", gap: 10, marginBottom: 12 }}
-                                                        onSubmit={(e) => handleCreateTask(e, p.id)}
-                                                    >
-                                                        <input
-                                                            className="form-control"
-                                                            placeholder="Task title"
-                                                            value={newTaskTitle}
-                                                            onChange={(e) => setNewTaskTitle(e.target.value)}
-                                                        />
-                                                        <input
-                                                            className="form-control"
-                                                            placeholder="Assignee"
-                                                            value={newTaskAssignee}
-                                                            onChange={(e) => setNewTaskAssignee(e.target.value)}
-                                                        />
-                                                        <button type="submit" className="btn btn-primary btn-sm">Add Task</button>
-                                                    </form>
-
-                                                    {tasks.length === 0 ? (
-
-                                                        <p className="empty-state">No tasks in this project yet.</p>
-
-                                                    ) : (
-
-                                                        <div className="table-scroll">
-                                                        <table className="table">
-
-                                                            <thead>
-                                                                <tr>
-                                                                    <th>Title</th>
-                                                                    <th>Assignee</th>
-                                                                    <th>Status</th>
-                                                                    <th></th>
-                                                                </tr>
-                                                            </thead>
-
-                                                            <tbody>
-
-                                                                {tasks.map((t) => (
-
-                                                                    <tr key={t.id}>
-                                                                        <td>{t.title}</td>
-                                                                        <td>{t.assignee || "—"}</td>
-                                                                        <td>
-                                                                            <select
-                                                                                className="form-control"
-                                                                                style={{ maxWidth: 130 }}
-                                                                                value={t.status}
-                                                                                onChange={(e) => handleTaskStatusChange(t.id, p.id, e.target.value)}
-                                                                            >
-                                                                                {TASK_STATUSES.map((s) => (
-                                                                                    <option key={s} value={s}>{s}</option>
-                                                                                ))}
-                                                                            </select>
-                                                                        </td>
-                                                                        <td>
-                                                                            <button
-                                                                                type="button"
-                                                                                className="btn btn-danger btn-sm"
-                                                                                onClick={() => handleRemoveTask(t.id, p.id)}
-                                                                            >
-                                                                                Remove
-                                                                            </button>
-                                                                        </td>
-                                                                    </tr>
-
-                                                                ))}
-
-                                                            </tbody>
-
-                                                        </table>
-                                                        </div>
-
-                                                    )}
-
-                                                    </>
-
-                                                )}
-
-                                            </td>
-                                        </tr>
-
-                                    )}
-
-                                    </Fragment>
 
                                 ))}
 
@@ -872,7 +362,7 @@ export default function Services() {
 
                     {apiKeys.length === 0 ? (
 
-                        <p className="empty-state">No API keys yet — or SecurityAPI isn't reachable.</p>
+                        <p className="empty-state">No API keys yet — create one above.</p>
 
                     ) : (
 
@@ -928,9 +418,14 @@ export default function Services() {
 
                     <h2 className="card-title" style={{ marginTop: 30 }}>Audit Log</h2>
 
+                    <p className="empty-state" style={{ padding: "0 0 15px", textAlign: "left" }}>
+                        The portal's real activity log — recent settings changes and backend
+                        errors, kept in memory on the server, cleared on restart.
+                    </p>
+
                     {auditLogs.length === 0 ? (
 
-                        <p className="empty-state">No audit log entries yet.</p>
+                        <p className="empty-state">No activity recorded yet.</p>
 
                     ) : (
 
@@ -941,27 +436,25 @@ export default function Services() {
                             <thead>
                                 <tr>
                                     <th>When</th>
-                                    <th>Actor</th>
-                                    <th>Action</th>
-                                    <th>Resource</th>
-                                    <th>Outcome</th>
+                                    <th>Level</th>
+                                    <th>Category</th>
+                                    <th>Message</th>
                                 </tr>
                             </thead>
 
                             <tbody>
 
-                                {auditLogs.map((entry) => (
+                                {auditLogs.map((entry, i) => (
 
-                                    <tr key={entry.id}>
+                                    <tr key={`${entry.timestamp}-${i}`}>
                                         <td>{new Date(entry.timestamp).toLocaleString()}</td>
-                                        <td>{entry.actor}</td>
-                                        <td>{entry.action}</td>
-                                        <td>{entry.resource}</td>
                                         <td>
-                                            <span className={`badge ${entry.outcome === "Success" ? "badge-success" : "badge-danger"}`}>
-                                                {entry.outcome}
+                                            <span className={`badge ${entry.level === "Error" ? "badge-danger" : "badge-info"}`}>
+                                                {entry.level}
                                             </span>
                                         </td>
+                                        <td>{entry.category}</td>
+                                        <td>{entry.message}</td>
                                     </tr>
 
                                 ))}

@@ -1,35 +1,33 @@
-using DeploymentAPI.DTOs;
+using DeploymentAPI.Helpers;
 using DeploymentAPI.Services;
 using Microsoft.AspNetCore.Mvc;
 
 namespace DeploymentAPI.Controllers;
 
 // Backs the Services page's "Security (SecurityAPI)" tab's Audit Log
-// panel — see AuditLogStore for why this lives in DeploymentAPI itself
-// rather than a separate origin.
+// panel — the portal's real activity log (same data/gate as
+// LogsController, used by Settings > Activity Log), not a separate fake
+// audit trail. Read-only: entries are only ever written by
+// ActivityLogService itself as real actions happen elsewhere in the app.
 [ApiController]
 [Route("api/security/audit-logs")]
 public class SecurityAuditLogController : ControllerBase
 {
-    private readonly AuditLogStore _logs;
+    private readonly ActivityLogService _logs;
+    private readonly SettingsService _settings;
 
-    public SecurityAuditLogController(AuditLogStore logs)
+    public SecurityAuditLogController(ActivityLogService logs, SettingsService settings)
     {
         _logs = logs;
+        _settings = settings;
     }
 
     [HttpGet]
-    public IActionResult GetRecent([FromQuery] int limit = 200)
+    public async Task<IActionResult> GetRecent()
     {
-        return Ok(_logs.GetRecent(limit));
-    }
+        if (await AdminGate.DenyUnlessAdminAsync(this, _settings, "view the activity log") is IActionResult denied)
+            return denied;
 
-    [HttpPost]
-    public IActionResult Create(CreateAuditLogRequest request)
-    {
-        if (string.IsNullOrWhiteSpace(request.Action))
-            return BadRequest(new { message = "An action is required." });
-
-        return Ok(_logs.Add(request));
+        return Ok(_logs.GetRecent());
     }
 }

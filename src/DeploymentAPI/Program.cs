@@ -128,20 +128,12 @@ builder.Services.AddSingleton<CloudStatusService>();
 // Singleton itself - safe to share the same way.
 builder.Services.AddSingleton<AwsSsoService>();
 
-// Backs the Services page's three demo tabs (Users/Projects/Security) -
-// in-memory sample data, same lifetime/rationale as AwsSsoService above.
-// Used to be three separately-hosted projects (AdminAPI/PMSCoreAPI/
-// SecurityAPI); folded in here so that page works from any origin the
-// rest of this API already works from, with no extra CORS/deployment of
-// its own. Those three projects themselves are untouched and still exist
-// as real, independently deployable apps for the portal's actual CI/CD
-// pipelines (see the "Release Admin/PMSCore/Security API" workflows) -
-// this is just a second, lightweight copy of their sample data for the
-// dashboard's own demo page.
-builder.Services.AddSingleton<UserStore>();
-builder.Services.AddSingleton<ProjectStore>();
+// Backs the Services page's "Security (SecurityAPI)" tab's API Keys
+// panel — the one sample-data panel left on that page without a real
+// portal equivalent to point at instead (Users/Projects/Audit Log now
+// read PAT users, Environments, and the real activity log respectively -
+// see AdminUsersController/PmsCoreProjectsController/SecurityAuditLogController).
 builder.Services.AddSingleton<ApiKeyStore>();
-builder.Services.AddSingleton<AuditLogStore>();
 
 //
 // CORS

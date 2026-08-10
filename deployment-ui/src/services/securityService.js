@@ -1,6 +1,8 @@
 import api from "../api/securityApi";
 
-export const getAuditLogs = async (limit = 200) => await api.get("/audit-logs", { params: { limit } });
+// The portal's real activity log (same data/gate Settings > Activity Log
+// uses) - see SecurityAuditLogController for why there's no create here.
+export const getAuditLogs = async () => await api.get("/audit-logs");
 
 export const getApiKeys = async () => await api.get("/api-keys");
 
