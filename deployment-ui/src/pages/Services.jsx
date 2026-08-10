@@ -8,7 +8,7 @@ import SectionTabs from "../components/common/SectionTabs";
 
 import PatUserAccessModal from "../components/PatUserAccessModal";
 
-import { getUsers, forceLogoutUser, blockUser, unblockUser } from "../services/adminService";
+import { getUsers, forceLogoutUser, blockUser, unblockUser, deleteUser } from "../services/adminService";
 import { getProjects } from "../services/pmscoreService";
 
 import {
@@ -134,6 +134,36 @@ export default function Services() {
 
             console.error(err);
             toast.show("Failed to unblock that user.", "error");
+
+        }
+
+    }
+
+    async function handleDeleteUser(user) {
+
+        if (!(await confirm({
+            title: "Delete this user?",
+            message: `Permanently delete '${user.patOwnerLogin}'? This removes their GitHub, ` +
+                "AWS/Azure/GCP credentials and sidebar restrictions entirely - not a sign-out, " +
+                "there's nothing to reconnect back to. If this browser returns, it starts over as " +
+                "a brand-new session. This cannot be undone.",
+            confirmLabel: "Delete",
+            danger: true
+        }))) {
+            return;
+        }
+
+        try {
+
+            await deleteUser(user.key);
+            toast.show(`Deleted '${user.patOwnerLogin}'.`, "success");
+            loadUsers();
+
+        }
+        catch (err) {
+
+            console.error(err);
+            toast.show("Failed to delete that user.", "error");
 
         }
 
@@ -412,6 +442,16 @@ export default function Services() {
                                                     </button>
 
                                                 )}
+
+                                                <button
+                                                    type="button"
+                                                    className="btn btn-danger btn-sm"
+                                                    onClick={() => handleDeleteUser(u)}
+                                                    disabled={u.key === MY_SESSION_KEY}
+                                                    title={u.key === MY_SESSION_KEY ? "You can't delete your own session here" : undefined}
+                                                >
+                                                    Delete
+                                                </button>
 
                                             </div>
 

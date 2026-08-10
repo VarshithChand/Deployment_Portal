@@ -13,3 +13,7 @@ export const forceLogoutUser = async (key) => await api.post(`/users/${encodeURI
 export const blockUser = async (key) => await api.post(`/users/${encodeURIComponent(key)}/block`);
 
 export const unblockUser = async (key) => await api.post(`/users/${encodeURIComponent(key)}/unblock`);
+
+// Real delete, not the soft sign-out above - removes every credential
+// and restriction tied to this key. Irreversible.
+export const deleteUser = async (key) => await api.delete(`/users/${encodeURIComponent(key)}`);

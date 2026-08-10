@@ -182,6 +182,30 @@ public class SettingsService
         }
     }
 
+    // A real delete (unlike SoftSignOutPatUserAsync above) - the Services
+    // page's Users tab "Delete" action for a session an admin never wants
+    // to see again. Removes everything tied to that key: GitHub, AWS,
+    // Azure, GCP credentials, sidebar access restrictions, and its block
+    // flag if it had one. Irreversible - if that browser comes back, it
+    // starts over as a brand-new, unconfigured session.
+    public async Task DeletePatUserAsync(string key)
+    {
+        var root = await ReadRootAsync();
+
+        (root["UserGitHubCredentials"] as JObject)?.Remove(key);
+        (root["UserAwsCredentials"] as JObject)?.Remove(key);
+        (root["UserAzureCredentials"] as JObject)?.Remove(key);
+        (root["UserGcpCredentials"] as JObject)?.Remove(key);
+        (root["SidebarAccess"] as JObject)?.Remove(key);
+
+        if (root["BlockedPatUsers"] is JArray blocked)
+            root["BlockedPatUsers"] = new JArray(blocked.Where(k => k.ToString() != key));
+
+        await WriteRootAsync(root);
+
+        _log.LogInfo("Settings", $"PAT user '{key}' deleted by admin.");
+    }
+
     public async Task<UserGitHubCredentials> SaveUserGitHubCredentialsAsync(string login, GitHubSettingsUpdateDto update)
     {
         var root = await ReadRootAsync();
@@ -197,14 +221,45 @@ public class SettingsService
         entry["Owner"] = update.Owner?.Trim() ?? string.Empty;
         entry["Repository"] = update.Repository?.Trim() ?? string.Empty;
 
+        string? evictedDuplicateLogin = null;
+
         if (!string.IsNullOrWhiteSpace(update.PersonalAccessToken))
         {
-            entry["PersonalAccessToken"] = update.PersonalAccessToken.Trim();
+            var trimmedToken = update.PersonalAccessToken.Trim();
+            entry["PersonalAccessToken"] = trimmedToken;
 
             // Reconnecting undoes an admin's earlier soft sign-out (see
             // SoftSignOutPatUserAsync) - typing a token back in is exactly
             // the recovery path that flag exists to require.
             entry.Remove("SignedOut");
+
+            // One session per real GitHub account: if this token belongs
+            // to an identity that some OTHER key already has stored,
+            // that older session is deleted outright (see
+            // DeletePatUserAsync) instead of being left as a duplicate
+            // row - the browser saving right now becomes the one and
+            // only session for that GitHub account.
+            var resolvedLogin = await ResolvePatOwnerLoginAsync(trimmedToken);
+
+            if (!string.IsNullOrWhiteSpace(resolvedLogin))
+            {
+                var existing = await GetPatUsersAsync();
+
+                foreach (var other in existing.Where(u => u.Key != login && u.PatOwnerLogin == resolvedLogin))
+                {
+                    await DeletePatUserAsync(other.Key);
+                    evictedDuplicateLogin = resolvedLogin;
+                }
+
+                // DeletePatUserAsync above wrote its own fresh copy of
+                // root - re-read so this save doesn't clobber that with
+                // the stale root captured at the top of this method.
+                if (evictedDuplicateLogin != null)
+                {
+                    root = await ReadRootAsync();
+                    users = root["UserGitHubCredentials"] as JObject ?? new JObject();
+                }
+            }
         }
 
         users[login] = entry;
@@ -213,7 +268,8 @@ public class SettingsService
         await WriteRootAsync(root);
 
         _log.LogInfo("Settings", $"GitHub settings saved for '{login}': {update.Owner}/{update.Repository}"
-            + (string.IsNullOrWhiteSpace(update.PersonalAccessToken) ? "" : " (token updated)"));
+            + (string.IsNullOrWhiteSpace(update.PersonalAccessToken) ? "" : " (token updated)")
+            + (evictedDuplicateLogin != null ? $" (replaced an existing session for @{evictedDuplicateLogin})" : ""));
 
         return await GetUserGitHubCredentialsAsync(login);
     }

@@ -92,4 +92,21 @@ public class AdminUsersController : ControllerBase
         await _settings.UnblockPatUserAsync(key);
         return Ok();
     }
+
+    // A real delete (see SettingsService.DeletePatUserAsync) - removes
+    // this session's row entirely rather than just soft-signing it out.
+    // Also forces an immediate sign-out for the same reason ForceLogout
+    // above does, so a live tab doesn't keep working against credentials
+    // that no longer exist.
+    [HttpDelete("{key}")]
+    public async Task<IActionResult> Delete(string key)
+    {
+        if (await AdminGate.DenyUnlessAdminAsync(this, _settings, "delete a PAT user") is IActionResult denied)
+            return denied;
+
+        await _settings.DeletePatUserAsync(key);
+        _activity.ForceLogout(key);
+
+        return Ok();
+    }
 }
