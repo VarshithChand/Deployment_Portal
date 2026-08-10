@@ -44,16 +44,23 @@ public class AdminUsersController : ControllerBase
         return Ok(users);
     }
 
-    // Ends that one session immediately - see GlobalLogoutMonitor's
-    // mySessionForceLogoutEpoch handling for how the browser on the other
-    // end notices and signs itself out within one poll interval.
+    // A soft delete (see SettingsService.SoftSignOutPatUserAsync) - their
+    // saved token/repo are left alone, just reported as absent, which
+    // puts RequireGitHubSetup's PAT popup back in front of them next time
+    // they try to do anything. This persists (unlike a plain force-logout)
+    // - it survives even if they weren't actively browsing when this ran,
+    // and undoes itself the moment they reconnect a token. Also bumps the
+    // force-logout signal so an already-open tab reloads into that popup
+    // right away instead of only discovering it on its next action.
     [HttpPost("{key}/logout")]
     public async Task<IActionResult> ForceLogout(string key)
     {
         if (await AdminGate.DenyUnlessAdminAsync(this, _settings, "sign out a PAT user") is IActionResult denied)
             return denied;
 
+        await _settings.SoftSignOutPatUserAsync(key);
         _activity.ForceLogout(key);
+
         return Ok();
     }
 

@@ -66,7 +66,9 @@ export default function Services() {
 
         if (!(await confirm({
             title: "Sign out this user?",
-            message: `Immediately sign out '${user.patOwnerLogin}'? They'll need to reload the portal to continue.`,
+            message: `Sign out '${user.patOwnerLogin}'? Their saved token stays stored but stops ` +
+                "working until they reconnect — they'll see the \"Connect your GitHub repository\" " +
+                "screen again next time they use the portal (immediately, if they have it open right now).",
             confirmLabel: "Sign Out",
             danger: true
         }))) {
@@ -336,6 +338,8 @@ export default function Services() {
                                         <td>
                                             {u.isBlocked ? (
                                                 <span className="badge badge-danger">Blocked</span>
+                                            ) : u.isSignedOut ? (
+                                                <span className="badge badge-warning">Signed Out</span>
                                             ) : (
                                                 <span className="badge badge-success">Active</span>
                                             )}

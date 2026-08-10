@@ -23,6 +23,12 @@ public class PatUserSummaryDto
     // token (see the block-check middleware in Program.cs).
     public bool IsBlocked { get; set; }
 
+    // Persisted (see SettingsService.SoftSignOutPatUserAsync) - the "Sign
+    // Out" button's soft delete: their token is still saved, just reported
+    // as absent, which puts RequireGitHubSetup's PAT popup back in front
+    // of them. Re-entering a token there clears this automatically.
+    public bool IsSignedOut { get; set; }
+
     // In-memory only (see SessionActivityService) - when this key was last
     // seen making any request, reset on every backend restart same as the
     // activity log. Null means "not seen since this instance started."

@@ -130,10 +130,41 @@ public class SettingsService
         var users = root["UserGitHubCredentials"] as JObject;
         var entry = users?[login] as JObject;
 
+        // A soft-signed-out entry (see SoftSignOutPatUserAsync) reports no
+        // token even though the real value is still sitting there
+        // untouched - this is what makes GitHubAuthService/TokenConfigured
+        // treat the session as "not connected," which is what puts
+        // RequireGitHubSetup's PAT popup back in front of them. Re-saving
+        // a token (SaveUserGitHubCredentialsAsync) clears the flag and
+        // this goes back to reporting the real value.
+        var signedOut = entry?["SignedOut"]?.Value<bool>() ?? false;
+
         return new UserGitHubCredentials(
             entry?["Owner"]?.ToString() ?? string.Empty,
             entry?["Repository"]?.ToString() ?? string.Empty,
-            entry?["PersonalAccessToken"]?.ToString());
+            signedOut ? null : entry?["PersonalAccessToken"]?.ToString());
+    }
+
+    // Admin-triggered "Sign Out" from the Services page's Users tab - a
+    // soft delete, not a real one: the stored token/repo are left exactly
+    // as they were, only a flag is set that makes every read of them (see
+    // GetUserGitHubCredentialsAsync above) report "not connected" instead.
+    // The practical effect is the same as if their token had never been
+    // entered - GitHubAuthService can't authenticate as them, and
+    // RequireGitHubSetup puts the PAT setup popup back in front of them -
+    // but nothing is actually lost, and typing a token back in (even the
+    // same one) immediately undoes it.
+    public async Task SoftSignOutPatUserAsync(string key)
+    {
+        var root = await ReadRootAsync();
+
+        if (root["UserGitHubCredentials"] is JObject users && users[key] is JObject entry)
+        {
+            entry["SignedOut"] = true;
+            await WriteRootAsync(root);
+
+            _log.LogInfo("Settings", $"PAT user '{key}' signed out by admin (soft - token kept, marked inactive).");
+        }
     }
 
     public async Task<UserGitHubCredentials> SaveUserGitHubCredentialsAsync(string login, GitHubSettingsUpdateDto update)
@@ -152,7 +183,14 @@ public class SettingsService
         entry["Repository"] = update.Repository?.Trim() ?? string.Empty;
 
         if (!string.IsNullOrWhiteSpace(update.PersonalAccessToken))
+        {
             entry["PersonalAccessToken"] = update.PersonalAccessToken.Trim();
+
+            // Reconnecting undoes an admin's earlier soft sign-out (see
+            // SoftSignOutPatUserAsync) - typing a token back in is exactly
+            // the recovery path that flag exists to require.
+            entry.Remove("SignedOut");
+        }
 
         users[login] = entry;
         root["UserGitHubCredentials"] = users;
@@ -716,7 +754,8 @@ public class SettingsService
                 Owner = entry["Owner"]?.ToString() ?? string.Empty,
                 Repository = entry["Repository"]?.ToString() ?? string.Empty,
                 RestrictedTabCount = restrictionCount,
-                IsBlocked = blocked?.Any(k => k.ToString() == p.Name) ?? false
+                IsBlocked = blocked?.Any(k => k.ToString() == p.Name) ?? false,
+                IsSignedOut = entry["SignedOut"]?.Value<bool>() ?? false
             };
         }).ToList();
     }
