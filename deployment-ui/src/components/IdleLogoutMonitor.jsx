@@ -38,6 +38,17 @@ export default function IdleLogoutMonitor() {
         warningRef.current = warning;
     }, [warning]);
 
+    // Separate from the foreground idle timer above: while the tab is
+    // hidden (switched to another app/window) nobody is there to see the
+    // "Still there?" dialog or respond to it, so backgrounding logs out
+    // directly on its own 2-minute clock instead of routing through the
+    // warning. hiddenSinceRef also covers the case where the device itself
+    // was asleep/suspended and the background setTimeout never got to fire
+    // - visibility returning re-checks real elapsed wall-clock time rather
+    // than trusting the timer alone.
+    const backgroundTimerRef = useRef(null);
+    const hiddenSinceRef = useRef(null);
+
     function scheduleWarning() {
 
         if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
@@ -92,6 +103,59 @@ export default function IdleLogoutMonitor() {
 
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [tab]);
+
+    // Backgrounding the tab (switching to another app/window) starts its
+    // own plain 2-minute clock, independent of clicks or the warning
+    // dialog - there's no point warning someone who isn't looking at the
+    // screen, so this logs out directly the moment it elapses. Coming back
+    // within the window cancels it; coming back after it (e.g. the laptop
+    // was asleep, so the setTimeout itself never got to fire) catches up
+    // by comparing real elapsed time instead.
+    useEffect(() => {
+
+        if (!user) return;
+
+        function handleVisibilityChange() {
+
+            if (document.hidden) {
+
+                hiddenSinceRef.current = Date.now();
+
+                backgroundTimerRef.current = setTimeout(() => {
+                    setWarning(false);
+                    logout();
+                }, IDLE_TIMEOUT_MS);
+
+                return;
+
+            }
+
+            if (backgroundTimerRef.current) {
+                clearTimeout(backgroundTimerRef.current);
+                backgroundTimerRef.current = null;
+            }
+
+            const hiddenSince = hiddenSinceRef.current;
+            hiddenSinceRef.current = null;
+
+            if (hiddenSince && Date.now() - hiddenSince >= IDLE_TIMEOUT_MS) {
+                logout();
+            }
+
+        }
+
+        document.addEventListener("visibilitychange", handleVisibilityChange);
+
+        return () => {
+
+            document.removeEventListener("visibilitychange", handleVisibilityChange);
+            if (backgroundTimerRef.current) clearTimeout(backgroundTimerRef.current);
+            hiddenSinceRef.current = null;
+
+        };
+
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [user]);
 
     // Countdown while the warning is up — pure state ticking, the actual
     // logout is a separate effect reacting to it hitting zero.
