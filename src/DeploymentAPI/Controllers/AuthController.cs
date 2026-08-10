@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using DeploymentAPI.Configuration;
+using DeploymentAPI.Helpers;
 using DeploymentAPI.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -14,12 +15,18 @@ public class AuthController : ControllerBase
     private readonly AuthService _auth;
     private readonly IOptionsMonitor<GitHubOAuthSettings> _oauthOptions;
     private readonly SettingsService _settings;
+    private readonly SessionActivityService _activity;
 
-    public AuthController(AuthService auth, IOptionsMonitor<GitHubOAuthSettings> oauthOptions, SettingsService settings)
+    public AuthController(
+        AuthService auth,
+        IOptionsMonitor<GitHubOAuthSettings> oauthOptions,
+        SettingsService settings,
+        SessionActivityService activity)
     {
         _auth = auth;
         _oauthOptions = oauthOptions;
         _settings = settings;
+        _activity = activity;
     }
 
     // Local dev serves frontend and backend from the same origin (via the
@@ -91,12 +98,24 @@ public class AuthController : ControllerBase
 
     // Anonymous and unconditional (same as /me being callable while
     // logged out) - every visitor, logged in or just browsing Public
-    // view, needs to be able to poll this to know a pipeline just ran.
+    // view, needs to be able to poll this to know a pipeline just ran, or
+    // that an admin just force-signed out this specific session (see
+    // AdminUsersController's logout action) - the second value is scoped
+    // to whichever session key this caller's own X-Session-Id resolves to,
+    // never anyone else's.
     [HttpGet("session-epoch")]
     public async Task<IActionResult> SessionEpoch()
     {
         var epoch = await _settings.GetForceLogoutEpochAsync();
-        return Ok(new { forceLogoutEpoch = epoch });
+
+        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var mine = _activity.GetForceLogoutAfter(key);
+
+        return Ok(new
+        {
+            forceLogoutEpoch = epoch,
+            mySessionForceLogoutEpoch = mine?.ToString("o")
+        });
     }
 
     [Authorize]

@@ -22,11 +22,15 @@ export const logout = async () => {
 
 };
 
-// Anonymous, cheap, no external calls - safe to poll frequently. See
-// SettingsService.BumpForceLogoutEpochAsync for what changes this value.
+// Anonymous, cheap, no external calls - safe to poll frequently.
+// forceLogoutEpoch is portal-wide (see SettingsService.BumpForceLogoutEpochAsync);
+// mySessionForceLogoutEpoch is scoped to just this caller's own session
+// (see SessionActivityService.ForceLogout, triggered from the Services
+// page's Users tab). Returns the whole object so GlobalLogoutMonitor can
+// track a baseline for each independently.
 export const getSessionEpoch = async () => {
 
     const response = await authApi.get("/session-epoch");
-    return response.data.forceLogoutEpoch;
+    return response.data;
 
 };

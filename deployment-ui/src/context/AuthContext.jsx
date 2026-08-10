@@ -136,6 +136,8 @@ export default function AuthProvider({ children }) {
             toast.show(
                 loggedOut === "deploy"
                     ? "You were signed out — a deployment was just triggered."
+                    : loggedOut === "admin"
+                    ? "You were signed out by the portal admin."
                     : loggedOut === "background"
                     ? "You were signed out after switching away for a while."
                     : "You were signed out after a period of inactivity."

@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using DeploymentAPI.Configuration;
+using DeploymentAPI.Helpers;
 using DeploymentAPI.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.HttpOverrides;
@@ -134,6 +135,11 @@ builder.Services.AddSingleton<AwsSsoService>();
 // read PAT users, Environments, and the real activity log respectively -
 // see AdminUsersController/PmsCoreProjectsController/SecurityAuditLogController).
 builder.Services.AddSingleton<ApiKeyStore>();
+
+// Per-session last-active/force-logout state for the Services page's
+// Users tab (see AdminUsersController) - in-memory, same lifetime
+// rationale as ActivityLogService.
+builder.Services.AddSingleton<SessionActivityService>();
 
 //
 // CORS
@@ -291,6 +297,33 @@ if (!app.Environment.IsDevelopment())
 // CORS
 //
 app.UseCors("ReactPolicy");
+
+//
+// Session activity — records that this browser/device (see PortalIdentity)
+// made a request just now (Services page's Users tab shows this as "Last
+// Active"), and rejects outright if an admin has blocked this specific
+// session (see SettingsService.BlockPatUserAsync) - stronger than clearing
+// their credentials, since a blocked session is refused even with a still-
+// valid token. Runs before auth/controllers so a blocked session can't
+// reach anything at all, not just admin-gated routes.
+//
+app.Use(async (context, next) =>
+{
+    var key = PortalIdentity.GetOrCreateKey(context);
+
+    var settings = context.RequestServices.GetRequiredService<SettingsService>();
+
+    if (await settings.IsPatUserBlockedAsync(key))
+    {
+        context.Response.StatusCode = StatusCodes.Status403Forbidden;
+        await context.Response.WriteAsJsonAsync(new { message = "This session has been blocked by the portal admin." });
+        return;
+    }
+
+    context.RequestServices.GetRequiredService<SessionActivityService>().Touch(key);
+
+    await next();
+});
 
 //
 // Authentication / Authorization

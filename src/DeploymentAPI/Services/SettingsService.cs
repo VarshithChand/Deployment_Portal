@@ -687,6 +687,7 @@ public class SettingsService
         var root = await ReadRootAsync();
         var users = root["UserGitHubCredentials"] as JObject;
         var access = root["SidebarAccess"] as JObject;
+        var blocked = root["BlockedPatUsers"] as JArray;
 
         if (users == null)
             return new List<PatUserSummaryDto>();
@@ -714,9 +715,52 @@ public class SettingsService
                 PatOwnerLogin = logins[i] ?? "Unknown (invalid or expired token)",
                 Owner = entry["Owner"]?.ToString() ?? string.Empty,
                 Repository = entry["Repository"]?.ToString() ?? string.Empty,
-                RestrictedTabCount = restrictionCount
+                RestrictedTabCount = restrictionCount,
+                IsBlocked = blocked?.Any(k => k.ToString() == p.Name) ?? false
             };
         }).ToList();
+    }
+
+    // A blocked key is rejected outright by every request (see the block-
+    // check middleware in Program.cs), even with a still-valid token —
+    // stronger than clearing their credentials, which they could just
+    // re-enter. Persisted (unlike SessionActivityService's force-logout)
+    // since a block is meant to stick across restarts until an admin
+    // explicitly lifts it.
+    public async Task<bool> IsPatUserBlockedAsync(string key)
+    {
+        var root = await ReadRootAsync();
+        var blocked = root["BlockedPatUsers"] as JArray;
+
+        return blocked?.Any(k => k.ToString() == key) ?? false;
+    }
+
+    public async Task BlockPatUserAsync(string key)
+    {
+        var root = await ReadRootAsync();
+        var blocked = root["BlockedPatUsers"] as JArray ?? new JArray();
+
+        if (!blocked.Any(k => k.ToString() == key))
+            blocked.Add(key);
+
+        root["BlockedPatUsers"] = blocked;
+        await WriteRootAsync(root);
+
+        _log.LogInfo("Settings", $"PAT user '{key}' blocked by admin.");
+    }
+
+    public async Task UnblockPatUserAsync(string key)
+    {
+        var root = await ReadRootAsync();
+
+        if (root["BlockedPatUsers"] is JArray blocked)
+        {
+            var remaining = new JArray(blocked.Where(k => k.ToString() != key));
+            root["BlockedPatUsers"] = remaining;
+            await WriteRootAsync(root);
+        }
+
+        _log.LogInfo("Settings", $"PAT user '{key}' unblocked by admin.");
     }
 
     private static async Task<string?> ResolvePatOwnerLoginAsync(string token)

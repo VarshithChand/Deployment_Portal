@@ -19,6 +19,7 @@ import {
 } from "../services/settingsService";
 import { getAccountRepositories } from "../services/githubService";
 import { getLogs } from "../services/logsService";
+import { SIDEBAR_TABS, SIDEBAR_STATES } from "../constants/sidebarAccess";
 
 import LoadingSpinner from "../components/LoadingSpinner";
 import PageLayout from "../components/layout/PageLayout";
@@ -51,31 +52,9 @@ const VIEWS = ["hub", "credentials", "activity-log", "access-levels", "branches"
 // its edit controls for non-admins rather than hiding the whole page.
 const ADMIN_ONLY_VIEWS = new Set(["sidebar-access", "activity-log", "smoke-tests", "external-apis"]);
 
-// Every restrictable sidebar tab except "settings" and "dashboard" — the
-// backend refuses those two entries regardless of what's sent (locking
-// Settings would strand every admin with no way back in, and Dashboard is
-// where the frontend's route guard sends anyone who lands on a restricted
-// tab — see SettingsService.SaveSidebarAccessAsync). Labels mirror
-// Sidebar.jsx's own TABS.
-const SIDEBAR_TABS = [
-    { key: "deploy", label: "Deploy" },
-    { key: "approvals", label: "Approvals" },
-    { key: "pullRequests", label: "Pull Requests" },
-    { key: "storage", label: "Artifacts & Images" },
-    { key: "analytics", label: "Analytics" },
-    { key: "timeline", label: "Timeline" },
-    { key: "history", label: "History" },
-    { key: "environments", label: "Environments" },
-    { key: "templates", label: "Template Tester" },
-    { key: "services", label: "Services" },
-    { key: "docker", label: "Docker" }
-];
-
-const SIDEBAR_STATES = [
-    { value: "visible", label: "Visible" },
-    { value: "locked", label: "Locked" },
-    { value: "hidden", label: "Hidden" }
-];
+// SIDEBAR_TABS/SIDEBAR_STATES live in constants/sidebarAccess.js - shared
+// with the Services page's per-PAT-user access popup, which manages the
+// exact same restriction data from a different entry point.
 
 const VIEW_TITLES = {
     credentials: "Credentials",

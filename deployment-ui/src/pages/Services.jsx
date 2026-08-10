@@ -6,7 +6,9 @@ import PageLayout from "../components/layout/PageLayout";
 import CopyButton from "../components/common/CopyButton";
 import SectionTabs from "../components/common/SectionTabs";
 
-import { getUsers } from "../services/adminService";
+import PatUserAccessModal from "../components/PatUserAccessModal";
+
+import { getUsers, forceLogoutUser, blockUser, unblockUser } from "../services/adminService";
 import { getProjects } from "../services/pmscoreService";
 
 import {
@@ -15,6 +17,12 @@ import {
     createApiKey,
     revokeApiKey
 } from "../services/securityService";
+
+// The current browser's own session key, same format PortalIdentity
+// derives server-side from this same value (see apiBase.js's
+// SESSION_STORAGE_KEY) - used only to stop an admin from accidentally
+// blocking/signing out their own active session from this table.
+const MY_SESSION_KEY = `sess:${localStorage.getItem("portalSessionId") || ""}`;
 
 const SECTIONS = [
     { key: "users", label: "Users" },
@@ -36,6 +44,7 @@ export default function Services() {
     // someone configured a token in Settings > GitHub.
 
     const [users, setUsers] = useState([]);
+    const [accessModalUser, setAccessModalUser] = useState(null);
 
     async function loadUsers() {
 
@@ -54,6 +63,79 @@ export default function Services() {
         finally {
 
             setLoaded((l) => ({ ...l, users: true }));
+
+        }
+
+    }
+
+    async function handleForceLogoutUser(user) {
+
+        if (!(await confirm({
+            title: "Sign out this user?",
+            message: `Immediately sign out '${user.patOwnerLogin}'? They'll need to reload the portal to continue.`,
+            confirmLabel: "Sign Out",
+            danger: true
+        }))) {
+            return;
+        }
+
+        try {
+
+            await forceLogoutUser(user.key);
+            toast.show(`Signed out '${user.patOwnerLogin}'.`, "success");
+
+        }
+        catch (err) {
+
+            console.error(err);
+            toast.show("Failed to sign out that user.", "error");
+
+        }
+
+    }
+
+    async function handleBlockUser(user) {
+
+        if (!(await confirm({
+            title: "Block this user?",
+            message: `Block '${user.patOwnerLogin}'? Every request from their session will be ` +
+                "rejected from now on, even with their existing token, until you unblock them. " +
+                "They'll also be signed out immediately.",
+            confirmLabel: "Block",
+            danger: true
+        }))) {
+            return;
+        }
+
+        try {
+
+            await blockUser(user.key);
+            toast.show(`Blocked '${user.patOwnerLogin}'.`, "success");
+            loadUsers();
+
+        }
+        catch (err) {
+
+            console.error(err);
+            toast.show("Failed to block that user.", "error");
+
+        }
+
+    }
+
+    async function handleUnblockUser(user) {
+
+        try {
+
+            await unblockUser(user.key);
+            toast.show(`Unblocked '${user.patOwnerLogin}'.`, "success");
+            loadUsers();
+
+        }
+        catch (err) {
+
+            console.error(err);
+            toast.show("Failed to unblock that user.", "error");
 
         }
 
@@ -201,8 +283,8 @@ export default function Services() {
 
                     <p className="empty-state" style={{ padding: "0 0 15px", textAlign: "left" }}>
                         Real PAT users — every browser/session that has configured a Personal
-                        Access Token on this portal. Restrictions are managed from{" "}
-                        <strong>Settings → Sidebar Access</strong>, not here.
+                        Access Token on this portal. Click a name to manage that user's sidebar
+                        access.
                     </p>
 
                     {users.length === 0 ? (
@@ -223,6 +305,9 @@ export default function Services() {
                                     <th>PAT Owner</th>
                                     <th>Repository</th>
                                     <th>Restricted</th>
+                                    <th>Last Active</th>
+                                    <th>Status</th>
+                                    <th></th>
                                 </tr>
                             </thead>
 
@@ -231,7 +316,16 @@ export default function Services() {
                                 {users.map((u) => (
 
                                     <tr key={u.key}>
-                                        <td>{u.patOwnerLogin}</td>
+                                        <td>
+                                            <button
+                                                type="button"
+                                                className="btn-link"
+                                                onClick={() => setAccessModalUser(u)}
+                                                title="Manage sidebar access"
+                                            >
+                                                {u.patOwnerLogin}
+                                            </button>
+                                        </td>
                                         <td>{u.owner}/{u.repository}</td>
                                         <td>
                                             {u.restrictedTabCount > 0 ? (
@@ -239,6 +333,59 @@ export default function Services() {
                                             ) : (
                                                 <span className="badge badge-success">Fully visible</span>
                                             )}
+                                        </td>
+                                        <td>
+                                            {u.lastActiveUtc
+                                                ? new Date(u.lastActiveUtc).toLocaleString()
+                                                : "Not seen since restart"}
+                                        </td>
+                                        <td>
+                                            {u.isBlocked ? (
+                                                <span className="badge badge-danger">Blocked</span>
+                                            ) : (
+                                                <span className="badge badge-success">Active</span>
+                                            )}
+                                        </td>
+                                        <td>
+
+                                            <div className="button-row">
+
+                                                <button
+                                                    type="button"
+                                                    className="btn btn-secondary btn-sm"
+                                                    onClick={() => handleForceLogoutUser(u)}
+                                                    disabled={u.key === MY_SESSION_KEY}
+                                                    title={u.key === MY_SESSION_KEY ? "You can't sign out your own session here" : undefined}
+                                                >
+                                                    Sign Out
+                                                </button>
+
+                                                {u.isBlocked ? (
+
+                                                    <button
+                                                        type="button"
+                                                        className="btn btn-secondary btn-sm"
+                                                        onClick={() => handleUnblockUser(u)}
+                                                    >
+                                                        Unblock
+                                                    </button>
+
+                                                ) : (
+
+                                                    <button
+                                                        type="button"
+                                                        className="btn btn-danger btn-sm"
+                                                        onClick={() => handleBlockUser(u)}
+                                                        disabled={u.key === MY_SESSION_KEY}
+                                                        title={u.key === MY_SESSION_KEY ? "You can't block your own session here" : undefined}
+                                                    >
+                                                        Block
+                                                    </button>
+
+                                                )}
+
+                                            </div>
+
                                         </td>
                                     </tr>
 
@@ -253,6 +400,17 @@ export default function Services() {
                     )}
 
                     </>
+
+                )}
+
+                {accessModalUser && (
+
+                    <PatUserAccessModal
+                        patUserKey={accessModalUser.key}
+                        patUserLabel={accessModalUser.patOwnerLogin}
+                        onClose={() => setAccessModalUser(null)}
+                        onSaved={loadUsers}
+                    />
 
                 )}
 

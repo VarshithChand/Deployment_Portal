@@ -7,35 +7,44 @@ import performLogout from "../utils/performLogout";
 const POLL_MS = 15000;
 
 // Runs for every visitor, logged in or not - unlike IdleLogoutMonitor
-// (which only has an OAuth `user` to expire), this reacts to a portal-
-// wide signal: GET /api/auth/session-epoch returns a timestamp that
-// DeploymentController bumps every time someone triggers a deployment
-// (see SettingsService.BumpForceLogoutEpochAsync). The first fetch just
-// establishes a baseline; any later poll that returns a DIFFERENT value
-// means a pipeline ran since this tab loaded, so every tab - not just
-// the one that triggered it - signs itself out within one poll interval.
+// (which only has an OAuth `user` to expire), this reacts to two portal-
+// side signals from GET /api/auth/session-epoch:
+//   - forceLogoutEpoch: portal-wide, bumped whenever someone triggers a
+//     deployment (see SettingsService.BumpForceLogoutEpochAsync).
+//   - mySessionForceLogoutEpoch: scoped to just this caller's own session,
+//     set when an admin uses the Services page's Users tab to sign this
+//     specific PAT user out (or blocks them) - see SessionActivityService.
+// The first poll just establishes a baseline for both; any later poll
+// where either value differs from its baseline means "sign out now."
 export default function GlobalLogoutMonitor() {
 
-    const baselineRef = useRef(undefined);
+    const baselineRef = useRef({ forceLogoutEpoch: undefined, mySessionForceLogoutEpoch: undefined });
 
     async function checkEpoch() {
 
-        let epoch;
+        let data;
 
         try {
-            epoch = await getSessionEpoch();
+            data = await getSessionEpoch();
         }
         catch {
             return;
         }
 
-        if (baselineRef.current === undefined) {
-            baselineRef.current = epoch;
+        const baseline = baselineRef.current;
+
+        if (baseline.forceLogoutEpoch === undefined) {
+            baselineRef.current = data;
             return;
         }
 
-        if (epoch !== baselineRef.current) {
+        if (data.forceLogoutEpoch !== baseline.forceLogoutEpoch) {
             performLogout("deploy");
+            return;
+        }
+
+        if (data.mySessionForceLogoutEpoch !== baseline.mySessionForceLogoutEpoch) {
+            performLogout("admin");
         }
 
     }
