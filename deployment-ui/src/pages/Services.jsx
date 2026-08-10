@@ -305,6 +305,7 @@ export default function Services() {
                                     <th>PAT Owner</th>
                                     <th>Repository</th>
                                     <th>Restricted</th>
+                                    <th>Device</th>
                                     <th>Last Active</th>
                                     <th>Status</th>
                                     <th></th>
@@ -334,6 +335,7 @@ export default function Services() {
                                                 <span className="badge badge-success">Fully visible</span>
                                             )}
                                         </td>
+                                        <td>{u.device}</td>
                                         <td>
                                             {u.lastActiveUtc
                                                 ? new Date(u.lastActiveUtc).toLocaleString()

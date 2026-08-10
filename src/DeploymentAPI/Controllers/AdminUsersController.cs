@@ -36,7 +36,10 @@ public class AdminUsersController : ControllerBase
         var users = await _settings.GetPatUsersAsync();
 
         foreach (var user in users)
+        {
             user.LastActiveUtc = _activity.GetLastSeen(user.Key);
+            user.Device = DeviceInfo.Describe(_activity.GetLastUserAgent(user.Key));
+        }
 
         return Ok(users);
     }

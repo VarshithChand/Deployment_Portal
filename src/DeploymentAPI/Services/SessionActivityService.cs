@@ -12,11 +12,23 @@ public class SessionActivityService
 {
     private readonly ConcurrentDictionary<string, DateTime> _lastSeen = new();
     private readonly ConcurrentDictionary<string, DateTime> _forceLogoutAfter = new();
+    private readonly ConcurrentDictionary<string, string> _lastUserAgent = new();
 
-    public void Touch(string key) => _lastSeen[key] = DateTime.UtcNow;
+    public void Touch(string key, string? userAgent = null)
+    {
+        _lastSeen[key] = DateTime.UtcNow;
+
+        if (!string.IsNullOrWhiteSpace(userAgent))
+            _lastUserAgent[key] = userAgent;
+    }
 
     public DateTime? GetLastSeen(string key) =>
         _lastSeen.TryGetValue(key, out var seen) ? seen : null;
+
+    // Raw header value - see Helpers.DeviceInfo.Describe for turning this
+    // into the "Windows · Chrome" style label the Users tab shows.
+    public string? GetLastUserAgent(string key) =>
+        _lastUserAgent.TryGetValue(key, out var ua) ? ua : null;
 
     // Stamped "now" - GlobalLogoutMonitor treats any change to this value
     // (polled per-session via GET /api/auth/session-epoch) as "sign out,"

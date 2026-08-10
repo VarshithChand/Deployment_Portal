@@ -320,7 +320,8 @@ app.Use(async (context, next) =>
         return;
     }
 
-    context.RequestServices.GetRequiredService<SessionActivityService>().Touch(key);
+    var userAgent = context.Request.Headers.UserAgent.ToString();
+    context.RequestServices.GetRequiredService<SessionActivityService>().Touch(key, userAgent);
 
     await next();
 });

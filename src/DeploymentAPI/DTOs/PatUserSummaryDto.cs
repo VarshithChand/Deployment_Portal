@@ -27,4 +27,9 @@ public class PatUserSummaryDto
     // seen making any request, reset on every backend restart same as the
     // activity log. Null means "not seen since this instance started."
     public DateTime? LastActiveUtc { get; set; }
+
+    // "Windows · Chrome" style label from that session's last request (see
+    // Helpers.DeviceInfo.Describe) - same in-memory/reset-on-restart
+    // caveat as LastActiveUtc.
+    public string Device { get; set; } = "Unknown device";
 }
