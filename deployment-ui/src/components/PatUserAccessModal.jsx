@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 
 import { getUserSidebarAccess, saveUserSidebarAccess, clearUserSidebarAccess } from "../services/settingsService";
-import { SIDEBAR_TABS, SIDEBAR_STATES } from "../constants/sidebarAccess";
+import { SIDEBAR_TABS } from "../constants/sidebarAccess";
+import SidebarStateToggle from "./common/SidebarStateToggle";
 import useToast from "../hooks/useToast";
 
 // The Services page's "click a PAT owner's name" popup — the same
@@ -145,16 +146,10 @@ export default function PatUserAccessModal({ patUserKey, patUserLabel, onClose, 
                                 <tr key={key}>
                                     <td>{label}</td>
                                     <td>
-                                        <select
-                                            className="form-control"
-                                            style={{ maxWidth: 130 }}
-                                            value={accessMap[key] || "visible"}
-                                            onChange={(e) => setTabState(key, e.target.value)}
-                                        >
-                                            {SIDEBAR_STATES.map((s) => (
-                                                <option key={s.value} value={s.value}>{s.label}</option>
-                                            ))}
-                                        </select>
+                                        <SidebarStateToggle
+                                            value={accessMap[key]}
+                                            onChange={(state) => setTabState(key, state)}
+                                        />
                                     </td>
                                 </tr>
 

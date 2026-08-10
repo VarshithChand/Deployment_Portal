@@ -1,3 +1,5 @@
+import SidebarStateToggle from "../common/SidebarStateToggle";
+
 // Pulled out of Settings.jsx's "sidebar-access" view - part of the same
 // cognitive-complexity cleanup as CredentialsView/ActivityLogView.
 export default function SidebarAccessView({
@@ -9,7 +11,6 @@ export default function SidebarAccessView({
     sidebarAccessMap,
     setSidebarTabState,
     sidebarTabs,
-    sidebarStates,
     handleSaveSidebarAccess,
     savingSidebarAccess,
     handleClearSidebarAccess,
@@ -131,15 +132,10 @@ export default function SidebarAccessView({
                                 <tr key={key}>
                                     <td>{label}</td>
                                     <td>
-                                        <select
-                                            className="form-control"
-                                            value={sidebarAccessMap[key] || "visible"}
-                                            onChange={(e) => setSidebarTabState(key, e.target.value)}
-                                        >
-                                            {sidebarStates.map((s) => (
-                                                <option key={s.value} value={s.value}>{s.label}</option>
-                                            ))}
-                                        </select>
+                                        <SidebarStateToggle
+                                            value={sidebarAccessMap[key]}
+                                            onChange={(state) => setSidebarTabState(key, state)}
+                                        />
                                     </td>
                                 </tr>
 

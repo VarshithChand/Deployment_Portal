@@ -19,7 +19,7 @@ import {
 } from "../services/settingsService";
 import { getAccountRepositories } from "../services/githubService";
 import { getLogs } from "../services/logsService";
-import { SIDEBAR_TABS, SIDEBAR_STATES } from "../constants/sidebarAccess";
+import { SIDEBAR_TABS } from "../constants/sidebarAccess";
 
 import LoadingSpinner from "../components/LoadingSpinner";
 import PageLayout from "../components/layout/PageLayout";
@@ -941,7 +941,6 @@ export default function Settings() {
                     sidebarAccessMap={sidebarAccessMap}
                     setSidebarTabState={setSidebarTabState}
                     sidebarTabs={SIDEBAR_TABS}
-                    sidebarStates={SIDEBAR_STATES}
                     handleSaveSidebarAccess={handleSaveSidebarAccess}
                     savingSidebarAccess={savingSidebarAccess}
                     handleClearSidebarAccess={handleClearSidebarAccess}
