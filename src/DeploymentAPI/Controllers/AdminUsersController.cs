@@ -1,3 +1,4 @@
+using System.Linq;
 using DeploymentAPI.Helpers;
 using DeploymentAPI.Services;
 using Microsoft.AspNetCore.Mvc;
@@ -108,5 +109,47 @@ public class AdminUsersController : ControllerBase
         _activity.ForceLogout(key);
 
         return Ok();
+    }
+
+    // Cleans up rows that predate SaveUserGitHubCredentialsAsync's one-
+    // session-per-PAT check (added after this list already had repeat
+    // rows for the same GitHub account, e.g. one person's Chrome and Edge
+    // sessions each stuck around as their own permanent-looking entry) -
+    // that check only stops NEW duplicates at save time, it doesn't
+    // retroactively merge ones already sitting here. Per real GitHub
+    // identity, keeps whichever key was active most recently and deletes
+    // the rest via DeletePatUserAsync; unresolvable tokens ("Unknown...")
+    // are left alone since there's no real identity to group them by.
+    [HttpPost("dedupe")]
+    public async Task<IActionResult> RemoveDuplicates()
+    {
+        if (await AdminGate.DenyUnlessAdminAsync(this, _settings, "remove duplicate PAT users") is IActionResult denied)
+            return denied;
+
+        var users = await _settings.GetPatUsersAsync();
+
+        var groups = users
+            .Where(u => !u.PatOwnerLogin.StartsWith("Unknown", StringComparison.Ordinal))
+            .GroupBy(u => u.PatOwnerLogin);
+
+        var removedCount = 0;
+
+        foreach (var group in groups)
+        {
+            if (group.Count() <= 1)
+                continue;
+
+            var keep = group
+                .OrderByDescending(u => _activity.GetLastSeen(u.Key) ?? DateTime.MinValue)
+                .First();
+
+            foreach (var duplicate in group.Where(u => u.Key != keep.Key))
+            {
+                await _settings.DeletePatUserAsync(duplicate.Key);
+                removedCount++;
+            }
+        }
+
+        return Ok(new { removedCount });
     }
 }

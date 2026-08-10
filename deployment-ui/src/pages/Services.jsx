@@ -8,7 +8,7 @@ import SectionTabs from "../components/common/SectionTabs";
 
 import PatUserAccessModal from "../components/PatUserAccessModal";
 
-import { getUsers, forceLogoutUser, blockUser, unblockUser, deleteUser } from "../services/adminService";
+import { getUsers, forceLogoutUser, blockUser, unblockUser, deleteUser, removeDuplicateUsers } from "../services/adminService";
 import { getProjects } from "../services/pmscoreService";
 
 import {
@@ -45,6 +45,7 @@ export default function Services() {
     const [users, setUsers] = useState([]);
     const [accessModalUser, setAccessModalUser] = useState(null);
     const [deviceInfoUser, setDeviceInfoUser] = useState(null);
+    const [deduping, setDeduping] = useState(false);
 
     async function loadUsers() {
 
@@ -58,6 +59,67 @@ export default function Services() {
 
             console.error(err);
             toast.show(err.response?.data?.message || "Failed to load PAT users.", "error");
+
+        }
+
+    }
+
+    // Groups of repeated rows for the same real GitHub account (the
+    // account column of usedEndpoints/... isn't unique - patOwnerLogin
+    // is), so the "Remove Duplicates" button only shows up when there's
+    // actually something to merge.
+    const duplicatePatOwnerLogins = new Set(
+        Object.entries(
+            users.reduce((counts, u) => {
+                if (!u.patOwnerLogin.startsWith("Unknown")) {
+                    counts[u.patOwnerLogin] = (counts[u.patOwnerLogin] || 0) + 1;
+                }
+                return counts;
+            }, {})
+        )
+            .filter(([, count]) => count > 1)
+            .map(([login]) => login)
+    );
+
+    async function handleRemoveDuplicates() {
+
+        if (!(await confirm({
+            title: "Remove duplicate users?",
+            message: "For every real GitHub account with more than one row here, this keeps " +
+                "whichever session was active most recently and permanently deletes the rest " +
+                "(their credentials, sidebar restrictions, everything). This cannot be undone.",
+            confirmLabel: "Remove Duplicates",
+            danger: true
+        }))) {
+            return;
+        }
+
+        try {
+
+            setDeduping(true);
+
+            const response = await removeDuplicateUsers();
+            const removedCount = response.data?.removedCount ?? 0;
+
+            toast.show(
+                removedCount > 0
+                    ? `Removed ${removedCount} duplicate ${removedCount === 1 ? "user" : "users"}.`
+                    : "No duplicates found.",
+                "success"
+            );
+
+            loadUsers();
+
+        }
+        catch (err) {
+
+            console.error(err);
+            toast.show("Failed to remove duplicates.", "error");
+
+        }
+        finally {
+
+            setDeduping(false);
 
         }
 
@@ -325,7 +387,24 @@ export default function Services() {
 
                     <>
 
-                    <h2 className="card-title">Users</h2>
+                    <div className="access-panel-header">
+
+                        <h2 className="card-title">Users</h2>
+
+                        {duplicatePatOwnerLogins.size > 0 && (
+                            <button
+                                type="button"
+                                className="btn btn-secondary btn-sm"
+                                onClick={handleRemoveDuplicates}
+                                disabled={deduping}
+                            >
+                                {deduping
+                                    ? "Removing..."
+                                    : `Remove Duplicates (${duplicatePatOwnerLogins.size})`}
+                            </button>
+                        )}
+
+                    </div>
 
                     <p className="empty-state" style={{ padding: "0 0 15px", textAlign: "left" }}>
                         Real PAT users — every browser/session that has configured a Personal

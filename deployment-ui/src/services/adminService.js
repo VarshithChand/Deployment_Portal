@@ -17,3 +17,8 @@ export const unblockUser = async (key) => await api.post(`/users/${encodeURIComp
 // Real delete, not the soft sign-out above - removes every credential
 // and restriction tied to this key. Irreversible.
 export const deleteUser = async (key) => await api.delete(`/users/${encodeURIComponent(key)}`);
+
+// Merges rows that resolve to the same real GitHub account, keeping
+// whichever was active most recently - a one-time cleanup for rows that
+// predate the one-session-per-PAT check saving now enforces.
+export const removeDuplicateUsers = async () => await api.post("/users/dedupe");
