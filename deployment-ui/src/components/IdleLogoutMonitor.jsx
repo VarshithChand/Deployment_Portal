@@ -1,10 +1,16 @@
 import { useEffect, useRef, useState } from "react";
 
 import useAuth from "../hooks/useAuth";
+import useNavigation from "../hooks/useNavigation";
 
 const IDLE_TIMEOUT_MS = 2 * 60 * 1000;
 const WARNING_SECONDS = 30;
-const ACTIVITY_EVENTS = ["mousedown", "mousemove", "keydown", "wheel", "touchstart"];
+
+// Deliberately narrow: a click (covers touch taps too, via the browser's
+// own synthesized click event) or switching tabs — not mouse movement,
+// scrolling, or keystrokes. Just having the page open and glancing at it
+// doesn't count as "still here."
+const ACTIVITY_EVENTS = ["click"];
 
 // Auto-logout after 2 minutes with no activity — but not silently: a
 // warning dialog appears first, giving 30s to click "Stay signed in"
@@ -15,6 +21,7 @@ const ACTIVITY_EVENTS = ["mousedown", "mousemove", "keydown", "wheel", "touchsta
 export default function IdleLogoutMonitor() {
 
     const { user, logout } = useAuth();
+    const { tab } = useNavigation();
 
     const [warning, setWarning] = useState(false);
     const [secondsLeft, setSecondsLeft] = useState(WARNING_SECONDS);
@@ -73,6 +80,18 @@ export default function IdleLogoutMonitor() {
 
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [user]);
+
+    // Switching tabs counts as activity too, same click-only guard as
+    // handleActivity above (in practice a tab switch only ever happens via
+    // a sidebar click anyway, which that click listener already covers -
+    // this catches any other way `tab` might change).
+    useEffect(() => {
+
+        if (!user || warningRef.current) return;
+        scheduleWarning();
+
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [tab]);
 
     // Countdown while the warning is up — pure state ticking, the actual
     // logout is a separate effect reacting to it hitting zero.
