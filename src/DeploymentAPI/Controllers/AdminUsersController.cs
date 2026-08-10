@@ -40,6 +40,7 @@ public class AdminUsersController : ControllerBase
             user.LastActiveUtc = _activity.GetLastSeen(user.Key);
             user.Device = DeviceInfo.Describe(_activity.GetLastUserAgent(user.Key));
             user.IpAddress = _activity.GetLastIpAddress(user.Key);
+            user.UsedEndpoints = _activity.GetUsedEndpoints(user.Key);
         }
 
         return Ok(users);

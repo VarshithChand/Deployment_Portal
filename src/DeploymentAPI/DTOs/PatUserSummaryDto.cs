@@ -43,4 +43,10 @@ public class PatUserSummaryDto
     // SessionActivityService.GetLastIpAddress) from that session's last
     // request - same in-memory/reset-on-restart caveat as LastActiveUtc.
     public string? IpAddress { get; set; }
+
+    // Every distinct "METHOD /path" this session has ever hit (see
+    // SessionActivityService.GetUsedEndpoints) - which of this portal's
+    // own APIs this user actually uses, not a full call history. Same
+    // in-memory/reset-on-restart caveat as LastActiveUtc.
+    public List<string> UsedEndpoints { get; set; } = new();
 }

@@ -3644,6 +3644,30 @@ textarea{
 
 }
 
+/* Services > Security's "API Usage" panel - one small tag per distinct
+   endpoint a PAT user has hit. */
+.api-usage-list{
+
+    display:flex;
+
+    flex-wrap:wrap;
+
+    gap:6px;
+
+}
+
+.api-usage-item{
+
+    background:var(--bg);
+
+    border:1px solid var(--border);
+
+    border-radius:6px;
+
+    padding:3px 8px;
+
+}
+
 .docker-logs{
 
     font-family:'Source Code Pro','Consolas',monospace;

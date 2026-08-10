@@ -173,6 +173,11 @@ export default function Services() {
 
         try {
 
+            // Users too, purely to drive the "API Usage" panel below
+            // (PatOwnerLogin + usedEndpoints) - a failure here shouldn't
+            // block Audit Log/API Keys from showing, since it's admin-
+            // gated separately and a non-admin PAT-owning admin edge case
+            // could otherwise blank the whole tab.
             const [logsRes, keysRes] = await Promise.all([getAuditLogs(), getApiKeys()]);
             setAuditLogs(Array.isArray(logsRes.data) ? logsRes.data : []);
             setApiKeys(Array.isArray(keysRes.data) ? keysRes.data : []);
@@ -182,6 +187,18 @@ export default function Services() {
 
             console.error(err);
             toast.show(err.response?.data?.message || "Failed to load security data.", "error");
+
+        }
+
+        try {
+
+            const usersRes = await getUsers();
+            setUsers(Array.isArray(usersRes.data) ? usersRes.data : []);
+
+        }
+        catch (err) {
+
+            console.error(err);
 
         }
 
@@ -614,6 +631,61 @@ export default function Services() {
                             </div>
 
                         ))}
+
+                        </div>
+
+                    )}
+
+                    <h2 className="card-title" style={{ marginTop: 30 }}>API Usage</h2>
+
+                    <p className="empty-state" style={{ padding: "0 0 15px", textAlign: "left" }}>
+                        Which of this portal's own APIs each PAT user has actually called (see the
+                        Users tab for who's who) — reset on server restart, same as Last Active.
+                    </p>
+
+                    {users.length === 0 ? (
+
+                        <p className="empty-state">No PAT users yet.</p>
+
+                    ) : (
+
+                        <div className="table-scroll">
+
+                        <table className="table">
+
+                            <thead>
+                                <tr>
+                                    <th>PAT Owner</th>
+                                    <th>APIs Used</th>
+                                </tr>
+                            </thead>
+
+                            <tbody>
+
+                                {users.map((u) => (
+
+                                    <tr key={u.key}>
+                                        <td>{u.patOwnerLogin}</td>
+                                        <td>
+                                            {u.usedEndpoints.length === 0 ? (
+                                                <span className="empty-state">Not seen since restart</span>
+                                            ) : (
+                                                <div className="api-usage-list">
+                                                    {u.usedEndpoints.map((endpoint) => (
+                                                        <code key={endpoint} className="commit-sha api-usage-item">
+                                                            {endpoint}
+                                                        </code>
+                                                    ))}
+                                                </div>
+                                            )}
+                                        </td>
+                                    </tr>
+
+                                ))}
+
+                            </tbody>
+
+                        </table>
 
                         </div>
 

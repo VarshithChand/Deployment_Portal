@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Linq;
 
 namespace DeploymentAPI.Services;
 
@@ -15,7 +16,15 @@ public class SessionActivityService
     private readonly ConcurrentDictionary<string, string> _lastUserAgent = new();
     private readonly ConcurrentDictionary<string, string> _lastIpAddress = new();
 
-    public void Touch(string key, string? userAgent = null, string? ipAddress = null)
+    // Every distinct "METHOD /path" this key has ever hit, not a full call
+    // history - Security > Audit Log already covers "what happened when";
+    // this answers "which of this app's own APIs does this user actually
+    // use" at a glance. The inner ConcurrentDictionary<string, byte> is
+    // just a thread-safe set (no concurrent HashSet in .NET) - the byte
+    // value is never read.
+    private readonly ConcurrentDictionary<string, ConcurrentDictionary<string, byte>> _usedEndpoints = new();
+
+    public void Touch(string key, string? userAgent = null, string? ipAddress = null, string? endpoint = null)
     {
         _lastSeen[key] = DateTime.UtcNow;
 
@@ -24,7 +33,15 @@ public class SessionActivityService
 
         if (!string.IsNullOrWhiteSpace(ipAddress))
             _lastIpAddress[key] = ipAddress;
+
+        if (!string.IsNullOrWhiteSpace(endpoint))
+            _usedEndpoints.GetOrAdd(key, _ => new ConcurrentDictionary<string, byte>())[endpoint] = 0;
     }
+
+    public List<string> GetUsedEndpoints(string key) =>
+        _usedEndpoints.TryGetValue(key, out var endpoints)
+            ? endpoints.Keys.OrderBy(e => e).ToList()
+            : new List<string>();
 
     public DateTime? GetLastSeen(string key) =>
         _lastSeen.TryGetValue(key, out var seen) ? seen : null;
