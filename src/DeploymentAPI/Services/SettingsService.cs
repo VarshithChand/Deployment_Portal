@@ -147,6 +147,19 @@ public class SettingsService
             signedOut ? null : entry?["PersonalAccessToken"]?.ToString());
     }
 
+    // The raw SignedOut flag, unmasked by GetUserGitHubCredentialsAsync's
+    // "report no token" behavior - lets a caller tell "never configured
+    // anything" apart from "an admin signed this session out," which is
+    // what RequireGitHubSetup uses to show a specific explanation instead
+    // of the generic first-time setup message.
+    public async Task<bool> IsPatUserSignedOutAsync(string key)
+    {
+        var root = await ReadRootAsync();
+        var entry = (root["UserGitHubCredentials"] as JObject)?[key] as JObject;
+
+        return entry?["SignedOut"]?.Value<bool>() ?? false;
+    }
+
     // Admin-triggered "Sign Out" from the Services page's Users tab - a
     // soft delete, not a real one: the stored token/repo are left exactly
     // as they were, only a flag is set that makes every read of them (see

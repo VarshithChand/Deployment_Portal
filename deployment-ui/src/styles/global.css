@@ -2175,6 +2175,23 @@ textarea{
 
 }
 
+/* RequireGitHubSetup's "signed out by admin" explanation - deliberately
+   at the bottom, below the reconnect form itself, and quiet rather than
+   alarming: the form above it is the actual call to action. */
+.signed-out-notice{
+
+    margin-top:18px;
+
+    padding-top:14px;
+
+    border-top:1px solid var(--border);
+
+    text-align:center;
+
+    color:var(--text-muted);
+
+}
+
 .token-help-link{
 
     display:inline-block;

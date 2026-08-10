@@ -95,7 +95,8 @@ public class SettingsController : ControllerBase
             GitHubOwner = creds.Owner,
             GitHubRepository = creds.Repository,
             GitHubTokenConfigured = creds.TokenConfigured,
-            IsConfigured = creds.IsConfigured
+            IsConfigured = creds.IsConfigured,
+            WasSignedOut = await _settings.IsPatUserSignedOutAsync(key)
         });
     }
 

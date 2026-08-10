@@ -55,6 +55,12 @@ export default function RequireGitHubSetup({ children }) {
     const [checking, setChecking] = useState(true);
     const [configured, setConfigured] = useState(true);
 
+    // True when this popup is showing because an admin used the Services
+    // page's Sign Out button (see SettingsService.SoftSignOutPatUserAsync),
+    // not because nothing was ever configured - lets the "token" step show
+    // a specific explanation instead of the generic first-visit copy.
+    const [wasSignedOut, setWasSignedOut] = useState(false);
+
     // "token" -> "pick-repo" -> "connected"
     const [step, setStep] = useState("token");
 
@@ -78,7 +84,12 @@ export default function RequireGitHubSetup({ children }) {
 
         getMyGitHubSettings()
             .then((settings) => {
-                if (!cancelled) setConfigured(!!settings.isConfigured);
+
+                if (cancelled) return;
+
+                setConfigured(!!settings.isConfigured);
+                setWasSignedOut(!!settings.wasSignedOut);
+
             })
             .catch((err) => {
                 console.error(err);
@@ -284,6 +295,13 @@ export default function RequireGitHubSetup({ children }) {
                                 </button>
 
                             </form>
+
+                            {wasSignedOut && (
+                                <p className="field-hint signed-out-notice">
+                                    Your session was signed out by the portal admin. Reconnect a token
+                                    above to continue.
+                                </p>
+                            )}
 
                             </>
 
