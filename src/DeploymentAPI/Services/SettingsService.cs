@@ -764,7 +764,13 @@ public class SettingsService
     // sites) — "settings" itself is deliberately excluded, same rule as
     // UnrestrictableTabs above, since granting Settings access would let a
     // scoped grantee edit the admin allowlist and grant themselves anything.
-    public static readonly HashSet<string> GrantablePageKeys = new()
+    // IReadOnlySet, not HashSet: a public static HashSet is only
+    // reference-immutable (the field itself can't be reassigned), not
+    // content-immutable — any caller could still do
+    // GrantablePageKeys.Add("settings") and silently defeat the
+    // "settings is never grantable" rule above. The interface hides
+    // Add/Remove/Clear from callers entirely.
+    public static readonly IReadOnlySet<string> GrantablePageKeys = new HashSet<string>
     {
         "deploy", "approvals", "pullRequests", "storage", "environments", "docker", "services"
     };

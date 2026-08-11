@@ -1520,23 +1520,19 @@ textarea{
 
     }
 
-    .mobile-nav-toggle{
-
-        display:flex;
-
-    }
-
 }
 
-/* Hidden by default (desktop/tablet default, like the rest of this
-   stylesheet) — shown only inside the max-width:768px block above. A
-   previous version of this tried to hide it with a separate
-   min-width:769px block instead; that rule and this one have identical
-   specificity, so with both "in scope" at once, source order alone (not
-   which media query looks more specific) decides the winner — and this
-   base rule came second, so it silently won even on desktop. Keeping the
-   default here and only ever turning it on inside the narrow breakpoint
-   avoids that race entirely. */
+/* Hidden by default (desktop/tablet), shown only inside the narrow
+   @media block below. Both rules share identical specificity
+   (.mobile-nav-toggle, one class) — CSS breaks that tie by source
+   order, not by which one sits inside a currently-matching media query,
+   so THIS rule has to come first and the max-width override has to come
+   strictly after it. They previously sat in the opposite order (the
+   override lived earlier, inside a big shared mobile-drawer media
+   block), which meant this unconditional display:none was always the
+   "later" rule and silently won even under 768px — the button existed,
+   it was just never visible, with no way to open the sidebar drawer on
+   a phone-width screen at all. */
 .mobile-nav-toggle{
 
     display:none;
@@ -1568,6 +1564,16 @@ textarea{
 .mobile-nav-toggle:hover{
 
     background:var(--table-row-hover);
+
+}
+
+@media(max-width:768px){
+
+    .mobile-nav-toggle{
+
+        display:flex;
+
+    }
 
 }
 
