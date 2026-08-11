@@ -9,6 +9,117 @@ import { getRunErrors } from "../services/historyService";
 
 const FAILURE_CONCLUSIONS = ["failure", "cancelled", "timed_out", "startup_failure", "action_required"];
 
+function JobErrorCard({ jobError, onViewFullMessage }) {
+
+    return (
+
+        <div className="error-message">
+
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", flexWrap: "wrap" }}>
+
+                <strong>
+                    {jobError.jobName}
+                    {" "}
+                    <StatusBadge status={jobError.conclusion} />
+                </strong>
+
+                <button
+                    type="button"
+                    className="btn btn-secondary btn-sm"
+                    onClick={() => onViewFullMessage(jobError)}
+                >
+                    View full message
+                </button>
+
+            </div>
+
+            {jobError.failedStep && (
+
+                <p style={{ margin: "6px 0 0" }}>
+                    It failed on the <strong>"{jobError.failedStep}"</strong> step.
+                </p>
+
+            )}
+
+            {jobError.messages && jobError.messages.length > 0 ? (
+
+                <>
+
+                <p style={{ margin: "10px 0 4px" }}>
+                    What GitHub reported:
+                </p>
+
+                <ul style={{ margin: "0", paddingLeft: "18px" }}>
+
+                    {jobError.messages.map((message, messageIndex) => (
+
+                        <li key={messageIndex}>{message}</li>
+
+                    ))}
+
+                </ul>
+
+                </>
+
+            ) : (
+
+                <p style={{ margin: "8px 0 0" }}>
+                    GitHub didn't attach a detailed error message to this
+                    step — click "View full message" above for more context.
+                </p>
+
+            )}
+
+        </div>
+
+    );
+
+}
+
+// Pulled out of HistoryTable's row-expansion JSX so this block's own
+// nesting (isLoading / no-errors / error-list, each a different shape)
+// doesn't count toward the .map() callback's cognitive complexity too.
+function RunFailureDetails({ run, isLoading, runErrors, onViewFullMessage }) {
+
+    if (isLoading) {
+        return <p className="empty-state">Loading error details...</p>;
+    }
+
+    if (!runErrors || runErrors.length === 0) {
+
+        return (
+            <p className="error-message">
+                This run {run.conclusion === "cancelled" ? "was cancelled" : "failed"},
+                but GitHub didn't return a detailed error message for any job in it.
+                That usually means the failure happened before the job's own steps ran
+                (for example GitHub's runners being temporarily unavailable) rather
+                than a step in the pipeline itself failing. Open the run on GitHub for
+                the full log.
+            </p>
+        );
+
+    }
+
+    return (
+
+        <>
+
+        <p className="empty-state" style={{ textAlign: "left", padding: "10px 0 4px" }}>
+            {runErrors.length === 1
+                ? "1 job in this run didn't succeed:"
+                : `${runErrors.length} jobs in this run didn't succeed:`}
+        </p>
+
+        {runErrors.map((jobError, index) => (
+            <JobErrorCard key={index} jobError={jobError} onViewFullMessage={onViewFullMessage} />
+        ))}
+
+        </>
+
+    );
+
+}
+
 export default function HistoryTable({ runs = [] }) {
 
     const safeRuns = Array.isArray(runs) ? runs : [];
@@ -162,97 +273,12 @@ export default function HistoryTable({ runs = [] }) {
 
                                     {isFailed ? (
 
-                                        isLoading ? (
-
-                                            <p className="empty-state">Loading error details...</p>
-
-                                        ) : !runErrors || runErrors.length === 0 ? (
-
-                                            <p className="error-message">
-                                                This run {run.conclusion === "cancelled" ? "was cancelled" : "failed"},
-                                                but GitHub didn't return a detailed error message for any job in it.
-                                                That usually means the failure happened before the job's own steps ran
-                                                (for example GitHub's runners being temporarily unavailable) rather
-                                                than a step in the pipeline itself failing. Open the run on GitHub for
-                                                the full log.
-                                            </p>
-
-                                        ) : (
-
-                                            <>
-
-                                            <p className="empty-state" style={{ textAlign: "left", padding: "10px 0 4px" }}>
-                                                {runErrors.length === 1
-                                                    ? "1 job in this run didn't succeed:"
-                                                    : `${runErrors.length} jobs in this run didn't succeed:`}
-                                            </p>
-
-                                            {runErrors.map((jobError, index) => (
-
-                                                <div key={index} className="error-message">
-
-                                                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", flexWrap: "wrap" }}>
-
-                                                        <strong>
-                                                            {jobError.jobName}
-                                                            {" "}
-                                                            <StatusBadge status={jobError.conclusion} />
-                                                        </strong>
-
-                                                        <button
-                                                            type="button"
-                                                            className="btn btn-secondary btn-sm"
-                                                            onClick={() => setDialogJobError(jobError)}
-                                                        >
-                                                            View full message
-                                                        </button>
-
-                                                    </div>
-
-                                                    {jobError.failedStep && (
-
-                                                        <p style={{ margin: "6px 0 0" }}>
-                                                            It failed on the <strong>"{jobError.failedStep}"</strong> step.
-                                                        </p>
-
-                                                    )}
-
-                                                    {jobError.messages && jobError.messages.length > 0 ? (
-
-                                                        <>
-
-                                                        <p style={{ margin: "10px 0 4px" }}>
-                                                            What GitHub reported:
-                                                        </p>
-
-                                                        <ul style={{ margin: "0", paddingLeft: "18px" }}>
-
-                                                            {jobError.messages.map((message, messageIndex) => (
-
-                                                                <li key={messageIndex}>{message}</li>
-
-                                                            ))}
-
-                                                        </ul>
-
-                                                        </>
-
-                                                    ) : (
-
-                                                        <p style={{ margin: "8px 0 0" }}>
-                                                            GitHub didn't attach a detailed error message to this
-                                                            step — click "View full message" above for more context.
-                                                        </p>
-
-                                                    )}
-
-                                                </div>
-
-                                            ))}
-
-                                            </>
-
-                                        )
+                                        <RunFailureDetails
+                                            run={run}
+                                            isLoading={isLoading}
+                                            runErrors={runErrors}
+                                            onViewFullMessage={setDialogJobError}
+                                        />
 
                                     ) : (
 

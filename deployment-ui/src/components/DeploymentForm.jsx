@@ -24,6 +24,42 @@ function formatInputLabel(name) {
 
 }
 
+// Workflows are split into CI / CD / CI+CD by name — repos don't reliably
+// label these consistently, so this is a heuristic: a workflow mentioning
+// both a CI-ish and a CD-ish term (e.g. "Build & Release") is treated as a
+// combined pipeline rather than forced into just one bucket. Module-level
+// (not redefined per render) since it only ever reads its own argument.
+function classifyWorkflow(item) {
+
+    const text = `${item.name} ${item.path || ""}`;
+
+    const hasCi = /\bci\b/i.test(text) || /\bbuild\b/i.test(text) || /\btest\b/i.test(text);
+    const hasCd = /\bcd\b/i.test(text) || /\brelease\b/i.test(text) || /\bdeploy\b/i.test(text);
+
+    if (hasCi && hasCd) {
+        return "CI+CD";
+    }
+
+    if (hasCi) {
+        return "CI";
+    }
+
+    // No clear signal either way — default to CD, since most pipelines
+    // that aren't obviously "CI" are deploy/release-oriented in practice.
+    return "CD";
+
+}
+
+function getDeployButtonLabel(deploying, showInputs) {
+
+    if (deploying) {
+        return showInputs ? "Deploying..." : "Running...";
+    }
+
+    return showInputs ? "Deploy" : "Run CI";
+
+}
+
 export default function DeploymentForm({
 
     branches,
@@ -125,31 +161,6 @@ export default function DeploymentForm({
             .includes(artifactSearch.toLowerCase())
 
     );
-
-    // Workflows are split into CI / CD / CI+CD by name — repos don't reliably
-    // label these consistently, so this is a heuristic: a workflow mentioning
-    // both a CI-ish and a CD-ish term (e.g. "Build & Release") is treated as a
-    // combined pipeline rather than forced into just one bucket.
-    const classifyWorkflow = (item) => {
-
-        const text = `${item.name} ${item.path || ""}`;
-
-        const hasCi = /\bci\b/i.test(text) || /\bbuild\b/i.test(text) || /\btest\b/i.test(text);
-        const hasCd = /\bcd\b/i.test(text) || /\brelease\b/i.test(text) || /\bdeploy\b/i.test(text);
-
-        if (hasCi && hasCd) {
-            return "CI+CD";
-        }
-
-        if (hasCi) {
-            return "CI";
-        }
-
-        // No clear signal either way — default to CD, since most pipelines
-        // that aren't obviously "CI" are deploy/release-oriented in practice.
-        return "CD";
-
-    };
 
     const modeWorkflows = workflows.filter((item) => classifyWorkflow(item) === mode);
 
@@ -920,15 +931,7 @@ export default function DeploymentForm({
 
                 >
 
-                    {
-
-                        deploying
-
-                            ? (showInputs ? "Deploying..." : "Running...")
-
-                            : (showInputs ? "Deploy" : "Run CI")
-
-                    }
+                    {getDeployButtonLabel(deploying, showInputs)}
 
                 </button>
 

@@ -54,6 +54,14 @@ public static class AdminGate
         if (IsAdminOrBootstrap(controller, view))
             return null;
 
+        if (view.AdminGitHubUsernames.Count == 0)
+            return controller.StatusCode(403, new { message = $"Admin login required to {action}." });
+
+        var auth = controller.HttpContext.RequestServices.GetRequiredService<GitHubAuthService>();
+
+        if (!auth.HasToken)
+            return controller.StatusCode(403, new { message = $"Admin login required to {action}." });
+
         // Resolved once here (not via IsAdminViaPersonalAccessTokenAsync,
         // which only returns a bool) so a denial can say WHY: no token at
         // all, a token GitHub itself couldn't verify right now (invalid,
@@ -63,32 +71,36 @@ public static class AdminGate
         // and a generic "Admin login required" couldn't tell them apart -
         // including for someone whose token IS genuinely an admin's, but
         // couldn't be confirmed in the moment.
-        if (view.AdminGitHubUsernames.Count > 0)
+        var login = await auth.GetAuthenticatedLoginAsync();
+
+        if (await IsAdminForRequestAsync(settings, view, login, pageKey))
+            return null;
+
+        return controller.StatusCode(403, new { message = $"Admin login required to {action}. {BuildDenialDetail(login, pageKey)}" });
+    }
+
+    private static async Task<bool> IsAdminForRequestAsync(SettingsService settings, SettingsViewDto view, string? login, string? pageKey)
+    {
+        if (login == null)
+            return false;
+
+        if (view.AdminGitHubUsernames.Any(u => string.Equals(u, login, StringComparison.OrdinalIgnoreCase)))
+            return true;
+
+        return pageKey != null && await settings.IsGrantedPageAdminAsync(pageKey, login);
+    }
+
+    private static string BuildDenialDetail(string? login, string? pageKey)
+    {
+        if (login == null)
         {
-            var auth = controller.HttpContext.RequestServices.GetRequiredService<GitHubAuthService>();
-
-            if (auth.HasToken)
-            {
-                var login = await auth.GetAuthenticatedLoginAsync();
-
-                if (login != null && view.AdminGitHubUsernames.Any(u => string.Equals(u, login, StringComparison.OrdinalIgnoreCase)))
-                    return null;
-
-                if (pageKey != null && login != null && await settings.IsGrantedPageAdminAsync(pageKey, login))
-                    return null;
-
-                var detail = login == null
-                    ? "Unable to verify your Personal Access Token with GitHub right now (it may be invalid, " +
-                      "or GitHub's API may be rate-limited) — admin access couldn't be confirmed. Try again " +
-                      "shortly, or check your token in Settings."
-                    : $"The GitHub account this Personal Access Token belongs to (@{login}) isn't in the admin allowlist" +
-                      (pageKey != null ? " and hasn't been granted access to this page." : ".");
-
-                return controller.StatusCode(403, new { message = $"Admin login required to {action}. {detail}" });
-            }
+            return "Unable to verify your Personal Access Token with GitHub right now (it may be invalid, " +
+                   "or GitHub's API may be rate-limited) — admin access couldn't be confirmed. Try again " +
+                   "shortly, or check your token in Settings.";
         }
 
-        return controller.StatusCode(403, new { message = $"Admin login required to {action}." });
+        return $"The GitHub account this Personal Access Token belongs to (@{login}) isn't in the admin allowlist" +
+               (pageKey != null ? " and hasn't been granted access to this page." : ".");
     }
 
     // Alternate path to the same "Admin" authority as a real GitHub OAuth

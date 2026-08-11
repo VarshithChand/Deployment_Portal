@@ -155,34 +155,40 @@ public class PipelineExplanationService
             return (jobNames, stepLabels);
 
         foreach (var jobEntry in jobs)
-        {
-            var jobKey = jobEntry.Key?.ToString() ?? string.Empty;
-
-            if (jobEntry.Value is not IDictionary<object, object> job)
-            {
-                if (jobKey.Length > 0) jobNames.Add(jobKey);
-                continue;
-            }
-
-            var displayName = job.TryGetValue("name", out var n) ? n?.ToString() : jobKey;
-            if (!string.IsNullOrWhiteSpace(displayName)) jobNames.Add(displayName);
-
-            if (job.TryGetValue("steps", out var stepsObj) && stepsObj is IEnumerable<object> steps)
-            {
-                foreach (var stepObj in steps)
-                {
-                    if (stepObj is not IDictionary<object, object> step)
-                        continue;
-
-                    var label = DescribeStep(step);
-
-                    if (!string.IsNullOrWhiteSpace(label) && !stepLabels.Contains(label))
-                        stepLabels.Add(label);
-                }
-            }
-        }
+            DescribeJob(jobEntry, jobNames, stepLabels);
 
         return (jobNames, stepLabels);
+    }
+
+    private static void DescribeJob(KeyValuePair<object, object> jobEntry, List<string> jobNames, List<string> stepLabels)
+    {
+        var jobKey = jobEntry.Key?.ToString() ?? string.Empty;
+
+        if (jobEntry.Value is not IDictionary<object, object> job)
+        {
+            if (jobKey.Length > 0) jobNames.Add(jobKey);
+            return;
+        }
+
+        var displayName = job.TryGetValue("name", out var n) ? n?.ToString() : jobKey;
+        if (!string.IsNullOrWhiteSpace(displayName)) jobNames.Add(displayName);
+
+        if (job.TryGetValue("steps", out var stepsObj) && stepsObj is IEnumerable<object> steps)
+            CollectStepLabels(steps, stepLabels);
+    }
+
+    private static void CollectStepLabels(IEnumerable<object> steps, List<string> stepLabels)
+    {
+        foreach (var stepObj in steps)
+        {
+            if (stepObj is not IDictionary<object, object> step)
+                continue;
+
+            var label = DescribeStep(step);
+
+            if (!string.IsNullOrWhiteSpace(label) && !stepLabels.Contains(label))
+                stepLabels.Add(label);
+        }
     }
 
     private static string? DescribeStep(IDictionary<object, object> step)

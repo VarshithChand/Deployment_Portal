@@ -103,89 +103,94 @@ public class CloudStatusService
         var awsCredentials = BuildCredentials(credentials);
         var regionEndpoint = RegionEndpoint.GetBySystemName(effectiveRegion);
 
-        var anyTarget = false;
+        var hasEcsTarget = !string.IsNullOrWhiteSpace(cluster) && !string.IsNullOrWhiteSpace(service);
+        var hasEcrTarget = !string.IsNullOrWhiteSpace(ecrRepository);
 
-        if (!string.IsNullOrWhiteSpace(cluster) && !string.IsNullOrWhiteSpace(service))
-        {
-            anyTarget = true;
+        if (hasEcsTarget)
+            await DescribeEcsServiceAsync(awsCredentials, regionEndpoint, cluster!, service!, result);
 
-            try
-            {
-                using var ecsClient = new AmazonECSClient(awsCredentials, regionEndpoint);
+        if (hasEcrTarget)
+            await DescribeEcrImagesAsync(awsCredentials, regionEndpoint, ecrRepository!, result);
 
-                var response = await ecsClient.DescribeServicesAsync(new DescribeServicesRequest
-                {
-                    Cluster = cluster,
-                    Services = new List<string> { service }
-                });
-
-                var svc = response.Services?.FirstOrDefault();
-
-                if (svc == null)
-                {
-                    result.Error = $"ECS service \"{service}\" not found in cluster \"{cluster}\".";
-                }
-                else
-                {
-                    result.EcsStatus = svc.Status;
-                    result.DesiredCount = svc.DesiredCount;
-                    result.RunningCount = svc.RunningCount;
-                    result.TaskDefinition = svc.TaskDefinition;
-                }
-            }
-            catch (Exception ex)
-            {
-                result.Error = AppendError(result.Error, $"ECS: {ex.Message}");
-            }
-        }
-
-        if (!string.IsNullOrWhiteSpace(ecrRepository))
-        {
-            anyTarget = true;
-
-            try
-            {
-                using var ecrClient = new AmazonECRClient(awsCredentials, regionEndpoint);
-
-                var listResponse = await ecrClient.ListImagesAsync(new ListImagesRequest
-                {
-                    RepositoryName = ecrRepository,
-                    MaxResults = 10
-                });
-
-                if (listResponse.ImageIds.Count > 0)
-                {
-                    var describeResponse = await ecrClient.DescribeImagesAsync(new DescribeImagesRequest
-                    {
-                        RepositoryName = ecrRepository,
-                        ImageIds = listResponse.ImageIds
-                    });
-
-                    result.EcrImages = describeResponse.ImageDetails
-                        .OrderByDescending(i => i.ImagePushedAt)
-                        .Take(5)
-                        .Select(i => new EcrImageDto
-                        {
-                            Tag = i.ImageTags?.FirstOrDefault(),
-                            PushedAt = i.ImagePushedAt,
-                            SizeBytes = i.ImageSizeInBytes ?? 0
-                        })
-                        .ToList();
-                }
-            }
-            catch (Exception ex)
-            {
-                result.Error = AppendError(result.Error, $"ECR: {ex.Message}");
-            }
-        }
-
-        if (!anyTarget)
+        if (!hasEcsTarget && !hasEcrTarget)
         {
             result.Error = "This environment has no ECS cluster/service or ECR repository configured yet.";
         }
 
         result.Found = result.Error == null;
         return result;
+    }
+
+    private static async System.Threading.Tasks.Task DescribeEcsServiceAsync(
+        AWSCredentials awsCredentials, RegionEndpoint regionEndpoint, string cluster, string service, CloudStatusDto result)
+    {
+        try
+        {
+            using var ecsClient = new AmazonECSClient(awsCredentials, regionEndpoint);
+
+            var response = await ecsClient.DescribeServicesAsync(new DescribeServicesRequest
+            {
+                Cluster = cluster,
+                Services = new List<string> { service }
+            });
+
+            var svc = response.Services?.FirstOrDefault();
+
+            if (svc == null)
+            {
+                result.Error = $"ECS service \"{service}\" not found in cluster \"{cluster}\".";
+            }
+            else
+            {
+                result.EcsStatus = svc.Status;
+                result.DesiredCount = svc.DesiredCount;
+                result.RunningCount = svc.RunningCount;
+                result.TaskDefinition = svc.TaskDefinition;
+            }
+        }
+        catch (Exception ex)
+        {
+            result.Error = AppendError(result.Error, $"ECS: {ex.Message}");
+        }
+    }
+
+    private static async System.Threading.Tasks.Task DescribeEcrImagesAsync(
+        AWSCredentials awsCredentials, RegionEndpoint regionEndpoint, string ecrRepository, CloudStatusDto result)
+    {
+        try
+        {
+            using var ecrClient = new AmazonECRClient(awsCredentials, regionEndpoint);
+
+            var listResponse = await ecrClient.ListImagesAsync(new ListImagesRequest
+            {
+                RepositoryName = ecrRepository,
+                MaxResults = 10
+            });
+
+            if (listResponse.ImageIds.Count == 0)
+                return;
+
+            var describeResponse = await ecrClient.DescribeImagesAsync(new DescribeImagesRequest
+            {
+                RepositoryName = ecrRepository,
+                ImageIds = listResponse.ImageIds
+            });
+
+            result.EcrImages = describeResponse.ImageDetails
+                .OrderByDescending(i => i.ImagePushedAt)
+                .Take(5)
+                .Select(i => new EcrImageDto
+                {
+                    Tag = i.ImageTags?.FirstOrDefault(),
+                    PushedAt = i.ImagePushedAt,
+                    SizeBytes = i.ImageSizeInBytes ?? 0
+                })
+                .ToList();
+        }
+        catch (Exception ex)
+        {
+            result.Error = AppendError(result.Error, $"ECR: {ex.Message}");
+        }
     }
 
     public async Task<CloudStatusDto> GetAzureWebAppStatusAsync(

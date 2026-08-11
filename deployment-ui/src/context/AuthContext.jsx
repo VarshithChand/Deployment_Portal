@@ -8,6 +8,51 @@ import useToast from "../hooks/useToast";
 
 export const AuthContext = createContext();
 
+function describeAuthError(authError) {
+
+    switch (authError) {
+        case "invalid_state":
+            return "Login session expired, please try again.";
+        case "not_allowed":
+            return "Your GitHub account isn't authorized to access this portal.";
+        default:
+            return "GitHub login failed.";
+    }
+
+}
+
+// Left behind by performLogout()/performSelfClear() (see
+// GlobalLogoutMonitor and PeriodicSignOutMonitor) after the hard reload
+// either one triggers, so whoever lands back here understands why
+// instead of it looking like an unexplained reset.
+function describeLoggedOutReason(loggedOut) {
+
+    switch (loggedOut) {
+        case "deploy":
+            return "You were signed out — a deployment was just triggered.";
+        case "admin":
+            return "You were signed out by the portal admin.";
+        case "cleared":
+            return "You were signed out and your saved credentials were cleared.";
+        default:
+            return "You were signed out.";
+    }
+
+}
+
+function clearQueryParam(params, key) {
+
+    params.delete(key);
+    const query = params.toString();
+
+    window.history.replaceState(
+        {},
+        "",
+        window.location.pathname + (query ? `?${query}` : "")
+    );
+
+}
+
 export default function AuthProvider({ children }) {
 
     const toast = useToast();
@@ -104,54 +149,15 @@ export default function AuthProvider({ children }) {
         const authError = params.get("authError");
 
         if (authError) {
-
-            toast.show(
-                authError === "invalid_state"
-                    ? "Login session expired, please try again."
-                    : authError === "not_allowed"
-                    ? "Your GitHub account isn't authorized to access this portal."
-                    : "GitHub login failed.",
-                "error"
-            );
-
-            params.delete("authError");
-            const query = params.toString();
-
-            window.history.replaceState(
-                {},
-                "",
-                window.location.pathname + (query ? `?${query}` : "")
-            );
-
+            toast.show(describeAuthError(authError), "error");
+            clearQueryParam(params, "authError");
         }
 
-        // Left behind by performLogout()/performSelfClear() (see
-        // GlobalLogoutMonitor and PeriodicSignOutMonitor) after the hard
-        // reload either one triggers, so whoever lands back here
-        // understands why instead of it looking like an unexplained reset.
         const loggedOut = params.get("loggedOut");
 
         if (loggedOut) {
-
-            toast.show(
-                loggedOut === "deploy"
-                    ? "You were signed out — a deployment was just triggered."
-                    : loggedOut === "admin"
-                    ? "You were signed out by the portal admin."
-                    : loggedOut === "cleared"
-                    ? "You were signed out and your saved credentials were cleared."
-                    : "You were signed out."
-            );
-
-            params.delete("loggedOut");
-            const query = params.toString();
-
-            window.history.replaceState(
-                {},
-                "",
-                window.location.pathname + (query ? `?${query}` : "")
-            );
-
+            toast.show(describeLoggedOutReason(loggedOut));
+            clearQueryParam(params, "loggedOut");
         }
 
         refresh();

@@ -582,6 +582,65 @@ function deepSubstitute(node, loopVar, item) {
 // can't know (a pipeline variable, a runtime output, an unparseable
 // expression) — undefined means "don't decide, fall back to showing it
 // as skippable" (see expandIfMatch).
+function evalEq(args) {
+    if (args.length !== 2 || args.some((a) => a === undefined)) return undefined;
+    return String(args[0]) === String(args[1]);
+}
+
+function evalNe(args) {
+    if (args.length !== 2 || args.some((a) => a === undefined)) return undefined;
+    return String(args[0]) !== String(args[1]);
+}
+
+function evalNot(args) {
+    if (args.length !== 1 || args[0] === undefined) return undefined;
+    return !args[0];
+}
+
+function evalIn(args) {
+    if (args.length < 1 || args[0] === undefined) return undefined;
+    return args.slice(1).some((v) => String(v) === String(args[0]));
+}
+
+function evalNotIn(args) {
+    if (args.length < 1 || args[0] === undefined) return undefined;
+    return !args.slice(1).some((v) => String(v) === String(args[0]));
+}
+
+// and()/or() use three-valued logic (like SQL NULL) rather than bailing
+// out on the first unknown operand: "and(false, X)" is decidably false
+// and "or(true, X)" is decidably true no matter what the undecidable X
+// turns out to be.
+function evalAnd(args) {
+    if (args.some((a) => a === false)) return false;
+    if (args.some((a) => a === undefined)) return undefined;
+    return args.every(Boolean);
+}
+
+function evalOr(args) {
+    if (args.some((a) => a === true)) return true;
+    if (args.some((a) => a === undefined)) return undefined;
+    return args.some(Boolean);
+}
+
+const CONDITION_FUNCTION_EVALUATORS = {
+    eq: evalEq,
+    ne: evalNe,
+    not: evalNot,
+    in: evalIn,
+    notin: evalNotIn,
+    and: evalAnd,
+    or: evalOr
+};
+
+// Module-level (not nested in evaluateCondition below) — it only reads
+// its own arguments, and a dispatch-table lookup keeps this trivially
+// simple instead of a 7-case switch each with its own branching.
+function applyFunction(name, args) {
+    const evaluator = CONDITION_FUNCTION_EVALUATORS[name.toLowerCase()];
+    return evaluator ? evaluator(args) : undefined;
+}
+
 function evaluateCondition(conditionText, loopVar, loopItem, paramsMap) {
 
     const text = conditionText.trim();
@@ -705,51 +764,6 @@ function evaluateCondition(conditionText, loopVar, loopItem, paramsMap) {
         // variables.*, job/stage outputs, etc. — genuinely only known at
         // real run time, not something this static preview can resolve.
         return undefined;
-
-    }
-
-    function applyFunction(name, args) {
-
-        switch (name.toLowerCase()) {
-
-            case "eq":
-                if (args.length !== 2 || args.some((a) => a === undefined)) return undefined;
-                return String(args[0]) === String(args[1]);
-
-            case "ne":
-                if (args.length !== 2 || args.some((a) => a === undefined)) return undefined;
-                return String(args[0]) !== String(args[1]);
-
-            case "not":
-                if (args.length !== 1 || args[0] === undefined) return undefined;
-                return !args[0];
-
-            case "in":
-                if (args.length < 1 || args[0] === undefined) return undefined;
-                return args.slice(1).some((v) => String(v) === String(args[0]));
-
-            case "notin":
-                if (args.length < 1 || args[0] === undefined) return undefined;
-                return !args.slice(1).some((v) => String(v) === String(args[0]));
-
-            // and()/or() use three-valued logic (like SQL NULL) rather than
-            // bailing out on the first unknown operand: "and(false, X)" is
-            // decidably false and "or(true, X)" is decidably true no matter
-            // what the undecidable X turns out to be.
-            case "and":
-                if (args.some((a) => a === false)) return false;
-                if (args.some((a) => a === undefined)) return undefined;
-                return args.every(Boolean);
-
-            case "or":
-                if (args.some((a) => a === true)) return true;
-                if (args.some((a) => a === undefined)) return undefined;
-                return args.some(Boolean);
-
-            default:
-                return undefined;
-
-        }
 
     }
 

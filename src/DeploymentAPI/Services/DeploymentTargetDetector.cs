@@ -30,23 +30,7 @@ public static class DeploymentTargetDetector
             var deserializer = new DeserializerBuilder().Build();
             var root = deserializer.Deserialize<Dictionary<object, object>>(yamlText);
 
-            if (root != null && root.TryGetValue("jobs", out var jobsObj) && jobsObj is IDictionary<object, object> jobs)
-            {
-                foreach (var jobEntry in jobs.Values)
-                {
-                    if (jobEntry is not IDictionary<object, object> job)
-                        continue;
-
-                    if (!job.TryGetValue("steps", out var stepsObj) || stepsObj is not IEnumerable<object> steps)
-                        continue;
-
-                    foreach (var stepObj in steps)
-                    {
-                        if (stepObj is IDictionary<object, object> step)
-                            InspectStep(step, result);
-                    }
-                }
-            }
+            InspectJobs(root, result);
         }
         catch
         {
@@ -57,14 +41,45 @@ public static class DeploymentTargetDetector
         }
 
         DetectFromRawText(yamlText, result);
+        ApplyProviderFallback(result);
 
+        return result;
+    }
+
+    private static void InspectJobs(Dictionary<object, object>? root, DetectedDeploymentTargetDto result)
+    {
+        if (root == null || !root.TryGetValue("jobs", out var jobsObj) || jobsObj is not IDictionary<object, object> jobs)
+            return;
+
+        foreach (var jobEntry in jobs.Values)
+            InspectJob(jobEntry, result);
+    }
+
+    private static void InspectJob(object jobEntry, DetectedDeploymentTargetDto result)
+    {
+        if (jobEntry is not IDictionary<object, object> job)
+            return;
+
+        if (!job.TryGetValue("steps", out var stepsObj) || stepsObj is not IEnumerable<object> steps)
+            return;
+
+        foreach (var stepObj in steps)
+        {
+            if (stepObj is IDictionary<object, object> step)
+                InspectStep(step, result);
+        }
+    }
+
+    // Field-by-field: an ECS deploy action seen after an ECR image ref
+    // shouldn't clobber the provider that field-level detection above
+    // already pinned down more specifically - this only fills in "none".
+    private static void ApplyProviderFallback(DetectedDeploymentTargetDto result)
+    {
         if (result.CloudProvider == "none" && (result.EcsCluster != null || result.EcrRepository != null))
             result.CloudProvider = "aws";
 
         if (result.CloudProvider == "none" && (result.AzureWebAppName != null || result.AzureResourceGroup != null))
             result.CloudProvider = "azure";
-
-        return result;
     }
 
     private static void InspectStep(IDictionary<object, object> step, DetectedDeploymentTargetDto result)
