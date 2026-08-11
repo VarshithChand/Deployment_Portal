@@ -8,7 +8,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&display=swap"
       rel="stylesheet"
     />
     <style>
@@ -19,6 +19,9 @@
          so this markup/CSS is simply discarded — no cleanup needed. */
       html, body { margin: 0; padding: 0; }
 
+      /* Glass (default/no data-style yet) — aurora wash, matches global.css's
+         own :root tokens exactly so there's no flash-then-shift once the
+         real stylesheet takes over. */
       #root {
         min-height: 100vh;
         background: #eef2ff;
@@ -34,6 +37,16 @@
           radial-gradient(46% 50% at 88% 4%, #0c1a3a 0%, transparent 62%),
           radial-gradient(50% 55% at 78% 92%, #083344 0%, transparent 60%);
       }
+      /* Other three styles get a flat fallback fill (no gradient) — each
+         has its own real background effect once the app's stylesheet
+         loads, this is only ever visible for a split second. */
+      html[data-style="brutal"] #root { background: #f4f1e9; background-image: none; }
+      html[data-style="brutal"][data-theme="dark"] #root { background: #1a1a1a; background-image: none; }
+      html[data-style="minimal"] #root { background: #fafafa; background-image: none; }
+      html[data-style="minimal"][data-theme="dark"] #root { background: #101012; background-image: none; }
+      html[data-style="neon"] #root,
+      html[data-style="neon"][data-theme="dark"] #root { background: #05070e; background-image: none; }
+      html[data-style="neon"][data-theme="light"] #root { background: #eef6fa; background-image: none; }
 
       .boot-loader {
         min-height: 100vh;
@@ -164,9 +177,10 @@
       }
     </style>
     <script>
-      // Read the persisted theme synchronously, before first paint, so the
-      // boot loader doesn't flash the wrong background for a split second
-      // (ThemeProvider does the same read again once React mounts).
+      // Read the persisted theme + style synchronously, before first paint,
+      // so the boot loader doesn't flash the wrong look for a split second
+      // (ThemeProvider/StyleProvider do the same read again once React
+      // mounts).
       (function () {
         try {
           var stored = localStorage.getItem('theme');
@@ -175,6 +189,15 @@
           document.documentElement.dataset.theme = theme;
         } catch (e) {
           console.warn('Unable to read persisted theme preference', e);
+        }
+        try {
+          var storedStyle = localStorage.getItem('appStyle');
+          var validStyles = ['glass', 'brutal', 'minimal', 'neon'];
+          if (validStyles.indexOf(storedStyle) !== -1) {
+            document.documentElement.dataset.style = storedStyle;
+          }
+        } catch (e) {
+          console.warn('Unable to read persisted style preference', e);
         }
       })();
     </script>

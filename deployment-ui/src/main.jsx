@@ -5,6 +5,7 @@ import App from "./App";
 
 import ToastProvider from "./context/ToastContext";
 import ThemeProvider from "./context/ThemeContext";
+import StyleProvider from "./context/StyleContext";
 import AuthProvider from "./context/AuthContext";
 import NavigationProvider from "./context/NavigationContext";
 
@@ -18,19 +19,23 @@ ReactDOM.createRoot(
 
         <ThemeProvider>
 
-            <ToastProvider>
+            <StyleProvider>
 
-                <NavigationProvider>
+                <ToastProvider>
 
-                    <AuthProvider>
+                    <NavigationProvider>
 
-                        <App/>
+                        <AuthProvider>
 
-                    </AuthProvider>
+                            <App/>
 
-                </NavigationProvider>
+                        </AuthProvider>
 
-            </ToastProvider>
+                    </NavigationProvider>
+
+                </ToastProvider>
+
+            </StyleProvider>
 
         </ThemeProvider>
 

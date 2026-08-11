@@ -89,6 +89,14 @@ export default function SettingsHubView({ isAdmin, setView, handleClearAll, clea
                 </p>
             </button>
 
+            <button type="button" className="settings-hub-tile" onClick={() => setView("appearance")}>
+                <h2>Appearance</h2>
+                <p>
+                    Pick how the portal looks — Glass, Neo-brutalist, Minimal, or Neon Ops —
+                    plus light/dark. Saved to your own browser, nobody else's view changes.
+                </p>
+            </button>
+
         </div>
 
         <div className="card card-danger-zone">

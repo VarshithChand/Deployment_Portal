@@ -31,6 +31,7 @@ import SidebarAccessView from "../components/settings/SidebarAccessView";
 import ActivityLogView from "../components/settings/ActivityLogView";
 import SmokeTestsView from "../components/settings/SmokeTestsView";
 import ExternalApisView from "../components/settings/ExternalApisView";
+import AppearanceView from "../components/settings/AppearanceView";
 import EnvironmentsAdminView from "../components/settings/EnvironmentsAdminView";
 import useToast from "../hooks/useToast";
 import useConfirm from "../hooks/useConfirm";
@@ -39,7 +40,7 @@ import useNavigation from "../hooks/useNavigation";
 import usePagination from "../hooks/usePagination";
 import parseRepoUrl from "../utils/parseRepoUrl";
 
-const VIEWS = ["hub", "credentials", "activity-log", "access-levels", "branches", "sidebar-access", "smoke-tests", "external-apis", "environments"];
+const VIEWS = ["hub", "credentials", "activity-log", "access-levels", "branches", "sidebar-access", "smoke-tests", "external-apis", "environments", "appearance"];
 
 // Every one of these requires Admin server-side (LogsController,
 // SmokeTestController, ExternalHealthController, and the /sidebar/*
@@ -64,7 +65,8 @@ const VIEW_TITLES = {
     "sidebar-access": "Sidebar Access",
     "smoke-tests": "Smoke Tests",
     "external-apis": "External APIs",
-    environments: "Environments"
+    environments: "Environments",
+    appearance: "Appearance"
 };
 
 // Mirrors the same "?tab=" pattern NavigationContext uses for the top-level
@@ -980,6 +982,12 @@ export default function Settings() {
             {view === "environments" && (
 
                 <EnvironmentsAdminView isAdmin={isAdmin} />
+
+            )}
+
+            {view === "appearance" && (
+
+                <AppearanceView />
 
             )}
 

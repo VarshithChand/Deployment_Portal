@@ -87,6 +87,145 @@
 }
 
 /* ==========================================
+   APP STYLE VARIANTS (Settings > Appearance)
+   Orthogonal to :root[data-theme] above — each of these three re-covers
+   the exact same token set glass's bare :root already defines, so the
+   whole app (which is built entirely from these tokens, not hardcoded
+   colors) re-skins by switching one attribute. "glass" itself needs no
+   block here since the bare :root/:root[data-theme="dark"] above already
+   IS glass — these are only the other three, light+dark each. viz-*
+   tokens (validated chart palette) intentionally stay constant across
+   every style; only the interface tokens change.
+========================================== */
+
+/* ---- Neo-brutalist: flat cream, thick black borders, hard shadows ---- */
+:root[data-style="brutal"]{
+    --bg:#f4f1e9;
+    --text:#111111;
+    --text-muted:#444444;
+    --heading-accent:#2f6bff;
+    --accent-secondary:#2f6bff;
+    --accent-3:#2f6bff;
+    --card-bg:#ffffff;
+    --card-bg-strong:#ffffff;
+    --card-shadow:#111111;
+    --stroke:#111111;
+    --border:#111111;
+    --input-bg:#ffffff;
+    --input-border:#111111;
+    --table-header-bg:#faf8f2;
+    --table-header-text:#111111;
+    --table-row-hover:#faf8f2;
+    --overlay-bg:rgba(0,0,0,.55);
+}
+
+:root[data-style="brutal"][data-theme="dark"]{
+    --bg:#1a1a1a;
+    --text:#f4f1e9;
+    --text-muted:#aaaaaa;
+    --heading-accent:#6d97ff;
+    --accent-secondary:#6d97ff;
+    --accent-3:#6d97ff;
+    --card-bg:#242424;
+    --card-bg-strong:#242424;
+    --card-shadow:#000000;
+    --stroke:#f4f1e9;
+    --border:#f4f1e9;
+    --input-bg:#242424;
+    --input-border:#f4f1e9;
+    --table-header-bg:#2a2a2a;
+    --table-header-text:#f4f1e9;
+    --table-row-hover:#2a2a2a;
+    --overlay-bg:rgba(0,0,0,.7);
+}
+
+/* ---- Minimal: quiet, understated, Linear/Vercel-style ---- */
+:root[data-style="minimal"]{
+    --bg:#fafafa;
+    --text:#18181b;
+    --text-muted:#5c5c66;
+    --heading-accent:#5b57eb;
+    --accent-secondary:#6d69f0;
+    --accent-3:#5b57eb;
+    --card-bg:#ffffff;
+    --card-bg-strong:#ffffff;
+    --card-shadow:rgba(0,0,0,.08);
+    --stroke:#ececed;
+    --border:#ececed;
+    --input-bg:#ffffff;
+    --input-border:#e4e4e7;
+    --table-header-bg:#f6f6f7;
+    --table-header-text:#52525b;
+    --table-row-hover:#f6f6f7;
+    --overlay-bg:rgba(0,0,0,.4);
+}
+
+:root[data-style="minimal"][data-theme="dark"]{
+    --bg:#101012;
+    --text:#f4f4f5;
+    --text-muted:#a1a1aa;
+    --heading-accent:#7c78f5;
+    --accent-secondary:#8d89f7;
+    --accent-3:#7c78f5;
+    --card-bg:#18181b;
+    --card-bg-strong:#18181b;
+    --card-shadow:rgba(0,0,0,.5);
+    --stroke:#27272a;
+    --border:#27272a;
+    --input-bg:#18181b;
+    --input-border:#27272a;
+    --table-header-bg:#1c1c1f;
+    --table-header-text:#d4d4d8;
+    --table-row-hover:#1c1c1f;
+    --overlay-bg:rgba(0,0,0,.6);
+}
+
+/* ---- Neon Ops: dark control room, glowing cyan/lime ---- */
+:root[data-style="neon"],
+:root[data-style="neon"][data-theme="dark"]{
+    --bg:#05070e;
+    --text:#e6f6ff;
+    --text-muted:#8aa2b8;
+    --heading-accent:#22d3ee;
+    --accent-secondary:#a3e635;
+    --accent-3:#22d3ee;
+    --card-bg:rgba(13,18,32,.72);
+    --card-bg-strong:rgba(13,18,32,.88);
+    --card-shadow:rgba(0,0,0,.6);
+    --stroke:rgba(34,211,238,.22);
+    --border:rgba(34,211,238,.22);
+    --input-bg:rgba(20,27,45,.6);
+    --input-border:rgba(34,211,238,.3);
+    --table-header-bg:rgba(34,211,238,.06);
+    --table-header-text:#8aa2b8;
+    --table-row-hover:rgba(34,211,238,.08);
+    --overlay-bg:rgba(0,0,0,.75);
+}
+
+/* Neon has no real "light mode" (a control-room aesthetic on white
+   doesn't read as the same thing) — this is a lighter slate stand-in so
+   the theme toggle still does something coherent instead of nothing. */
+:root[data-style="neon"][data-theme="light"]{
+    --bg:#eef6fa;
+    --text:#0b1620;
+    --text-muted:#516273;
+    --heading-accent:#0891b2;
+    --accent-secondary:#4d7c0f;
+    --accent-3:#0891b2;
+    --card-bg:rgba(255,255,255,.75);
+    --card-bg-strong:rgba(255,255,255,.92);
+    --card-shadow:rgba(8,145,178,.18);
+    --stroke:rgba(8,145,178,.25);
+    --border:rgba(8,145,178,.25);
+    --input-bg:#ffffff;
+    --input-border:rgba(8,145,178,.3);
+    --table-header-bg:rgba(8,145,178,.08);
+    --table-header-text:#0b1620;
+    --table-row-hover:rgba(8,145,178,.06);
+    --overlay-bg:rgba(0,0,0,.4);
+}
+
+/* ==========================================
    GLOBAL RESET
 ========================================== */
 
@@ -4872,4 +5011,406 @@ textarea{
 
 .external-health-status-filter-active{
     box-shadow:0 0 0 2px var(--card-bg), 0 0 0 4px var(--heading-accent);
+}
+
+/* ==========================================
+   APP STYLE — STRUCTURAL OVERRIDES
+   Token swaps above cover color; this covers the things that actually
+   read as a different STYLE at a glance — blur on/off, radius, shadow
+   shape, flat-vs-gradient-vs-outline fills, heading typeface, background
+   effect. Grouped per style rather than per component: every rule here
+   is [data-style="x"] plus an existing class, so specificity (0,2,0)
+   always beats the bare-class rule (0,1,0) it's overriding, regardless
+   of where in the file either one sits.
+========================================== */
+
+h1, h2, h3, .card-title, .page-title, .page-header h1, .stat-tile-value, .hero h1{
+    font-family:var(--head-font, 'Inter'), 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+/* ---------- NEO-BRUTALIST ---------- */
+/* Flat fills, thick black borders, hard offset shadows that shift closer
+   on hover instead of a soft lift — no blur anywhere, sharp corners. */
+
+:root[data-style="brutal"]{ --head-font:'Space Grotesk'; }
+
+[data-style="brutal"] body::before,
+[data-style="brutal"] body::after{ display:none; }
+
+[data-style="brutal"] .card,
+[data-style="brutal"] .top-bar,
+[data-style="brutal"] .app-sidebar,
+[data-style="brutal"] .app-footer,
+[data-style="brutal"] .dialog,
+[data-style="brutal"] .activity-bell-panel,
+[data-style="brutal"] .combobox-dropdown,
+[data-style="brutal"] .btn,
+[data-style="brutal"] .repo-name-badge{
+    backdrop-filter:none;
+    -webkit-backdrop-filter:none;
+    border-radius:4px;
+}
+
+[data-style="brutal"] .card{
+    border-width:2.5px;
+    box-shadow:5px 5px 0 var(--card-shadow);
+    transition:transform .15s var(--e, ease), box-shadow .15s var(--e, ease);
+}
+
+[data-style="brutal"] .card:hover{
+    transform:translate(-2px,-2px);
+    box-shadow:7px 7px 0 var(--card-shadow);
+}
+
+[data-style="brutal"] .btn,
+[data-style="brutal"] .qa-btn{
+    border-width:2.5px;
+    box-shadow:4px 4px 0 var(--card-shadow);
+}
+
+[data-style="brutal"] .btn:hover:not(:disabled){
+    transform:translate(-2px,-2px);
+    box-shadow:6px 6px 0 var(--card-shadow);
+}
+
+[data-style="brutal"] .btn-primary,
+[data-style="brutal"] .btn-success,
+[data-style="brutal"] .btn-danger,
+[data-style="brutal"] .btn-warning,
+[data-style="brutal"] .btn-secondary{
+    background:var(--heading-accent);
+    border-color:var(--card-shadow);
+}
+
+[data-style="brutal"] .btn-primary::before,
+[data-style="brutal"] .btn-success::before,
+[data-style="brutal"] .btn-danger::before,
+[data-style="brutal"] .btn-warning::before,
+[data-style="brutal"] .btn-secondary::before{
+    display:none;
+}
+
+[data-style="brutal"] .badge,
+[data-style="brutal"] .status-success,
+[data-style="brutal"] .repo-name-badge,
+[data-style="brutal"] .pr-notification-badge,
+[data-style="brutal"] .app-sidebar-item.active{
+    border-radius:3px;
+}
+
+[data-style="brutal"] .badge{
+    border-width:1.5px;
+    border-color:currentColor;
+}
+
+[data-style="brutal"] .app-sidebar-item.active{
+    background:var(--heading-accent);
+    border-width:2px;
+    border-color:var(--card-shadow);
+    box-shadow:3px 3px 0 var(--card-shadow);
+}
+
+[data-style="brutal"] .pr-notification-badge{
+    background:#d97706;
+    border-width:2px;
+    border-color:var(--card-shadow);
+    box-shadow:none;
+}
+
+[data-style="brutal"] .table th:first-child,
+[data-style="brutal"] .table th:last-child{
+    border-radius:0;
+}
+
+[data-style="brutal"] .table th{
+    border-bottom:2px solid var(--border);
+}
+
+[data-style="brutal"] .form-control{
+    border-width:2px;
+    border-radius:4px;
+}
+
+[data-style="brutal"] .loading-mark-tile{
+    background:var(--heading-accent);
+    border:2.5px solid var(--card-shadow);
+    border-radius:4px;
+}
+
+[data-style="brutal"] .loading-mark-ring{
+    border-radius:4px;
+}
+
+/* ---------- MINIMAL ---------- */
+/* No blur, no gradients, quiet single-color accents, small soft shadows —
+   the opposite instinct from glass: understatement over ornament. */
+
+[data-style="minimal"] .card,
+[data-style="minimal"] .top-bar,
+[data-style="minimal"] .app-sidebar,
+[data-style="minimal"] .app-footer,
+[data-style="minimal"] .dialog,
+[data-style="minimal"] .activity-bell-panel,
+[data-style="minimal"] .combobox-dropdown,
+[data-style="minimal"] .btn{
+    backdrop-filter:none;
+    -webkit-backdrop-filter:none;
+}
+
+[data-style="minimal"] .card{
+    border-radius:10px;
+    box-shadow:var(--card-shadow);
+}
+
+[data-style="minimal"] .card:hover{
+    box-shadow:0 8px 30px -16px rgba(0,0,0,.25);
+    transform:translateY(-2px);
+}
+
+[data-style="minimal"] .btn,
+[data-style="minimal"] .qa-btn,
+[data-style="minimal"] .form-control,
+[data-style="minimal"] .dialog{
+    border-radius:8px;
+}
+
+[data-style="minimal"] .btn-primary,
+[data-style="minimal"] .btn-success,
+[data-style="minimal"] .btn-danger,
+[data-style="minimal"] .btn-warning,
+[data-style="minimal"] .btn-secondary{
+    background:var(--heading-accent);
+    box-shadow:none;
+}
+
+[data-style="minimal"] .btn-primary:hover:not(:disabled),
+[data-style="minimal"] .btn-success:hover:not(:disabled),
+[data-style="minimal"] .btn-danger:hover:not(:disabled),
+[data-style="minimal"] .btn-warning:hover:not(:disabled),
+[data-style="minimal"] .btn-secondary:hover:not(:disabled){
+    box-shadow:0 4px 12px -4px rgba(0,0,0,.25);
+}
+
+[data-style="minimal"] .btn-primary::before,
+[data-style="minimal"] .btn-success::before,
+[data-style="minimal"] .btn-danger::before,
+[data-style="minimal"] .btn-warning::before,
+[data-style="minimal"] .btn-secondary::before{
+    display:none;
+}
+
+[data-style="minimal"] .app-sidebar-item.active{
+    background:var(--heading-accent);
+    box-shadow:none;
+}
+
+[data-style="minimal"] .pr-notification-badge{
+    background:var(--heading-accent);
+    box-shadow:none;
+}
+
+[data-style="minimal"] .loading-mark-tile{
+    background:var(--heading-accent);
+}
+
+/* ---------- NEON OPS ---------- */
+/* Dark control-room surfaces, outlined glowing controls instead of
+   filled ones, a faint cyan grid instead of the aurora wash. */
+
+:root[data-style="neon"]{ --head-font:'Space Grotesk'; }
+
+[data-style="neon"] body::before{ display:none; }
+
+[data-style="neon"] body::after{
+    background-image:
+        linear-gradient(rgba(34,211,238,.05) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(34,211,238,.05) 1px, transparent 1px);
+    background-size:44px 44px;
+    opacity:1;
+}
+
+[data-style="neon"] .card,
+[data-style="neon"] .top-bar,
+[data-style="neon"] .app-sidebar,
+[data-style="neon"] .app-footer,
+[data-style="neon"] .dialog,
+[data-style="neon"] .activity-bell-panel,
+[data-style="neon"] .combobox-dropdown{
+    backdrop-filter:blur(10px);
+    -webkit-backdrop-filter:blur(10px);
+}
+
+[data-style="neon"] .card:hover{
+    box-shadow:0 0 24px -6px var(--heading-accent);
+    border-color:var(--heading-accent);
+}
+
+[data-style="neon"] .btn,
+[data-style="neon"] .qa-btn{
+    backdrop-filter:none;
+    -webkit-backdrop-filter:none;
+}
+
+[data-style="neon"] .btn-primary,
+[data-style="neon"] .btn-success,
+[data-style="neon"] .btn-danger,
+[data-style="neon"] .btn-warning,
+[data-style="neon"] .btn-secondary,
+[data-style="neon"] .qa-btn{
+    background:transparent;
+    color:var(--heading-accent);
+    border-color:var(--heading-accent);
+    box-shadow:0 0 16px -3px var(--heading-accent);
+}
+
+[data-style="neon"] .btn-primary::before,
+[data-style="neon"] .btn-success::before,
+[data-style="neon"] .btn-danger::before,
+[data-style="neon"] .btn-warning::before,
+[data-style="neon"] .btn-secondary::before{
+    display:none;
+}
+
+[data-style="neon"] .btn-primary:hover:not(:disabled),
+[data-style="neon"] .btn-success:hover:not(:disabled),
+[data-style="neon"] .btn-danger:hover:not(:disabled),
+[data-style="neon"] .btn-warning:hover:not(:disabled),
+[data-style="neon"] .btn-secondary:hover:not(:disabled){
+    box-shadow:0 0 24px -2px var(--heading-accent);
+}
+
+[data-style="neon"] .app-sidebar-item.active{
+    background:rgba(34,211,238,.12);
+    color:var(--heading-accent);
+    border-color:var(--heading-accent);
+    box-shadow:0 0 14px -2px var(--heading-accent);
+}
+
+[data-style="neon"] .badge-success,
+[data-style="neon"] .status-success{
+    box-shadow:0 0 8px -2px currentColor;
+}
+
+[data-style="neon"] .pr-notification-badge{
+    background:transparent;
+    color:#a3e635;
+    border:1px solid #a3e635;
+    box-shadow:0 0 14px -3px #a3e635;
+}
+
+[data-style="neon"] .loading-mark-tile{
+    background:transparent;
+    border:1px solid var(--heading-accent);
+    box-shadow:0 0 20px -4px var(--heading-accent);
+}
+
+[data-style="neon"] .loading-mark-ring{
+    border-color:var(--heading-accent);
+}
+
+@media(prefers-reduced-motion:reduce){
+    [data-style="neon"] body::after{ animation:none; }
+}
+
+/* ==========================================
+   APPEARANCE PICKER (Settings > Appearance)
+========================================== */
+
+.appearance-style-grid{
+    display:grid;
+    grid-template-columns:repeat(auto-fit, minmax(min(220px, 100%), 1fr));
+    gap:16px;
+}
+
+.appearance-style-card{
+    position:relative;
+    text-align:left;
+    display:flex;
+    flex-direction:column;
+    gap:10px;
+    background:var(--card-bg);
+    border:1px solid var(--border);
+    border-radius:12px;
+    padding:16px;
+    cursor:pointer;
+    font-family:inherit;
+    transition:transform .15s ease, box-shadow .15s ease, border-color .15s ease;
+}
+
+.appearance-style-card:hover{
+    transform:translateY(-2px);
+    box-shadow:0 10px 26px var(--card-shadow);
+}
+
+.appearance-style-card.active{
+    border-color:var(--heading-accent);
+    box-shadow:0 0 0 2px var(--heading-accent);
+}
+
+.appearance-style-swatch{
+    display:flex;
+    align-items:flex-end;
+    gap:5px;
+    height:44px;
+    border-radius:8px;
+    padding:8px;
+    overflow:hidden;
+}
+
+.appearance-style-swatch span{
+    flex:1;
+    border-radius:3px 3px 1px 1px;
+    height:100%;
+}
+
+/* Each swatch is a tiny, hardcoded preview of that style's own palette —
+   deliberately NOT driven by the live --tokens (those change with
+   whichever style is currently active), so all four always show their
+   real identity side by side regardless of what's selected right now. */
+.appearance-style-swatch-glass{ background:linear-gradient(135deg,#dbeafe,#ede9fe); }
+.appearance-style-swatch-glass span:nth-child(1){ background:linear-gradient(180deg,#3b82f6,#6366f1); }
+.appearance-style-swatch-glass span:nth-child(2){ background:rgba(255,255,255,.7); }
+.appearance-style-swatch-glass span:nth-child(3){ background:linear-gradient(180deg,#6366f1,#06b6d4); }
+
+.appearance-style-swatch-brutal{ background:#f4f1e9; border:2px solid #111; padding:6px; }
+.appearance-style-swatch-brutal span{ border-radius:2px; border:1.5px solid #111; }
+.appearance-style-swatch-brutal span:nth-child(1){ background:#2f6bff; }
+.appearance-style-swatch-brutal span:nth-child(2){ background:#fff; }
+.appearance-style-swatch-brutal span:nth-child(3){ background:#c9f7dd; }
+
+.appearance-style-swatch-minimal{ background:#fafafa; border:1px solid #ececed; }
+.appearance-style-swatch-minimal span:nth-child(1){ background:#5b57eb; }
+.appearance-style-swatch-minimal span:nth-child(2){ background:#fff; border:1px solid #ececed; }
+.appearance-style-swatch-minimal span:nth-child(3){ background:#f6f6f7; }
+
+.appearance-style-swatch-neon{ background:#05070e; }
+.appearance-style-swatch-neon span:nth-child(1){ background:transparent; border:1px solid #22d3ee; box-shadow:0 0 8px -1px #22d3ee; }
+.appearance-style-swatch-neon span:nth-child(2){ background:rgba(13,18,32,.9); border:1px solid rgba(34,211,238,.3); }
+.appearance-style-swatch-neon span:nth-child(3){ background:transparent; border:1px solid #a3e635; box-shadow:0 0 8px -1px #a3e635; }
+
+.appearance-style-name{
+    font-size:14px;
+    font-weight:700;
+    color:var(--text);
+}
+
+.appearance-style-desc{
+    font-size:12px;
+    color:var(--text-muted);
+    line-height:1.4;
+}
+
+.appearance-style-check{
+    position:absolute;
+    top:12px;
+    right:12px;
+    width:20px;
+    height:20px;
+    border-radius:50%;
+    background:var(--heading-accent);
+    color:#fff;
+    font-size:11px;
+    font-weight:700;
+    display:grid;
+    place-items:center;
 }
