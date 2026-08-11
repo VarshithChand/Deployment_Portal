@@ -431,6 +431,45 @@ public class SettingsController : ControllerBase
         return Ok(await _settings.GetSidebarAccessAsync(key));
     }
 
+    // Scoped admin grants — a GitHub login can be handed admin authority for
+    // just ONE page's actions (see AdminGate's pageKey param) instead of the
+    // full allowlist. Managing these three endpoints always requires FULL
+    // admin (no pageKey passed here): a page-scoped grantee must never be
+    // able to grant further access, to themselves or anyone else, or the
+    // scoping would be meaningless.
+    [HttpGet("page-admin-grants")]
+    public async Task<IActionResult> GetPageAdminGrants()
+    {
+        if (await AdminGate.DenyUnlessAdminAsync(this, _settings, "view page-scoped admin access") is IActionResult denied)
+            return denied;
+
+        return Ok(await _settings.GetPageAdminGrantsAsync());
+    }
+
+    [HttpPost("page-admin-grants/{pageKey}")]
+    public async Task<IActionResult> GrantPageAdmin(string pageKey, PageAdminGrantDto request)
+    {
+        if (await AdminGate.DenyUnlessAdminAsync(this, _settings, "grant page-scoped admin access") is IActionResult denied)
+            return denied;
+
+        if (!SettingsService.GrantablePageKeys.Contains(pageKey))
+            return BadRequest(new { message = $"'{pageKey}' isn't a grantable page." });
+
+        if (string.IsNullOrWhiteSpace(request.Login))
+            return BadRequest(new { message = "A GitHub login is required." });
+
+        return Ok(await _settings.GrantPageAdminAsync(pageKey, request.Login.Trim()));
+    }
+
+    [HttpDelete("page-admin-grants/{pageKey}/{login}")]
+    public async Task<IActionResult> RevokePageAdmin(string pageKey, string login)
+    {
+        if (await AdminGate.DenyUnlessAdminAsync(this, _settings, "revoke page-scoped admin access") is IActionResult denied)
+            return denied;
+
+        return Ok(await _settings.RevokePageAdminAsync(pageKey, login));
+    }
+
     [HttpDelete("{section}")]
     public async Task<IActionResult> Clear(string section)
     {

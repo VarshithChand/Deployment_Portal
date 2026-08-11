@@ -36,7 +36,7 @@ public class ApprovalsController : ControllerBase
     [HttpPost("decide")]
     public async Task<IActionResult> Decide(ApprovalDecisionDto decision)
     {
-        if (await AdminGate.DenyUnlessAdminAsync(this, _settings, "approve or reject a release") is IActionResult denied)
+        if (await AdminGate.DenyUnlessAdminAsync(this, _settings, "approve or reject a release", "approvals") is IActionResult denied)
             return denied;
 
         if (decision.RunId <= 0 || decision.EnvironmentIds.Count == 0)

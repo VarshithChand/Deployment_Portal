@@ -55,7 +55,7 @@ public class PullRequestsController : ControllerBase
     [HttpPost("{number}/approve")]
     public async Task<IActionResult> Approve(int number)
     {
-        if (await AdminGate.DenyUnlessAdminAsync(this, _settings, "approve or merge pull requests") is IActionResult denied)
+        if (await AdminGate.DenyUnlessAdminAsync(this, _settings, "approve or merge pull requests", "pullRequests") is IActionResult denied)
             return denied;
 
         await _github.ApprovePullRequestAsync(number);
@@ -68,7 +68,7 @@ public class PullRequestsController : ControllerBase
     [HttpPost("{number}/merge")]
     public async Task<IActionResult> Merge(int number)
     {
-        if (await AdminGate.DenyUnlessAdminAsync(this, _settings, "approve or merge pull requests") is IActionResult denied)
+        if (await AdminGate.DenyUnlessAdminAsync(this, _settings, "approve or merge pull requests", "pullRequests") is IActionResult denied)
             return denied;
 
         await _github.MergePullRequestAsync(number);

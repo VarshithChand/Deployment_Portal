@@ -5,6 +5,7 @@ import useToast from "../hooks/useToast";
 import useConfirm from "../hooks/useConfirm";
 import LoadingSpinner from "../components/LoadingSpinner";
 import PageLayout from "../components/layout/PageLayout";
+import PageAdminAccessButton from "../components/common/PageAdminAccessButton";
 import SectionTabs from "../components/common/SectionTabs";
 import ContainersSection from "../components/docker/ContainersSection";
 import ImagesSection from "../components/docker/ImagesSection";
@@ -512,7 +513,7 @@ export default function Docker() {
 
     return (
 
-        <PageLayout title="Docker">
+        <PageLayout title="Docker" actions={<PageAdminAccessButton pageKey="docker" pageLabel="Docker" />}>
 
             {dialog}
 

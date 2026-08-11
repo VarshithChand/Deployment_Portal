@@ -38,7 +38,13 @@ public static class AdminGate
     private static bool HasSessionHeader(ControllerBase controller) =>
         controller.Request.Headers.ContainsKey("X-Session-Id");
 
-    public static async Task<IActionResult?> DenyUnlessAdminAsync(ControllerBase controller, SettingsService settings, string action)
+    // pageKey (optional): also passes a caller whose GitHub login has been
+    // granted scoped access to just this one page (see SettingsService's
+    // PageAdminGrants) — the lighter-weight alternative to putting someone
+    // on the full AdminGitHubUsernames allowlist. Omitted entirely for
+    // actions with no page-scoped equivalent (e.g. Settings itself), which
+    // stay full-admin-only exactly as before.
+    public static async Task<IActionResult?> DenyUnlessAdminAsync(ControllerBase controller, SettingsService settings, string action, string? pageKey = null)
     {
         if (!HasSessionHeader(controller))
             return controller.StatusCode(403, new { message = "Missing required request header." });
@@ -68,11 +74,15 @@ public static class AdminGate
                 if (login != null && view.AdminGitHubUsernames.Any(u => string.Equals(u, login, StringComparison.OrdinalIgnoreCase)))
                     return null;
 
+                if (pageKey != null && login != null && await settings.IsGrantedPageAdminAsync(pageKey, login))
+                    return null;
+
                 var detail = login == null
                     ? "Unable to verify your Personal Access Token with GitHub right now (it may be invalid, " +
                       "or GitHub's API may be rate-limited) — admin access couldn't be confirmed. Try again " +
                       "shortly, or check your token in Settings."
-                    : $"The GitHub account this Personal Access Token belongs to (@{login}) isn't in the admin allowlist.";
+                    : $"The GitHub account this Personal Access Token belongs to (@{login}) isn't in the admin allowlist" +
+                      (pageKey != null ? " and hasn't been granted access to this page." : ".");
 
                 return controller.StatusCode(403, new { message = $"Admin login required to {action}. {detail}" });
             }

@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import useToast from "../hooks/useToast";
 import useConfirm from "../hooks/useConfirm";
 import PageLayout from "../components/layout/PageLayout";
+import PageAdminAccessButton from "../components/common/PageAdminAccessButton";
 import CopyButton from "../components/common/CopyButton";
 import SectionTabs from "../components/common/SectionTabs";
 
@@ -375,7 +376,7 @@ export default function Services() {
 
     return (
 
-        <PageLayout title="Services">
+        <PageLayout title="Services" actions={<PageAdminAccessButton pageKey="services" pageLabel="Services" />}>
 
             {dialog}
 

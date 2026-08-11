@@ -3,6 +3,7 @@ import { useGithubResources } from "../hooks/useGithubResources";
 import DeploymentForm from "../components/DeploymentForm";
 import LoadingSpinner from "../components/LoadingSpinner";
 import PageLayout from "../components/layout/PageLayout";
+import PageAdminAccessButton from "../components/common/PageAdminAccessButton";
 
 export default function Deploy() {
 
@@ -16,7 +17,7 @@ export default function Deploy() {
 
     return (
 
-        <PageLayout title="Deployment Configuration">
+        <PageLayout title="Deployment Configuration" actions={<PageAdminAccessButton pageKey="deploy" pageLabel="Deploy" />}>
 
             {
 

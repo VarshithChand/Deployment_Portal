@@ -15,6 +15,7 @@ import useToast from "../hooks/useToast";
 import useConfirm from "../hooks/useConfirm";
 import LoadingSpinner from "../components/LoadingSpinner";
 import PageLayout from "../components/layout/PageLayout";
+import PageAdminAccessButton from "../components/common/PageAdminAccessButton";
 import HistorySection from "../components/pullRequests/HistorySection";
 
 export default function PullRequests() {
@@ -207,7 +208,7 @@ export default function PullRequests() {
 
     return (
 
-        <PageLayout title="Pull Requests">
+        <PageLayout title="Pull Requests" actions={<PageAdminAccessButton pageKey="pullRequests" pageLabel="Pull Requests" />}>
 
             {dialog}
 

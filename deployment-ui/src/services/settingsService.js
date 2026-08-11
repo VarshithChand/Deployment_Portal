@@ -176,3 +176,22 @@ export const previewGitHubUserRepositories = async (username) => {
     });
     return response.data;
 };
+
+// Scoped admin access — a GitHub login granted admin authority for just one
+// page (see AdminGate's pageKey param / SettingsService.PageAdminGrants)
+// instead of the full allowlist. Full-admin only to manage, same as the
+// allowlist itself.
+export const getPageAdminGrants = async () => {
+    const response = await settingsApi.get("/page-admin-grants");
+    return response.data;
+};
+
+export const grantPageAdmin = async (pageKey, login) => {
+    const response = await settingsApi.post(`/page-admin-grants/${pageKey}`, { login });
+    return response.data;
+};
+
+export const revokePageAdmin = async (pageKey, login) => {
+    const response = await settingsApi.delete(`/page-admin-grants/${pageKey}/${encodeURIComponent(login)}`);
+    return response.data;
+};

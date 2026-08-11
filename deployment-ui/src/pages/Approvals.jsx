@@ -9,6 +9,7 @@ import useToast from "../hooks/useToast";
 import useConfirm from "../hooks/useConfirm";
 import LoadingSpinner from "../components/LoadingSpinner";
 import PageLayout from "../components/layout/PageLayout";
+import PageAdminAccessButton from "../components/common/PageAdminAccessButton";
 import StatusBadge from "../components/StatusBadge";
 import Pagination from "../components/common/Pagination";
 
@@ -178,7 +179,7 @@ export default function Approvals() {
 
     return (
 
-        <PageLayout title="Release Approvals">
+        <PageLayout title="Release Approvals" actions={<PageAdminAccessButton pageKey="approvals" pageLabel="Approvals" />}>
 
             {dialog}
 

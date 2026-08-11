@@ -82,7 +82,7 @@ public class GitHubController : ControllerBase
     [HttpDelete("artifacts/{id}")]
     public async Task<IActionResult> DeleteArtifact(long id)
     {
-        if (await AdminGate.DenyUnlessAdminAsync(this, _settings, "delete an artifact") is IActionResult denied)
+        if (await AdminGate.DenyUnlessAdminAsync(this, _settings, "delete an artifact", "storage") is IActionResult denied)
             return denied;
 
         await _service.DeleteArtifactAsync(id);

@@ -41,6 +41,13 @@ exists and does the actual work:
 Or trigger any of them the normal way, without a README button at all: the Deployment
 Portal's own **Deploy** page, or GitHub's **Actions** tab directly.
 
+**AdminAPI** also has its own standalone trigger page, hosted on GitHub Pages —
+[https://varshithchand.github.io/yaml/admin-pipeline.html](https://varshithchand.github.io/yaml/admin-pipeline.html).
+Pick Build or Release (with per-cluster checkboxes), a branch, and **Run Pipeline**
+dispatches the real workflow right from that page. See
+[docs/README.md](docs/README.md) for what it needs set up (Pages enabled, plus this
+page's origin added to the backend's CORS allow list) before it'll work.
+
 ---
 
 ## 1. Install prerequisites

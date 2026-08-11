@@ -31,7 +31,7 @@ public class DeploymentController : ControllerBase
     public async Task<IActionResult> Deploy(
         DeployDto request)
     {
-        if (await AdminGate.DenyUnlessAdminAsync(this, _settings, "trigger a deployment") is IActionResult denied)
+        if (await AdminGate.DenyUnlessAdminAsync(this, _settings, "trigger a deployment", "deploy") is IActionResult denied)
             return denied;
 
         var result =

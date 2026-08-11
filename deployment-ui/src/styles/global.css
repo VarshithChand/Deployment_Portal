@@ -2175,6 +2175,100 @@ textarea{
 
 }
 
+/* PageAdminAccessModal - search results + granted-list rows */
+
+.page-admin-results{
+
+    margin-top:8px;
+
+    border:1px solid var(--border);
+
+    border-radius:8px;
+
+    overflow:hidden;
+
+}
+
+.page-admin-result-row{
+
+    display:flex;
+
+    align-items:center;
+
+    gap:10px;
+
+    width:100%;
+
+    padding:10px 12px;
+
+    border:none;
+
+    border-bottom:1px solid var(--border);
+
+    background:var(--card-bg);
+
+    color:var(--text);
+
+    text-align:left;
+
+    cursor:pointer;
+
+    font-size:14px;
+
+}
+
+.page-admin-result-row:last-child{
+
+    border-bottom:none;
+
+}
+
+.page-admin-result-row:hover{
+
+    background:var(--table-row-hover);
+
+}
+
+.page-admin-result-row span:nth-child(2){
+
+    flex:1;
+
+}
+
+.page-admin-grant-list{
+
+    list-style:none;
+
+    margin:8px 0 0;
+
+    padding:0;
+
+    display:flex;
+
+    flex-direction:column;
+
+    gap:6px;
+
+}
+
+.page-admin-grant-list li{
+
+    display:flex;
+
+    align-items:center;
+
+    justify-content:space-between;
+
+    padding:8px 12px;
+
+    border:1px solid var(--border);
+
+    border-radius:8px;
+
+    font-size:14px;
+
+}
+
 /* RequireGitHubSetup's "signed out by admin" explanation - a fixed
    banner pinned to the actual bottom of the viewport (not just the
    bottom of the centered dialog card, which can still land in the upper

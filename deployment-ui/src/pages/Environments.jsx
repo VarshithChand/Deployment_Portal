@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 
 import PageLayout from "../components/layout/PageLayout";
+import PageAdminAccessButton from "../components/common/PageAdminAccessButton";
 import LoadingSpinner from "../components/LoadingSpinner";
 import StatusBadge from "../components/StatusBadge";
 import EnvironmentDetailView from "../components/environments/EnvironmentDetailView";
@@ -67,7 +68,7 @@ export default function Environments() {
 
     return (
 
-        <PageLayout title="Environments">
+        <PageLayout title="Environments" actions={<PageAdminAccessButton pageKey="environments" pageLabel="Environments" />}>
 
             <div className="card">
 

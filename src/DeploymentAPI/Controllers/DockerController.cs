@@ -30,7 +30,7 @@ public class DockerController : ControllerBase
     }
 
     private async Task<IActionResult?> DenyUnlessAdminAsync(string action) =>
-        await AdminGate.DenyUnlessAdminAsync(this, _settings, action);
+        await AdminGate.DenyUnlessAdminAsync(this, _settings, action, "docker");
 
     // ---------- Containers ----------
 

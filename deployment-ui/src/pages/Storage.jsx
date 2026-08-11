@@ -5,6 +5,7 @@ import { getSettings } from "../services/settingsService";
 
 import LoadingSpinner from "../components/LoadingSpinner";
 import PageLayout from "../components/layout/PageLayout";
+import PageAdminAccessButton from "../components/common/PageAdminAccessButton";
 import ArtifactsTable from "../components/storage/ArtifactsTable";
 import DockerImagesTable from "../components/storage/DockerImagesTable";
 import useToast from "../hooks/useToast";
@@ -129,7 +130,7 @@ export default function Storage() {
 
     return (
 
-        <PageLayout title="Artifacts & Images">
+        <PageLayout title="Artifacts & Images" actions={<PageAdminAccessButton pageKey="storage" pageLabel="Artifacts & Images" />}>
 
             {dialog}
 

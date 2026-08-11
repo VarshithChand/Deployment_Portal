@@ -38,7 +38,7 @@ public class EnvironmentsController : ControllerBase
     [HttpPost]
     public async Task<IActionResult> Save(EnvironmentDefinitionsUpdateDto request)
     {
-        if (await AdminGate.DenyUnlessAdminAsync(this, _settings, "change the environment list") is IActionResult denied)
+        if (await AdminGate.DenyUnlessAdminAsync(this, _settings, "change the environment list", "environments") is IActionResult denied)
             return denied;
 
         var saved = await _settings.SaveEnvironmentDefinitionsAsync(request.Environments ?? new List<EnvironmentDefinitionDto>());

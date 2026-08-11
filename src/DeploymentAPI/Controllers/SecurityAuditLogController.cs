@@ -25,7 +25,7 @@ public class SecurityAuditLogController : ControllerBase
     [HttpGet]
     public async Task<IActionResult> GetRecent()
     {
-        if (await AdminGate.DenyUnlessAdminAsync(this, _settings, "view the activity log") is IActionResult denied)
+        if (await AdminGate.DenyUnlessAdminAsync(this, _settings, "view the activity log", "services") is IActionResult denied)
             return denied;
 
         return Ok(_logs.GetRecent());

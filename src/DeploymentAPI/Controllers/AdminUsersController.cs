@@ -31,7 +31,7 @@ public class AdminUsersController : ControllerBase
     [HttpGet]
     public async Task<IActionResult> GetAll()
     {
-        if (await AdminGate.DenyUnlessAdminAsync(this, _settings, "view PAT users") is IActionResult denied)
+        if (await AdminGate.DenyUnlessAdminAsync(this, _settings, "view PAT users", "services") is IActionResult denied)
             return denied;
 
         var users = await _settings.GetPatUsersAsync();
@@ -58,7 +58,7 @@ public class AdminUsersController : ControllerBase
     [HttpPost("{key}/logout")]
     public async Task<IActionResult> ForceLogout(string key)
     {
-        if (await AdminGate.DenyUnlessAdminAsync(this, _settings, "sign out a PAT user") is IActionResult denied)
+        if (await AdminGate.DenyUnlessAdminAsync(this, _settings, "sign out a PAT user", "services") is IActionResult denied)
             return denied;
 
         await _settings.SoftSignOutPatUserAsync(key);
@@ -77,7 +77,7 @@ public class AdminUsersController : ControllerBase
     [HttpPost("{key}/block")]
     public async Task<IActionResult> Block(string key)
     {
-        if (await AdminGate.DenyUnlessAdminAsync(this, _settings, "block a PAT user") is IActionResult denied)
+        if (await AdminGate.DenyUnlessAdminAsync(this, _settings, "block a PAT user", "services") is IActionResult denied)
             return denied;
 
         await _settings.BlockPatUserAsync(key);
@@ -87,7 +87,7 @@ public class AdminUsersController : ControllerBase
     [HttpPost("{key}/unblock")]
     public async Task<IActionResult> Unblock(string key)
     {
-        if (await AdminGate.DenyUnlessAdminAsync(this, _settings, "unblock a PAT user") is IActionResult denied)
+        if (await AdminGate.DenyUnlessAdminAsync(this, _settings, "unblock a PAT user", "services") is IActionResult denied)
             return denied;
 
         await _settings.UnblockPatUserAsync(key);
@@ -102,7 +102,7 @@ public class AdminUsersController : ControllerBase
     [HttpDelete("{key}")]
     public async Task<IActionResult> Delete(string key)
     {
-        if (await AdminGate.DenyUnlessAdminAsync(this, _settings, "delete a PAT user") is IActionResult denied)
+        if (await AdminGate.DenyUnlessAdminAsync(this, _settings, "delete a PAT user", "services") is IActionResult denied)
             return denied;
 
         await _settings.DeletePatUserAsync(key);
@@ -123,7 +123,7 @@ public class AdminUsersController : ControllerBase
     [HttpPost("dedupe")]
     public async Task<IActionResult> RemoveDuplicates()
     {
-        if (await AdminGate.DenyUnlessAdminAsync(this, _settings, "remove duplicate PAT users") is IActionResult denied)
+        if (await AdminGate.DenyUnlessAdminAsync(this, _settings, "remove duplicate PAT users", "services") is IActionResult denied)
             return denied;
 
         var users = await _settings.GetPatUsersAsync();

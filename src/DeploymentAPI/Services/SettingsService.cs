@@ -753,6 +753,94 @@ public class SettingsService
         return await GetSidebarAccessAsync(key);
     }
 
+    // Scoped alternative to the global admin allowlist: a GitHub login can
+    // be granted admin authority for ONE page's actions (e.g. Docker) without
+    // joining AdminGitHubUsernames, which would hand them every admin-gated
+    // action portal-wide. Keyed by GitHub login (not a PortalIdentity session
+    // key) for the same reason the allowlist itself is — a login survives
+    // that person re-configuring their PAT or switching browsers, where a
+    // session key wouldn't. Only these page keys are grantable: each maps to
+    // a real page with its own admin-gated controller (see AdminGate call
+    // sites) — "settings" itself is deliberately excluded, same rule as
+    // UnrestrictableTabs above, since granting Settings access would let a
+    // scoped grantee edit the admin allowlist and grant themselves anything.
+    public static readonly HashSet<string> GrantablePageKeys = new()
+    {
+        "deploy", "approvals", "pullRequests", "storage", "environments", "docker", "services"
+    };
+
+    public async Task<Dictionary<string, List<string>>> GetPageAdminGrantsAsync()
+    {
+        var root = await ReadRootAsync();
+        var grants = root["PageAdminGrants"] as JObject ?? new JObject();
+
+        return grants.Properties()
+            .ToDictionary(
+                p => p.Name,
+                p => (p.Value as JArray)?.Select(v => v.ToString()).ToList() ?? new List<string>());
+    }
+
+    public async Task<List<string>> GetPageAdminGrantAsync(string pageKey)
+    {
+        var all = await GetPageAdminGrantsAsync();
+        return all.TryGetValue(pageKey, out var logins) ? logins : new List<string>();
+    }
+
+    public async Task<bool> IsGrantedPageAdminAsync(string pageKey, string? login)
+    {
+        if (string.IsNullOrWhiteSpace(login))
+            return false;
+
+        var logins = await GetPageAdminGrantAsync(pageKey);
+        return logins.Any(u => string.Equals(u, login, StringComparison.OrdinalIgnoreCase));
+    }
+
+    public async Task<List<string>> GrantPageAdminAsync(string pageKey, string login)
+    {
+        if (!GrantablePageKeys.Contains(pageKey))
+            throw new ArgumentException($"'{pageKey}' isn't a grantable page.");
+
+        var root = await ReadRootAsync();
+        var grants = root["PageAdminGrants"] as JObject ?? new JObject();
+        var list = grants[pageKey] as JArray ?? new JArray();
+
+        if (!list.Any(v => string.Equals(v.ToString(), login, StringComparison.OrdinalIgnoreCase)))
+            list.Add(login);
+
+        grants[pageKey] = list;
+        root["PageAdminGrants"] = grants;
+
+        await WriteRootAsync(root);
+
+        _log.LogInfo("Settings", $"Granted '{pageKey}' admin access to @{login}.");
+
+        return list.Select(v => v.ToString()).ToList();
+    }
+
+    public async Task<List<string>> RevokePageAdminAsync(string pageKey, string login)
+    {
+        var root = await ReadRootAsync();
+        var grants = root["PageAdminGrants"] as JObject;
+        var list = grants?[pageKey] as JArray;
+
+        if (list != null)
+        {
+            var match = list.FirstOrDefault(v => string.Equals(v.ToString(), login, StringComparison.OrdinalIgnoreCase));
+
+            if (match != null)
+                list.Remove(match);
+
+            if (list.Count == 0)
+                grants!.Remove(pageKey);
+
+            await WriteRootAsync(root);
+        }
+
+        _log.LogInfo("Settings", $"Revoked '{pageKey}' admin access from @{login}.");
+
+        return list?.Select(v => v.ToString()).ToList() ?? new List<string>();
+    }
+
     // Settings > External APIs — a portal-wide, admin-pasted list of
     // external health-check URLs (one per line) to monitor, stored as raw
     // text rather than a parsed structure since grouping by version/
