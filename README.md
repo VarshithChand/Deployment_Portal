@@ -13,6 +13,36 @@ No database is required — all configuration is stored in a local JSON file.
 
 ---
 
+## Run Pipeline
+
+[![Run Pipeline](https://img.shields.io/badge/Run%20Pipeline-GitHub%20Actions-2ea44f?style=for-the-badge&logo=github)](https://github.com/VarshithChand/yaml/actions/workflows/run-pipeline.yml)
+
+Click the button, then on the page it opens:
+
+1. Click **Run workflow** (top right).
+2. Pick the branch.
+3. Pick an **environment** (`dev` / `staging` / `production`).
+4. Pick a **project** (`AdminAPI` / `SecurityAPI` / `PMSCoreAPI`).
+5. Click **Run workflow** to confirm.
+
+A README can't execute YAML or hold a live form itself — this button just jumps to
+GitHub's own real trigger page for [`run-pipeline.yml`](.github/workflows/run-pipeline.yml).
+That workflow is currently a scaffold: it logs whichever branch/environment/project you
+picked, but doesn't deploy anything yet — none of `dev`/`staging`/`production` map onto
+this repo's actual deploy targets today. Each project's own *real* pipeline already
+exists and does the actual work:
+
+| Project | CI (builds automatically on push) | Release (manual, real deploy) |
+|---|---|---|
+| AdminAPI | [`admin.yml`](.github/workflows/admin.yml) | [`release-admin.yml`](.github/workflows/release-admin.yml) — see [src/AdminAPI/README.md](src/AdminAPI/README.md) |
+| PMSCoreAPI | [`pmscore.yml`](.github/workflows/pmscore.yml) | [`Release PMSCore API.yml`](<.github/workflows/Release PMSCore API.yml>) |
+| SecurityAPI | [`security.yml`](.github/workflows/security.yml) | [`Release Security API.yml`](<.github/workflows/Release Security API.yml>) |
+
+Or trigger any of them the normal way, without a README button at all: the Deployment
+Portal's own **Deploy** page, or GitHub's **Actions** tab directly.
+
+---
+
 ## 1. Install prerequisites
 
 You need **.NET SDK 10** and **Node.js 20+**. Pick your OS below.

@@ -1,0 +1,48 @@
+name: Run Pipeline
+
+# One README-friendly entry point with a real branch/environment/project
+# picker, callable via the badge in the root README. Its steps below just
+# echo the selection - a starting scaffold, not wired to actually deploy
+# anything yet. This repo's real per-project pipelines already do that,
+# each with its own actual inputs (see Release Admin API's deploy_rc/
+# deploy_cluster01-03, for example) - "dev/staging/production" here don't
+# correspond to those yet. Wiring this to genuinely dispatch the right
+# real workflow per project/environment is a follow-up, not something
+# guessed at here.
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Select environment'
+        required: true
+        type: choice
+        options:
+          - dev
+          - staging
+          - production
+
+      project:
+        description: 'Select project'
+        required: true
+        type: choice
+        options:
+          - AdminAPI
+          - SecurityAPI
+          - PMSCoreAPI
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Show selected configuration
+        run: |
+          echo "Branch: $GITHUB_REF_NAME"
+          echo "Environment: ${{ inputs.environment }}"
+          echo "Project: ${{ inputs.project }}"
+
+      - name: Run pipeline
+        run: |
+          echo "Deploying ${{ inputs.project }}"
+          echo "Environment: ${{ inputs.environment }}"
