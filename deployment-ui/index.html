@@ -8,7 +8,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Lexend:wght@400;500;600;700&family=Source+Sans+3:wght@400;500;600&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap"
       rel="stylesheet"
     />
     <style>
@@ -19,8 +19,21 @@
          so this markup/CSS is simply discarded — no cleanup needed. */
       html, body { margin: 0; padding: 0; }
 
-      #root { min-height: 100vh; background: #f4f6fb; }
-      html[data-theme="dark"] #root { background: #0f172a; }
+      #root {
+        min-height: 100vh;
+        background: #eef2ff;
+        background-image:
+          radial-gradient(42% 44% at 12% 8%, #dbeafe 0%, transparent 60%),
+          radial-gradient(46% 50% at 88% 4%, #ede9fe 0%, transparent 62%),
+          radial-gradient(50% 55% at 78% 92%, #cffafe 0%, transparent 60%);
+      }
+      html[data-theme="dark"] #root {
+        background: #070b1a;
+        background-image:
+          radial-gradient(42% 44% at 12% 8%, #1e1b4b 0%, transparent 60%),
+          radial-gradient(46% 50% at 88% 4%, #0c1a3a 0%, transparent 62%),
+          radial-gradient(50% 55% at 78% 92%, #083344 0%, transparent 60%);
+      }
 
       .boot-loader {
         min-height: 100vh;
@@ -29,7 +42,7 @@
         align-items: center;
         justify-content: center;
         gap: 16px;
-        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        font-family: 'Inter', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
       }
 
       .boot-loader-mark { position: relative; width: 48px; height: 48px; animation: boot-pulse 1.4s ease-in-out infinite; }
@@ -39,14 +52,14 @@
         inset: -8px;
         border-radius: 14px;
         border: 2.5px solid transparent;
-        border-top-color: #2563eb;
-        border-right-color: #2563eb;
+        border-top-color: #3b82f6;
+        border-right-color: #3b82f6;
         animation: boot-spin .9s linear infinite;
       }
       html[data-theme="dark"] .boot-loader-ring { border-top-color: #60a5fa; border-right-color: #60a5fa; }
 
       .boot-loader p { margin: 0; font-size: 14px; color: #64748b; }
-      html[data-theme="dark"] .boot-loader p { color: #94a3b8; }
+      html[data-theme="dark"] .boot-loader p { color: #a3b0cc; }
 
       @keyframes boot-pulse {
         0%, 100% { transform: scale(1); opacity: 1; }

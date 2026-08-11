@@ -1,3 +1,5 @@
+import CountUp from "../common/CountUp";
+
 export default function StatisticsCard({
 
     branches,
@@ -10,7 +12,7 @@ export default function StatisticsCard({
 
     return (
 
-        <div className="card dashboard-card">
+        <div className="card dashboard-card tilt">
 
             <h2 className="card-title">
 
@@ -24,7 +26,7 @@ export default function StatisticsCard({
 
                 <strong>
 
-                    {branches.length}
+                    <CountUp value={branches.length} />
 
                 </strong>
 
@@ -36,7 +38,7 @@ export default function StatisticsCard({
 
                 <strong>
 
-                    {artifacts.length}
+                    <CountUp value={artifacts.length} />
 
                 </strong>
 
@@ -48,7 +50,7 @@ export default function StatisticsCard({
 
                 <strong>
 
-                    {workflows.length}
+                    <CountUp value={workflows.length} />
 
                 </strong>
 

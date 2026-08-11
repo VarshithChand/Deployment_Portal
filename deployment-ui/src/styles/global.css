@@ -3,24 +3,35 @@
 ========================================== */
 
 :root{
-    --bg:#f4f6fb;
+    --bg:#eef2ff;
+    --bg-a:#dbeafe;
+    --bg-b:#ede9fe;
+    --bg-c:#cffafe;
     --text:#0f172a;
     --text-muted:#64748b;
-    --heading-accent:#2563eb;
+    --heading-accent:#3b82f6;
     /* Secondary accent — reserved for "in progress / informational" states
        (running jobs, in_progress badges) so they read as visually distinct
        from primary brand actions (nav, buttons, headings) instead of
        everything defaulting to the same blue. */
-    --accent-secondary:#7c3aed;
-    --card-bg:#ffffff;
-    --card-shadow:rgba(15,23,42,.08);
-    --border:#e2e8f0;
-    --input-bg:#ffffff;
+    --accent-secondary:#6366f1;
+    --accent-3:#06b6d4;
+    /* Glass surfaces: --card-bg stays legible on its own (no blur needed)
+       for the many small nested panels that reuse it — the five primary
+       chrome containers (.card, .top-bar, .app-sidebar, .dialog,
+       .app-footer) additionally get backdrop-filter blur for the full
+       frosted-glass look where it's most visible. */
+    --card-bg:rgba(255,255,255,.78);
+    --card-bg-strong:rgba(255,255,255,.88);
+    --card-shadow:rgba(30,41,80,.16);
+    --stroke:rgba(255,255,255,.65);
+    --border:rgba(148,163,184,.35);
+    --input-bg:rgba(255,255,255,.7);
     --input-border:#cbd5e1;
-    --table-header-bg:#2563eb;
-    --table-header-text:#ffffff;
-    --table-row-hover:#f1f5fd;
-    --overlay-bg:rgba(15,23,42,.55);
+    --table-header-bg:rgba(255,255,255,.5);
+    --table-header-text:#334155;
+    --table-row-hover:rgba(255,255,255,.55);
+    --overlay-bg:rgba(30,41,80,.45);
 
     /* Data-viz tokens (validated categorical/status palette) */
     --viz-surface:#fcfcfb;
@@ -39,19 +50,25 @@
 }
 
 :root[data-theme="dark"]{
-    --bg:#0f172a;
-    --text:#e5e7eb;
-    --text-muted:#94a3b8;
+    --bg:#070b1a;
+    --bg-a:#1e1b4b;
+    --bg-b:#0c1a3a;
+    --bg-c:#083344;
+    --text:#e7ecf6;
+    --text-muted:#a3b0cc;
     --heading-accent:#60a5fa;
     --accent-secondary:#a78bfa;
-    --card-bg:#1e293b;
-    --card-shadow:rgba(0,0,0,.4);
-    --border:#334155;
-    --input-bg:#0f172a;
+    --accent-3:#22d3ee;
+    --card-bg:rgba(30,41,66,.6);
+    --card-bg-strong:rgba(38,50,80,.72);
+    --card-shadow:rgba(0,0,0,.5);
+    --stroke:rgba(255,255,255,.1);
+    --border:rgba(255,255,255,.1);
+    --input-bg:rgba(15,23,42,.6);
     --input-border:#334155;
-    --table-header-bg:#1d4ed8;
-    --table-header-text:#ffffff;
-    --table-row-hover:#273549;
+    --table-header-bg:rgba(255,255,255,.05);
+    --table-header-text:#cbd5e1;
+    --table-row-hover:rgba(255,255,255,.06);
     --overlay-bg:rgba(0,0,0,.65);
 
     --viz-surface:#1a1a19;
@@ -77,12 +94,21 @@
     margin:0;
     padding:0;
     box-sizing:border-box;
-    font-family:'Source Sans 3','Segoe UI',Tahoma,Geneva,Verdana,sans-serif;
+    font-family:'Inter','Segoe UI',Tahoma,Geneva,Verdana,sans-serif;
 }
 
 h1, h2, h3, .card-title, .page-title, .page-header h1, .stat-tile-value{
-    font-family:'Lexend','Segoe UI',Tahoma,Geneva,Verdana,sans-serif;
+    font-family:'Inter','Segoe UI',Tahoma,Geneva,Verdana,sans-serif;
+    font-weight:700;
+    letter-spacing:-.02em;
     line-height:1.25;
+}
+
+/* Monospace utility — branch names, commit SHAs, keys, anything that
+   benefits from fixed-width alignment. Opt-in via class since most of
+   the app's text is prose/labels, not data. */
+.mono{
+    font-family:'JetBrains Mono',ui-monospace,'SFMono-Regular',Menlo,Consolas,monospace;
 }
 
 body{
@@ -92,6 +118,47 @@ body{
     transition:background .2s ease, color .2s ease;
     font-size:16px;
     line-height:1.5;
+    position:relative;
+}
+
+/* Aurora backdrop — three soft radial washes that slowly drift, sitting
+   behind every glass surface (.card/.top-bar/.app-sidebar/.dialog), which
+   is what they're blurring/tinting to produce the frosted-glass effect.
+   Fixed + negative inset so it covers the viewport regardless of #root's
+   own overflow:hidden layout, and z-index:-2 keeps it behind body's own
+   background color (the fallback for anywhere the aurora doesn't reach). */
+body::before{
+    content:"";
+    position:fixed;
+    inset:-20%;
+    z-index:-2;
+    background:
+        radial-gradient(42% 44% at 12% 8%, var(--bg-a) 0%, transparent 60%),
+        radial-gradient(46% 50% at 88% 4%, var(--bg-b) 0%, transparent 62%),
+        radial-gradient(50% 55% at 78% 92%, var(--bg-c) 0%, transparent 60%),
+        radial-gradient(46% 50% at 6% 96%, var(--bg-b) 0%, transparent 58%);
+    filter:saturate(1.15);
+    animation:aurora-drift 26s ease-in-out infinite alternate;
+}
+
+body::after{
+    content:"";
+    position:fixed;
+    inset:0;
+    z-index:-1;
+    pointer-events:none;
+    background-image:radial-gradient(rgba(148,163,184,.10) .5px, transparent .5px);
+    background-size:22px 22px;
+    opacity:.5;
+}
+
+@keyframes aurora-drift{
+    0%{ transform:translate3d(0,0,0) scale(1); }
+    100%{ transform:translate3d(0,-2%,0) scale(1.06); }
+}
+
+@media(prefers-reduced-motion:reduce){
+    body::before{ animation:none; }
 }
 
 /* Sticky footer: #root stretches to at least the full viewport height and
@@ -270,7 +337,10 @@ textarea{
 
     border-top:1px solid var(--border);
 
-    background:var(--card-bg);
+    background:var(--card-bg-strong);
+
+    backdrop-filter:blur(20px) saturate(160%);
+    -webkit-backdrop-filter:blur(20px) saturate(160%);
 
 }
 
@@ -409,13 +479,16 @@ textarea{
 
     background:var(--card-bg);
 
-    border-radius:12px;
+    border-radius:16px;
 
-    border:1px solid var(--border);
+    border:1px solid var(--stroke);
 
-    padding:20px;
+    padding:22px;
 
-    box-shadow:0 5px 15px var(--card-shadow);
+    box-shadow:0 10px 30px -12px var(--card-shadow);
+
+    backdrop-filter:blur(22px) saturate(160%);
+    -webkit-backdrop-filter:blur(22px) saturate(160%);
 
     margin-bottom:25px;
 
@@ -429,10 +502,28 @@ textarea{
 
 .card:hover{
 
-    transform:translateY(-3px);
+    transform:translateY(-6px);
 
-    box-shadow:0 10px 26px var(--card-shadow);
+    box-shadow:0 24px 60px -18px var(--card-shadow);
 
+    border-color:rgba(99,102,241,.4);
+
+}
+
+/* Staggered entrance for grid card layouts (Dashboard's stat tiles, etc.)
+   — same card-in fade/slide every card already plays, just offset a beat
+   per position so a grid cascades in instead of popping in as one block.
+   Capped at 6 explicit steps; anything past that just plays unstaggered
+   rather than growing the selector list forever. */
+.grid > .card:nth-child(1){ animation-delay:0s; }
+.grid > .card:nth-child(2){ animation-delay:.06s; }
+.grid > .card:nth-child(3){ animation-delay:.12s; }
+.grid > .card:nth-child(4){ animation-delay:.18s; }
+.grid > .card:nth-child(5){ animation-delay:.24s; }
+.grid > .card:nth-child(6){ animation-delay:.3s; }
+
+@media(prefers-reduced-motion:reduce){
+    .grid > .card{ animation-delay:0s; }
 }
 
 @keyframes card-in{
@@ -1035,13 +1126,16 @@ textarea{
 
     width:220px;
 
-    background:var(--card-bg);
+    background:var(--card-bg-strong);
 
     border-right:1px solid var(--border);
 
     height:100%;
 
     transition:width .18s ease;
+
+    backdrop-filter:blur(20px) saturate(160%);
+    -webkit-backdrop-filter:blur(20px) saturate(160%);
 
 }
 
@@ -1248,11 +1342,11 @@ textarea{
 
     width:100%;
 
-    padding:10px 12px;
+    padding:10px 13px;
 
-    border:none;
+    border:1px solid transparent;
 
-    border-radius:8px;
+    border-radius:12px;
 
     background:none;
 
@@ -1270,7 +1364,7 @@ textarea{
 
     overflow:hidden;
 
-    transition:background-color .15s ease, color .15s ease;
+    transition:background-color .15s ease, color .15s ease, box-shadow .15s ease;
 
 }
 
@@ -1280,13 +1374,43 @@ textarea{
 
     color:var(--text);
 
+    transform:translateX(4px);
+
+}
+
+.app-sidebar-item-icon{
+
+    transition:transform .2s ease;
+
+}
+
+.app-sidebar-item:hover .app-sidebar-item-icon{
+
+    transform:scale(1.15);
+
+}
+
+/* Collapsed rail centers icons with no room to slide right without
+   clipping against the toggle button — keep the icon-scale feedback,
+   drop the horizontal shift. */
+.app-sidebar.collapsed .app-sidebar-item:hover{
+    transform:none;
+}
+
+@media(prefers-reduced-motion:reduce){
+    .app-sidebar-item:hover{ transform:none; }
+    .app-sidebar-item:hover .app-sidebar-item-icon{ transform:none; }
 }
 
 .app-sidebar-item.active{
 
-    background:#2563eb;
+    background:linear-gradient(135deg, var(--heading-accent), var(--accent-secondary));
+
+    border-color:rgba(255,255,255,.18);
 
     color:#ffffff;
+
+    box-shadow:0 8px 20px -6px rgba(79,70,229,.55);
 
 }
 
@@ -1487,13 +1611,16 @@ textarea{
 
     gap:12px 16px;
 
-    padding:10px 24px;
+    padding:12px 24px;
 
-    background:var(--card-bg);
+    background:var(--card-bg-strong);
 
     border-bottom:1px solid var(--border);
 
     box-shadow:0 1px 4px var(--card-shadow);
+
+    backdrop-filter:blur(20px) saturate(160%);
+    -webkit-backdrop-filter:blur(20px) saturate(160%);
 
 }
 
@@ -1557,21 +1684,34 @@ textarea{
 
     align-items:center;
 
-    padding:6px 12px;
+    padding:7px 13px;
 
-    border-radius:20px;
+    border-radius:999px;
 
-    background:var(--bg);
+    background:var(--card-bg);
 
-    border:1px solid var(--border);
+    border:1px solid var(--stroke);
 
     color:var(--text-muted);
 
-    font-size:13px;
+    font-size:12.5px;
 
     font-weight:600;
 
-    font-family:'Source Code Pro','Consolas',monospace;
+    font-family:'JetBrains Mono',ui-monospace,Consolas,monospace;
+
+    backdrop-filter:blur(10px);
+    -webkit-backdrop-filter:blur(10px);
+
+    transition:background-color .2s ease, transform .2s ease;
+
+}
+
+.repo-name-badge:hover{
+
+    background:var(--table-row-hover);
+
+    transform:translateY(-1px);
 
 }
 
@@ -1605,7 +1745,7 @@ textarea{
 
     cursor:pointer;
 
-    transition:background-color .15s ease, color .15s ease;
+    transition:background-color .15s ease, color .15s ease, transform .15s ease;
 
 }
 
@@ -1614,6 +1754,8 @@ textarea{
     background:var(--table-row-hover);
 
     color:var(--text);
+
+    transform:translateY(-2px);
 
 }
 
@@ -1645,6 +1787,21 @@ textarea{
 
     text-align:center;
 
+    animation:activity-bell-ping 2s infinite;
+
+}
+
+/* Pulses the badge's own shadow outward, not its size/position — an
+   unread count that visibly grew/shrank each cycle would be misread as
+   the count itself changing. */
+@keyframes activity-bell-ping{
+    0%{ box-shadow:0 0 0 0 rgba(220,38,38,.55); }
+    70%{ box-shadow:0 0 0 7px rgba(220,38,38,0); }
+    100%{ box-shadow:0 0 0 0 rgba(220,38,38,0); }
+}
+
+@media(prefers-reduced-motion:reduce){
+    .activity-bell-badge{ animation:none; }
 }
 
 .activity-bell-panel{
@@ -1773,13 +1930,13 @@ textarea{
 
     align-items:center;
 
-    padding:6px 12px;
+    padding:7px 13px;
 
-    border:none;
+    border:1px solid rgba(255,255,255,.15);
 
-    border-radius:20px;
+    border-radius:999px;
 
-    background:#d97706;
+    background:linear-gradient(135deg, #fbbf24, #d97706);
 
     color:#ffffff;
 
@@ -1789,13 +1946,17 @@ textarea{
 
     cursor:pointer;
 
-    transition:background-color .15s ease;
+    box-shadow:0 6px 16px -5px rgba(217,119,6,.6);
+
+    transition:transform .2s ease, box-shadow .2s ease;
 
 }
 
 .pr-notification-badge:hover{
 
-    background:#b45309;
+    transform:translateY(-2px);
+
+    box-shadow:0 10px 22px -6px rgba(217,119,6,.7);
 
 }
 
@@ -2461,15 +2622,24 @@ textarea{
 
     padding:12px 22px;
 
-    border:none;
+    border:1px solid var(--stroke);
 
-    border-radius:8px;
+    border-radius:11px;
+
+    background:var(--card-bg);
+
+    color:var(--text);
 
     font-size:15px;
 
     font-weight:600;
 
     position:relative;
+
+    overflow:hidden;
+
+    backdrop-filter:blur(10px);
+    -webkit-backdrop-filter:blur(10px);
 
     transition:transform .15s ease, box-shadow .15s ease, background-color .2s ease, opacity .2s ease;
 
@@ -2481,6 +2651,52 @@ textarea{
 
     box-shadow:0 6px 16px rgba(0,0,0,.18);
 
+}
+
+/* Diagonal light sweep on hover — a thin bright band travels across the
+   button once per hover, not looping, so it reads as a response to the
+   cursor rather than ambient decoration. Skipped on the plain unvarianted
+   .btn (dialog "Close" buttons etc.) since a glass/neutral button doesn't
+   have enough contrast against the sweep to make it visible or worthwhile
+   — only the colored variants (which have full-opacity fills) get it. */
+.btn-primary::before,
+.btn-success::before,
+.btn-danger::before,
+.btn-warning::before,
+.btn-secondary::before{
+
+    content:"";
+    position:absolute;
+    top:0;
+    left:-120%;
+    width:60%;
+    height:100%;
+    transform:skewX(-20deg);
+    background:linear-gradient(90deg, transparent, rgba(255,255,255,.45), transparent);
+    pointer-events:none;
+
+}
+
+.btn-primary:hover:not(:disabled)::before,
+.btn-success:hover:not(:disabled)::before,
+.btn-danger:hover:not(:disabled)::before,
+.btn-warning:hover:not(:disabled)::before,
+.btn-secondary:hover:not(:disabled)::before{
+
+    animation:btn-shine .8s ease;
+
+}
+
+@keyframes btn-shine{
+    to{ left:130%; }
+}
+
+@media(prefers-reduced-motion:reduce){
+    .btn-primary::before,
+    .btn-success::before,
+    .btn-danger::before,
+    .btn-warning::before,
+    .btn-secondary::before{ display:none; }
 }
 
 .btn:active:not(:disabled){
@@ -2537,73 +2753,75 @@ textarea{
 
 .btn-primary{
 
-    background:#2563eb;
-
+    background:linear-gradient(135deg, var(--heading-accent), var(--accent-secondary));
+    border-color:rgba(255,255,255,.15);
     color:white;
+    box-shadow:0 8px 20px -8px rgba(59,130,246,.6);
 
 }
 
-.btn-primary:hover{
+.btn-primary:hover:not(:disabled){
 
-    background:#1d4ed8;
+    box-shadow:0 14px 28px -10px rgba(59,130,246,.7);
 
 }
 
 .btn-success{
 
-    background:#16a34a;
-
+    background:linear-gradient(135deg, #10b981, #059669);
+    border-color:rgba(255,255,255,.15);
     color:white;
+    box-shadow:0 8px 20px -8px rgba(16,185,129,.5);
 
 }
 
 .btn-success:hover:not(:disabled){
 
-    background:#15803d;
-
-    box-shadow:0 6px 20px rgba(22,163,74,.45);
+    box-shadow:0 14px 28px -10px rgba(16,185,129,.6);
 
 }
 
 .btn-danger{
 
-    background:#dc2626;
-
+    background:linear-gradient(135deg, #f87171, #dc2626);
+    border-color:rgba(255,255,255,.15);
     color:white;
+    box-shadow:0 8px 20px -8px rgba(220,38,38,.5);
 
 }
 
-.btn-danger:hover{
+.btn-danger:hover:not(:disabled){
 
-    background:#b91c1c;
+    box-shadow:0 14px 28px -10px rgba(220,38,38,.6);
 
 }
 
 .btn-warning{
 
-    background:#f59e0b;
-
+    background:linear-gradient(135deg, #fbbf24, #d97706);
+    border-color:rgba(255,255,255,.15);
     color:white;
+    box-shadow:0 8px 20px -8px rgba(217,119,6,.5);
 
 }
 
-.btn-warning:hover{
+.btn-warning:hover:not(:disabled){
 
-    background:#d97706;
+    box-shadow:0 14px 28px -10px rgba(217,119,6,.6);
 
 }
 
 .btn-secondary{
 
-    background:#64748b;
-
+    background:linear-gradient(135deg, #94a3b8, #64748b);
+    border-color:rgba(255,255,255,.15);
     color:white;
 
 }
 
-.btn-secondary:hover{
+.btn-secondary:hover:not(:disabled){
 
-    background:#475569;
+    box-shadow:0 14px 28px -10px rgba(100,116,139,.5);
 
 }
 
@@ -2631,10 +2849,26 @@ textarea{
 
     color:var(--table-header-text);
 
-    padding:15px;
+    padding:14px 16px;
 
     text-align:left;
 
+    font-size:12px;
+
+    font-weight:600;
+
+    letter-spacing:.04em;
+
+    text-transform:uppercase;
+
+}
+
+.table th:first-child{
+    border-radius:11px 0 0 11px;
+}
+
+.table th:last-child{
+    border-radius:0 11px 11px 0;
 }
 
 .table th.num,
@@ -2670,7 +2904,7 @@ textarea{
 
     background:var(--table-row-hover);
 
-    box-shadow:inset 3px 0 0 #2563eb;
+    box-shadow:inset 3px 0 0 var(--heading-accent);
 
 }
 
@@ -2711,14 +2945,6 @@ textarea{
 ========================================== */
 
 .badge{
-
-    padding:6px 12px;
-
-    border-radius:20px;
-
-    font-size:13px;
-
-    color:white;
 
     display:inline-block;
 
@@ -3264,11 +3490,13 @@ textarea{
 
 .dialog{
 
-    background:var(--card-bg);
+    background:var(--card-bg-strong);
 
     color:var(--text);
 
-    border-radius:12px;
+    border:1px solid var(--stroke);
+
+    border-radius:16px;
 
     padding:25px;
 
@@ -3280,7 +3508,10 @@ textarea{
 
     overflow-y:auto;
 
-    box-shadow:0 10px 30px rgba(0,0,0,.25);
+    box-shadow:0 24px 60px -18px rgba(0,0,0,.35);
+
+    backdrop-filter:blur(24px) saturate(160%);
+    -webkit-backdrop-filter:blur(24px) saturate(160%);
 
     animation:dialog-in .22s cubic-bezier(0.4,0,0.2,1) both;
 
@@ -4058,31 +4289,61 @@ textarea{
 }
 
 .badge{
-    padding:6px 12px;
-    border-radius:20px;
-    color:white;
+    padding:5px 12px;
+    border-radius:999px;
     font-weight:600;
     font-size:12px;
+    border:1px solid transparent;
 }
 
 .badge-success{
-    background:#16a34a;
+    background:rgba(16,185,129,.16);
+    color:#059669;
+    border-color:rgba(16,185,129,.3);
+}
+
+:root[data-theme="dark"] .badge-success{
+    color:#34d399;
 }
 
 .badge-danger{
-    background:#dc2626;
+    background:rgba(239,68,68,.15);
+    color:#dc2626;
+    border-color:rgba(239,68,68,.28);
+}
+
+:root[data-theme="dark"] .badge-danger{
+    color:#f87171;
 }
 
 .badge-warning{
-    background:#ca8a04;
+    background:rgba(245,158,11,.16);
+    color:#b45309;
+    border-color:rgba(245,158,11,.3);
+}
+
+:root[data-theme="dark"] .badge-warning{
+    color:#fbbf24;
 }
 
 .badge-info{
-    background:var(--accent-secondary);
+    background:rgba(99,102,241,.16);
+    color:#4f46e5;
+    border-color:rgba(99,102,241,.3);
+}
+
+:root[data-theme="dark"] .badge-info{
+    color:#a5b4fc;
 }
 
 .badge-secondary{
-    background:#6b7280;
+    background:rgba(100,116,139,.16);
+    color:#475569;
+    border-color:rgba(100,116,139,.3);
+}
+
+:root[data-theme="dark"] .badge-secondary{
+    color:#94a3b8;
 }
 
 /* ==========================================

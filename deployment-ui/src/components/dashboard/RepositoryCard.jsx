@@ -2,7 +2,7 @@ export default function RepositoryCard({ repository }) {
 
     return (
 
-        <div className="card dashboard-card">
+        <div className="card dashboard-card tilt">
 
             <h2 className="card-title">
 

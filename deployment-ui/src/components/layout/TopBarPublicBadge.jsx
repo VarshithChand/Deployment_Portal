@@ -1,4 +1,5 @@
 import AccountAvatar from "../common/AccountAvatar";
+import CountUp from "../common/CountUp";
 
 // Pulled out of TopBar's "no OAuth login" branch (rate limit badge + PAT
 // owner/admin badge) so its own nested conditionals stop counting toward
@@ -19,7 +20,7 @@ export default function TopBarPublicBadge({ rateLimit, tokenOwner, isAdminSessio
                     className={`badge ${rateLimit.remaining <= 10 ? "badge-danger" : "badge-info"}`}
                     title={`GitHub API requests remaining this hour — resets at ${new Date(rateLimit.resetAt).toLocaleTimeString()}`}
                 >
-                    {rateLimit.remaining}/{rateLimit.limit}
+                    <CountUp value={rateLimit.remaining} duration={600} />/{rateLimit.limit}
                 </span>
             )}
 

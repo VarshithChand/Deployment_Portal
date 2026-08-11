@@ -25,6 +25,7 @@ import GlobalLogoutMonitor from "./components/GlobalLogoutMonitor";
 import useNavigation from "./hooks/useNavigation";
 import useAuth from "./hooks/useAuth";
 import useToast from "./hooks/useToast";
+import useCardTilt from "./hooks/useCardTilt";
 
 // Admin-only regardless of Sidebar Access state — same guard the Sidebar
 // tabs themselves already get (see Sidebar.jsx's ADMIN_ONLY_TABS), needed
@@ -36,6 +37,8 @@ function App(){
     const { tab, setTab, sidebarAccess } = useNavigation();
     const { isAdminSession, oauthStatusChecked } = useAuth();
     const toast = useToast();
+
+    useCardTilt();
 
     // Locking/hiding a tab (see Settings > Sidebar Access) has to actually
     // block it, not just grey out its Sidebar entry — otherwise a direct
