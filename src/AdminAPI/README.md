@@ -30,9 +30,28 @@ Two separate workflows, in order:
    ever runs manually (`workflow_dispatch`), since deploying is a deliberate action,
    not something that should happen on every push.
 
-## Triggering a deployment
+## Run it
 
-`Release Admin API` takes four inputs, each a checkbox, all default **on**:
+A README can't run code or hold a live form — GitHub strips scripts and interactive
+HTML out of rendered Markdown, so nothing below can dispatch a workflow by itself.
+These buttons instead jump straight to the real, working control for each one — no
+extra searching through the Actions tab.
+
+[![Run Release Admin API](https://img.shields.io/badge/GitHub_Actions-Run_Release_Admin_API-2ea44f?style=for-the-badge&logo=github)](https://github.com/VarshithChand/yaml/actions/workflows/release-admin.yml)
+[![Run Admin API CI](https://img.shields.io/badge/GitHub_Actions-Run_Admin_API_CI-0366d6?style=for-the-badge&logo=github)](https://github.com/VarshithChand/yaml/actions/workflows/admin.yml)
+[![Open in Deployment Portal](https://img.shields.io/badge/Deployment_Portal-Open_Deploy_Page-6f42c1?style=for-the-badge)](https://yaml.v-varshith-2004.workers.dev/?tab=deploy)
+
+Each GitHub button lands on that workflow's Actions page — click **Run workflow**
+(top right) there to open its real branch picker and inputs. The portal button opens
+the Deploy page directly, workflow pre-selectable from its own dropdown.
+
+<details>
+<summary><strong>Release Admin API — inputs (click to expand)</strong></summary>
+
+<br>
+
+Four checkboxes, all default **on** — each is an independent job, so unchecking one
+leaves the other three untouched:
 
 | Input | Deploys to |
 |---|---|
@@ -41,33 +60,21 @@ Two separate workflows, in order:
 | `deploy_cluster02` | Cluster02 (Production) |
 | `deploy_cluster03` | Cluster03 (Production) |
 
-Uncheck whichever targets you don't want touched this run — each one is an
-independent job, so e.g. RC-only is just `deploy_rc` checked and the other three
-cleared.
+For example, an RC-only run is `deploy_rc` checked with the other three cleared.
 
-### Option A — through the Deployment Portal
+</details>
 
-1. Open the portal, go to **Deploy**.
-2. Pick the branch you want deployed.
-3. Pick **Release Admin API** from the workflow dropdown.
-4. Toggle `deploy_rc` / `deploy_cluster01` / `deploy_cluster02` / `deploy_cluster03`
-   as needed.
-5. Click **Deploy**.
+### Through the Deployment Portal
 
-Triggering this way requires an admin session — either a GitHub OAuth login with the
-Admin role, or a Personal Access Token (configured in **Settings → GitHub**) that
-belongs to a username on the admin allowlist (**Settings → Credentials → Admin
-Allowlist**). Otherwise the portal rejects the request before it ever reaches GitHub.
+Requires an admin session — either a GitHub OAuth login with the Admin role, or a
+Personal Access Token (**Settings → GitHub**) belonging to a username on the admin
+allowlist (**Settings → Credentials → Admin Allowlist**). Otherwise the portal
+rejects the request before it ever reaches GitHub.
 
-### Option B — directly on GitHub
+### Directly on GitHub
 
-1. Go to the repo's **Actions** tab → **Release Admin API** in the left sidebar.
-2. Click **Run workflow**, pick the branch.
-3. Set the four checkboxes.
-4. Click **Run workflow** to confirm.
-
-This needs write access to the repo (or Actions-trigger permission), same as running
-any other workflow manually from GitHub's own UI — no portal involved at all.
+Needs write access to the repo (or Actions-trigger permission) — same requirement as
+running any other workflow manually from GitHub's own UI, no portal involved at all.
 
 ### Confirming it worked
 
