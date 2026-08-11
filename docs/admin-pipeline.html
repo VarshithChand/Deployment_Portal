@@ -135,16 +135,40 @@ function getSessionId() {
   return id;
 }
 
+// fetch() itself throws (rather than resolving with a response) when the
+// browser blocks the request before it ever reaches the server - a CORS
+// rejection (this page's origin isn't yet in the backend's
+// Cors:AllowedOrigins) looks identical, from here, to the backend being
+// down entirely. Caught here so every caller gets a clear, on-page
+// message instead of an unhandled rejection that just leaves the page
+// looking stuck on "Checking your session...".
 async function apiFetch(path, options = {}) {
-  const response = await fetch(API_BASE + path, {
-    ...options,
-    credentials: "include",
-    headers: {
-      "X-Session-Id": getSessionId(),
-      "Content-Type": "application/json",
-      ...(options.headers || {})
-    }
-  });
+  let response;
+
+  try {
+    response = await fetch(API_BASE + path, {
+      ...options,
+      credentials: "include",
+      headers: {
+        "X-Session-Id": getSessionId(),
+        "Content-Type": "application/json",
+        ...(options.headers || {})
+      }
+    });
+  }
+  catch (err) {
+    console.error(err);
+    return {
+      ok: false,
+      status: 0,
+      data: {
+        message: "Couldn't reach the backend at all — most likely this page's origin " +
+          "(" + window.location.origin + ") hasn't been added to the backend's CORS " +
+          "allowed origins yet (see docs/README.md), or the backend is offline."
+      }
+    };
+  }
+
   const data = await response.json().catch(() => null);
   return { ok: response.ok, status: response.status, data };
 }
@@ -163,11 +187,20 @@ function showSection(id) {
 }
 
 async function checkAuth() {
-  const { ok, data } = await apiFetch("/api/settings/me/github");
+  const { ok, status, data } = await apiFetch("/api/settings/me/github");
+
   if (ok && data && data.gitHubTokenConfigured) {
     showSection("deploy-section");
-  } else {
-    showSection("setup-section");
+    return;
+  }
+
+  showSection("setup-section");
+
+  // status 0 means apiFetch's own catch fired (network/CORS failure) -
+  // that specific message is worth surfacing immediately, since it means
+  // nothing on this page can work yet, not just "no token saved so far."
+  if (status === 0 && data && data.message) {
+    showResult(data.message, false);
   }
 }
 
