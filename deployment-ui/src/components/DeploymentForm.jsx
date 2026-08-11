@@ -160,6 +160,36 @@ export default function DeploymentForm({
 
     }
 
+    // Pre-selects a workflow from "?workflow=" in the URL (e.g. a README
+    // badge linking to .../?tab=deploy&workflow=release-admin.yml) - lands
+    // here with that workflow, its own real mode tab, and its real declared
+    // inputs already showing, instead of making someone find it in the
+    // dropdown themselves. Matches by bare filename or full path, either
+    // side case-insensitive, since a link only needs to get the filename
+    // right. Runs once workflows have loaded; a param that doesn't match
+    // anything is silently ignored, same as never having been there.
+    useEffect(() => {
+
+        if (workflows.length === 0) return;
+
+        const requested = new URLSearchParams(window.location.search).get("workflow");
+        if (!requested) return;
+
+        const target = requested.toLowerCase();
+
+        const match = workflows.find((item) => {
+            const path = item.path.toLowerCase();
+            return path === target || path.endsWith(`/${target}`);
+        });
+
+        if (!match) return;
+
+        setMode(classifyWorkflow(match));
+        setWorkflow(match.path);
+
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [workflows]);
+
     /* -----------------------------
        Fetch the selected workflow's declared inputs — always, regardless
        of CI/CD mode (see showInputs above for why this can't be
