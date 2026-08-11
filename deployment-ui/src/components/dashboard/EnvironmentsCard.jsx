@@ -1,7 +1,8 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 import { getEnvironments } from "../../services/environmentsService";
 import useNavigation from "../../hooks/useNavigation";
+import useAuth from "../../hooks/useAuth";
 import StatusBadge from "../StatusBadge";
 import usePolling from "../../hooks/usePolling";
 
@@ -19,11 +20,21 @@ const PROVIDER_LABEL = {
 export default function EnvironmentsCard() {
 
     const { goToEnvironment } = useNavigation();
+    const { githubRepoConfigured } = useAuth();
 
     const [environments, setEnvironments] = useState([]);
     const [loading, setLoading] = useState(true);
 
     async function loadEnvironments() {
+
+        // Same reasoning as RecentDeployments — this card mounts even
+        // behind RequireGitHubSetup's popup, so without this guard it
+        // polled GitHub every 30s regardless of whether a repo was
+        // configured yet.
+        if (!githubRepoConfigured) {
+            setLoading(false);
+            return;
+        }
 
         const data = await getEnvironments();
         setEnvironments(Array.isArray(data) ? data : []);
@@ -31,12 +42,10 @@ export default function EnvironmentsCard() {
 
     }
 
+    // usePolling already fires loadEnvironments once immediately on mount
+    // in addition to its interval — the separate mount-only effect this
+    // used to also have was a redundant second initial fetch.
     usePolling(loadEnvironments, 30000);
-
-    useEffect(() => {
-        loadEnvironments();
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
 
     return (
 

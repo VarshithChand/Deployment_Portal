@@ -1,14 +1,25 @@
 import { useState } from "react";
 
 import usePolling from "../../hooks/usePolling";
+import useAuth from "../../hooks/useAuth";
 import { getWorkflowRuns } from "../../services/historyService";
 import StatusBadge from "../StatusBadge";
 
 export default function RecentDeployments() {
 
+    const { githubRepoConfigured } = useAuth();
     const [runs, setRuns] = useState([]);
 
     async function loadRuns() {
+
+        // Dashboard (and this card with it) mounts even while
+        // RequireGitHubSetup's popup is still showing — without this,
+        // an unconfigured session polled GitHub every 20s regardless,
+        // burning through the anonymous 60/hour rate limit before
+        // anyone had a chance to paste a token in.
+        if (!githubRepoConfigured) {
+            return;
+        }
 
         const data = await getWorkflowRuns();
 

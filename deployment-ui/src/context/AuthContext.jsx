@@ -61,6 +61,17 @@ export default function AuthProvider({ children }) {
     const [loading, setLoading] = useState(true);
     const [oauthConfigured, setOauthConfigured] = useState(false);
     const [githubTokenConfigured, setGithubTokenConfigured] = useState(false);
+
+    // Full IsConfigured (owner + repository + token, not just a token) —
+    // what RequireGitHubSetup itself gates the setup popup on. Data-
+    // fetching hooks (useGithubResources, RecentDeployments,
+    // EnvironmentsCard, ActivityBell) read this too, so they don't fire
+    // real GitHub API calls for a session that's still sitting at that
+    // popup — those calls used to fire immediately on mount regardless,
+    // burning through the 60/hour anonymous rate limit before someone
+    // had even pasted a token in.
+    const [githubRepoConfigured, setGithubRepoConfigured] = useState(false);
+
     const [tokenOwner, setTokenOwner] = useState(null);
 
     // True when THIS session has admin authority — either a real GitHub
@@ -111,6 +122,7 @@ export default function AuthProvider({ children }) {
 
             const hasToken = !!myGitHub.gitHubTokenConfigured;
             setGithubTokenConfigured(hasToken);
+            setGithubRepoConfigured(!!myGitHub.isConfigured);
 
             if (hasToken) {
 
@@ -181,7 +193,7 @@ export default function AuthProvider({ children }) {
 
     return (
 
-        <AuthContext.Provider value={{ user, loading, login, logout, refresh, oauthConfigured, githubTokenConfigured, tokenOwner, canApproveReleases: !!tokenOwner?.canApprove, isAdminSession, oauthStatusChecked, refreshOauthStatus }}>
+        <AuthContext.Provider value={{ user, loading, login, logout, refresh, oauthConfigured, githubTokenConfigured, githubRepoConfigured, tokenOwner, canApproveReleases: !!tokenOwner?.canApprove, isAdminSession, oauthStatusChecked, refreshOauthStatus }}>
 
             {children}
 

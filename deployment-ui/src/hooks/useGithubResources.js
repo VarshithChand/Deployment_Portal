@@ -6,6 +6,7 @@ import {
     getArtifacts,
     getWorkflows
 } from "../services/githubService";
+import useAuth from "./useAuth";
 
 function normalizeList(data) {
     return Array.isArray(data) ? data : [];
@@ -20,6 +21,8 @@ function normalizeWorkflows(data) {
 // loading/error handling; only Dashboard also needs the repository itself.
 export function useGithubResources({ includeRepository = false } = {}) {
 
+    const { githubRepoConfigured, oauthStatusChecked } = useAuth();
+
     const [repository, setRepository] = useState({});
     const [branches, setBranches] = useState([]);
     const [artifacts, setArtifacts] = useState([]);
@@ -28,7 +31,17 @@ export function useGithubResources({ includeRepository = false } = {}) {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
 
+    // No owner/repo/token configured yet means RequireGitHubSetup's popup
+    // is showing (or about to) — this hook's own caller (Dashboard/Deploy)
+    // still mounts underneath it, so without this guard every one of these
+    // four calls fired immediately regardless, burning through the
+    // anonymous 60/hour GitHub rate limit before someone had even pasted
+    // a token in.
     const loadData = useCallback(async (force = false) => {
+
+        if (!githubRepoConfigured) {
+            return;
+        }
 
         try {
 
@@ -69,13 +82,25 @@ export function useGithubResources({ includeRepository = false } = {}) {
 
         }
 
-    }, [includeRepository]);
+    }, [includeRepository, githubRepoConfigured]);
 
     useEffect(() => {
 
+        // Still resolving whether a repo is configured — leave `loading`
+        // at its initial true so the caller keeps showing a spinner
+        // instead of flashing an empty state before the real answer's in.
+        if (!oauthStatusChecked) {
+            return;
+        }
+
+        if (!githubRepoConfigured) {
+            setLoading(false);
+            return;
+        }
+
         loadData();
 
-    }, [loadData]);
+    }, [loadData, oauthStatusChecked, githubRepoConfigured]);
 
     return { repository, branches, artifacts, workflows, loading, error, loadData };
 

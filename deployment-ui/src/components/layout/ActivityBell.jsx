@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import usePolling from "../../hooks/usePolling";
+import useAuth from "../../hooks/useAuth";
 import { getRecentActivity } from "../../services/activityService";
 
 const LAST_SEEN_KEY = "activity-last-seen";
@@ -29,12 +30,22 @@ function BellIcon() {
 // and it survives reloads (unlike plain in-memory state).
 export default function ActivityBell() {
 
+    const { githubRepoConfigured } = useAuth();
+
     const [events, setEvents] = useState([]);
     const [open, setOpen] = useState(false);
     const [lastSeen, setLastSeen] = useState(() => localStorage.getItem(LAST_SEEN_KEY) || "");
     const containerRef = useRef(null);
 
     async function load() {
+
+        // The bell lives in TopBar, mounted app-wide — including behind
+        // RequireGitHubSetup's popup before a repo is even connected,
+        // where "recent commits + workflow runs" has nothing to fetch
+        // yet anyway.
+        if (!githubRepoConfigured) {
+            return;
+        }
 
         try {
 
