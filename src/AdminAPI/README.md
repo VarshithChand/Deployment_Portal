@@ -40,11 +40,15 @@ extra searching through the Actions tab.
 [![Run Release Admin API](https://img.shields.io/badge/GitHub_Actions-Run_Release_Admin_API-2ea44f?style=for-the-badge&logo=github)](https://github.com/VarshithChand/yaml/actions/workflows/release-admin.yml)
 [![Run Admin API CI](https://img.shields.io/badge/GitHub_Actions-Run_Admin_API_CI-0366d6?style=for-the-badge&logo=github)](https://github.com/VarshithChand/yaml/actions/workflows/admin.yml)
 [![Open in Deployment Portal](https://img.shields.io/badge/Deployment_Portal-Deploy_Release_Admin_API-6f42c1?style=for-the-badge)](https://yaml.v-varshith-2004.workers.dev/?tab=deploy&workflow=release-admin.yml)
+[![Standalone Pipeline Page](https://img.shields.io/badge/GitHub_Pages-Standalone_Pipeline_Page-24292e?style=for-the-badge&logo=github)](https://varshithchand.github.io/yaml/admin-pipeline.html)
 
 Each GitHub button lands on that workflow's Actions page — click **Run workflow**
 (top right) there to open its real branch picker and inputs. The portal button opens
 the Deploy page with **Release Admin API** and its four checkboxes already
-pre-selected — just pick a branch and click **Deploy**.
+pre-selected — just pick a branch and click **Deploy**. The GitHub Pages button opens
+[`docs/admin-pipeline.html`](../../docs/admin-pipeline.html) — a standalone page with
+its own real form that calls the same backend directly (see [docs/README.md](../../docs/README.md)
+for the one-time setup this needs before it works).
 
 <details>
 <summary><strong>Release Admin API — inputs (click to expand)</strong></summary>
