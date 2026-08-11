@@ -20,9 +20,17 @@ public class SecurityApiKeysController : ControllerBase
         _settings = settings;
     }
 
+    // Everyone's keys, every owner — the Services > Security admin panel.
+    // Previously had no gate at all: any visitor who knew this route could
+    // see every PAT user's key name/owner/creation date, well past what
+    // the Services page being admin-only client-side implied was
+    // protected. Page-scoped ("services") same as the rest of that page.
     [HttpGet]
     public async Task<IActionResult> GetAll()
     {
+        if (await AdminGate.DenyUnlessAdminAsync(this, _settings, "view API keys", "services") is IActionResult denied)
+            return denied;
+
         var keys = await _settings.GetApiKeysAsync();
 
         // One batched lookup instead of one GitHub API call per key -
@@ -43,13 +51,70 @@ public class SecurityApiKeysController : ControllerBase
     [HttpPost]
     public async Task<IActionResult> Create(CreateApiKeyRequest request)
     {
+        if (await AdminGate.DenyUnlessAdminAsync(this, _settings, "create an API key", "services") is IActionResult denied)
+            return denied;
+
         var ownerKey = PortalIdentity.GetOrCreateKey(HttpContext);
+        return Ok(await CreateForOwnerAsync(request, ownerKey));
+    }
+
+    [HttpDelete("{id}")]
+    public async Task<IActionResult> Revoke(int id)
+    {
+        if (await AdminGate.DenyUnlessAdminAsync(this, _settings, "revoke an API key", "services") is IActionResult denied)
+            return denied;
+
+        return await _settings.RevokeApiKeyAsync(id) ? NoContent() : NotFound();
+    }
+
+    // Self-service, no admin gate — every visitor already manages their
+    // own GitHub/AWS/Azure/GCP credentials with no admin required (see
+    // SettingsController's /me/* endpoints), same pattern here: a PAT
+    // user's own API key(s), scoped strictly to their own PortalIdentity
+    // key so they can never see or touch anyone else's. Reachable from
+    // Settings > Credentials rather than the admin-only Services page.
+    [HttpGet("mine")]
+    public async Task<IActionResult> GetMine()
+    {
+        var callerKey = PortalIdentity.GetOrCreateKey(HttpContext);
+        var patUsers = await _settings.GetPatUsersAsync();
+
+        var dtos = (await _settings.GetApiKeysAsync())
+            .Where(k => k.OwnerKey == callerKey)
+            .OrderBy(k => k.Id)
+            .Select(k => ToDto(k, patUsers))
+            .ToList();
+
+        return Ok(dtos);
+    }
+
+    [HttpPost("mine")]
+    public async Task<IActionResult> CreateMine(CreateApiKeyRequest request)
+    {
+        var callerKey = PortalIdentity.GetOrCreateKey(HttpContext);
+        return Ok(await CreateForOwnerAsync(request, callerKey));
+    }
+
+    [HttpDelete("mine/{id}")]
+    public async Task<IActionResult> RevokeMine(int id)
+    {
+        var callerKey = PortalIdentity.GetOrCreateKey(HttpContext);
+        var owns = (await _settings.GetApiKeysAsync()).Any(k => k.Id == id && k.OwnerKey == callerKey);
+
+        if (!owns)
+            return NotFound();
+
+        return await _settings.RevokeApiKeyAsync(id) ? NoContent() : NotFound();
+    }
+
+    private async Task<CreatedApiKeyDto> CreateForOwnerAsync(CreateApiKeyRequest request, string ownerKey)
+    {
         var (entry, rawKey) = await _settings.CreateApiKeyAsync(request.Name, ownerKey);
 
         var patUsers = await _settings.GetPatUsersAsync();
         var dto = ToDto(entry, patUsers);
 
-        return Ok(new CreatedApiKeyDto
+        return new CreatedApiKeyDto
         {
             Id = dto.Id,
             Name = dto.Name,
@@ -59,13 +124,7 @@ public class SecurityApiKeysController : ControllerBase
             OwnerKey = dto.OwnerKey,
             OwnerLogin = dto.OwnerLogin,
             Key = rawKey
-        });
-    }
-
-    [HttpDelete("{id}")]
-    public async Task<IActionResult> Revoke(int id)
-    {
-        return await _settings.RevokeApiKeyAsync(id) ? NoContent() : NotFound();
+        };
     }
 
     private static ApiKeyDto ToDto(ApiKey key, List<PatUserSummaryDto> patUsers)

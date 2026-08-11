@@ -5,12 +5,14 @@ import GitHubAccessSection from "./GitHubAccessSection";
 import AwsLoginSection from "./credentials/AwsLoginSection";
 import AzureLoginSection from "./credentials/AzureLoginSection";
 import GcpLoginSection from "./credentials/GcpLoginSection";
+import ApiKeySection from "./credentials/ApiKeySection";
 
 const MODES = [
     { key: "github", label: "GitHub" },
     { key: "aws", label: "AWS" },
     { key: "azure", label: "Azure" },
     { key: "gcp", label: "GCP" },
+    { key: "apikey", label: "API Key" },
     { key: "sonarqube", label: "SonarQube" },
     { key: "docker", label: "Docker" },
     { key: "oauth", label: "GitHub OAuth" },
@@ -85,8 +87,9 @@ export default function CredentialsView({
             <p className="empty-state" style={{ padding: "0 0 15px", textAlign: "left" }}>
                 GitHub, AWS, and Azure below are yours alone — kept for your own browser
                 session, isolated from every other user of this portal. GCP is stored the
-                same way, for future use. SonarQube, Docker, OAuth, and the admin allowlist
-                are shared by the whole portal instead.
+                same way, for future use, and your API Key is scoped the same way too.
+                SonarQube, Docker, OAuth, and the admin allowlist are shared by the whole
+                portal instead.
             </p>
 
             <div className="button-row" style={{ marginBottom: "20px" }}>
@@ -131,6 +134,8 @@ export default function CredentialsView({
             {mode === "azure" && <AzureLoginSection />}
 
             {mode === "gcp" && <GcpLoginSection />}
+
+            {mode === "apikey" && <ApiKeySection />}
 
             {mode === "docker" && (
 
