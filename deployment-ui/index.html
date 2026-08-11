@@ -47,6 +47,15 @@
       html[data-style="neon"] #root,
       html[data-style="neon"][data-theme="dark"] #root { background: #05070e; background-image: none; }
       html[data-style="neon"][data-theme="light"] #root { background: #eef6fa; background-image: none; }
+      html[data-style="clay"] #root { background: #e7ebf5; background-image: none; }
+      html[data-style="clay"][data-theme="dark"] #root { background: #1e2330; background-image: none; }
+      html[data-style="midnight"] #root,
+      html[data-style="midnight"][data-theme="dark"] #root { background: #0d1117; background-image: none; }
+      html[data-style="midnight"][data-theme="light"] #root { background: #f6f8fa; background-image: none; }
+      html[data-style="sunset"] #root { background: #fff8f3; background-image: none; }
+      html[data-style="sunset"][data-theme="dark"] #root { background: #221515; background-image: none; }
+      html[data-style="mono"] #root { background: #f6f5f2; background-image: none; }
+      html[data-style="mono"][data-theme="dark"] #root { background: #161412; background-image: none; }
 
       .boot-loader {
         min-height: 100vh;
@@ -192,7 +201,7 @@
         }
         try {
           var storedStyle = localStorage.getItem('appStyle');
-          var validStyles = ['glass', 'brutal', 'minimal', 'neon'];
+          var validStyles = ['glass', 'brutal', 'minimal', 'neon', 'clay', 'midnight', 'sunset', 'mono'];
           if (validStyles.indexOf(storedStyle) !== -1) {
             document.documentElement.dataset.style = storedStyle;
           }
