@@ -1,5 +1,7 @@
 // Icon mark matches the app's favicon (public/favicon.svg) — same glyph,
 // same blue, so the tab icon and the in-app logo read as one identity.
+// Three stacked chevrons ("Ascend") read as a release moving up through
+// environments — dev to acpt to prod — rather than a plain arrow.
 export default function Logo({ compact = false, showEyebrow = true, size = 40 }) {
 
     return (
@@ -8,7 +10,11 @@ export default function Logo({ compact = false, showEyebrow = true, size = 40 })
 
             <svg width={size} height={size} viewBox="0 0 48 48" aria-hidden="true" focusable="false">
                 <rect width="48" height="48" rx="10" fill="#2563eb" />
-                <path d="M24 8 L36 22 L28 22 L28 40 L20 40 L20 22 L12 22 Z" fill="#ffffff" />
+                <g fill="none" stroke="#ffffff" strokeWidth="4.9" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M13.5 18 L24 9 L34.5 18" />
+                    <path d="M13.5 27.8 L24 18.8 L34.5 27.8" opacity=".62" />
+                    <path d="M13.5 37.5 L24 28.5 L34.5 37.5" opacity=".34" />
+                </g>
             </svg>
 
             {!compact && (

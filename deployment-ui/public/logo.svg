@@ -1,6 +1,10 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="360" height="64" viewBox="0 0 360 64">
   <rect x="8" y="8" width="48" height="48" rx="10" fill="#2563eb"/>
-  <path d="M32 16 L44 30 L36 30 L36 48 L28 48 L28 30 L20 30 Z" fill="#ffffff"/>
-  <text x="72" y="28" font-family="Lexend, 'Segoe UI', Arial, sans-serif" font-size="11" font-weight="600" letter-spacing="1.5" fill="#64748b">GITHUB</text>
-  <text x="70" y="49" font-family="Lexend, 'Segoe UI', Arial, sans-serif" font-size="24" font-weight="700" fill="#0f172a">Deployment Portal</text>
+  <g fill="none" stroke="#ffffff" stroke-width="4.9" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M21.5 26 L32 17 L42.5 26"/>
+    <path d="M21.5 35.8 L32 26.8 L42.5 35.8" opacity=".62"/>
+    <path d="M21.5 45.5 L32 36.5 L42.5 45.5" opacity=".34"/>
+  </g>
+  <text x="72" y="28" font-family="Inter, 'Segoe UI', Arial, sans-serif" font-size="11" font-weight="600" letter-spacing="1.5" fill="#64748b">GITHUB</text>
+  <text x="70" y="49" font-family="Inter, 'Segoe UI', Arial, sans-serif" font-size="24" font-weight="700" fill="#0f172a">Deployment Portal</text>
 </svg>

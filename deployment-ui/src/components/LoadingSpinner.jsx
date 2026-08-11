@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 
 import useNavigation from "../hooks/useNavigation";
-import Logo from "./common/Logo";
+import LoadingMark from "./common/LoadingMark";
 
 // If a page is still loading after this long, something's probably wrong
 // (a stalled request, a dead backend) rather than just being slow — offer
@@ -25,11 +25,14 @@ export default function LoadingSpinner() {
 
         <div className="loading-container">
 
-            <div className="loading-logo">
-                <Logo compact size={48} showEyebrow={false} />
-            </div>
+            <LoadingMark size={56} />
 
-            <p>Loading deployment information...</p>
+            <p>
+                Loading deployment information
+                <span className="loading-dots"><span>.</span><span>.</span><span>.</span></span>
+            </p>
+
+            <div className="loading-track"></div>
 
             {slow && (
 

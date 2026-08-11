@@ -41,35 +41,126 @@
         flex-direction: column;
         align-items: center;
         justify-content: center;
-        gap: 16px;
+        gap: 34px;
         font-family: 'Inter', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
       }
 
-      .boot-loader-mark { position: relative; width: 48px; height: 48px; animation: boot-pulse 1.4s ease-in-out infinite; }
+      /* Concentric rings pulsing outward from behind the tile, staggered
+         so a new one starts as the previous fades — reads as "emitting"
+         rather than a single repeating ripple. */
+      .boot-loader-mark { position: relative; width: 128px; height: 128px; display: grid; place-items: center; }
 
       .boot-loader-ring {
         position: absolute;
-        inset: -8px;
-        border-radius: 14px;
-        border: 2.5px solid transparent;
-        border-top-color: #3b82f6;
-        border-right-color: #3b82f6;
-        animation: boot-spin .9s linear infinite;
+        top: 50%; left: 50%;
+        width: 64px; height: 64px;
+        border-radius: 18px;
+        border: 2px solid #3b82f6;
+        transform: translate(-50%, -50%);
+        animation: boot-emit 2.4s ease-out infinite;
+        opacity: 0;
       }
-      html[data-theme="dark"] .boot-loader-ring { border-top-color: #60a5fa; border-right-color: #60a5fa; }
+      html[data-theme="dark"] .boot-loader-ring { border-color: #60a5fa; }
+      .boot-loader-ring:nth-child(2) { animation-delay: .8s; }
+      .boot-loader-ring:nth-child(3) { animation-delay: 1.6s; }
 
-      .boot-loader p { margin: 0; font-size: 14px; color: #64748b; }
-      html[data-theme="dark"] .boot-loader p { color: #a3b0cc; }
+      .boot-loader-tile {
+        position: relative;
+        width: 64px; height: 64px;
+        border-radius: 16px;
+        overflow: hidden;
+        background: linear-gradient(150deg, #3b82f6, #2563eb);
+        box-shadow: 0 16px 40px -10px rgba(37,99,235,.65), inset 0 1px 0 rgba(255,255,255,.35);
+        display: grid;
+        place-items: center;
+        animation: boot-breathe 2.4s ease-in-out infinite;
+      }
 
-      @keyframes boot-pulse {
-        0%, 100% { transform: scale(1); opacity: 1; }
-        50% { transform: scale(.92); opacity: .75; }
+      .boot-loader-tile svg { width: 32px; height: 32px; animation: boot-lift 2.4s ease-in-out infinite; }
+
+      /* A second, fainter copy of the mark rising and fading inside the
+         tile — a "ghost" trailing the main glyph's own subtle lift. */
+      .boot-loader-ghost {
+        position: absolute; left: 50%; top: 50%;
+        width: 22px; height: 22px;
+        transform: translate(-50%, -50%);
+        animation: boot-rise 2.4s ease-in infinite;
       }
-      @keyframes boot-spin {
-        to { transform: rotate(360deg); }
+      .boot-loader-ghost svg { width: 22px; height: 22px; }
+
+      .boot-loader-tile::after {
+        content: "";
+        position: absolute; inset: 0;
+        background: linear-gradient(120deg, transparent 30%, rgba(255,255,255,.45) 50%, transparent 70%);
+        transform: translateX(-120%);
+        animation: boot-sheen 2.4s ease-in-out infinite;
       }
+
+      .boot-loader-caption { text-align: center; }
+      .boot-loader-caption .boot-loader-title { font-size: 16px; font-weight: 600; letter-spacing: -.01em; color: #0f172a; }
+      html[data-theme="dark"] .boot-loader-caption .boot-loader-title { color: #e7ecf6; }
+      .boot-loader-caption .boot-loader-sub {
+        margin-top: 5px; font-size: 12.5px; color: #64748b;
+        font-family: 'JetBrains Mono', ui-monospace, monospace;
+      }
+      html[data-theme="dark"] .boot-loader-caption .boot-loader-sub { color: #a3b0cc; }
+
+      .boot-loader-dots span { animation: boot-blink 1.4s infinite; }
+      .boot-loader-dots span:nth-child(2) { animation-delay: .2s; }
+      .boot-loader-dots span:nth-child(3) { animation-delay: .4s; }
+
+      .boot-loader-track {
+        width: 190px; height: 5px;
+        border-radius: 999px;
+        background: rgba(37,99,235,.14);
+        overflow: hidden;
+        position: relative;
+      }
+      html[data-theme="dark"] .boot-loader-track { background: rgba(96,165,250,.16); }
+      .boot-loader-track::after {
+        content: "";
+        position: absolute; top: 0; left: -42%;
+        height: 100%; width: 42%;
+        border-radius: 999px;
+        background: linear-gradient(90deg, #2563eb, #3b82f6);
+        animation: boot-slide 1.5s ease-in-out infinite;
+      }
+
+      @keyframes boot-emit {
+        0% { opacity: .55; transform: translate(-50%, -50%) scale(1); }
+        100% { opacity: 0; transform: translate(-50%, -58%) scale(2.1); }
+      }
+      @keyframes boot-breathe {
+        0%, 100% { transform: scale(1); }
+        50% { transform: scale(1.06); }
+      }
+      @keyframes boot-lift {
+        0%, 100% { transform: translateY(2px); }
+        45% { transform: translateY(-4px); }
+      }
+      @keyframes boot-rise {
+        0% { opacity: 0; transform: translate(-50%, -10%); }
+        30% { opacity: .5; }
+        70%, 100% { opacity: 0; transform: translate(-50%, -140%); }
+      }
+      @keyframes boot-sheen {
+        0%, 55% { transform: translateX(-120%); }
+        80%, 100% { transform: translateX(120%); }
+      }
+      @keyframes boot-blink {
+        0%, 80%, 100% { opacity: .2; }
+        40% { opacity: 1; }
+      }
+      @keyframes boot-slide {
+        0% { left: -42%; }
+        100% { left: 100%; }
+      }
+
       @media (prefers-reduced-motion: reduce) {
-        .boot-loader-mark, .boot-loader-ring { animation: none; }
+        .boot-loader-ring, .boot-loader-tile, .boot-loader-tile svg, .boot-loader-ghost,
+        .boot-loader-tile::after, .boot-loader-dots span, .boot-loader-track::after {
+          animation: none;
+        }
       }
     </style>
     <script>
@@ -92,13 +183,33 @@
     <div id="root">
       <div class="boot-loader">
         <div class="boot-loader-mark">
-          <svg width="48" height="48" viewBox="0 0 48 48" aria-hidden="true" focusable="false">
-            <rect width="48" height="48" rx="10" fill="#2563eb" />
-            <path d="M24 8 L36 22 L28 22 L28 40 L20 40 L20 22 L12 22 Z" fill="#ffffff" />
-          </svg>
-          <div class="boot-loader-ring"></div>
+          <span class="boot-loader-ring"></span>
+          <span class="boot-loader-ring"></span>
+          <span class="boot-loader-ring"></span>
+          <div class="boot-loader-tile">
+            <svg viewBox="0 0 48 48" aria-hidden="true" focusable="false">
+              <g fill="none" stroke="#ffffff" stroke-width="4.9" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M13.5 18 L24 9 L34.5 18" />
+                <path d="M13.5 27.8 L24 18.8 L34.5 27.8" opacity=".62" />
+                <path d="M13.5 37.5 L24 28.5 L34.5 37.5" opacity=".34" />
+              </g>
+            </svg>
+            <div class="boot-loader-ghost">
+              <svg viewBox="0 0 48 48" aria-hidden="true" focusable="false">
+                <g fill="none" stroke="#ffffff" stroke-width="4.9" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M13.5 18 L24 9 L34.5 18" />
+                  <path d="M13.5 27.8 L24 18.8 L34.5 27.8" opacity=".62" />
+                  <path d="M13.5 37.5 L24 28.5 L34.5 37.5" opacity=".34" />
+                </g>
+              </svg>
+            </div>
+          </div>
         </div>
-        <p>Loading Deployment Portal&hellip;</p>
+        <div class="boot-loader-caption">
+          <div class="boot-loader-title">Loading<span class="boot-loader-dots"><span>.</span><span>.</span><span>.</span></span></div>
+          <div class="boot-loader-sub">Deployment Portal</div>
+        </div>
+        <div class="boot-loader-track"></div>
       </div>
     </div>
     <script type="module" src="/src/main.jsx"></script>

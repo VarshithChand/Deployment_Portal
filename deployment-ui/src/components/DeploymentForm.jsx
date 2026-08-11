@@ -1012,6 +1012,7 @@ export default function DeploymentForm({
             <ProgressBar
 
                 visible={deploying && !runId}
+                label={showInputs ? "Deploying" : "Running"}
 
             />
 

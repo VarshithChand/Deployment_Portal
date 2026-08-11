@@ -158,15 +158,18 @@ export default function PageAdminAccessModal({ pageKey, pageLabel, onClose }) {
 
                     <>
 
-                        <label htmlFor="page-admin-search">Search PAT users</label>
-                        <input
-                            id="page-admin-search"
-                            type="text"
-                            placeholder="GitHub username or owner/repo..."
-                            value={query}
-                            onChange={(e) => setQuery(e.target.value)}
-                            autoComplete="off"
-                        />
+                        <div className="form-group">
+                            <label htmlFor="page-admin-search">Search PAT users</label>
+                            <input
+                                id="page-admin-search"
+                                type="text"
+                                className="form-control"
+                                placeholder="GitHub username or owner/repo"
+                                value={query}
+                                onChange={(e) => setQuery(e.target.value)}
+                                autoComplete="off"
+                            />
+                        </div>
 
                         {query.trim() && (
 
