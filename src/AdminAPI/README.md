@@ -46,9 +46,9 @@ Each GitHub button lands on that workflow's Actions page — click **Run workflo
 (top right) there to open its real branch picker and inputs. The portal button opens
 the Deploy page with **Release Admin API** and its four checkboxes already
 pre-selected — just pick a branch and click **Deploy**. The GitHub Pages button opens
-[`docs/admin-pipeline.html`](../../docs/admin-pipeline.html) — a standalone page with
-its own real form that calls the same backend directly (see [docs/README.md](../../docs/README.md)
-for the one-time setup this needs before it works).
+[`docs/admin-pipeline.html`](../../docs/admin-pipeline.html) — a plain static landing
+page with no backend and nothing to configure; its own button just links to the same
+GitHub Actions trigger screen as the first badge above.
 
 <details>
 <summary><strong>Release Admin API — inputs (click to expand)</strong></summary>

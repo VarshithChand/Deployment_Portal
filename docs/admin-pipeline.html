@@ -12,8 +12,7 @@
     --border: #e2e8f0;
     --text: #1e293b;
     --text-muted: #64748b;
-    --danger: #dc2626;
-    --success: #16a34a;
+    --row-bg: #f8fafc;
   }
   * { box-sizing: border-box; }
   body {
@@ -27,7 +26,7 @@
   }
   .card {
     width: 100%;
-    max-width: 480px;
+    max-width: 520px;
     background: var(--card-bg);
     border: 1px solid var(--border);
     border-radius: 12px;
@@ -35,246 +34,72 @@
     box-shadow: 0 4px 16px rgba(0,0,0,.06);
   }
   h1 { font-size: 20px; margin: 0 0 4px; }
-  .subtitle { font-size: 13px; color: var(--text-muted); margin: 0 0 24px; }
-  label { display: block; font-size: 13px; font-weight: 600; margin: 16px 0 6px; }
-  input[type="text"], input[type="password"] {
+  .subtitle { font-size: 13px; color: var(--text-muted); margin: 0 0 24px; line-height: 1.5; }
+  h2 { font-size: 14px; margin: 24px 0 10px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border); }
+  th { color: var(--text-muted); font-weight: 600; }
+  tr:nth-child(even) td { background: var(--row-bg); }
+  .btn {
+    display: block;
     width: 100%;
-    padding: 9px 11px;
-    border: 1px solid var(--border);
+    text-align: center;
+    text-decoration: none;
+    padding: 12px;
     border-radius: 6px;
-    font-size: 14px;
-  }
-  .checkbox-row { display: flex; align-items: center; gap: 8px; margin: 10px 0; }
-  .checkbox-row label { margin: 0; font-weight: 500; }
-  button {
-    width: 100%;
-    margin-top: 20px;
-    padding: 11px;
-    border: none;
-    border-radius: 6px;
-    background: var(--accent);
-    color: #fff;
     font-size: 14px;
     font-weight: 600;
-    cursor: pointer;
+    margin-top: 10px;
   }
-  button:disabled { opacity: .6; cursor: not-allowed; }
-  button.secondary { background: var(--text-muted); }
-  #result {
-    margin-top: 18px;
-    padding: 12px 14px;
-    border-radius: 8px;
-    font-size: 13px;
-    display: none;
-    white-space: pre-wrap;
+  .btn-primary { background: var(--accent); color: #fff; }
+  .btn-secondary { background: #eef2f7; color: var(--text); border: 1px solid var(--border); }
+  .note {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-top: 20px;
+    padding-top: 16px;
+    border-top: 1px solid var(--border);
+    line-height: 1.5;
   }
-  #result.ok { display: block; background: #dcfce7; color: var(--success); }
-  #result.err { display: block; background: #fee2e2; color: var(--danger); }
-  .hint { font-size: 12px; color: var(--text-muted); margin-top: 4px; }
-  #setup-section, #deploy-section { display: none; }
-  .loading { text-align: center; color: var(--text-muted); font-size: 13px; padding: 20px 0; }
 </style>
 </head>
 <body>
 
 <div class="card">
   <h1>🚀 AdminAPI — Release Pipeline</h1>
-  <p class="subtitle">Triggers the real <code>Release Admin API</code> workflow via the Deployment Portal's own backend — no token ever touches this page's JavaScript.</p>
+  <p class="subtitle">
+    A plain static page — no backend, no login, no data leaves your browser. The button
+    below takes you straight to GitHub's own real trigger screen for this workflow,
+    where you pick the branch and toggle the targets and run it for real.
+  </p>
 
-  <div id="loading" class="loading">Checking your session…</div>
+  <h2>Release Admin API — inputs (reference)</h2>
+  <table>
+    <thead>
+      <tr><th>Input</th><th>Deploys to</th><th>Default</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>deploy_rc</td><td>RC</td><td>on</td></tr>
+      <tr><td>deploy_cluster01</td><td>Cluster01 (Production)</td><td>on</td></tr>
+      <tr><td>deploy_cluster02</td><td>Cluster02 (Production)</td><td>on</td></tr>
+      <tr><td>deploy_cluster03</td><td>Cluster03 (Production)</td><td>on</td></tr>
+    </tbody>
+  </table>
 
-  <div id="setup-section">
-    <p class="hint" style="margin-top:0;">
-      This page's session (a fresh one, separate from the main portal) has no GitHub
-      token yet. Add one to continue — it's stored only for this browser, same as the
-      portal itself.
-    </p>
-    <label for="token">Personal Access Token</label>
-    <input type="password" id="token" placeholder="ghp_..." autocomplete="new-password">
-    <label for="owner">Repository Owner</label>
-    <input type="text" id="owner" placeholder="VarshithChand">
-    <label for="repo">Repository Name</label>
-    <input type="text" id="repo" placeholder="yaml">
-    <button id="save-token-btn" onclick="saveToken()">Save &amp; Continue</button>
-  </div>
+  <a class="btn btn-primary" href="https://github.com/VarshithChand/yaml/actions/workflows/release-admin.yml" target="_blank" rel="noreferrer">
+    ▶ Open Release Admin API on GitHub
+  </a>
+  <a class="btn btn-secondary" href="https://github.com/VarshithChand/yaml/actions/workflows/admin.yml" target="_blank" rel="noreferrer">
+    Open Admin API CI on GitHub
+  </a>
 
-  <div id="deploy-section">
-    <label for="branch">Branch</label>
-    <input type="text" id="branch" placeholder="master" value="master">
-
-    <label style="margin-bottom:8px;">Targets</label>
-    <div class="checkbox-row"><input type="checkbox" id="deploy_rc" checked><label for="deploy_rc">Deploy RC</label></div>
-    <div class="checkbox-row"><input type="checkbox" id="deploy_cluster01" checked><label for="deploy_cluster01">Deploy Cluster01</label></div>
-    <div class="checkbox-row"><input type="checkbox" id="deploy_cluster02" checked><label for="deploy_cluster02">Deploy Cluster02</label></div>
-    <div class="checkbox-row"><input type="checkbox" id="deploy_cluster03" checked><label for="deploy_cluster03">Deploy Cluster03</label></div>
-
-    <button id="run-btn" onclick="runPipeline()">▶ Run Release Admin API</button>
-    <button class="secondary" onclick="resetToken()">Use a different token</button>
-  </div>
-
-  <div id="result"></div>
+  <p class="note">
+    On the page that opens, click <strong>Run workflow</strong> (top right), pick a
+    branch, set the checkboxes above as you want them, then click <strong>Run
+    workflow</strong> again to confirm. Needs write/Actions-trigger access to the repo,
+    same as running any other workflow manually from GitHub's own UI.
+  </p>
 </div>
-
-<script>
-// Real backend, real session, real GitHub call - same mechanism the
-// Deployment Portal's own Deploy page uses (DeploymentAPI on Render).
-// This page is a SEPARATE origin from the portal, so it gets its own
-// independent session (localStorage is per-origin) - the first visit
-// here needs its own token, same as a first visit to the portal itself.
-// The token is only ever sent to DeploymentAPI over HTTPS and stored
-// server-side; it is never embedded in this page's own source.
-const API_BASE = "https://deployment-portal-sec0.onrender.com";
-const SESSION_KEY = "adminPipelineSessionId";
-
-function getSessionId() {
-  let id = localStorage.getItem(SESSION_KEY);
-  if (!id) {
-    id = crypto.randomUUID();
-    localStorage.setItem(SESSION_KEY, id);
-  }
-  return id;
-}
-
-// fetch() itself throws (rather than resolving with a response) when the
-// browser blocks the request before it ever reaches the server - a CORS
-// rejection (this page's origin isn't yet in the backend's
-// Cors:AllowedOrigins) looks identical, from here, to the backend being
-// down entirely. Caught here so every caller gets a clear, on-page
-// message instead of an unhandled rejection that just leaves the page
-// looking stuck on "Checking your session...".
-async function apiFetch(path, options = {}) {
-  let response;
-
-  try {
-    response = await fetch(API_BASE + path, {
-      ...options,
-      credentials: "include",
-      headers: {
-        "X-Session-Id": getSessionId(),
-        "Content-Type": "application/json",
-        ...(options.headers || {})
-      }
-    });
-  }
-  catch (err) {
-    console.error(err);
-    return {
-      ok: false,
-      status: 0,
-      data: {
-        message: "Couldn't reach the backend at all — most likely this page's origin " +
-          "(" + window.location.origin + ") hasn't been added to the backend's CORS " +
-          "allowed origins yet (see docs/README.md), or the backend is offline."
-      }
-    };
-  }
-
-  const data = await response.json().catch(() => null);
-  return { ok: response.ok, status: response.status, data };
-}
-
-function showResult(message, ok) {
-  const el = document.getElementById("result");
-  el.textContent = message;
-  el.className = ok ? "ok" : "err";
-}
-
-function showSection(id) {
-  ["setup-section", "deploy-section"].forEach((s) => {
-    document.getElementById(s).style.display = s === id ? "block" : "none";
-  });
-  document.getElementById("loading").style.display = "none";
-}
-
-async function checkAuth() {
-  const { ok, status, data } = await apiFetch("/api/settings/me/github");
-
-  if (ok && data && data.gitHubTokenConfigured) {
-    showSection("deploy-section");
-    return;
-  }
-
-  showSection("setup-section");
-
-  // status 0 means apiFetch's own catch fired (network/CORS failure) -
-  // that specific message is worth surfacing immediately, since it means
-  // nothing on this page can work yet, not just "no token saved so far."
-  if (status === 0 && data && data.message) {
-    showResult(data.message, false);
-  }
-}
-
-async function saveToken() {
-  const token = document.getElementById("token").value.trim();
-  const owner = document.getElementById("owner").value.trim();
-  const repo = document.getElementById("repo").value.trim();
-
-  if (!token || !owner || !repo) {
-    showResult("Fill in the token, owner, and repository first.", false);
-    return;
-  }
-
-  const btn = document.getElementById("save-token-btn");
-  btn.disabled = true;
-  btn.textContent = "Saving…";
-
-  const { ok, data } = await apiFetch("/api/settings/me/github", {
-    method: "POST",
-    body: JSON.stringify({ owner, repository: repo, personalAccessToken: token })
-  });
-
-  btn.disabled = false;
-  btn.textContent = "Save & Continue";
-
-  if (ok) {
-    showResult("Connected. You can trigger a release below.", true);
-    showSection("deploy-section");
-  } else {
-    showResult((data && data.message) || "Failed to save your token.", false);
-  }
-}
-
-function resetToken() {
-  showSection("setup-section");
-  document.getElementById("result").className = "";
-}
-
-async function runPipeline() {
-  const branch = document.getElementById("branch").value.trim() || "master";
-
-  const inputs = {
-    deploy_rc: String(document.getElementById("deploy_rc").checked),
-    deploy_cluster01: String(document.getElementById("deploy_cluster01").checked),
-    deploy_cluster02: String(document.getElementById("deploy_cluster02").checked),
-    deploy_cluster03: String(document.getElementById("deploy_cluster03").checked)
-  };
-
-  const btn = document.getElementById("run-btn");
-  btn.disabled = true;
-  btn.textContent = "Running…";
-
-  const { ok, data } = await apiFetch("/api/deployment/deploy", {
-    method: "POST",
-    body: JSON.stringify({
-      mode: "CD",
-      branch: branch,
-      workflow: "release-admin.yml",
-      inputs: inputs
-    })
-  });
-
-  btn.disabled = false;
-  btn.textContent = "▶ Run Release Admin API";
-
-  if (ok && data && data.success) {
-    showResult((data.message || "Triggered.") + (data.runId ? ("\nRun ID: " + data.runId) : ""), true);
-  } else {
-    showResult((data && data.message) || "Failed to trigger the pipeline.", false);
-  }
-}
-
-checkAuth();
-</script>
 
 </body>
 </html>
