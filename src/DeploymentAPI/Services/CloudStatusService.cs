@@ -300,13 +300,24 @@ public class CloudStatusService
         return result;
     }
 
+    // Filtered server-side to instance-state-name=running - a stopped
+    // instance still exists (still shows in the Console, still billed for
+    // its EBS volumes) but isn't actually running, and this tile is meant
+    // to answer "what's live right now", not "what has ever been created".
     private static async System.Threading.Tasks.Task DescribeEc2InstancesAsync(
         AWSCredentials awsCredentials, RegionEndpoint regionEndpoint, AwsResourceInventoryDto result)
     {
         try
         {
             using var client = new AmazonEC2Client(awsCredentials, regionEndpoint);
-            var response = await client.DescribeInstancesAsync(new DescribeInstancesRequest());
+
+            var response = await client.DescribeInstancesAsync(new DescribeInstancesRequest
+            {
+                Filters = new List<Amazon.EC2.Model.Filter>
+                {
+                    new() { Name = "instance-state-name", Values = new List<string> { "running" } }
+                }
+            });
 
             var instances = response.Reservations.SelectMany(r => r.Instances).ToList();
 
@@ -314,7 +325,7 @@ public class CloudStatusService
                 .Select(i => new AwsResourceItemDto
                 {
                     Name = i.Tags?.FirstOrDefault(t => t.Key == "Name")?.Value ?? i.InstanceId,
-                    Detail = $"{i.InstanceType} · {i.State?.Name}"
+                    Detail = i.InstanceType
                 })
                 .ToList();
 

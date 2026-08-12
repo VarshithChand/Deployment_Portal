@@ -8,7 +8,7 @@ const POLL_MS = 30000;
 const MAX_ITEMS_SHOWN = 4;
 
 const SERVICES = [
-    { key: "ec2", label: "EC2 Instances" },
+    { key: "ec2", label: "Running EC2 Instances" },
     { key: "vpc", label: "VPCs" },
     { key: "s3", label: "S3 Buckets" },
     { key: "lambda", label: "Lambda Functions" },
