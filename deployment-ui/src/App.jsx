@@ -29,6 +29,8 @@ import useNavigation from "./hooks/useNavigation";
 import useAuth from "./hooks/useAuth";
 import useToast from "./hooks/useToast";
 import useCardTilt from "./hooks/useCardTilt";
+import { reportFrontendHeartbeat } from "./services/appVersionService";
+import { APP_COMMIT, APP_VERSION, APP_ENVIRONMENT } from "./utils/buildInfo";
 
 // Admin-only regardless of Sidebar Access state — same guard the Sidebar
 // tabs themselves already get (see Sidebar.jsx's ADMIN_ONLY_TABS), needed
@@ -42,6 +44,18 @@ function App(){
     const toast = useToast();
 
     useCardTilt();
+
+    // Fired once per real app load (not polled) - reports this browser's
+    // own build-time commit so Services -> Application Support can show
+    // an admin which frontend build any given session is actually running
+    // (see ApplicationSupportToolsService/AdminUsersController). A failure
+    // here is silently non-fatal - it's diagnostic-only, never something
+    // that should block or disrupt normal use of the portal.
+    useEffect(() => {
+
+        reportFrontendHeartbeat(APP_COMMIT, APP_VERSION, APP_ENVIRONMENT).catch((err) => console.error(err));
+
+    }, []);
 
     // Locking/hiding a tab (see Settings > Sidebar Access) has to actually
     // block it, not just grey out its Sidebar entry — otherwise a direct

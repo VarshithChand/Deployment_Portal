@@ -144,6 +144,13 @@ builder.Services.AddSingleton<AwsSsoService>();
 // the current request's own session.
 builder.Services.AddSingleton<IAiAssistantService, GeminiService>();
 builder.Services.AddScoped<AiToolsService>();
+// Resolved once at startup from real git/environment state (see
+// ApplicationBuildInfoService) - Singleton since none of it changes while
+// the process is alive. ApplicationSupportToolsService is Scoped because
+// it depends on Scoped services (SettingsService, GitHubApiService,
+// GitHubAuthService).
+builder.Services.AddSingleton<ApplicationBuildInfoService>();
+builder.Services.AddScoped<ApplicationSupportToolsService>();
 
 // Per-session last-active/force-logout state for the Services page's
 // Users tab (see AdminUsersController) - in-memory, same lifetime

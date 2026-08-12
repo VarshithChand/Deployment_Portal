@@ -7311,3 +7311,22 @@ h1, h2, h3, .card-title, .page-title, .page-header h1, .stat-tile-value, .hero h
     opacity:.5;
     cursor:not-allowed;
 }
+
+/* Deployment Support Copilot (Services -> Application Support) - the same
+   message/suggestion/send styling as the floating Deployment Copilot
+   drawer above, just embedded in a plain card instead of a fixed overlay
+   panel. */
+.copilot-inline-body{
+    max-height:420px;
+    overflow-y:auto;
+    margin-bottom:14px;
+}
+
+.copilot-inline-footer{
+    display:flex;
+    gap:8px;
+}
+
+.copilot-inline-footer .form-control{
+    flex:1;
+}

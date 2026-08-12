@@ -1,3 +1,4 @@
+using DeploymentAPI.DTOs;
 using DeploymentAPI.Helpers;
 using DeploymentAPI.Services;
 using Microsoft.AspNetCore.Mvc;
@@ -18,16 +19,37 @@ namespace DeploymentAPI.Controllers;
 public class AppVersionController : ControllerBase
 {
     private readonly SettingsService _settings;
+    private readonly SessionActivityService _activity;
 
-    public AppVersionController(SettingsService settings)
+    public AppVersionController(SettingsService settings, SessionActivityService activity)
     {
         _settings = settings;
+        _activity = activity;
     }
 
     [HttpGet]
     public async Task<IActionResult> Get()
     {
         return Ok(new { version = await _settings.GetAppVersionAsync() });
+    }
+
+    // Every session's frontend reports its own build-time commit/version
+    // once per app load (see deployment-ui/utils/buildInfo.js) - open to
+    // any session, same as this whole controller's GET above, since
+    // Application Support's "User Versions" view (admin-only to READ) is
+    // meant to cover every visitor, not just admins. Nothing here is a
+    // secret - just the same public build stamp already visible in the
+    // browser's own JS bundle.
+    [HttpPost("frontend-heartbeat")]
+    public IActionResult FrontendHeartbeat([FromBody] FrontendHeartbeatRequestDto request)
+    {
+        if (string.IsNullOrWhiteSpace(request.Commit))
+            return BadRequest(new { message = "commit is required." });
+
+        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        _activity.RecordFrontendBuild(key, request.Commit, request.Version, request.Environment);
+
+        return Ok();
     }
 
     [HttpPost("clear-cache")]

@@ -49,4 +49,17 @@ public class PatUserSummaryDto
     // own APIs this user actually uses, not a full call history. Same
     // in-memory/reset-on-restart caveat as LastActiveUtc.
     public List<string> UsedEndpoints { get; set; } = new();
+
+    // In-memory only (see SessionActivityService.GetFrontendBuild) - the
+    // git commit this session's browser last reported running, from its
+    // own build-time-embedded metadata (see deployment-ui/vite.config.js).
+    // Null means this session hasn't loaded the app since the backend last
+    // restarted, or is running a build from before this reporting existed.
+    public string? FrontendCommit { get; set; }
+
+    public string? FrontendVersion { get; set; }
+
+    public string? FrontendEnvironment { get; set; }
+
+    public DateTime? FrontendLastSeenUtc { get; set; }
 }

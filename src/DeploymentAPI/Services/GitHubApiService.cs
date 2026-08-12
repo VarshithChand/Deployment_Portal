@@ -1364,6 +1364,8 @@ public class GitHubApiService
     {
         Id = (long?)x["id"] ?? 0,
 
+        RunNumber = (long?)x["run_number"] ?? 0,
+
         Name = x["name"]?.ToString() ?? string.Empty,
 
         Branch = x["head_branch"]?.ToString() ?? string.Empty,

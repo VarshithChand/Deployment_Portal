@@ -42,6 +42,12 @@ public class AdminUsersController : ControllerBase
             user.Device = DeviceInfo.Describe(_activity.GetLastUserAgent(user.Key));
             user.IpAddress = _activity.GetLastIpAddress(user.Key);
             user.UsedEndpoints = _activity.GetUsedEndpoints(user.Key);
+
+            var frontendBuild = _activity.GetFrontendBuild(user.Key);
+            user.FrontendCommit = frontendBuild?.Commit;
+            user.FrontendVersion = frontendBuild?.Version;
+            user.FrontendEnvironment = frontendBuild?.Environment;
+            user.FrontendLastSeenUtc = frontendBuild?.ReportedAtUtc;
         }
 
         return Ok(users);

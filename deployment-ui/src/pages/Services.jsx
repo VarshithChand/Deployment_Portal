@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import useToast from "../hooks/useToast";
 import useConfirm from "../hooks/useConfirm";
@@ -8,6 +8,7 @@ import CopyButton from "../components/common/CopyButton";
 import SectionTabs from "../components/common/SectionTabs";
 
 import PatUserAccessModal from "../components/PatUserAccessModal";
+import ApplicationSupportSection from "../components/services/ApplicationSupportSection";
 
 import { getUsers, forceLogoutUser, blockUser, unblockUser, deleteUser, removeDuplicateUsers } from "../services/adminService";
 import { getProjects } from "../services/pmscoreService";
@@ -28,15 +29,43 @@ const MY_SESSION_KEY = `sess:${localStorage.getItem("portalSessionId") || ""}`;
 const SECTIONS = [
     { key: "users", label: "Users" },
     { key: "projects", label: "Environments" },
-    { key: "security", label: "Security" }
+    { key: "security", label: "Security" },
+    { key: "application-support", label: "Application Support" }
 ];
+
+// Mirrors Settings.jsx's own "?view=" pattern - a raw/stale/hand-edited
+// value falls back to the default section instead of rendering nothing.
+function readSectionFromUrl() {
+
+    const requested = new URLSearchParams(window.location.search).get("view");
+
+    return SECTIONS.some((s) => s.key === requested) ? requested : "users";
+
+}
 
 export default function Services() {
 
     const toast = useToast();
     const { confirm, dialog } = useConfirm();
 
-    const [section, setSection] = useState("users");
+    const [section, setSectionState] = useState(readSectionFromUrl);
+
+    const setSection = useCallback((next) => {
+
+        setSectionState(next);
+
+        const url = new URL(window.location.href);
+
+        if (next === "users") {
+            url.searchParams.delete("view");
+        }
+        else {
+            url.searchParams.set("view", next);
+        }
+
+        window.history.replaceState(null, "", url);
+
+    }, []);
 
     // ---------- Users ----------
     // Real PAT users (see AdminUsersController) - read-only, since a PAT
@@ -865,6 +894,8 @@ export default function Services() {
                     </>
 
                 )}
+
+                {section === "application-support" && <ApplicationSupportSection />}
 
             </div>
 

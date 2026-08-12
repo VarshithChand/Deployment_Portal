@@ -24,6 +24,14 @@ public class SessionActivityService
     // value is never read.
     private readonly ConcurrentDictionary<string, ConcurrentDictionary<string, byte>> _usedEndpoints = new();
 
+    // Which frontend build a given session's browser is actually running -
+    // reported once per app load (see AppVersionController's
+    // frontend-heartbeat endpoint / deployment-ui's utils/buildInfo.js).
+    // Backs Application Support's "User Versions" view (see
+    // ApplicationSupportController) - lets an admin see whether a specific
+    // user is stuck on a stale cached build without asking them.
+    private readonly ConcurrentDictionary<string, FrontendBuildInfo> _frontendBuilds = new();
+
     public void Touch(string key, string? userAgent = null, string? ipAddress = null, string? endpoint = null)
     {
         _lastSeen[key] = DateTime.UtcNow;
@@ -64,4 +72,12 @@ public class SessionActivityService
 
     public DateTime? GetForceLogoutAfter(string key) =>
         _forceLogoutAfter.TryGetValue(key, out var stamp) ? stamp : null;
+
+    public void RecordFrontendBuild(string key, string commit, string? version, string environment) =>
+        _frontendBuilds[key] = new FrontendBuildInfo(commit, version, environment, DateTime.UtcNow);
+
+    public FrontendBuildInfo? GetFrontendBuild(string key) =>
+        _frontendBuilds.TryGetValue(key, out var info) ? info : null;
 }
+
+public record FrontendBuildInfo(string Commit, string? Version, string Environment, DateTime ReportedAtUtc);
