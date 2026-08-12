@@ -58,16 +58,19 @@ public class GitHubController : ControllerBase
         return Ok(await _service.GetAccountRepositoriesAsync());
     }
 
-    // Dashboard's "all your repos" container - which pipeline (if any) is
+    // Dashboard's "all your repos" container - which pipeline(s) are
     // currently running on a repo OTHER than the one this session is
-    // pointed at, so switching repos isn't the only way to see that.
-    [HttpGet("repo-latest-run")]
-    public async Task<IActionResult> RepoLatestRun([FromQuery] string owner, [FromQuery] string repo)
+    // pointed at, so switching repos isn't the only way to see that. Returns
+    // several recent runs (not just the latest one) since more than one can
+    // legitimately be running in the same repo at once - see
+    // GetRecentRunsForRepoAsync's own comment.
+    [HttpGet("repo-runs")]
+    public async Task<IActionResult> RepoRuns([FromQuery] string owner, [FromQuery] string repo)
     {
         if (string.IsNullOrWhiteSpace(owner) || string.IsNullOrWhiteSpace(repo))
             return BadRequest("owner and repo are required.");
 
-        return Ok(await _service.GetLatestRunForRepoAsync(owner, repo));
+        return Ok(await _service.GetRecentRunsForRepoAsync(owner, repo));
     }
 
     [HttpGet("artifacts")]

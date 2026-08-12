@@ -1086,28 +1086,36 @@ public class GitHubApiService
     // this session is actually pointed at. Same 20s cache as everything
     // else, keyed per-repo, so switching between the repo grid's pages
     // doesn't re-hit GitHub for repos already checked recently.
-    public Task<WorkflowDto?> GetLatestRunForRepoAsync(string owner, string repository) =>
-        GetCachedAsync($"latest-run:{owner}/{repository}", async () =>
+    // per_page=10, not 1 - a single push commonly triggers several workflow
+    // files at once (build, smoke tests, notify-on-failure, ...), and more
+    // than one of those can legitimately be running concurrently in the
+    // same repo. Only fetching the single latest run meant a second,
+    // slightly-older-but-still-running workflow in that same repo was
+    // invisible to the Dashboard's "workflows running" count - this is
+    // what lets the caller see (and count) every currently active run per
+    // repo, not just the most recent one.
+    public Task<List<WorkflowDto>> GetRecentRunsForRepoAsync(string owner, string repository) =>
+        GetCachedAsync($"recent-runs:{owner}/{repository}", async () =>
         {
             try
             {
                 var client = _auth.CreateClient();
 
                 var url =
-                    $"https://api.github.com/repos/{Uri.EscapeDataString(owner)}/{Uri.EscapeDataString(repository)}/actions/runs?per_page=1";
+                    $"https://api.github.com/repos/{Uri.EscapeDataString(owner)}/{Uri.EscapeDataString(repository)}/actions/runs?per_page=10";
 
                 var json = await HttpClientHelper.GetAsync(client, url);
                 var runs = JObject.Parse(json)["workflow_runs"] as JArray;
 
-                return runs != null && runs.Count > 0 ? MapRun(runs[0]!) : null;
+                return runs?.Select(r => MapRun(r!)).ToList() ?? new List<WorkflowDto>();
             }
             catch
             {
                 // One repo's Actions being disabled, private-and-inaccessible,
                 // or GitHub hiccuping shouldn't break the whole grid - "no
-                // recent run to show" and "couldn't check" render identically
+                // recent runs to show" and "couldn't check" render identically
                 // on a per-repo card either way.
-                return null;
+                return new List<WorkflowDto>();
             }
         });
 

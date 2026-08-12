@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 
-import { getAccountRepositories, getRepoLatestRun } from "../../services/githubService";
+import { getAccountRepositories, getRepoRuns } from "../../services/githubService";
 import { saveMyGitHubSettings } from "../../services/settingsService";
 import useAuth from "../../hooks/useAuth";
 import useToast from "../../hooks/useToast";
@@ -38,18 +38,24 @@ function RepoIcon() {
 
 }
 
-// run is undefined while still loading, null once checked with nothing
-// found, or a WorkflowDto once a run exists — three distinct states, three
-// distinct renders.
-function RepoRunStatus({ run }) {
+// runs is undefined while still loading, an empty array once checked with
+// nothing found, or a list of recent WorkflowDtos (most recent first) once
+// runs exist — three distinct states, three distinct renders. Only the
+// first (most recent) run shows here; a single per-card badge can only
+// ever show one status, so this stays "the latest run," same as before -
+// it's WorkflowActivityIndicator's running COUNT that now looks at every
+// run in the list, not just this one.
+function RepoRunStatus({ runs }) {
 
-    if (run === undefined) {
+    if (runs === undefined) {
         return <p className="field-hint" style={{ margin: "8px 0 0" }}>Checking pipeline...</p>;
     }
 
-    if (!run) {
+    if (runs.length === 0) {
         return <p className="field-hint" style={{ margin: "8px 0 0" }}>No recent runs</p>;
     }
+
+    const run = runs[0];
 
     return (
 
@@ -77,7 +83,7 @@ export default function AllRepositoriesCard({ repository }) {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
     const [search, setSearch] = useState("");
-    const [runs, setRuns] = useState({});
+    const [runsByRepo, setRunsByRepo] = useState({});
 
     const [target, setTarget] = useState(null);
     const [switching, setSwitching] = useState(false);
@@ -93,12 +99,12 @@ export default function AllRepositoriesCard({ repository }) {
 
         repoList.forEach((repo) => {
 
-            getRepoLatestRun(repo.owner, repo.name)
+            getRepoRuns(repo.owner, repo.name)
                 .then((response) => {
-                    setRuns((prev) => ({ ...prev, [repo.fullName]: response.data || null }));
+                    setRunsByRepo((prev) => ({ ...prev, [repo.fullName]: Array.isArray(response.data) ? response.data : [] }));
                 })
                 .catch(() => {
-                    setRuns((prev) => ({ ...prev, [repo.fullName]: null }));
+                    setRunsByRepo((prev) => ({ ...prev, [repo.fullName]: [] }));
                 });
 
         });
@@ -236,7 +242,7 @@ export default function AllRepositoriesCard({ repository }) {
                             {totalCount} {totalCount === 1 ? "repository" : "repositories"}
                         </span>
 
-                        <WorkflowActivityIndicator repos={repos} runs={runs} />
+                        <WorkflowActivityIndicator repos={repos} runsByRepo={runsByRepo} />
 
                     </div>
 
@@ -298,7 +304,7 @@ export default function AllRepositoriesCard({ repository }) {
 
                             </div>
 
-                            <RepoRunStatus run={runs[repo.fullName]} />
+                            <RepoRunStatus runs={runsByRepo[repo.fullName]} />
 
                         </button>
 

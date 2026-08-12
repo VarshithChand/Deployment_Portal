@@ -52,12 +52,32 @@ function WorkflowActivityItem({ entry }) {
 
 }
 
+function toEntry(repo, run, key) {
+
+    return {
+        key,
+        repoName: repo.name,
+        workflowName: run.name || "Workflow",
+        status: run.status,
+        conclusion: run.conclusion,
+        branch: run.branch,
+        when: relativeTime(run.createdAt),
+        createdAt: run.createdAt
+    };
+
+}
+
+function byRecency(a, b) {
+    return new Date(b.createdAt) - new Date(a.createdAt);
+}
+
 // All Repositories' header badge + hover popover — "N workflows running"
 // across every repository this token's account can see (not just the
 // current page), with a breakdown of what's running right now and what
-// finished most recently. Rebuilt from the same `runs` map AllRepositories
-// Card already fetches for its per-card status, no separate data source.
-export default function WorkflowActivityIndicator({ repos, runs }) {
+// finished most recently. Rebuilt from the same `runsByRepo` map
+// AllRepositoriesCard already fetches for its per-card status, no separate
+// data source.
+export default function WorkflowActivityIndicator({ repos, runsByRepo }) {
 
     const [open, setOpen] = useState(false);
     const closeTimer = useRef(null);
@@ -79,54 +99,32 @@ export default function WorkflowActivityIndicator({ repos, runs }) {
         closeTimer.current = setTimeout(() => setOpen(false), 100);
     }
 
-    const checked = repos.filter((repo) => runs[repo.fullName] !== undefined);
+    const checked = repos.filter((repo) => runsByRepo[repo.fullName] !== undefined);
 
+    // Every currently-active run in every checked repo, not just one per
+    // repo - a single push commonly triggers several workflow files at
+    // once, and more than one can legitimately be running in the same repo
+    // simultaneously (e.g. "Smoke Tests" and "Notify Dev Team On Pipeline
+    // Failure" both in_progress together). Capping this at one-per-repo
+    // undercounted exactly that case.
     const running = checked
-        .filter((repo) => {
-            const run = runs[repo.fullName];
-            return run && run.status !== "completed";
-        })
-        .sort((a, b) => new Date(runs[b.fullName].createdAt) - new Date(runs[a.fullName].createdAt))
-        .map((repo) => {
+        .flatMap((repo) => (runsByRepo[repo.fullName] || [])
+            .filter((run) => run.status !== "completed")
+            .map((run) => toEntry(repo, run, `${repo.fullName}:${run.id}`)))
+        .sort(byRecency);
 
-            const run = runs[repo.fullName];
-
-            return {
-                key: repo.fullName,
-                repoName: repo.name,
-                workflowName: run.name || "Workflow",
-                status: run.status,
-                conclusion: run.conclusion,
-                branch: run.branch,
-                when: relativeTime(run.createdAt)
-            };
-
-        });
-
-    // Every checked repo with a finished run, not just a handful - the
-    // popover already scrolls (see .workflow-activity-popover's max-height)
-    // so there's no need to truncate the account down to a top few.
+    // One entry per repo (its most recent FINISHED run) - the popover
+    // already scrolls (see .workflow-activity-popover's max-height), but
+    // showing all ~10 fetched runs for all ~34 repos would be hundreds of
+    // rows; "running" above is the one section that genuinely needs every
+    // concurrent run, this one just needs "what happened last" per repo.
     const latest = checked
-        .filter((repo) => {
-            const run = runs[repo.fullName];
-            return run && run.status === "completed";
-        })
-        .sort((a, b) => new Date(runs[b.fullName].createdAt) - new Date(runs[a.fullName].createdAt))
         .map((repo) => {
-
-            const run = runs[repo.fullName];
-
-            return {
-                key: repo.fullName,
-                repoName: repo.name,
-                workflowName: run.name || "Workflow",
-                status: run.status,
-                conclusion: run.conclusion,
-                branch: run.branch,
-                when: relativeTime(run.createdAt)
-            };
-
-        });
+            const run = (runsByRepo[repo.fullName] || []).find((r) => r.status === "completed");
+            return run ? toEntry(repo, run, repo.fullName) : null;
+        })
+        .filter(Boolean)
+        .sort(byRecency);
 
     const count = running.length;
     const stillChecking = repos.length - checked.length;

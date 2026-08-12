@@ -25,12 +25,13 @@ export const getAccountRepositories = async () => {
     return await api.get("/account-repositories");
 };
 
-// Dashboard's "all your repos" container — which pipeline (if any) is
-// currently running on a repo other than the one this session is pointed
-// at. Cached 20s per-repo server-side, so polling this across a page of
-// cards doesn't burn through the rate limit on its own.
-export const getRepoLatestRun = async (owner, repo) => {
-    return await api.get("/repo-latest-run", { params: { owner, repo } });
+// Dashboard's "all your repos" container — recent runs (not just the
+// single latest one - a repo can have more than one workflow running at
+// once) for a repo other than the one this session is pointed at. Cached
+// 20s per-repo server-side, so polling this across a page of cards doesn't
+// burn through the rate limit on its own.
+export const getRepoRuns = async (owner, repo) => {
+    return await api.get("/repo-runs", { params: { owner, repo } });
 };
 
 export const getArtifacts = async (force = false) => {
