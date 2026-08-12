@@ -1,7 +1,7 @@
 import { createContext, useCallback, useEffect, useState } from "react";
 
 import { getMe, logout as logoutRequest } from "../services/authService";
-import { getSettings, getMyGitHubSettings, getMyAwsSettings } from "../services/settingsService";
+import { getSettings, getMyGitHubSettings, getMyAwsSettings, getMyPinStatus } from "../services/settingsService";
 import { getTokenOwner } from "../services/githubService";
 import { API_BASE } from "../api/apiBase";
 import useToast from "../hooks/useToast";
@@ -74,6 +74,12 @@ export default function AuthProvider({ children }) {
 
     const [tokenOwner, setTokenOwner] = useState(null);
 
+    // Whether this session has a screen-lock PIN set — read by
+    // PeriodicSignOutMonitor to decide whether its 10-minute idle prompt
+    // locks (PIN set) or falls back to wiping every saved credential (no
+    // PIN, the original behavior, unchanged).
+    const [pinConfigured, setPinConfigured] = useState(false);
+
     // Which AWS identity (IAM username, or account/role for an SSO
     // session) this browser's saved credentials resolve to — shown as a
     // TopBar badge, the AWS equivalent of the GitHub repo-name badge.
@@ -115,13 +121,15 @@ export default function AuthProvider({ children }) {
 
         try {
 
-            const [settings, myGitHub, myAws] = await Promise.all([
+            const [settings, myGitHub, myAws, myPin] = await Promise.all([
                 getSettings(),
                 getMyGitHubSettings(),
-                getMyAwsSettings()
+                getMyAwsSettings(),
+                getMyPinStatus()
             ]);
 
             setAwsIdentityLabel(myAws.identityLabel || null);
+            setPinConfigured(!!myPin.configured);
 
             setOauthConfigured(
                 !!settings.gitHubOAuthClientId && !!settings.gitHubOAuthClientSecretConfigured
@@ -202,7 +210,7 @@ export default function AuthProvider({ children }) {
 
     return (
 
-        <AuthContext.Provider value={{ user, loading, login, logout, refresh, oauthConfigured, githubTokenConfigured, githubRepoConfigured, tokenOwner, canApproveReleases: !!tokenOwner?.canApprove, isAdminSession, oauthStatusChecked, refreshOauthStatus, awsIdentityLabel }}>
+        <AuthContext.Provider value={{ user, loading, login, logout, refresh, oauthConfigured, githubTokenConfigured, githubRepoConfigured, tokenOwner, canApproveReleases: !!tokenOwner?.canApprove, isAdminSession, oauthStatusChecked, refreshOauthStatus, awsIdentityLabel, pinConfigured }}>
 
             {children}
 

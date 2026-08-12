@@ -1053,6 +1053,58 @@ public class SettingsService
         return keys.Any(k => !k.Revoked && k.HashedKey == hash);
     }
 
+    // Screen-lock PIN — replaces PeriodicSignOutMonitor's old "wipe every
+    // credential after 10 minutes" behavior for whoever sets one: instead
+    // of clearing GitHub/AWS/Azure/GCP, the frontend shows a lock screen
+    // and this is what it checks the entered PIN against. Only ever the
+    // hash (same SHA-256 pattern as API keys above) — the raw PIN is never
+    // stored, only compared against on each unlock attempt. Session-scoped
+    // like every other /me/* setting - never shared across visitors.
+    public async Task<bool> HasPinAsync(string key)
+    {
+        var root = await ReadRootAsync();
+        var pins = root["SecurityPins"] as JObject;
+
+        return !string.IsNullOrWhiteSpace(pins?[key]?.ToString());
+    }
+
+    public async Task SetPinAsync(string key, string pin)
+    {
+        var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(pin))).ToLowerInvariant();
+
+        var root = await ReadRootAsync();
+        var pins = root["SecurityPins"] as JObject ?? new JObject();
+
+        pins[key] = hash;
+        root["SecurityPins"] = pins;
+
+        await WriteRootAsync(root);
+
+        _log.LogInfo("Settings", "Screen-lock PIN set for a session.");
+    }
+
+    public async Task ClearPinAsync(string key)
+    {
+        var root = await ReadRootAsync();
+
+        if (root["SecurityPins"] is JObject pins && pins.Remove(key))
+            await WriteRootAsync(root);
+    }
+
+    public async Task<bool> VerifyPinAsync(string key, string pin)
+    {
+        var root = await ReadRootAsync();
+        var pins = root["SecurityPins"] as JObject;
+        var stored = pins?[key]?.ToString();
+
+        if (string.IsNullOrWhiteSpace(stored))
+            return false;
+
+        var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(pin))).ToLowerInvariant();
+
+        return stored == hash;
+    }
+
     private static async Task<string?> ResolvePatOwnerLoginAsync(string token)
     {
         using var client = new HttpClient();

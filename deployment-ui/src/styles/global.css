@@ -3930,6 +3930,36 @@ textarea{
 
 }
 
+/* PinLockScreen — the "fake logout" PeriodicSignOutMonitor shows once a
+   screen-lock PIN is set, instead of wiping credentials. Above the
+   blocked-overlay (an admin action) since a self-lock can legitimately
+   stack on top of whatever else was on screen and needs to win. */
+.pin-lock-backdrop{
+
+    z-index:1450;
+
+}
+
+.pin-lock-dialog{
+
+    max-width:360px;
+
+    text-align:center;
+
+}
+
+.pin-lock-input{
+
+    text-align:center;
+
+    font-size:22px;
+
+    letter-spacing:.5em;
+
+    font-family:'JetBrains Mono', ui-monospace, monospace;
+
+}
+
 .yaml-viewer{
 
     background:var(--code-bg, #0d1117);

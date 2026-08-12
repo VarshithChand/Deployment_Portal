@@ -100,6 +100,28 @@ export const clearMyGcpCredentials = async () => {
     return response.data;
 };
 
+// Screen-lock PIN — self-service, session-scoped like GitHub/AWS/Azure/GCP
+// above. Backs PeriodicSignOutMonitor's lock screen (see PinLockScreen).
+export const getMyPinStatus = async () => {
+    const response = await settingsApi.get("/me/pin");
+    return response.data;
+};
+
+export const saveMyPin = async (pin) => {
+    const response = await settingsApi.post("/me/pin", { pin });
+    return response.data;
+};
+
+export const clearMyPin = async () => {
+    const response = await settingsApi.delete("/me/pin");
+    return response.data;
+};
+
+export const verifyMyPin = async (pin) => {
+    const response = await settingsApi.post("/me/pin/verify", { pin });
+    return response.data;
+};
+
 export const saveDockerSettings = async (payload) => {
     const response = await settingsApi.post("/docker", payload);
     return response.data;

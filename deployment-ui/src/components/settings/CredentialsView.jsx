@@ -6,6 +6,7 @@ import AwsLoginSection from "./credentials/AwsLoginSection";
 import AzureLoginSection from "./credentials/AzureLoginSection";
 import GcpLoginSection from "./credentials/GcpLoginSection";
 import ApiKeySection from "./credentials/ApiKeySection";
+import SecurityPinSection from "./credentials/SecurityPinSection";
 
 const MODES = [
     { key: "github", label: "GitHub" },
@@ -13,6 +14,7 @@ const MODES = [
     { key: "azure", label: "Azure" },
     { key: "gcp", label: "GCP" },
     { key: "apikey", label: "API Key" },
+    { key: "screenlock", label: "Screen Lock" },
     { key: "sonarqube", label: "SonarQube" },
     { key: "docker", label: "Docker" },
     { key: "oauth", label: "GitHub OAuth" },
@@ -136,6 +138,8 @@ export default function CredentialsView({
             {mode === "gcp" && <GcpLoginSection />}
 
             {mode === "apikey" && <ApiKeySection />}
+
+            {mode === "screenlock" && <SecurityPinSection />}
 
             {mode === "docker" && (
 

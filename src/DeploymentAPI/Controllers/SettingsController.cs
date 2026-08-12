@@ -348,6 +348,52 @@ public class SettingsController : ControllerBase
         return Ok();
     }
 
+    // Screen-lock PIN — self-service like every credential above, no
+    // AdminGate needed. Backs PeriodicSignOutMonitor's lock screen: set
+    // one here and the 10-minute idle prompt locks instead of wiping
+    // GitHub/AWS/Azure/GCP; leave it unset and the old wipe-everything
+    // behavior stays exactly as it was.
+    [HttpGet("me/pin")]
+    public async Task<IActionResult> GetMyPin()
+    {
+        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        return Ok(new { Configured = await _settings.HasPinAsync(key) });
+    }
+
+    [HttpPost("me/pin")]
+    public async Task<IActionResult> SaveMyPin(SecurityPinUpdateDto request)
+    {
+        if (string.IsNullOrWhiteSpace(request.Pin) || request.Pin.Length < 4 || request.Pin.Length > 8 || !request.Pin.All(char.IsDigit))
+            return BadRequest(new { message = "PIN must be 4 to 8 digits." });
+
+        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        await _settings.SetPinAsync(key, request.Pin);
+
+        return Ok(new { Configured = true });
+    }
+
+    [HttpDelete("me/pin")]
+    public async Task<IActionResult> ClearMyPin()
+    {
+        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        await _settings.ClearPinAsync(key);
+        return Ok();
+    }
+
+    // No rate limiting beyond the lockout the frontend itself enforces
+    // (PinLockScreen falls back to a full data wipe after too many wrong
+    // attempts) - a 4-8 digit PIN protecting local UI state, not an
+    // account, doesn't carry the same brute-force stakes a real
+    // authentication endpoint would.
+    [HttpPost("me/pin/verify")]
+    public async Task<IActionResult> VerifyMyPin(SecurityPinUpdateDto request)
+    {
+        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var valid = await _settings.VerifyPinAsync(key, request.Pin ?? string.Empty);
+
+        return Ok(new { Valid = valid });
+    }
+
     // "Clear All Data" for a non-admin - resets only the caller's own
     // credentials (GitHub, AWS, Azure, GCP). No AdminGate here, same
     // reasoning as every /me/* endpoint above: nobody needs admin rights
