@@ -184,10 +184,10 @@ public class AwsServiceStatusDto
 }
 
 // The Dashboard's "AWS Services" container — a broader account-wide
-// inventory across the services teams actually use day to day (EC2, VPC,
-// S3, Lambda, Route 53, SNS), independent of the Environments feature's
-// ECS/ECR panel, which only ever showed the one cluster/service/repository
-// an environment happens to be wired to.
+// inventory across the services teams actually use day to day (EC2, ECR,
+// VPC, S3, Lambda, Route 53, SNS), independent of the Environments
+// feature's ECS/ECR panel, which only ever showed the one cluster/service/
+// repository an environment happens to be wired to.
 public class AwsResourceInventoryDto
 {
     public bool Configured { get; set; }
@@ -195,6 +195,8 @@ public class AwsResourceInventoryDto
     public string? Region { get; set; }
 
     public AwsServiceStatusDto Ec2 { get; set; } = new();
+
+    public AwsServiceStatusDto Ecr { get; set; } = new();
 
     public AwsServiceStatusDto Vpc { get; set; } = new();
 

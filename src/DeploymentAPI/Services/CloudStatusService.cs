@@ -260,7 +260,7 @@ public class CloudStatusService
         if (credentials.RequiresMfaRefresh)
         {
             const string mfaError = "MFA session expired — re-enter your 6-digit code in Settings → Credentials → AWS.";
-            result.Ec2.Error = result.Vpc.Error = result.S3.Error = result.Lambda.Error = result.Route53.Error = result.Sns.Error = mfaError;
+            result.Ec2.Error = result.Ecr.Error = result.Vpc.Error = result.S3.Error = result.Lambda.Error = result.Route53.Error = result.Sns.Error = mfaError;
             return result;
         }
 
@@ -270,12 +270,14 @@ public class CloudStatusService
         var awsCredentials = BuildCredentials(credentials);
         var tasks = new List<System.Threading.Tasks.Task>();
 
-        // EC2, VPC, and Lambda are regional - nothing to call without one.
+        // EC2, ECR, VPC, Lambda, and SNS are regional - nothing to call
+        // without one.
         if (!string.IsNullOrWhiteSpace(effectiveRegion))
         {
             var regionEndpoint = RegionEndpoint.GetBySystemName(effectiveRegion);
 
             tasks.Add(DescribeEc2InstancesAsync(awsCredentials, regionEndpoint, result));
+            tasks.Add(DescribeEcrRepositoriesAsync(awsCredentials, regionEndpoint, result));
             tasks.Add(DescribeVpcsAsync(awsCredentials, regionEndpoint, result));
             tasks.Add(DescribeLambdaFunctionsAsync(awsCredentials, regionEndpoint, result));
             tasks.Add(DescribeSnsTopicsAsync(awsCredentials, regionEndpoint, result));
@@ -283,7 +285,7 @@ public class CloudStatusService
         else
         {
             const string noRegionError = "No AWS region configured — set one in Settings → Credentials → AWS.";
-            result.Ec2.Error = result.Vpc.Error = result.Lambda.Error = result.Sns.Error = noRegionError;
+            result.Ec2.Error = result.Ecr.Error = result.Vpc.Error = result.Lambda.Error = result.Sns.Error = noRegionError;
         }
 
         // S3 and Route 53 are global services - any region's endpoint sees
@@ -341,6 +343,32 @@ public class CloudStatusService
         catch (Exception ex)
         {
             result.Ec2.Error = ex.Message;
+        }
+    }
+
+    private static async System.Threading.Tasks.Task DescribeEcrRepositoriesAsync(
+        AWSCredentials awsCredentials, RegionEndpoint regionEndpoint, AwsResourceInventoryDto result)
+    {
+        try
+        {
+            using var client = new AmazonECRClient(awsCredentials, regionEndpoint);
+            var response = await client.DescribeRepositoriesAsync(new Amazon.ECR.Model.DescribeRepositoriesRequest());
+            var repositories = response.Repositories ?? new List<Amazon.ECR.Model.Repository>();
+
+            result.Ecr.Items = repositories
+                .Select(r => new AwsResourceItemDto
+                {
+                    Name = r.RepositoryName,
+                    Detail = r.CreatedAt?.ToString("yyyy-MM-dd")
+                })
+                .ToList();
+
+            result.Ecr.Count = repositories.Count;
+            result.Ecr.Found = true;
+        }
+        catch (Exception ex)
+        {
+            result.Ecr.Error = ex.Message;
         }
     }
 

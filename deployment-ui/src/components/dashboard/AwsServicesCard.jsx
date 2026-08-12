@@ -9,6 +9,7 @@ const MAX_ITEMS_SHOWN = 4;
 
 const SERVICES = [
     { key: "ec2", label: "Running EC2 Instances" },
+    { key: "ecr", label: "ECR Repositories" },
     { key: "vpc", label: "VPCs" },
     { key: "s3", label: "S3 Buckets" },
     { key: "lambda", label: "Lambda Functions" },
@@ -137,15 +138,15 @@ export default function AwsServicesCard() {
             ) : !inventory?.configured ? (
 
                 <p className="empty-state" style={{ textAlign: "left" }}>
-                    Enter your AWS credentials in Settings → Credentials → AWS to see EC2, VPC, S3,
-                    Lambda, Route 53, and SNS resources here.
+                    Enter your AWS credentials in Settings → Credentials → AWS to see EC2, ECR, VPC,
+                    S3, Lambda, Route 53, and SNS resources here.
                 </p>
 
             ) : visibleServices.length === 0 ? (
 
                 <p className="empty-state" style={{ textAlign: "left" }}>
                     Nothing currently running in {inventory.region || "your AWS account"} across EC2,
-                    VPC, S3, Lambda, Route 53, or SNS.
+                    ECR, VPC, S3, Lambda, Route 53, or SNS.
                 </p>
 
             ) : (
