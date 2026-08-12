@@ -232,6 +232,14 @@ export default function AwsLoginSection() {
     const mfaSessionExpired = !loading && status?.mfaEnrolled && !status?.mfaSessionActive;
     const ssoSessionExpired = !loading && status?.requiresSsoSignIn;
 
+    // Fully configured with nothing needing attention - the state the
+    // screenshot that prompted this showed: signed in, yet both entry
+    // forms still sat wide open for editing, one accidental keystroke away
+    // from overwriting a working setup. mfaSessionExpired/ssoSessionExpired
+    // are deliberately excluded - those need the form to stay reachable to
+    // refresh the session, not blocked behind an extra clear step.
+    const isLockedIn = !loading && status?.configured && !mfaSessionExpired && !ssoSessionExpired;
+
     return (
 
         <>
@@ -272,47 +280,71 @@ export default function AwsLoginSection() {
 
         </div>
 
-        <AwsSsoSignIn onConnected={refresh} />
+        {isLockedIn ? (
 
-        <div className="settings-subsection">
+            <div className="settings-subsection">
 
-            <button
-                type="button"
-                className="btn btn-secondary btn-sm"
-                onClick={() => setShowAccessKeyForm((v) => !v)}
-            >
-                {showAccessKeyForm ? "Hide" : "Use an IAM access key instead"}
-            </button>
-
-            {mfaSessionExpired && (
-                <p className="error-message" style={{ marginTop: "12px" }}>
-                    MFA session expired — enter a fresh code below.
+                <p className="field-hint" style={{ marginTop: 0 }}>
+                    AWS is already configured for this session. Clear it below before
+                    entering different credentials — this avoids partially overwriting a
+                    setup that's currently working.
                 </p>
-            )}
 
-            {showAccessKeyForm && (
+                <button type="button" className="btn btn-danger" onClick={handleClear}>
+                    Clear AWS Credentials
+                </button>
 
-                loading ? (
+            </div>
 
-                    <p className="field-hint">Loading...</p>
+        ) : (
 
-                ) : (
+            <>
 
-                    <AwsAccessKeyForm
-                        form={form}
-                        setForm={setForm}
-                        status={status}
-                        saving={saving}
-                        missingSerialForCode={missingSerialForCode}
-                        onSave={handleSave}
-                        onClear={handleClear}
-                    />
+            <div className="settings-subsection">
 
-                )
+                <button
+                    type="button"
+                    className="btn btn-secondary btn-sm"
+                    onClick={() => setShowAccessKeyForm((v) => !v)}
+                >
+                    {showAccessKeyForm ? "Hide" : "Use an IAM access key instead"}
+                </button>
 
-            )}
+                {mfaSessionExpired && (
+                    <p className="error-message" style={{ marginTop: "12px" }}>
+                        MFA session expired — enter a fresh code below.
+                    </p>
+                )}
 
-        </div>
+                {showAccessKeyForm && (
+
+                    loading ? (
+
+                        <p className="field-hint">Loading...</p>
+
+                    ) : (
+
+                        <AwsAccessKeyForm
+                            form={form}
+                            setForm={setForm}
+                            status={status}
+                            saving={saving}
+                            missingSerialForCode={missingSerialForCode}
+                            onSave={handleSave}
+                            onClear={handleClear}
+                        />
+
+                    )
+
+                )}
+
+            </div>
+
+            <AwsSsoSignIn onConnected={refresh} />
+
+            </>
+
+        )}
 
         </>
 
