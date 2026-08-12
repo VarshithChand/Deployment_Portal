@@ -23,6 +23,7 @@ import ErrorBoundary from "./components/common/ErrorBoundary";
 import RequireGitHubSetup from "./components/RequireGitHubSetup";
 import PeriodicSignOutMonitor from "./components/PeriodicSignOutMonitor";
 import GlobalLogoutMonitor from "./components/GlobalLogoutMonitor";
+import DeploymentCopilot from "./components/copilot/DeploymentCopilot";
 import useNavigation from "./hooks/useNavigation";
 import useAuth from "./hooks/useAuth";
 import useToast from "./hooks/useToast";
@@ -80,6 +81,7 @@ function App(){
 
             <PeriodicSignOutMonitor />
             <GlobalLogoutMonitor />
+            <DeploymentCopilot />
 
             <RequireGitHubSetup>
 

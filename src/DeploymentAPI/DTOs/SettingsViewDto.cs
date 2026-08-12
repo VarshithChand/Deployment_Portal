@@ -26,6 +26,16 @@ public class SettingsViewDto
 
     public bool SonarTokenConfigured { get; set; }
 
+    // Deployment Copilot (see GeminiService/AiToolsService/AiController) —
+    // AiModel is a plain configuration value (a model NAME, e.g.
+    // "gemini-2.0-flash"), not a secret, so it's safe to always return.
+    // The Gemini API key itself is never in this DTO under any field name.
+    public string AiProvider { get; set; } = "Google Gemini";
+
+    public string AiModel { get; set; } = string.Empty;
+
+    public bool AiApiKeyConfigured { get; set; }
+
     // Whether the CURRENT caller (this request's OAuth login or configured
     // Personal Access Token) has admin authority — computed per-request in
     // SettingsController.Get(), never derived from AdminGitHubUsernames on

@@ -164,6 +164,21 @@ export const saveSonarSettings = async (payload) => {
     return response.data;
 };
 
+// Deployment Copilot's Gemini API key/model - the saved settings view
+// (getSettings) never echoes the key back, only aiApiKeyConfigured/aiModel.
+export const saveAiSettings = async (payload) => {
+    const response = await settingsApi.post("/ai", payload);
+    return response.data;
+};
+
+// Tests whatever's currently SAVED (see SettingsController.TestAi) - not
+// anything unsaved sitting in the form, since the backend never accepts an
+// API key over this endpoint.
+export const testAiConnection = async () => {
+    const response = await settingsApi.post("/ai/test");
+    return response.data;
+};
+
 export const clearSettings = async (section) => {
     const response = await settingsApi.delete(`/${section}`);
     return response.data;

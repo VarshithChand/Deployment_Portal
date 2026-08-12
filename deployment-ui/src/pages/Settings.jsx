@@ -9,6 +9,8 @@ import {
     saveGitHubOAuthSettings,
     saveAdminUsernames,
     saveSonarSettings,
+    saveAiSettings,
+    testAiConnection,
     getPatUsers,
     getUserSidebarAccess,
     saveUserSidebarAccess,
@@ -159,6 +161,13 @@ export default function Settings() {
 
     const [adminUsernamesText, setAdminUsernamesText] = useState("");
 
+    const [aiModel, setAiModel] = useState("");
+    const [aiApiKey, setAiApiKey] = useState("");
+    const [aiApiKeyConfigured, setAiApiKeyConfigured] = useState(false);
+    const [savingAi, setSavingAi] = useState(false);
+    const [testingAi, setTestingAi] = useState(false);
+    const [aiTestResult, setAiTestResult] = useState(null);
+
     // Sidebar Access is two levels: a list of PAT users to pick from, then
     // that one user's own per-tab restrictions once picked.
     const [patUsers, setPatUsers] = useState([]);
@@ -202,6 +211,9 @@ export default function Settings() {
             setSonarOrganization(data.sonarOrganization || "");
             setSonarProjectKey(data.sonarProjectKey || "");
             setSonarTokenConfigured(!!data.sonarTokenConfigured);
+
+            setAiModel(data.aiModel || "");
+            setAiApiKeyConfigured(!!data.aiApiKeyConfigured);
 
         }
         catch (err) {
@@ -623,6 +635,66 @@ export default function Settings() {
 
     }
 
+    async function handleSaveAi() {
+
+        try {
+
+            setSavingAi(true);
+
+            await saveAiSettings({
+                apiKey: aiApiKey || null,
+                model: aiModel
+            });
+
+            setAiApiKey("");
+            setAiTestResult(null);
+            toast.show("AI Assistant settings saved.", "success");
+            load();
+
+        }
+        catch (err) {
+
+            console.error(err);
+            toast.show(err.response?.data?.message || "Failed to save AI Assistant settings.", "error");
+
+        }
+        finally {
+
+            setSavingAi(false);
+
+        }
+
+    }
+
+    async function handleTestAi() {
+
+        try {
+
+            setTestingAi(true);
+            setAiTestResult(null);
+
+            const result = await testAiConnection();
+            setAiTestResult(result);
+
+        }
+        catch (err) {
+
+            console.error(err);
+
+            setAiTestResult({
+                success: false,
+                message: err.response?.data?.message || "Unable to test the connection right now."
+            });
+
+        }
+        finally {
+
+            setTestingAi(false);
+
+        }
+
+    }
+
     async function handleSaveAdmins() {
 
         const usernames = adminUsernamesText
@@ -805,6 +877,11 @@ export default function Settings() {
                 refreshOauthStatus();
             }
 
+            if (section === "ai") {
+                setAiApiKey("");
+                setAiTestResult(null);
+            }
+
             toast.show(`${label} cleared.`, "success");
             load();
 
@@ -978,6 +1055,16 @@ export default function Settings() {
                     setAdminUsernamesText={setAdminUsernamesText}
                     handleSaveAdmins={handleSaveAdmins}
                     savingAdmins={savingAdmins}
+                    aiModel={aiModel}
+                    setAiModel={setAiModel}
+                    aiApiKey={aiApiKey}
+                    setAiApiKey={setAiApiKey}
+                    aiApiKeyConfigured={aiApiKeyConfigured}
+                    handleSaveAi={handleSaveAi}
+                    savingAi={savingAi}
+                    handleTestAi={handleTestAi}
+                    testingAi={testingAi}
+                    aiTestResult={aiTestResult}
                 />
 
             )}

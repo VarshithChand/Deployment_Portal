@@ -135,6 +135,15 @@ builder.Services.AddSingleton<CloudServiceManagementService>();
 // Its only state is IMemoryCache-backed pending sign-ins, already a
 // Singleton itself - safe to share the same way.
 builder.Services.AddSingleton<AwsSsoService>();
+// Deployment Copilot. GeminiService is stateless (every call takes its API
+// key/model as parameters, same as CloudStatusService taking credentials
+// per-call) - Singleton, behind the provider-agnostic IAiAssistantService
+// so a future non-Gemini implementation is a one-line swap here. AiToolsService
+// is Scoped because it depends on Scoped services (GitHubAuthService,
+// SettingsService, DatabaseManagementService) that are already resolved to
+// the current request's own session.
+builder.Services.AddSingleton<IAiAssistantService, GeminiService>();
+builder.Services.AddScoped<AiToolsService>();
 
 // Per-session last-active/force-logout state for the Services page's
 // Users tab (see AdminUsersController) - in-memory, same lifetime

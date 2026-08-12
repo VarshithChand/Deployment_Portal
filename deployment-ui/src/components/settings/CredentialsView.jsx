@@ -18,7 +18,8 @@ const MODES = [
     { key: "sonarqube", label: "SonarQube" },
     { key: "docker", label: "Docker" },
     { key: "oauth", label: "GitHub OAuth" },
-    { key: "admin", label: "Admin Allowlist" }
+    { key: "admin", label: "Admin Allowlist" },
+    { key: "ai", label: "AI Assistant" }
 ];
 
 // Pulled out of Settings.jsx's "credentials" view - its own nested
@@ -72,7 +73,17 @@ export default function CredentialsView({
     adminUsernamesText,
     setAdminUsernamesText,
     handleSaveAdmins,
-    savingAdmins
+    savingAdmins,
+    aiModel,
+    setAiModel,
+    aiApiKey,
+    setAiApiKey,
+    aiApiKeyConfigured,
+    handleSaveAi,
+    savingAi,
+    handleTestAi,
+    testingAi,
+    aiTestResult
 }) {
 
     const [mode, setMode] = useState("github");
@@ -378,6 +389,92 @@ export default function CredentialsView({
 
                 <button type="button" className="btn btn-danger" onClick={() => handleClear("admins", "admin allowlist")}>
                     Clear
+                </button>
+
+            </div>
+
+            </div>
+
+            )}
+
+            {mode === "ai" && (
+
+            <div className="settings-subsection">
+
+            <h3 className="settings-subhead">AI Assistant</h3>
+
+            <p className="empty-state" style={{ padding: "0 0 15px", textAlign: "left" }}>
+                Powers <strong>Deployment Copilot</strong>, the assistant available throughout the
+                portal. The API key is only ever used server-side, never sent to the browser.
+            </p>
+
+            <div className="form-group">
+                <label>Provider</label>
+                <input type="text" className="form-control" value="Google Gemini" disabled />
+            </div>
+
+            <div className="form-group">
+                <label>
+                    Gemini API Key
+                    {" "}
+                    {aiApiKeyConfigured && (
+                        <span className="badge badge-success">Saved</span>
+                    )}
+                </label>
+                <ClearableInput
+                    type="password"
+                    placeholder={aiApiKeyConfigured ? "Leave blank to keep current key" : ""}
+                    value={aiApiKey}
+                    onChange={(e) => setAiApiKey(e.target.value)}
+                    onClear={() => setAiApiKey("")}
+                    autoComplete="new-password"
+                />
+            </div>
+
+            <div className="form-group">
+                <label>Gemini Model</label>
+                <ClearableInput
+                    placeholder="e.g. gemini-2.0-flash"
+                    value={aiModel}
+                    onChange={(e) => setAiModel(e.target.value)}
+                    onClear={() => setAiModel("")}
+                    autoComplete="off"
+                    name="ai-model"
+                />
+            </div>
+
+            <div className="form-group">
+                <label>Status</label>
+                <p style={{ margin: 0 }}>
+                    {aiApiKeyConfigured
+                        ? <span className="badge badge-success">🟢 Configured</span>
+                        : <span className="badge badge-danger">🔴 Not Configured</span>}
+                </p>
+                {!aiApiKeyConfigured && (
+                    <p className="field-hint" style={{ marginTop: "6px" }}>
+                        Add a Gemini API key and model to enable Deployment Copilot.
+                    </p>
+                )}
+            </div>
+
+            {aiTestResult && (
+                <p className={aiTestResult.success ? "field-hint" : "field-hint field-hint-bad"}>
+                    {aiTestResult.success ? "🟢 " : "🔴 "}{aiTestResult.message}
+                </p>
+            )}
+
+            <div className="button-row">
+
+                <button type="button" className="btn btn-primary" onClick={handleSaveAi} disabled={savingAi}>
+                    {savingAi ? "Saving..." : "Save Configuration"}
+                </button>
+
+                <button type="button" className="btn btn-secondary" onClick={handleTestAi} disabled={testingAi || !aiApiKeyConfigured}>
+                    {testingAi ? "Testing..." : "Test Connection"}
+                </button>
+
+                <button type="button" className="btn btn-danger" onClick={() => handleClear("ai", "Gemini API key")}>
+                    Clear Key
                 </button>
 
             </div>

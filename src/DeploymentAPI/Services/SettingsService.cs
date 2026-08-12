@@ -592,6 +592,42 @@ public class SettingsService
             sonar?["Token"]?.ToString());
     }
 
+    // Deployment Copilot's Gemini API key/model - portal-wide, shared, same
+    // storage model as Sonar above. The key is never sent to the frontend
+    // (see SettingsViewDto/BuildView, which only ever exposes AiModel and
+    // AiApiKeyConfigured); GeminiService/AiToolsService are the only
+    // callers of GetAiAssistantCredentialsAsync below.
+    public async Task<SettingsViewDto> SaveAiAssistantAsync(AiAssistantSettingsUpdateDto update)
+    {
+        var root = await ReadRootAsync();
+
+        var ai = root["AiAssistant"] as JObject ?? new JObject();
+
+        ai["Model"] = update.Model ?? string.Empty;
+
+        if (!string.IsNullOrWhiteSpace(update.ApiKey))
+            ai["GeminiApiKey"] = update.ApiKey;
+
+        root["AiAssistant"] = ai;
+
+        await WriteRootAsync(root);
+
+        _log.LogInfo("Settings", $"AI Assistant settings saved (model: {update.Model})"
+            + (string.IsNullOrWhiteSpace(update.ApiKey) ? "" : ", API key updated"));
+
+        return BuildView(root);
+    }
+
+    public async Task<AiAssistantCredentials> GetAiAssistantCredentialsAsync()
+    {
+        var root = await ReadRootAsync();
+        var ai = root["AiAssistant"] as JObject;
+
+        return new AiAssistantCredentials(
+            ai?["GeminiApiKey"]?.ToString(),
+            ai?["Model"]?.ToString() ?? string.Empty);
+    }
+
     public async Task<SettingsViewDto> SaveAdminUsernamesAsync(AdminUsernamesUpdateDto update)
     {
         var root = await ReadRootAsync();
@@ -619,7 +655,8 @@ public class SettingsService
         ["docker"] = ("Docker", "Password"),
         ["github-oauth"] = ("GitHubOAuth", "ClientSecret"),
         ["admins"] = ("Auth", null),
-        ["sonar"] = ("Sonar", "Token")
+        ["sonar"] = ("Sonar", "Token"),
+        ["ai"] = ("AiAssistant", "GeminiApiKey")
     };
 
     // Resets just the CALLER's own credentials (GitHub, AWS, Azure, GCP) -
@@ -676,6 +713,7 @@ public class SettingsService
         root.Remove("Docker");
         root.Remove("GitHubOAuth");
         root.Remove("Sonar");
+        root.Remove("AiAssistant");
 
         await WriteRootAsync(root);
 
@@ -1258,6 +1296,7 @@ public class SettingsService
         var oauth = root["GitHubOAuth"] as JObject;
         var auth = root["Auth"] as JObject;
         var sonar = root["Sonar"] as JObject;
+        var ai = root["AiAssistant"] as JObject;
 
         var admins = (auth?["AdminGitHubUsernames"] as JArray)?
             .Select(x => x.ToString())
@@ -1277,7 +1316,11 @@ public class SettingsService
             SonarHostUrl = sonar?["HostUrl"]?.ToString() is string h && !string.IsNullOrWhiteSpace(h) ? h : "https://sonarcloud.io",
             SonarOrganization = sonar?["Organization"]?.ToString() ?? string.Empty,
             SonarProjectKey = sonar?["ProjectKey"]?.ToString() ?? string.Empty,
-            SonarTokenConfigured = !string.IsNullOrWhiteSpace(sonar?["Token"]?.ToString())
+            SonarTokenConfigured = !string.IsNullOrWhiteSpace(sonar?["Token"]?.ToString()),
+
+            AiProvider = "Google Gemini",
+            AiModel = ai?["Model"]?.ToString() ?? string.Empty,
+            AiApiKeyConfigured = !string.IsNullOrWhiteSpace(ai?["GeminiApiKey"]?.ToString())
         };
     }
 

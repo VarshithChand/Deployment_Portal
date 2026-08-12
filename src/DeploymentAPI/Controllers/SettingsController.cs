@@ -23,13 +23,15 @@ public class SettingsController : ControllerBase
     private readonly GitHubApiService _github;
     private readonly CloudStatusService _cloud;
     private readonly GitHubAuthService _githubAuth;
+    private readonly IAiAssistantService _ai;
 
-    public SettingsController(SettingsService settings, GitHubApiService github, CloudStatusService cloud, GitHubAuthService githubAuth)
+    public SettingsController(SettingsService settings, GitHubApiService github, CloudStatusService cloud, GitHubAuthService githubAuth, IAiAssistantService ai)
     {
         _settings = settings;
         _github = github;
         _cloud = cloud;
         _githubAuth = githubAuth;
+        _ai = ai;
     }
 
     [HttpGet]
@@ -479,6 +481,43 @@ public class SettingsController : ControllerBase
             return denied;
 
         return Ok(await _settings.SaveSonarAsync(request));
+    }
+
+    // Deployment Copilot's Gemini API key/model - same admin-only, portal-
+    // wide model as Sonar above. The saved view (BuildView) never echoes
+    // the key back, only AiApiKeyConfigured/AiModel.
+    [HttpPost("ai")]
+    public async Task<IActionResult> SaveAi(AiAssistantSettingsUpdateDto request)
+    {
+        if (await AdminGate.DenyUnlessAdminAsync(this, _settings, "change settings") is IActionResult denied)
+            return denied;
+
+        return Ok(await _settings.SaveAiAssistantAsync(request));
+    }
+
+    // Tests the CURRENTLY SAVED Gemini configuration (not whatever's
+    // sitting unsaved in the form) - "Test Connection" is meant to confirm
+    // what Deployment Copilot will actually use, so this deliberately
+    // ignores anything the caller hasn't saved yet rather than accepting
+    // an API key in the request body.
+    [HttpPost("ai/test")]
+    public async Task<IActionResult> TestAi()
+    {
+        if (await AdminGate.DenyUnlessAdminAsync(this, _settings, "test the AI Assistant connection") is IActionResult denied)
+            return denied;
+
+        var creds = await _settings.GetAiAssistantCredentialsAsync();
+
+        if (!creds.IsConfigured)
+        {
+            return Ok(new AiTestConnectionResultDto
+            {
+                Success = false,
+                Message = "Add a Gemini API key and model, then save, before testing the connection."
+            });
+        }
+
+        return Ok(await _ai.TestConnectionAsync(creds.ApiKey!, creds.Model));
     }
 
     [HttpPost("admins")]
