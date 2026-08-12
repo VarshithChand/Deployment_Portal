@@ -369,9 +369,14 @@ public class CloudStatusService
 
     // Cloud Services page's ECS detail - every cluster this access key can
     // see, and every service within each, with running/desired task
-    // counts. Capped at the first 10 clusters and first 20 services per
-    // cluster - this is a glance view, not an exhaustive account audit,
-    // and an account with dozens of clusters shouldn't make this call hang.
+    // counts. Capped, not literally unbounded - each additional cluster
+    // costs a couple more AWS API calls (ListServices + DescribeServices),
+    // so an account with hundreds of clusters shouldn't make this call
+    // hang. The caps sit well above the frontend's own page size (see
+    // CloudServiceDetailModal's RESOURCE_PAGE_SIZE) specifically so its
+    // pagination has real multiple-page depth to page through, rather
+    // than a cap that silently matches page size and makes "page 2"
+    // always empty.
     public async Task<AwsEcsDetailDto> GetEcsDetailAsync(UserAwsCredentials credentials, string? region)
     {
         var result = new AwsEcsDetailDto { Configured = credentials.IsConfigured };
@@ -400,7 +405,7 @@ public class CloudStatusService
             var clusterArns = (await client.ListClustersAsync(new Amazon.ECS.Model.ListClustersRequest()))
                 .ClusterArns ?? new List<string>();
 
-            foreach (var clusterArn in clusterArns.Take(10))
+            foreach (var clusterArn in clusterArns.Take(30))
             {
                 var clusterName = clusterArn.Contains('/') ? clusterArn[(clusterArn.LastIndexOf('/') + 1)..] : clusterArn;
                 var clusterEntry = new AwsEcsClusterDto { ClusterName = clusterName };
@@ -410,27 +415,34 @@ public class CloudStatusService
                     var serviceArns = (await client.ListServicesAsync(new Amazon.ECS.Model.ListServicesRequest { Cluster = clusterArn }))
                         .ServiceArns ?? new List<string>();
 
-                    var toDescribe = serviceArns.Take(20).ToList();
+                    var toDescribe = serviceArns.Take(50).ToList();
+                    var services = new List<AwsEcsServiceDto>();
 
-                    if (toDescribe.Count > 0)
+                    // DescribeServices only accepts up to 10 ARNs per call
+                    // (an AWS API limit, not a choice made here) - batching
+                    // is what lets the cap above actually be 50, not 10.
+                    for (var i = 0; i < toDescribe.Count; i += 10)
                     {
+                        var batch = toDescribe.Skip(i).Take(10).ToList();
+
                         var described = await client.DescribeServicesAsync(new Amazon.ECS.Model.DescribeServicesRequest
                         {
                             Cluster = clusterArn,
-                            Services = toDescribe
+                            Services = batch
                         });
 
-                        clusterEntry.Status = "ACTIVE";
-                        clusterEntry.Services = (described.Services ?? new List<Amazon.ECS.Model.Service>())
+                        services.AddRange((described.Services ?? new List<Amazon.ECS.Model.Service>())
                             .Select(s => new AwsEcsServiceDto
                             {
                                 ServiceName = s.ServiceName,
                                 Status = s.Status,
                                 RunningCount = s.RunningCount ?? 0,
                                 DesiredCount = s.DesiredCount ?? 0
-                            })
-                            .ToList();
+                            }));
                     }
+
+                    clusterEntry.Status = "ACTIVE";
+                    clusterEntry.Services = services;
                 }
                 catch (Exception ex)
                 {
@@ -752,7 +764,12 @@ public class CloudStatusService
         }
     }
 
-    private const int MaxOtherItemsPerGroup = 10;
+    // Well above the Cloud Services page's own 10-per-page list (see
+    // CloudServiceDetailModal's RESOURCE_PAGE_SIZE) so its pagination has
+    // real depth to page through - a cap that happened to match page size
+    // exactly would've made "page 2" always come up empty regardless of
+    // how many resources actually exist.
+    private const int MaxOtherItemsPerGroup = 50;
 
     // arn:partition:service:region:account:resource -> (service, type, name).
     // "resource" itself varies by service: "type/id" (ecr, ecs), "type:id"

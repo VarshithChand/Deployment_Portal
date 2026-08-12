@@ -3,6 +3,10 @@ import { useEffect, useState } from "react";
 import AWS_SERVICES from "../../data/awsServiceCatalog";
 import { getMyAwsEc2Detail, getMyAwsEcsDetail } from "../../services/settingsService";
 import { getLiveStatusForService } from "../../utils/cloudServiceLiveStatus";
+import usePagination from "../../hooks/usePagination";
+import Pagination from "../common/Pagination";
+
+const RESOURCE_PAGE_SIZE = 10;
 
 function StateBadge({ state }) {
 
@@ -62,19 +66,43 @@ function Ec2LiveStatus() {
                 <span><strong>{detail.stoppedCount}</strong> stopped</span>
             </div>
 
-            {detail.instances.length > 0 && (
+            {detail.instances.length > 0 && <Ec2InstanceList instances={detail.instances} />}
 
-                <ul className="cloud-service-detail-list cloud-service-detail-list-plain">
-                    {detail.instances.map((i) => (
-                        <li key={i.instanceId}>
-                            <StateBadge state={i.state} />
-                            <span>{i.name}</span>
-                            <span className="field-hint" style={{ margin: 0 }}>{i.instanceType}</span>
-                        </li>
-                    ))}
-                </ul>
+        </>
 
-            )}
+    );
+
+}
+
+// A growing collection (more instances get launched over time) - its own
+// pagination, independent of anything else in this modal.
+function Ec2InstanceList({ instances }) {
+
+    const { page, setPage, pageCount, pageItems, totalCount, startIndex, endIndex } =
+        usePagination(instances, RESOURCE_PAGE_SIZE);
+
+    return (
+
+        <>
+
+            <ul className="cloud-service-detail-list cloud-service-detail-list-plain">
+                {pageItems.map((i) => (
+                    <li key={i.instanceId}>
+                        <StateBadge state={i.state} />
+                        <span>{i.name}</span>
+                        <span className="field-hint" style={{ margin: 0 }}>{i.instanceType}</span>
+                    </li>
+                ))}
+            </ul>
+
+            <Pagination
+                page={page}
+                pageCount={pageCount}
+                totalCount={totalCount}
+                startIndex={startIndex}
+                endIndex={endIndex}
+                onPageChange={setPage}
+            />
 
         </>
 
@@ -124,10 +152,24 @@ function EcsLiveStatus() {
         return <p className="field-hint">No ECS clusters found in this region.</p>;
     }
 
+    return <EcsClusterList clusters={detail.clusters} />;
+
+}
+
+// The cluster list itself is paginated (an account can have many clusters)
+// - each individually-shown cluster's service list gets its OWN pagination
+// below, evaluated independently rather than assumed to be covered by
+// paginating the cluster list.
+function EcsClusterList({ clusters }) {
+
+    const { page, setPage, pageCount, pageItems, totalCount, startIndex, endIndex } =
+        usePagination(clusters, RESOURCE_PAGE_SIZE);
+
     return (
 
         <>
-            {detail.clusters.map((cluster) => (
+
+            {pageItems.map((cluster) => (
 
                 <div key={cluster.clusterName} className="cloud-service-ecs-cluster">
 
@@ -141,23 +183,59 @@ function EcsLiveStatus() {
 
                     ) : (
 
-                        <ul className="cloud-service-detail-list cloud-service-detail-list-plain">
-                            {cluster.services.map((s) => (
-                                <li key={s.serviceName}>
-                                    <StateBadge state={s.runningCount > 0 ? "running" : "stopped"} />
-                                    <span>{s.serviceName}</span>
-                                    <span className="field-hint" style={{ margin: 0 }}>
-                                        {s.runningCount} / {s.desiredCount} tasks
-                                    </span>
-                                </li>
-                            ))}
-                        </ul>
+                        <EcsServiceList services={cluster.services} />
 
                     )}
 
                 </div>
 
             ))}
+
+            <Pagination
+                page={page}
+                pageCount={pageCount}
+                totalCount={totalCount}
+                startIndex={startIndex}
+                endIndex={endIndex}
+                onPageChange={setPage}
+            />
+
+        </>
+
+    );
+
+}
+
+function EcsServiceList({ services }) {
+
+    const { page, setPage, pageCount, pageItems, totalCount, startIndex, endIndex } =
+        usePagination(services, RESOURCE_PAGE_SIZE);
+
+    return (
+
+        <>
+
+            <ul className="cloud-service-detail-list cloud-service-detail-list-plain">
+                {pageItems.map((s) => (
+                    <li key={s.serviceName}>
+                        <StateBadge state={s.runningCount > 0 ? "running" : "stopped"} />
+                        <span>{s.serviceName}</span>
+                        <span className="field-hint" style={{ margin: 0 }}>
+                            {s.runningCount} / {s.desiredCount} tasks
+                        </span>
+                    </li>
+                ))}
+            </ul>
+
+            <Pagination
+                page={page}
+                pageCount={pageCount}
+                totalCount={totalCount}
+                startIndex={startIndex}
+                endIndex={endIndex}
+                onPageChange={setPage}
+            />
+
         </>
 
     );
@@ -203,18 +281,40 @@ function GenericLiveStatus({ service, inventory }) {
                 <span><strong>{status.count}</strong> found</span>
             </div>
 
-            {status.items?.length > 0 && (
+            {status.items?.length > 0 && <GenericResourceList items={status.items} />}
 
-                <ul className="cloud-service-detail-list cloud-service-detail-list-plain">
-                    {status.items.slice(0, 8).map((item, index) => (
-                        <li key={index}>
-                            <span>{item.name}</span>
-                            {item.detail && <span className="field-hint" style={{ margin: 0 }}>{item.detail}</span>}
-                        </li>
-                    ))}
-                </ul>
+        </>
 
-            )}
+    );
+
+}
+
+function GenericResourceList({ items }) {
+
+    const { page, setPage, pageCount, pageItems, totalCount, startIndex, endIndex } =
+        usePagination(items, RESOURCE_PAGE_SIZE);
+
+    return (
+
+        <>
+
+            <ul className="cloud-service-detail-list cloud-service-detail-list-plain">
+                {pageItems.map((item, index) => (
+                    <li key={startIndex + index}>
+                        <span>{item.name}</span>
+                        {item.detail && <span className="field-hint" style={{ margin: 0 }}>{item.detail}</span>}
+                    </li>
+                ))}
+            </ul>
+
+            <Pagination
+                page={page}
+                pageCount={pageCount}
+                totalCount={totalCount}
+                startIndex={startIndex}
+                endIndex={endIndex}
+                onPageChange={setPage}
+            />
 
         </>
 

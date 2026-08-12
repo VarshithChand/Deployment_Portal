@@ -1,13 +1,20 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import AWS_SERVICES, { AWS_CATEGORIES } from "../data/awsServiceCatalog";
 import { getMyAwsResources } from "../services/settingsService";
 import { getLiveStatusForService } from "../utils/cloudServiceLiveStatus";
 import usePolling from "../hooks/usePolling";
+import usePagination from "../hooks/usePagination";
 import PageLayout from "../components/layout/PageLayout";
 import SearchBox from "../components/common/SearchBox";
+import Pagination from "../components/common/Pagination";
 import CloudServiceCard from "../components/cloudServices/CloudServiceCard";
 import CloudServiceDetailModal from "../components/cloudServices/CloudServiceDetailModal";
+
+// Matches the repo-picker grids' own convention (SwitchRepositoryModal,
+// AllRepositoriesCard both use 6-9) rather than the 10-per-page default
+// for plain tables - this is a card grid, same shape of UI.
+const CATALOG_PAGE_SIZE = 9;
 
 // Only AWS is wired up (see section 12 of the request this page came
 // from) - Azure/GCP are listed as disabled options so adding a second
@@ -105,6 +112,30 @@ export default function CloudServices() {
             .filter((s) => matchesQuery(s, trimmed));
 
     }, [providerServices, category, search]);
+
+    // "All AWS Services" is the full catalog (~100 entries for AWS alone) -
+    // exactly the kind of growing/large grid the project's pagination
+    // policy requires, unlike "Services You're Using" above (bounded by
+    // what an account actually has running, realistically always small).
+    const {
+        page: catalogPage,
+        setPage: setCatalogPage,
+        pageCount: catalogPageCount,
+        pageItems: catalogPageItems,
+        totalCount: catalogTotalCount,
+        startIndex: catalogStartIndex,
+        endIndex: catalogEndIndex
+    } = usePagination(filtered, CATALOG_PAGE_SIZE);
+
+    // usePagination only snaps back when the current page no longer exists
+    // (pageCount shrinks past it) - a search/category change can produce a
+    // same-or-larger pageCount while still being a completely different
+    // result set, so this resets explicitly rather than potentially
+    // leaving page 3 of "EC2" showing page 3 of "database" instead.
+    useEffect(() => {
+        setCatalogPage(1);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [search, category]);
 
     function clearFilters() {
         setSearch("");
@@ -249,19 +280,32 @@ export default function CloudServices() {
 
                 ) : (
 
-                    <div className="cloud-service-grid">
+                    <>
 
-                        {filtered.map((service) => (
+                        <div className="cloud-service-grid">
 
-                            <CloudServiceCard
-                                key={service.id}
-                                service={service}
-                                onSelect={setSelectedService}
-                            />
+                            {catalogPageItems.map((service) => (
 
-                        ))}
+                                <CloudServiceCard
+                                    key={service.id}
+                                    service={service}
+                                    onSelect={setSelectedService}
+                                />
 
-                    </div>
+                            ))}
+
+                        </div>
+
+                        <Pagination
+                            page={catalogPage}
+                            pageCount={catalogPageCount}
+                            totalCount={catalogTotalCount}
+                            startIndex={catalogStartIndex}
+                            endIndex={catalogEndIndex}
+                            onPageChange={setCatalogPage}
+                        />
+
+                    </>
 
                 )}
 
