@@ -603,7 +603,19 @@ public class SettingsService
 
         var ai = root["AiAssistant"] as JObject ?? new JObject();
 
-        ai["Model"] = update.Model ?? string.Empty;
+        // Accept either a bare model ID ("gemini-2.0-flash") or the full
+        // resource name as Google's docs/AI Studio often display it
+        // ("models/gemini-2.0-flash") - GeminiService always builds the
+        // URL as ".../models/{model}:generateContent", so a stored value
+        // that still had "models/" on it would 404 twice-prefixed. See
+        // GeminiService.NormalizeModel for the same rule applied
+        // defensively at call time too.
+        var normalizedModel = (update.Model ?? string.Empty).Trim().Trim('/');
+
+        if (normalizedModel.StartsWith("models/", StringComparison.OrdinalIgnoreCase))
+            normalizedModel = normalizedModel["models/".Length..];
+
+        ai["Model"] = normalizedModel;
 
         if (!string.IsNullOrWhiteSpace(update.ApiKey))
             ai["GeminiApiKey"] = update.ApiKey;

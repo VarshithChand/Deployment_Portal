@@ -46,11 +46,22 @@ public class GeminiService : IAiAssistantService
             }
         };
 
-        var (success, text, error) = await SendRequestAsync(apiKey, model, requestBody);
+        var (success, _, error, rawErrorDetail) = await SendRequestRawAsync(apiKey, model, requestBody);
 
         if (!success)
         {
-            return new AiTestConnectionResultDto { Success = false, Message = error ?? "Gemini connection failed." };
+            // Test Connection is the admin-only diagnostic tool (section 6)
+            // - unlike the Chat path, showing Gemini's own error text here
+            // is exactly the point, since it's what actually says WHY (e.g.
+            // "models/gemini-x is not found for API version v1beta..."),
+            // not just a generic bucketed message. Never includes the API
+            // key itself - Gemini's error bodies don't echo it back, it
+            // only ever appears in the outbound request URL.
+            var message = !string.IsNullOrWhiteSpace(rawErrorDetail)
+                ? $"Gemini connection failed: {rawErrorDetail}"
+                : error ?? "Gemini connection failed.";
+
+            return new AiTestConnectionResultDto { Success = false, Message = message };
         }
 
         return new AiTestConnectionResultDto
@@ -116,7 +127,7 @@ public class GeminiService : IAiAssistantService
             if (toolsBlock != null)
                 requestBody["tools"] = toolsBlock.DeepClone();
 
-            var (success, responseJson, error) = await SendRequestRawAsync(apiKey, model, requestBody);
+            var (success, responseJson, error, _) = await SendRequestRawAsync(apiKey, model, requestBody);
 
             if (!success)
             {
@@ -201,23 +212,26 @@ public class GeminiService : IAiAssistantService
         return result;
     }
 
-    private async Task<(bool Success, string? Text, string? Error)> SendRequestAsync(string apiKey, string model, JsonObject body)
+    // Accepts either a bare model ID ("gemini-2.0-flash") or the full
+    // resource name as Google's own docs/AI Studio often display it
+    // ("models/gemini-2.0-flash") - without this, pasting the latter built
+    // a "models/models/..." URL that 404s, which is the single most common
+    // way this configuration gets entered wrong.
+    private static string NormalizeModel(string model)
     {
-        var (success, json, error) = await SendRequestRawAsync(apiKey, model, body);
+        var trimmed = model.Trim().Trim('/');
 
-        if (!success)
-            return (false, null, error);
-
-        var text = json?["candidates"]?[0]?["content"]?["parts"]?[0]?["text"]?.GetValue<string>();
-
-        return (true, text, null);
+        return trimmed.StartsWith("models/", StringComparison.OrdinalIgnoreCase)
+            ? trimmed["models/".Length..]
+            : trimmed;
     }
 
-    private async Task<(bool Success, JsonNode? Json, string? Error)> SendRequestRawAsync(string apiKey, string model, JsonObject body)
+    private async Task<(bool Success, JsonNode? Json, string? Error, string? RawErrorDetail)> SendRequestRawAsync(string apiKey, string model, JsonObject body)
     {
         using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(TimeoutSeconds) };
 
-        var url = $"https://generativelanguage.googleapis.com/v1beta/models/{Uri.EscapeDataString(model)}:generateContent?key={Uri.EscapeDataString(apiKey)}";
+        var normalizedModel = NormalizeModel(model);
+        var url = $"https://generativelanguage.googleapis.com/v1beta/models/{Uri.EscapeDataString(normalizedModel)}:generateContent?key={Uri.EscapeDataString(apiKey)}";
 
         try
         {
@@ -226,26 +240,44 @@ public class GeminiService : IAiAssistantService
             var responseText = await response.Content.ReadAsStringAsync();
 
             if (!response.IsSuccessStatusCode)
-                return (false, null, MapErrorResponse(response.StatusCode, responseText));
+                return (false, null, MapErrorResponse(response.StatusCode, responseText), ExtractProviderErrorMessage(responseText));
 
             var json = JsonNode.Parse(responseText);
 
             if (json?["candidates"] == null)
-                return (false, null, "Deployment Copilot didn't return a response. Try again.");
+                return (false, null, "Deployment Copilot didn't return a response. Try again.", null);
 
-            return (true, json, null);
+            return (true, json, null, null);
         }
         catch (TaskCanceledException)
         {
-            return (false, null, "Deployment Copilot couldn't reach the AI provider in time. Please try again.");
+            return (false, null, "Deployment Copilot couldn't reach the AI provider in time. Please try again.", null);
         }
         catch (HttpRequestException)
         {
-            return (false, null, "Deployment Copilot couldn't reach the AI provider right now. Please try again.");
+            return (false, null, "Deployment Copilot couldn't reach the AI provider right now. Please try again.", null);
         }
         catch (JsonException)
         {
-            return (false, null, "Deployment Copilot received an unexpected response from the AI provider.");
+            return (false, null, "Deployment Copilot received an unexpected response from the AI provider.", null);
+        }
+    }
+
+    // Gemini's own error.message text (e.g. "models/gemini-x is not found
+    // for API version v1beta, or is not supported for generateContent...")
+    // - never includes the API key (that only ever appears in the outbound
+    // request URL, not anything Gemini echoes back), so it's safe to show
+    // directly on the admin-only Test Connection diagnostic.
+    private static string? ExtractProviderErrorMessage(string rawBody)
+    {
+        try
+        {
+            var message = JsonNode.Parse(rawBody)?["error"]?["message"]?.GetValue<string>();
+            return string.IsNullOrWhiteSpace(message) ? null : message;
+        }
+        catch (JsonException)
+        {
+            return null;
         }
     }
 
