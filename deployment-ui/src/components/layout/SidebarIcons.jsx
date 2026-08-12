@@ -240,6 +240,21 @@ export function GitHubGroupIcon() {
     );
 }
 
+// Three overlapping filled circles capped by a rounded rect "ground line" -
+// the same filled-shapes-overlapping technique MoonIcon already uses above
+// (rather than a hand-authored curve path), reading as a simple cloud
+// silhouette for the Cloud Services nested page.
+export function CloudServicesIcon() {
+    return (
+        <svg {...common}>
+            <circle cx="6.5" cy="10.5" r="3" fill="currentColor" />
+            <circle cx="10.5" cy="8.3" r="3.7" fill="currentColor" />
+            <circle cx="13" cy="10.5" r="2.6" fill="currentColor" />
+            <rect x="3.5" y="10" width="12" height="4" rx="2" fill="currentColor" />
+        </svg>
+    );
+}
+
 export function ChevronIcon({ direction = "left" }) {
     return (
         <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true"

@@ -10,6 +10,7 @@ import Environments from "./pages/Environments";
 import Analytics from "./pages/Analytics";
 import Timeline from "./pages/Timeline";
 import TemplateTester from "./pages/TemplateTester";
+import CloudServices from "./pages/CloudServices";
 import Services from "./pages/Services";
 import Docker from "./pages/Docker";
 import CodeQuality from "./pages/CodeQuality";
@@ -100,6 +101,7 @@ function App(){
                             {tab === "history" && <History/>}
                             {tab === "environments" && <Environments/>}
                             {tab === "templates" && <TemplateTester/>}
+                            {tab === "cloudServices" && <CloudServices/>}
                             {tab === "services" && <Services/>}
                             {tab === "docker" && <Docker/>}
                             {tab === "codeQuality" && <CodeQuality/>}
