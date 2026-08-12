@@ -1,5 +1,6 @@
 import { logout as logoutRequest } from "../services/authService";
 import { clearMySettings } from "../services/settingsService";
+import { clearPortalLocked } from "./portalLock";
 
 // The periodic "stay or sign out" prompt's Sign Out path (see
 // PeriodicSignOutMonitor) - clears every credential this browser has
@@ -10,6 +11,14 @@ import { clearMySettings } from "../services/settingsService";
 // this one is a real data clear, same as the admin's soft Sign Out but
 // self-triggered and full-scope rather than just the GitHub token.
 export default async function performSelfClear() {
+
+    // Otherwise the screen-lock flag (see utils/portalLock) survives the
+    // reload below - PeriodicSignOutMonitor reads it as its initial state
+    // on remount and immediately re-locks the screen with PinLockScreen,
+    // even though the clear and redirect both actually succeeded. This is
+    // what made "Forgot your PIN? Clear all saved credentials instead"
+    // look stuck on the lock screen instead of landing on the dashboard.
+    clearPortalLocked();
 
     try {
         await clearMySettings();
