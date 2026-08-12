@@ -319,7 +319,13 @@ public class CloudStatusService
                 }
             });
 
-            var instances = response.Reservations.SelectMany(r => r.Instances).ToList();
+            // An account/filter combination that matches nothing can come
+            // back with these collections left null rather than empty - a
+            // zero-instance account is the common case for a freshly wired
+            // up credential, not an edge case to skip guarding against.
+            var instances = (response.Reservations ?? new List<Reservation>())
+                .SelectMany(r => r.Instances ?? new List<Instance>())
+                .ToList();
 
             result.Ec2.Items = instances
                 .Select(i => new AwsResourceItemDto
@@ -345,8 +351,9 @@ public class CloudStatusService
         {
             using var client = new AmazonEC2Client(awsCredentials, regionEndpoint);
             var response = await client.DescribeVpcsAsync(new DescribeVpcsRequest());
+            var vpcs = response.Vpcs ?? new List<Vpc>();
 
-            result.Vpc.Items = response.Vpcs
+            result.Vpc.Items = vpcs
                 .Select(v => new AwsResourceItemDto
                 {
                     Name = v.Tags?.FirstOrDefault(t => t.Key == "Name")?.Value ?? v.VpcId,
@@ -354,7 +361,7 @@ public class CloudStatusService
                 })
                 .ToList();
 
-            result.Vpc.Count = response.Vpcs.Count;
+            result.Vpc.Count = vpcs.Count;
             result.Vpc.Found = true;
         }
         catch (Exception ex)
@@ -370,12 +377,13 @@ public class CloudStatusService
         {
             using var client = new AmazonLambdaClient(awsCredentials, regionEndpoint);
             var response = await client.ListFunctionsAsync(new ListFunctionsRequest());
+            var functions = response.Functions ?? new List<FunctionConfiguration>();
 
-            result.Lambda.Items = response.Functions
+            result.Lambda.Items = functions
                 .Select(f => new AwsResourceItemDto { Name = f.FunctionName, Detail = f.Runtime })
                 .ToList();
 
-            result.Lambda.Count = response.Functions.Count;
+            result.Lambda.Count = functions.Count;
             result.Lambda.Found = true;
         }
         catch (Exception ex)
@@ -391,8 +399,9 @@ public class CloudStatusService
         {
             using var client = new AmazonSimpleNotificationServiceClient(awsCredentials, regionEndpoint);
             var response = await client.ListTopicsAsync(new ListTopicsRequest());
+            var topics = response.Topics ?? new List<Topic>();
 
-            result.Sns.Items = response.Topics
+            result.Sns.Items = topics
                 .Select(t => new AwsResourceItemDto
                 {
                     // arn:aws:sns:us-east-1:123456789012:my-topic -> "my-topic"
@@ -401,7 +410,7 @@ public class CloudStatusService
                 })
                 .ToList();
 
-            result.Sns.Count = response.Topics.Count;
+            result.Sns.Count = topics.Count;
             result.Sns.Found = true;
         }
         catch (Exception ex)
@@ -417,8 +426,9 @@ public class CloudStatusService
         {
             using var client = new AmazonS3Client(awsCredentials, regionEndpoint);
             var response = await client.ListBucketsAsync(new ListBucketsRequest());
+            var buckets = response.Buckets ?? new List<S3Bucket>();
 
-            result.S3.Items = response.Buckets
+            result.S3.Items = buckets
                 .Select(b => new AwsResourceItemDto
                 {
                     Name = b.BucketName,
@@ -426,7 +436,7 @@ public class CloudStatusService
                 })
                 .ToList();
 
-            result.S3.Count = response.Buckets.Count;
+            result.S3.Count = buckets.Count;
             result.S3.Found = true;
         }
         catch (Exception ex)
@@ -442,8 +452,9 @@ public class CloudStatusService
         {
             using var client = new AmazonRoute53Client(awsCredentials, regionEndpoint);
             var response = await client.ListHostedZonesAsync(new ListHostedZonesRequest());
+            var zones = response.HostedZones ?? new List<HostedZone>();
 
-            result.Route53.Items = response.HostedZones
+            result.Route53.Items = zones
                 .Select(z => new AwsResourceItemDto
                 {
                     Name = z.Name,
@@ -451,7 +462,7 @@ public class CloudStatusService
                 })
                 .ToList();
 
-            result.Route53.Count = response.HostedZones.Count;
+            result.Route53.Count = zones.Count;
             result.Route53.Found = true;
         }
         catch (Exception ex)
