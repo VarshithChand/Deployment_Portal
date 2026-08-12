@@ -25,15 +25,21 @@ const MODES = [
 // A convenience picker, not a restriction — GEMINI_MODEL is still whatever
 // string ends up saved (see SettingsService.SaveAiAssistantAsync), so
 // picking "Custom / other model" below still works for anything Google
-// adds or retires later. Google fully shut down the entire 2.0 Flash line
-// (gemini-2.0-flash/-lite and their -001 variants) on 2026-06-01 - the
-// current free-tier models are the 2.5 generation below. Note:
-// gemini-2.5-flash itself has an announced 2026-10-16 shutdown date
-// (replacement: gemini-3.5-flash, paid-only as of this writing) - if this
-// list is out of date by the time you're reading it, use "Custom" with
-// whatever model ai.google.dev/gemini-api/docs/models currently lists.
+// adds or retires later.
+//
+// "gemini-flash-latest" is listed first and recommended: it's a real,
+// documented Google alias that always resolves to the current
+// recommended Flash model (hot-swapped on new releases, with a 2-week
+// notice before any breaking change) - ai.google.dev/gemini-api/docs/models.
+// This sidesteps the whole class of problem where a specific dated model
+// ID (gemini-2.0-flash, then gemini-2.5-flash) got rejected with
+// "no longer available to new users" - some newly-created API keys are
+// restricted to alias/current-generation models rather than every
+// individually-dated one, even while that same dated ID is still listed
+// as "stable" for older keys.
 const GEMINI_MODEL_OPTIONS = [
-    { value: "gemini-2.5-flash", label: "Gemini 2.5 Flash — recommended, free tier" },
+    { value: "gemini-flash-latest", label: "Gemini Flash (latest) — recommended, auto-updates" },
+    { value: "gemini-2.5-flash", label: "Gemini 2.5 Flash — free tier" },
     { value: "gemini-2.5-flash-lite", label: "Gemini 2.5 Flash-Lite — fastest, free tier" }
 ];
 
