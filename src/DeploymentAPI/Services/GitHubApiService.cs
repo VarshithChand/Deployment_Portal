@@ -1079,6 +1079,38 @@ public class GitHubApiService
             return runs.Select(MapRun).ToList();
         });
 
+    // For the Dashboard's "all your repos" container — unlike every other
+    // method here, owner/repository is an explicit argument rather than
+    // _auth.Owner/_auth.Repository, since this checks OTHER repos the same
+    // token can see (from GetAccountRepositoriesAsync), not the one repo
+    // this session is actually pointed at. Same 20s cache as everything
+    // else, keyed per-repo, so switching between the repo grid's pages
+    // doesn't re-hit GitHub for repos already checked recently.
+    public Task<WorkflowDto?> GetLatestRunForRepoAsync(string owner, string repository) =>
+        GetCachedAsync($"latest-run:{owner}/{repository}", async () =>
+        {
+            try
+            {
+                var client = _auth.CreateClient();
+
+                var url =
+                    $"https://api.github.com/repos/{Uri.EscapeDataString(owner)}/{Uri.EscapeDataString(repository)}/actions/runs?per_page=1";
+
+                var json = await HttpClientHelper.GetAsync(client, url);
+                var runs = JObject.Parse(json)["workflow_runs"] as JArray;
+
+                return runs != null && runs.Count > 0 ? MapRun(runs[0]!) : null;
+            }
+            catch
+            {
+                // One repo's Actions being disabled, private-and-inaccessible,
+                // or GitHub hiccuping shouldn't break the whole grid - "no
+                // recent run to show" and "couldn't check" render identically
+                // on a per-repo card either way.
+                return null;
+            }
+        });
+
     //===========================================================
     // Single Workflow Run (Live Progress)
     //===========================================================

@@ -1,0 +1,320 @@
+import { useEffect, useState } from "react";
+
+import { getAccountRepositories, getRepoLatestRun } from "../../services/githubService";
+import { saveMyGitHubSettings } from "../../services/settingsService";
+import useAuth from "../../hooks/useAuth";
+import useToast from "../../hooks/useToast";
+import usePagination from "../../hooks/usePagination";
+import usePolling from "../../hooks/usePolling";
+import SearchBox from "../common/SearchBox";
+import Pagination from "../common/Pagination";
+import ConfirmDialog from "../ConfirmDialog";
+import StatusBadge from "../StatusBadge";
+
+const PAGE_SIZE = 6;
+const RUN_POLL_MS = 20000;
+
+// A plain rounded rectangle with a spine down the left edge — same glyph
+// SwitchRepositoryModal uses, kept in sync so the two repo pickers read as
+// the same feature rather than two different ones.
+function RepoIcon() {
+
+    return (
+
+        <svg className="repo-picker-icon" width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+            <rect x="2.5" y="2.5" width="11" height="11" rx="1.5" stroke="currentColor" strokeWidth="1.3" />
+            <line x1="5.5" y1="2.5" x2="5.5" y2="13.5" stroke="currentColor" strokeWidth="1.3" />
+        </svg>
+
+    );
+
+}
+
+// run is undefined while still loading, null once checked with nothing
+// found, or a WorkflowDto once a run exists — three distinct states, three
+// distinct renders.
+function RepoRunStatus({ run }) {
+
+    if (run === undefined) {
+        return <p className="field-hint" style={{ margin: "8px 0 0" }}>Checking pipeline...</p>;
+    }
+
+    if (!run) {
+        return <p className="field-hint" style={{ margin: "8px 0 0" }}>No recent runs</p>;
+    }
+
+    return (
+
+        <div className="repo-picker-meta" style={{ marginTop: "8px" }}>
+            <StatusBadge status={run.conclusion || run.status} />
+            <span className="field-hint" style={{ margin: 0 }}>{run.name}</span>
+        </div>
+
+    );
+
+}
+
+// Dashboard's persistent view of every repository this token's account can
+// see — not just the one repo this session is currently pointed at. Reuses
+// SwitchRepositoryModal's repo-picker CSS and its saveMyGitHubSettings +
+// reload switch pattern, but lives on the page itself instead of behind a
+// modal, and additionally shows each visible repo's latest workflow run so
+// a pipeline running on a repo you're not looking at doesn't go unnoticed.
+export default function AllRepositoriesCard({ repository }) {
+
+    const { githubRepoConfigured } = useAuth();
+    const toast = useToast();
+
+    const [repos, setRepos] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState("");
+    const [search, setSearch] = useState("");
+    const [runs, setRuns] = useState({});
+
+    const [target, setTarget] = useState(null);
+    const [switching, setSwitching] = useState(false);
+
+    useEffect(() => {
+
+        if (!githubRepoConfigured) {
+            setLoading(false);
+            return;
+        }
+
+        let cancelled = false;
+
+        getAccountRepositories()
+            .then((response) => {
+
+                if (!cancelled) {
+                    setRepos(Array.isArray(response.data) ? response.data : []);
+                }
+
+            })
+            .catch((err) => {
+
+                console.error(err);
+
+                if (!cancelled) {
+                    setError("Unable to load repositories for this token's account.");
+                }
+
+            })
+            .finally(() => {
+
+                if (!cancelled) {
+                    setLoading(false);
+                }
+
+            });
+
+        return () => {
+            cancelled = true;
+        };
+
+    }, [githubRepoConfigured]);
+
+    const filtered = repos.filter((repo) =>
+        repo.fullName.toLowerCase().includes(search.toLowerCase())
+    );
+
+    const { page, setPage, pageCount, pageItems, totalCount, startIndex, endIndex } =
+        usePagination(filtered, PAGE_SIZE);
+
+    useEffect(() => {
+
+        setPage(1);
+
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [search]);
+
+    // Only the page currently on screen gets checked for a running
+    // pipeline — checking every repo the token can see, on every poll,
+    // would multiply GitHub calls by the size of the whole account.
+    function loadRunsForVisiblePage() {
+
+        if (!githubRepoConfigured || pageItems.length === 0) {
+            return;
+        }
+
+        pageItems.forEach((repo) => {
+
+            getRepoLatestRun(repo.owner, repo.name)
+                .then((response) => {
+                    setRuns((prev) => ({ ...prev, [repo.fullName]: response.data || null }));
+                })
+                .catch(() => {
+                    setRuns((prev) => ({ ...prev, [repo.fullName]: null }));
+                });
+
+        });
+
+    }
+
+    usePolling(loadRunsForVisiblePage, RUN_POLL_MS);
+
+    const currentFullName = repository?.full_name
+        || (repository?.owner?.login && repository?.name ? `${repository.owner.login}/${repository.name}` : null);
+
+    async function handleConfirmSwitch() {
+
+        if (!target) {
+            return;
+        }
+
+        try {
+
+            setSwitching(true);
+
+            await saveMyGitHubSettings({
+                owner: target.owner,
+                repository: target.name,
+                personalAccessToken: null
+            });
+
+            toast.show(`Switched to ${target.fullName}.`, "success");
+
+            // Same reason SwitchRepositoryModal reloads: every page that
+            // already fetched data for the old repo has no way to know a
+            // different one is now configured, short of refetching
+            // everything itself.
+            setTimeout(() => window.location.reload(), 900);
+
+        }
+        catch (err) {
+
+            console.error(err);
+            toast.show(err.response?.data?.message || "Failed to switch repository.", "error");
+            setSwitching(false);
+            setTarget(null);
+
+        }
+
+    }
+
+    if (!githubRepoConfigured) {
+        return null;
+    }
+
+    return (
+
+        <div className="card">
+
+            <div className="repo-picker-header" style={{ marginBottom: "12px" }}>
+
+                <div>
+                    <h2 className="card-title" style={{ marginBottom: "4px" }}>All Repositories</h2>
+                    <p className="field-hint" style={{ margin: 0 }}>
+                        Every repository this token's account can see. Click one to switch to it.
+                    </p>
+                </div>
+
+                {!loading && !error && (
+                    <span className="repo-picker-count">
+                        {totalCount} {totalCount === 1 ? "repository" : "repositories"}
+                    </span>
+                )}
+
+            </div>
+
+            <SearchBox
+                placeholder="Search repositories..."
+                value={search}
+                onChange={setSearch}
+            />
+
+            <div className="repo-picker-grid">
+
+                {loading && (
+                    <p className="field-hint">Loading repositories...</p>
+                )}
+
+                {!loading && error && (
+                    <div className="error-message">{error}</div>
+                )}
+
+                {!loading && !error && filtered.length === 0 && (
+                    <p className="empty-state">No repositories match "{search}".</p>
+                )}
+
+                {!loading && !error && pageItems.map((repo) => {
+
+                    const isCurrent = repo.fullName === currentFullName;
+
+                    return (
+
+                        <button
+                            type="button"
+                            key={repo.fullName}
+                            className={`repo-picker-card ${isCurrent ? "repo-picker-card-current" : ""}`}
+                            disabled={isCurrent}
+                            onClick={() => setTarget(repo)}
+                        >
+
+                            <div className="repo-picker-title">
+                                <RepoIcon />
+                                <span className="repo-picker-name">
+                                    <span className="repo-picker-owner">{repo.owner}/</span>
+                                    {repo.name}
+                                </span>
+                            </div>
+
+                            <div className="repo-picker-meta">
+
+                                <span className={`badge ${repo.private ? "badge-secondary" : "badge-info"}`}>
+                                    {repo.private ? "Private" : "Public"}
+                                </span>
+
+                                {isCurrent && (
+                                    <span className="badge badge-success">Current</span>
+                                )}
+
+                            </div>
+
+                            <RepoRunStatus run={runs[repo.fullName]} />
+
+                        </button>
+
+                    );
+
+                })}
+
+            </div>
+
+            {!loading && !error && (
+
+                <Pagination
+                    page={page}
+                    pageCount={pageCount}
+                    totalCount={totalCount}
+                    startIndex={startIndex}
+                    endIndex={endIndex}
+                    onPageChange={setPage}
+                />
+
+            )}
+
+            <ConfirmDialog
+
+                open={!!target}
+                title="Switch repository?"
+                confirmLabel={switching ? "Switching..." : "Switch"}
+                message={
+                    target && (
+                        <>
+                            From <strong>{currentFullName || "(no repository configured)"}</strong>
+                            {" "}to <strong>{target.fullName}</strong>.
+                            {" "}This changes the repository you point at.
+                        </>
+                    )
+                }
+                onConfirm={handleConfirmSwitch}
+                onCancel={() => !switching && setTarget(null)}
+
+            />
+
+        </div>
+
+    );
+
+}

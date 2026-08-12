@@ -6,7 +6,8 @@ import PageLayout from "../components/layout/PageLayout";
 import RepositoryCard from "../components/dashboard/RepositoryCard";
 import StatisticsCard from "../components/dashboard/StatisticsCard";
 import QuickActions from "../components/dashboard/QuickActions";
-import RecentDeployments from "../components/dashboard/RecentDeployments";
+import AllRepositoriesCard from "../components/dashboard/AllRepositoriesCard";
+import AwsServicesCard from "../components/dashboard/AwsServicesCard";
 import EnvironmentsCard from "../components/dashboard/EnvironmentsCard";
 import PublicRepoLookup from "../components/dashboard/PublicRepoLookup";
 
@@ -73,7 +74,11 @@ export default function Dashboard() {
 
             <br />
 
-            <RecentDeployments />
+            <AllRepositoriesCard repository={repository} />
+
+            <br />
+
+            <AwsServicesCard />
 
             <br />
 

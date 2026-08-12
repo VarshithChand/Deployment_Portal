@@ -58,6 +58,18 @@ public class GitHubController : ControllerBase
         return Ok(await _service.GetAccountRepositoriesAsync());
     }
 
+    // Dashboard's "all your repos" container - which pipeline (if any) is
+    // currently running on a repo OTHER than the one this session is
+    // pointed at, so switching repos isn't the only way to see that.
+    [HttpGet("repo-latest-run")]
+    public async Task<IActionResult> RepoLatestRun([FromQuery] string owner, [FromQuery] string repo)
+    {
+        if (string.IsNullOrWhiteSpace(owner) || string.IsNullOrWhiteSpace(repo))
+            return BadRequest("owner and repo are required.");
+
+        return Ok(await _service.GetLatestRunForRepoAsync(owner, repo));
+    }
+
     [HttpGet("artifacts")]
     public async Task<IActionResult> Artifacts([FromQuery] bool force = false)
     {
