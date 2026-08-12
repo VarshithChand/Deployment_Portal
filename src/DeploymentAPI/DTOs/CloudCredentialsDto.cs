@@ -207,6 +207,32 @@ public class AwsResourceInventoryDto
     public AwsServiceStatusDto Route53 { get; set; } = new();
 
     public AwsServiceStatusDto Sns { get; set; } = new();
+
+    // Everything else this access key can see in the region, discovered
+    // dynamically via the Resource Groups Tagging API rather than one
+    // hand-written SDK call per AWS service (there are ~300 of those) -
+    // RDS, DynamoDB, SQS, CloudFront, whatever else the account actually
+    // uses. One dynamic tile per AWS service namespace found.
+    public List<AwsServiceGroupDto> Other { get; set; } = new();
+
+    // Set only if the broader tagging-API scan itself failed (e.g. no
+    // tag:GetResources permission) - the six/seven dedicated tiles above
+    // are unaffected either way, since each already fails independently.
+    public string? OtherError { get; set; }
+}
+
+// One dynamically-discovered AWS service's slice of "Other" above - same
+// shape as AwsServiceStatusDto's count/items, plus the service's own key
+// (the ARN service namespace, e.g. "dynamodb") and a human label.
+public class AwsServiceGroupDto
+{
+    public string Key { get; set; } = string.Empty;
+
+    public string Label { get; set; } = string.Empty;
+
+    public int Count { get; set; }
+
+    public List<AwsResourceItemDto> Items { get; set; } = new();
 }
 
 // The temporary credential set STS (MFA path) or AWS SSO's

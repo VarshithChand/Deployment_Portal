@@ -7,6 +7,8 @@ using Amazon.ECS;
 using Amazon.ECS.Model;
 using Amazon.Lambda;
 using Amazon.Lambda.Model;
+using Amazon.ResourceGroupsTaggingAPI;
+using Amazon.ResourceGroupsTaggingAPI.Model;
 using Amazon.Route53;
 using Amazon.Route53.Model;
 using Amazon.Runtime;
@@ -261,6 +263,7 @@ public class CloudStatusService
         {
             const string mfaError = "MFA session expired — re-enter your 6-digit code in Settings → Credentials → AWS.";
             result.Ec2.Error = result.Ecr.Error = result.Vpc.Error = result.S3.Error = result.Lambda.Error = result.Route53.Error = result.Sns.Error = mfaError;
+            result.OtherError = mfaError;
             return result;
         }
 
@@ -281,11 +284,13 @@ public class CloudStatusService
             tasks.Add(DescribeVpcsAsync(awsCredentials, regionEndpoint, result));
             tasks.Add(DescribeLambdaFunctionsAsync(awsCredentials, regionEndpoint, result));
             tasks.Add(DescribeSnsTopicsAsync(awsCredentials, regionEndpoint, result));
+            tasks.Add(DescribeOtherResourcesAsync(awsCredentials, regionEndpoint, result));
         }
         else
         {
             const string noRegionError = "No AWS region configured — set one in Settings → Credentials → AWS.";
             result.Ec2.Error = result.Ecr.Error = result.Vpc.Error = result.Lambda.Error = result.Sns.Error = noRegionError;
+            result.OtherError = noRegionError;
         }
 
         // S3 and Route 53 are global services - any region's endpoint sees
@@ -498,6 +503,134 @@ public class CloudStatusService
             result.Route53.Error = ex.Message;
         }
     }
+
+    // ARN service namespaces already covered by their own dedicated tile
+    // above - skipped here so the same resource never shows up twice.
+    // "ec2" also covers VPC/subnet/security-group/volume ARNs, not just
+    // instances; excluding the whole namespace is a deliberate trade-off
+    // (those stay covered only by the Ec2/Vpc tiles' own explicit calls,
+    // not by this broader scan) rather than re-splitting "ec2" back apart
+    // here.
+    private static readonly HashSet<string> KnownServiceNamespaces = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "ec2", "ecr", "s3", "lambda", "route53", "sns"
+    };
+
+    // Friendly plural names for the ARN service namespaces this commonly
+    // turns up - anything not listed here still gets a tile, just with a
+    // titleized fallback label instead of a hand-picked one.
+    private static readonly Dictionary<string, string> ServiceLabels = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["dynamodb"] = "DynamoDB Tables",
+        ["rds"] = "RDS Databases",
+        ["sqs"] = "SQS Queues",
+        ["secretsmanager"] = "Secrets Manager Secrets",
+        ["kms"] = "KMS Keys",
+        ["elasticloadbalancing"] = "Load Balancers",
+        ["cloudfront"] = "CloudFront Distributions",
+        ["apigateway"] = "API Gateways",
+        ["eks"] = "EKS Clusters",
+        ["ecs"] = "ECS Clusters/Services",
+        ["elasticache"] = "ElastiCache Clusters",
+        ["states"] = "Step Functions",
+        ["events"] = "EventBridge Rules",
+        ["logs"] = "CloudWatch Log Groups",
+        ["cloudwatch"] = "CloudWatch Alarms",
+        ["iam"] = "IAM Roles",
+        ["acm"] = "ACM Certificates",
+        ["es"] = "OpenSearch Domains",
+        ["kinesis"] = "Kinesis Streams",
+        ["cloudformation"] = "CloudFormation Stacks",
+        ["autoscaling"] = "Auto Scaling Groups",
+        ["elasticfilesystem"] = "EFS File Systems",
+        ["redshift"] = "Redshift Clusters",
+        ["glue"] = "Glue Resources",
+        ["sagemaker"] = "SageMaker Resources"
+    };
+
+    // "All the services on that region, based on the access key" — rather
+    // than hand-writing one SDK call per AWS service (there are ~300),
+    // this asks the Resource Groups Tagging API for every resource it can
+    // see in the region in one paginated scan, then groups whatever comes
+    // back by ARN service namespace into a tile per service actually in
+    // use. Capped at a few pages - this is a Dashboard glance, not an
+    // exhaustive account audit, and an account with thousands of tagged
+    // resources shouldn't make this card hang.
+    private static async System.Threading.Tasks.Task DescribeOtherResourcesAsync(
+        AWSCredentials awsCredentials, RegionEndpoint regionEndpoint, AwsResourceInventoryDto result)
+    {
+        try
+        {
+            using var client = new AmazonResourceGroupsTaggingAPIClient(awsCredentials, regionEndpoint);
+
+            var groups = new Dictionary<string, AwsServiceGroupDto>(StringComparer.OrdinalIgnoreCase);
+            string? paginationToken = null;
+            var pagesFetched = 0;
+
+            do
+            {
+                var response = await client.GetResourcesAsync(new GetResourcesRequest
+                {
+                    ResourcesPerPage = 100,
+                    PaginationToken = paginationToken
+                });
+
+                foreach (var mapping in response.ResourceTagMappingList ?? new List<ResourceTagMapping>())
+                {
+                    var (service, type, name) = ParseArn(mapping.ResourceARN);
+
+                    if (KnownServiceNamespaces.Contains(service))
+                        continue;
+
+                    if (!groups.TryGetValue(service, out var group))
+                    {
+                        group = new AwsServiceGroupDto { Key = service, Label = LabelFor(service) };
+                        groups[service] = group;
+                    }
+
+                    group.Items.Add(new AwsResourceItemDto { Name = name, Detail = type });
+                    group.Count++;
+                }
+
+                paginationToken = response.PaginationToken;
+                pagesFetched++;
+            }
+            while (!string.IsNullOrEmpty(paginationToken) && pagesFetched < 5);
+
+            foreach (var group in groups.Values)
+                group.Items = group.Items.Take(MaxOtherItemsPerGroup).ToList();
+
+            result.Other = groups.Values.OrderByDescending(g => g.Count).ToList();
+        }
+        catch (Exception ex)
+        {
+            result.OtherError = ex.Message;
+        }
+    }
+
+    private const int MaxOtherItemsPerGroup = 10;
+
+    // arn:partition:service:region:account:resource -> (service, type, name).
+    // "resource" itself varies by service: "type/id" (ecr, ecs), "type:id"
+    // (lambda), or just a bare id/name with no type prefix at all (s3,
+    // sns) - the split on the first '/' or ':' handles all three shapes.
+    private static (string Service, string? Type, string Name) ParseArn(string arn)
+    {
+        var parts = arn.Split(':', 6);
+        var service = parts.Length > 2 ? parts[2] : "aws";
+        var resource = parts.Length > 5 ? parts[5] : arn;
+
+        var separatorIndex = resource.IndexOfAny(new[] { '/', ':' });
+
+        return separatorIndex > 0 && separatorIndex < resource.Length - 1
+            ? (service, resource[..separatorIndex], resource[(separatorIndex + 1)..])
+            : (service, null, resource);
+    }
+
+    private static string LabelFor(string service) =>
+        ServiceLabels.TryGetValue(service, out var label)
+            ? label
+            : System.Globalization.CultureInfo.InvariantCulture.TextInfo.ToTitleCase(service) + " Resources";
 
     public async Task<CloudStatusDto> GetAzureWebAppStatusAsync(
         UserAzureCredentials credentials,

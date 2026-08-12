@@ -77,11 +77,15 @@ function AwsServiceTile({ label, status }) {
 
 }
 
-// Dashboard's account-wide AWS tracker — EC2, VPC, S3, Lambda, Route 53,
-// and SNS, all resolved from this session's own saved AWS credentials
-// (see AwsLoginSection), independent of the Environments feature's ECS/ECR
-// panel, which only ever showed the one cluster/service/repository a
-// specific environment happens to be wired to.
+// Dashboard's account-wide AWS tracker — every AWS service this session's
+// saved credentials (see AwsLoginSection) can see resources in, for the
+// configured region. EC2/ECR/VPC/S3/Lambda/Route53/SNS are hand-checked
+// (accurate semantics, e.g. EC2 filtered to actually-running instances);
+// everything else comes from a broader Resource Groups Tagging API scan
+// (see CloudStatusService.DescribeOtherResourcesAsync), one tile per AWS
+// service namespace actually found. Independent of the Environments
+// feature's ECS/ECR panel, which only ever showed the one cluster/service/
+// repository a specific environment happens to be wired to.
 export default function AwsServicesCard() {
 
     const { githubRepoConfigured, awsIdentityLabel } = useAuth();
@@ -112,16 +116,37 @@ export default function AwsServicesCard() {
     }
 
     // "Running services" only — a service sitting at zero isn't shown at
-    // all, rather than rendering six tiles where most just say "0/None
-    // found". An error still renders (that's "couldn't check", not
-    // "nothing running") since silently hiding it would read as "all clear"
-    // when it might not be.
-    const visibleServices = inventory?.configured
+    // all, rather than rendering tiles that just say "0/None found". An
+    // error still renders (that's "couldn't check", not "nothing running")
+    // since silently hiding it would read as "all clear" when it might not
+    // be. The seven hand-checked services above come first; anything else
+    // this access key has in the region — RDS, DynamoDB, SQS, whatever —
+    // comes from inventory.other (see CloudStatusService.
+    // DescribeOtherResourcesAsync), one dynamic tile per AWS service found.
+    const visibleKnown = inventory?.configured
         ? SERVICES.filter((service) => {
             const status = inventory[service.key];
             return status && (status.error || status.count > 0);
-        })
+        }).map((service) => ({ key: service.key, label: service.label, status: inventory[service.key] }))
         : [];
+
+    const otherTiles = inventory?.configured
+        ? (inventory.other || []).map((group) => ({
+            key: group.key,
+            label: group.label,
+            status: { count: group.count, items: group.items }
+        }))
+        : [];
+
+    if (inventory?.configured && inventory.otherError) {
+        otherTiles.push({
+            key: "other-error",
+            label: "Other AWS Resources",
+            status: { error: inventory.otherError }
+        });
+    }
+
+    const visibleTiles = [...visibleKnown, ...otherTiles];
 
     return (
 
@@ -138,15 +163,15 @@ export default function AwsServicesCard() {
             ) : !inventory?.configured ? (
 
                 <p className="empty-state" style={{ textAlign: "left" }}>
-                    Enter your AWS credentials in Settings → Credentials → AWS to see EC2, ECR, VPC,
-                    S3, Lambda, Route 53, and SNS resources here.
+                    Enter your AWS credentials in Settings → Credentials → AWS to see every AWS
+                    service this access key has resources in, for the configured region.
                 </p>
 
-            ) : visibleServices.length === 0 ? (
+            ) : visibleTiles.length === 0 ? (
 
                 <p className="empty-state" style={{ textAlign: "left" }}>
-                    Nothing currently running in {inventory.region || "your AWS account"} across EC2,
-                    ECR, VPC, S3, Lambda, Route 53, or SNS.
+                    Nothing currently running in {inventory.region || "your AWS account"} across any
+                    AWS service this access key can see.
                 </p>
 
             ) : (
@@ -160,12 +185,12 @@ export default function AwsServicesCard() {
 
                 <div className="aws-service-grid">
 
-                    {visibleServices.map((service) => (
+                    {visibleTiles.map((tile) => (
 
                         <AwsServiceTile
-                            key={service.key}
-                            label={service.label}
-                            status={inventory[service.key]}
+                            key={tile.key}
+                            label={tile.label}
+                            status={tile.status}
                         />
 
                     ))}
