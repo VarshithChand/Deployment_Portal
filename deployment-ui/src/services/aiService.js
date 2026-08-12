@@ -1,12 +1,10 @@
 import api from "../api/aiApi";
 
-// The frontend still displays the full visible transcript locally (see
-// DeploymentCopilot.jsx) but only ever sends the NEW message plus the
-// prior turn's interactionId - Gemini's Interactions API resolves the
-// actual conversation history server-side from that ID (see
-// GeminiService), so there's nothing to resend. previousInteractionId is
-// null/undefined for the first message in a conversation.
-export const sendCopilotMessage = async (message, previousInteractionId, context) => {
-    const response = await api.post("/chat", { message, previousInteractionId, context });
+// messages: [{ role: "user" | "model", content: string }, ...] - the
+// frontend holds the full visible transcript (see DeploymentCopilot.jsx)
+// and sends it back each turn; the backend keeps no chat history of its
+// own (section 8/23 of the Deployment Copilot spec).
+export const sendCopilotMessage = async (messages, context) => {
+    const response = await api.post("/chat", { messages, context });
     return response.data;
 };
