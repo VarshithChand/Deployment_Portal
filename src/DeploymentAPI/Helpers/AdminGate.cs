@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using DeploymentAPI.DTOs;
 using DeploymentAPI.Services;
 using Microsoft.AspNetCore.Mvc;
@@ -119,5 +120,56 @@ public static class AdminGate
 
         return login != null
             && view.AdminGitHubUsernames.Any(u => string.Equals(u, login, StringComparison.OrdinalIgnoreCase));
+    }
+
+    // Database Management is deliberately restricted to one specific GitHub
+    // identity, not "anyone on the general AdminGitHubUsernames allowlist" —
+    // that's an explicit, standalone requirement (a second, narrower gate on
+    // top of AdminGate's usual admin check), not a stand-in for it. Every
+    // other admin-only feature in this portal stays on the regular allowlist.
+    private const string SuperAdminLogin = "VarshithChand";
+
+    // Resolves the caller's real GitHub username the same way the rest of
+    // AdminGate does it in two different places (DenyUnlessAdminAsync's PAT
+    // fallback, IsAdminViaPersonalAccessTokenAsync) — OAuth login first (see
+    // AuthService: ClaimTypes.Name holds the raw GitHub "login" field), then
+    // the configured Personal Access Token's owner. Pulled out once here so
+    // the super-admin check below doesn't need to duplicate either path.
+    public static async Task<string?> ResolveCallerLoginAsync(ControllerBase controller)
+    {
+        if (controller.User.Identity?.IsAuthenticated == true)
+        {
+            var claimLogin = controller.User.FindFirst(ClaimTypes.Name)?.Value;
+
+            if (!string.IsNullOrWhiteSpace(claimLogin))
+                return claimLogin;
+        }
+
+        var auth = controller.HttpContext.RequestServices.GetRequiredService<GitHubAuthService>();
+        return await auth.GetAuthenticatedLoginAsync();
+    }
+
+    public static async Task<bool> IsSuperAdminAsync(ControllerBase controller)
+    {
+        var login = await ResolveCallerLoginAsync(controller);
+        return login != null && string.Equals(login, SuperAdminLogin, StringComparison.OrdinalIgnoreCase);
+    }
+
+    // Same CSRF guard as DenyUnlessAdminAsync (see HasSessionHeader) plus the
+    // single-identity check above — used for every Database Management
+    // endpoint instead of the regular DenyUnlessAdminAsync, since being on
+    // the general admin allowlist is explicitly NOT enough here.
+    public static async Task<IActionResult?> DenyUnlessSuperAdminAsync(ControllerBase controller, string action)
+    {
+        if (!HasSessionHeader(controller))
+            return controller.StatusCode(403, new { message = "Missing required request header." });
+
+        if (await IsSuperAdminAsync(controller))
+            return null;
+
+        return controller.StatusCode(403, new
+        {
+            message = $"Database management is restricted to a single administrator account. You are not authorized to {action}."
+        });
     }
 }

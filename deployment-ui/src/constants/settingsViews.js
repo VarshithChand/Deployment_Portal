@@ -2,7 +2,7 @@
 // pulled out to its own file (rather than only living inside Settings.jsx)
 // so HeaderSearch can list every sub-page as its own searchable result
 // without a layout component reaching into a page component's internals.
-export const VIEWS = ["hub", "credentials", "activity-log", "access-levels", "branches", "sidebar-access", "smoke-tests", "external-apis", "environments", "appearance"];
+export const VIEWS = ["hub", "credentials", "activity-log", "access-levels", "branches", "sidebar-access", "smoke-tests", "external-apis", "environments", "appearance", "database"];
 
 // Every one of these requires Admin server-side (LogsController,
 // SmokeTestController, ExternalHealthController, and the /sidebar/*
@@ -15,6 +15,13 @@ export const VIEWS = ["hub", "credentials", "activity-log", "access-levels", "br
 // its edit controls for non-admins rather than hiding the whole page.
 export const ADMIN_ONLY_VIEWS = new Set(["sidebar-access", "activity-log", "smoke-tests", "external-apis"]);
 
+// Restricted to the single GitHub identity Database Management is locked to
+// (see AdminGate.DenyUnlessSuperAdminAsync) - a strictly narrower gate than
+// ADMIN_ONLY_VIEWS above, which every general admin passes. The backend
+// enforces the real 403 on every api/database/* call regardless of this -
+// this only decides whether Settings shows/keeps the tile and sub-page.
+export const SUPER_ADMIN_ONLY_VIEWS = new Set(["database"]);
+
 export const VIEW_TITLES = {
     credentials: "Credentials",
     "activity-log": "Activity Log",
@@ -24,5 +31,6 @@ export const VIEW_TITLES = {
     "smoke-tests": "Smoke Tests",
     "external-apis": "External APIs",
     environments: "Environments",
-    appearance: "Appearance"
+    appearance: "Appearance",
+    database: "Database"
 };

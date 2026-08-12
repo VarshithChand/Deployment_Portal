@@ -115,6 +115,10 @@ builder.Services.AddScoped<GitHubApiService>();
 builder.Services.AddScoped<DeploymentService>();
 builder.Services.AddScoped<NotificationService>();
 builder.Services.AddScoped<SettingsService>();
+// Scoped (not Singleton) because it depends on SettingsService, itself
+// Scoped — reads that service's already-parsed DATABASE_URL connection
+// string rather than re-parsing it.
+builder.Services.AddScoped<DatabaseManagementService>();
 builder.Services.AddScoped<AuthService>();
 builder.Services.AddScoped<SonarApiService>();
 builder.Services.AddScoped<SmokeTestService>();

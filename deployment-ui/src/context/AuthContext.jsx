@@ -95,6 +95,14 @@ export default function AuthProvider({ children }) {
     // Sidebar Access.
     const [isAdminSession, setIsAdminSession] = useState(false);
 
+    // True only for the single GitHub identity Database Management is
+    // restricted to (see AdminGate.DenyUnlessSuperAdminAsync) — a strictly
+    // narrower check than isAdminSession above. Only ever used to decide
+    // whether to show the Database tile/nav entry; the real restriction is
+    // enforced server-side on every api/database/* endpoint regardless of
+    // what this says.
+    const [isSuperAdminSession, setIsSuperAdminSession] = useState(false);
+
     // False until refreshOauthStatus's first call resolves. isAdminSession
     // starts false too, but that's indistinguishable from "checked, and
     // this session isn't admin" — a route guard reacting to isAdminSession
@@ -136,6 +144,7 @@ export default function AuthProvider({ children }) {
             );
 
             setIsAdminSession(!!settings.isAdminSession);
+            setIsSuperAdminSession(!!settings.isSuperAdminSession);
 
             const hasToken = !!myGitHub.gitHubTokenConfigured;
             setGithubTokenConfigured(hasToken);
@@ -210,7 +219,7 @@ export default function AuthProvider({ children }) {
 
     return (
 
-        <AuthContext.Provider value={{ user, loading, login, logout, refresh, oauthConfigured, githubTokenConfigured, githubRepoConfigured, tokenOwner, canApproveReleases: !!tokenOwner?.canApprove, isAdminSession, oauthStatusChecked, refreshOauthStatus, awsIdentityLabel, pinConfigured }}>
+        <AuthContext.Provider value={{ user, loading, login, logout, refresh, oauthConfigured, githubTokenConfigured, githubRepoConfigured, tokenOwner, canApproveReleases: !!tokenOwner?.canApprove, isAdminSession, isSuperAdminSession, oauthStatusChecked, refreshOauthStatus, awsIdentityLabel, pinConfigured }}>
 
             {children}
 

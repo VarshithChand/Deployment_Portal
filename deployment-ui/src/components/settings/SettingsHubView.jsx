@@ -1,7 +1,7 @@
 // Pulled out of Settings.jsx's "hub" view - part of the same
 // cognitive-complexity cleanup as CredentialsView/SidebarAccessView/
 // ActivityLogView.
-export default function SettingsHubView({ isAdmin, setView, handleClearAll, clearingAll }) {
+export default function SettingsHubView({ isAdmin, isSuperAdmin, setView, handleClearAll, clearingAll }) {
 
     return (
 
@@ -96,6 +96,18 @@ export default function SettingsHubView({ isAdmin, setView, handleClearAll, clea
                     plus light/dark. Saved to your own browser, nobody else's view changes.
                 </p>
             </button>
+
+            {isSuperAdmin && (
+
+                <button type="button" className="settings-hub-tile" onClick={() => setView("database")}>
+                    <h2>Database</h2>
+                    <p>
+                        Inspect the live PostgreSQL database — tables, columns, indexes, and rows —
+                        and make structured changes. Restricted to a single administrator account.
+                    </p>
+                </button>
+
+            )}
 
         </div>
 

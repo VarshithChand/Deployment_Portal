@@ -41,6 +41,7 @@ public class SettingsController : ControllerBase
             || await AdminGate.IsAdminViaPersonalAccessTokenAsync(this, view);
 
         view.IsAdminSession = isAdmin;
+        view.IsSuperAdminSession = await AdminGate.IsSuperAdminAsync(this);
 
         // The admin allowlist is only needed by an admin editing it, or
         // during bootstrap when it's empty anyway — showing the real

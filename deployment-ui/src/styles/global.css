@@ -4150,6 +4150,38 @@ textarea{
 
 }
 
+/* Settings -> Database (create table / add-row / edit-row dialogs) */
+.db-dialog-wide{
+    max-width:640px;
+}
+
+.db-column-row{
+    display:grid;
+    grid-template-columns:1.4fr 1fr auto auto 1fr auto;
+    gap:8px;
+    align-items:center;
+    margin-bottom:8px;
+}
+
+.db-column-checkbox{
+    display:flex;
+    align-items:center;
+    gap:6px;
+    font-size:.85rem;
+    color:var(--text-muted);
+    white-space:nowrap;
+}
+
+.db-column-checkbox input{
+    margin:0;
+}
+
+@media (max-width:720px){
+    .db-column-row{
+        grid-template-columns:1fr 1fr;
+    }
+}
+
 @keyframes overlay-in{
     from{ opacity:0; }
     to{ opacity:1; }

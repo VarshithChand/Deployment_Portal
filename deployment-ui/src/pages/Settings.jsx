@@ -21,7 +21,7 @@ import {
 import { getAccountRepositories } from "../services/githubService";
 import { getLogs } from "../services/logsService";
 import { SIDEBAR_TABS } from "../constants/sidebarAccess";
-import { VIEWS, VIEW_TITLES, ADMIN_ONLY_VIEWS } from "../constants/settingsViews";
+import { VIEWS, VIEW_TITLES, ADMIN_ONLY_VIEWS, SUPER_ADMIN_ONLY_VIEWS } from "../constants/settingsViews";
 import isValidGitHubUsername from "../utils/githubUsername";
 
 import LoadingSpinner from "../components/LoadingSpinner";
@@ -36,6 +36,7 @@ import SmokeTestsView from "../components/settings/SmokeTestsView";
 import ExternalApisView from "../components/settings/ExternalApisView";
 import AppearanceView from "../components/settings/AppearanceView";
 import EnvironmentsAdminView from "../components/settings/EnvironmentsAdminView";
+import DatabaseView from "../components/settings/DatabaseView";
 import useToast from "../hooks/useToast";
 import useConfirm from "../hooks/useConfirm";
 import useAuth from "../hooks/useAuth";
@@ -67,7 +68,7 @@ export default function Settings() {
 
     const toast = useToast();
     const { confirm, dialog } = useConfirm();
-    const { user, isAdminSession, oauthStatusChecked, refreshOauthStatus } = useAuth();
+    const { user, isAdminSession, isSuperAdminSession, oauthStatusChecked, refreshOauthStatus } = useAuth();
     const {
         pendingRepoUrl, setPendingRepoUrl,
         pendingSettingsView, setPendingSettingsView,
@@ -228,10 +229,21 @@ export default function Settings() {
 
         if (ADMIN_ONLY_VIEWS.has(view) && oauthStatusChecked && !isAdmin) {
             setView("hub");
+            return;
+        }
+
+        // Database is restricted to one specific GitHub identity, not the
+        // general admin allowlist - see SUPER_ADMIN_ONLY_VIEWS/AdminGate.
+        // DenyUnlessSuperAdminAsync. Checked separately from the isAdmin
+        // bounce above since a general admin who isn't that identity would
+        // otherwise pass the isAdmin check and land on a page that just
+        // 403s on every call.
+        if (SUPER_ADMIN_ONLY_VIEWS.has(view) && oauthStatusChecked && !isSuperAdminSession) {
+            setView("hub");
         }
 
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [view, isAdmin, oauthStatusChecked]);
+    }, [view, isAdmin, isSuperAdminSession, oauthStatusChecked]);
 
     useEffect(() => {
 
@@ -910,6 +922,7 @@ export default function Settings() {
 
                 <SettingsHubView
                     isAdmin={isAdmin}
+                    isSuperAdmin={isSuperAdminSession}
                     setView={setView}
                     handleClearAll={handleClearAll}
                     clearingAll={clearingAll}
@@ -1025,6 +1038,12 @@ export default function Settings() {
             {view === "appearance" && (
 
                 <AppearanceView />
+
+            )}
+
+            {view === "database" && isSuperAdminSession && (
+
+                <DatabaseView />
 
             )}
 

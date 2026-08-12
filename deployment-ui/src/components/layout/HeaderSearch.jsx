@@ -5,7 +5,7 @@ import useNavigation from "../../hooks/useNavigation";
 import parseRepoUrl from "../../utils/parseRepoUrl";
 import isValidGitHubUsername from "../../utils/githubUsername";
 import { FLAT_TABS, GATED_TABS, ADMIN_ONLY_TABS } from "./Sidebar";
-import { VIEWS, VIEW_TITLES, ADMIN_ONLY_VIEWS } from "../../constants/settingsViews";
+import { VIEWS, VIEW_TITLES, ADMIN_ONLY_VIEWS, SUPER_ADMIN_ONLY_VIEWS } from "../../constants/settingsViews";
 
 function SearchIcon() {
 
@@ -47,7 +47,7 @@ const SETTINGS_SEARCH_VIEWS = VIEWS.filter((v) => v !== "hub");
 // already does, rather than maintaining a second copy of either.
 export default function HeaderSearch() {
 
-    const { user, canApproveReleases, isAdminSession, oauthStatusChecked } = useAuth();
+    const { user, canApproveReleases, isAdminSession, isSuperAdminSession, oauthStatusChecked } = useAuth();
     const { setTab, sidebarAccess, goToSettingsView, goToSettingsWithRepo } = useNavigation();
 
     const [query, setQuery] = useState("");
@@ -91,6 +91,7 @@ export default function HeaderSearch() {
         // exists that Settings would immediately bounce back to hub anyway.
         const settingsResults = SETTINGS_SEARCH_VIEWS
             .filter((v) => !ADMIN_ONLY_VIEWS.has(v) || (oauthStatusChecked && isSettingsAdmin))
+            .filter((v) => !SUPER_ADMIN_ONLY_VIEWS.has(v) || (oauthStatusChecked && isSuperAdminSession))
             .filter((v) => (VIEW_TITLES[v] || v).toLowerCase().includes(trimmed))
             .map((v) => ({
                 type: "settings-view",

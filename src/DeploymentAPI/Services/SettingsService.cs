@@ -116,6 +116,12 @@ public class SettingsService
         _tableEnsured = true;
     }
 
+    // Reused by DatabaseManagementService instead of re-parsing DATABASE_URL
+    // a second time — null when the app is running against the local JSON
+    // file (no DATABASE_URL configured), which is exactly when Database
+    // Management has nothing to show anyway.
+    public string? GetDatabaseConnectionString() => _connectionString;
+
     public async Task<SettingsViewDto> GetViewAsync()
     {
         var root = await ReadRootAsync();

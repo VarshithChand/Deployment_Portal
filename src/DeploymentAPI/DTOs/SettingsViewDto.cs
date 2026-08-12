@@ -31,4 +31,12 @@ public class SettingsViewDto
     // SettingsController.Get(), never derived from AdminGitHubUsernames on
     // the frontend, since that list itself is blanked out for non-admins.
     public bool IsAdminSession { get; set; }
+
+    // Whether the CURRENT caller is specifically the one GitHub identity
+    // Database Management is restricted to (see AdminGate.
+    // DenyUnlessSuperAdminAsync) — deliberately separate from IsAdminSession,
+    // since being a general admin is NOT sufficient for this one feature.
+    // Frontend-side, this only controls whether the Database tile/nav entry
+    // is shown; the backend enforces the real restriction on every endpoint.
+    public bool IsSuperAdminSession { get; set; }
 }
