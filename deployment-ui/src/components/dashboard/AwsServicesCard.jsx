@@ -16,24 +16,12 @@ const SERVICES = [
     { key: "sns", label: "SNS Topics" }
 ];
 
-// One AWS service's tile — status is undefined while the whole inventory
-// is still loading, or the per-service AwsServiceStatusDto (found/error/
-// count/items) once it's back. Each service fails independently (a
-// missing IAM permission on just one of the six shouldn't blank the rest).
+// A tile only ever renders for a service that's actually got something
+// running (status.count > 0) or one that errored trying to check (still
+// worth surfacing — that's a real problem, not "nothing running"). A
+// clean zero-count service is deliberately not a tile at all; see
+// hasSomethingToShow below for the empty-account case.
 function AwsServiceTile({ label, status }) {
-
-    if (!status) {
-
-        return (
-
-            <div className="aws-service-tile">
-                <div className="aws-service-tile-header"><span>{label}</span></div>
-                <p className="field-hint" style={{ margin: 0 }}>Checking...</p>
-            </div>
-
-        );
-
-    }
 
     if (status.error) {
 
@@ -60,37 +48,27 @@ function AwsServiceTile({ label, status }) {
 
             <div className="aws-service-tile-header">
                 <span>{label}</span>
-                <span className={`badge ${status.count > 0 ? "badge-success" : "badge-secondary"}`}>
-                    {status.count}
-                </span>
+                <span className="badge badge-success">{status.count}</span>
             </div>
 
-            {status.count === 0 ? (
+            <ul className="aws-service-tile-list">
 
-                <p className="field-hint" style={{ margin: 0 }}>None found</p>
+                {status.items.slice(0, MAX_ITEMS_SHOWN).map((item, index) => (
 
-            ) : (
+                    <li key={index}>
+                        <span className="aws-service-tile-item-name">{item.name}</span>
+                        {item.detail && (
+                            <span className="aws-service-tile-item-detail">{item.detail}</span>
+                        )}
+                    </li>
 
-                <ul className="aws-service-tile-list">
+                ))}
 
-                    {status.items.slice(0, MAX_ITEMS_SHOWN).map((item, index) => (
+                {status.count > MAX_ITEMS_SHOWN && (
+                    <li className="aws-service-tile-more">+{status.count - MAX_ITEMS_SHOWN} more</li>
+                )}
 
-                        <li key={index}>
-                            <span className="aws-service-tile-item-name">{item.name}</span>
-                            {item.detail && (
-                                <span className="aws-service-tile-item-detail">{item.detail}</span>
-                            )}
-                        </li>
-
-                    ))}
-
-                    {status.count > MAX_ITEMS_SHOWN && (
-                        <li className="aws-service-tile-more">+{status.count - MAX_ITEMS_SHOWN} more</li>
-                    )}
-
-                </ul>
-
-            )}
+            </ul>
 
         </div>
 
@@ -132,6 +110,18 @@ export default function AwsServicesCard() {
         return null;
     }
 
+    // "Running services" only — a service sitting at zero isn't shown at
+    // all, rather than rendering six tiles where most just say "0/None
+    // found". An error still renders (that's "couldn't check", not
+    // "nothing running") since silently hiding it would read as "all clear"
+    // when it might not be.
+    const visibleServices = inventory?.configured
+        ? SERVICES.filter((service) => {
+            const status = inventory[service.key];
+            return status && (status.error || status.count > 0);
+        })
+        : [];
+
     return (
 
         <div className="card">
@@ -151,6 +141,13 @@ export default function AwsServicesCard() {
                     Lambda, Route 53, and SNS resources here.
                 </p>
 
+            ) : visibleServices.length === 0 ? (
+
+                <p className="empty-state" style={{ textAlign: "left" }}>
+                    Nothing currently running in {inventory.region || "your AWS account"} across EC2,
+                    VPC, S3, Lambda, Route 53, or SNS.
+                </p>
+
             ) : (
 
                 <>
@@ -162,7 +159,7 @@ export default function AwsServicesCard() {
 
                 <div className="aws-service-grid">
 
-                    {SERVICES.map((service) => (
+                    {visibleServices.map((service) => (
 
                         <AwsServiceTile
                             key={service.key}
