@@ -187,6 +187,7 @@ export default function DeploymentCopilot() {
                         aria-modal="true"
                         aria-labelledby="copilot-title"
                         onClick={(e) => e.stopPropagation()}
+                        onKeyDown={(e) => e.stopPropagation()}
                     >
 
                         <div className="copilot-drawer-header">

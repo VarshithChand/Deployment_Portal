@@ -130,22 +130,22 @@ public class AiController : ControllerBase
         if (context == null)
             return SystemInstructionBase;
 
-        var parts = new List<string>();
-
-        void Add(string label, string? value)
+        var fields = new (string Label, string? Value)[]
         {
-            if (!string.IsNullOrWhiteSpace(value))
-                parts.Add($"{label}: {value}");
-        }
+            ("currentTab", context.CurrentTab),
+            ("currentView", context.CurrentView),
+            ("selectedService", context.SelectedService),
+            ("selectedCluster", context.SelectedCluster),
+            ("selectedEcsService", context.SelectedEcsService),
+            ("selectedEcrRepo", context.SelectedRepo),
+            ("selectedDatabaseTable", context.SelectedTable),
+            ("selectedEnvironment", context.SelectedEnvironment)
+        };
 
-        Add("currentTab", context.CurrentTab);
-        Add("currentView", context.CurrentView);
-        Add("selectedService", context.SelectedService);
-        Add("selectedCluster", context.SelectedCluster);
-        Add("selectedEcsService", context.SelectedEcsService);
-        Add("selectedEcrRepo", context.SelectedRepo);
-        Add("selectedDatabaseTable", context.SelectedTable);
-        Add("selectedEnvironment", context.SelectedEnvironment);
+        var parts = fields
+            .Where(f => !string.IsNullOrWhiteSpace(f.Value))
+            .Select(f => $"{f.Label}: {f.Value}")
+            .ToList();
 
         if (parts.Count == 0)
             return SystemInstructionBase;
