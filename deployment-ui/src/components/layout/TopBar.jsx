@@ -11,6 +11,7 @@ import HeaderSearch from "./HeaderSearch";
 import { getRateLimit } from "../../services/githubService";
 import { getPullRequestCount } from "../../services/pullRequestsService";
 import { getMyGitHubSettings } from "../../services/settingsService";
+import { setPortalLocked } from "../../utils/portalLock";
 
 // A plain three-bar glyph, same stroke style as Sidebar's ChevronIcon —
 // only ever shown below the 768px breakpoint (see global.css), where
@@ -25,6 +26,17 @@ function MenuIcon() {
     );
 }
 
+// A plain padlock — filled body, shackle as an open arc so it reads as
+// "lock" without needing a second closed-vs-open variant.
+function LockIcon() {
+    return (
+        <svg width="16" height="16" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+            <rect x="4.5" y="9" width="11" height="8" rx="1.8" stroke="currentColor" strokeWidth="1.6" />
+            <path d="M7 9V6.5a3 3 0 0 1 6 0V9" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+        </svg>
+    );
+}
+
 // The slim top strip: brand mark on the left, account/rate-limit controls
 // on the right. Primary navigation and the theme toggle both live in
 // Sidebar — on tablet/desktop it's a persistent rail with no need for a
@@ -32,7 +44,10 @@ function MenuIcon() {
 // menu button opens (mobile-nav-toggle is hidden via CSS at wider widths).
 export default function TopBar() {
 
-    const { user, loading, login, logout, oauthConfigured, tokenOwner, canApproveReleases, isAdminSession, awsIdentityLabel } = useAuth();
+    const {
+        user, loading, login, logout, oauthConfigured, tokenOwner,
+        canApproveReleases, isAdminSession, awsIdentityLabel, pinConfigured
+    } = useAuth();
     const { setTab, mobileNavOpen, setMobileNavOpen } = useNavigation();
 
     const [rateLimit, setRateLimit] = useState(null);
@@ -98,6 +113,17 @@ export default function TopBar() {
 
     usePolling(loadPullRequestCount, 30000);
 
+    // A reload (not just flipping in-memory state) is deliberate — it's
+    // the same "set a flag, then reload" pattern the rest of the app
+    // already uses for a repo switch/settings save, and it's what lets
+    // PeriodicSignOutMonitor's own locked-state-from-localStorage init (see
+    // utils/portalLock) pick this up immediately as it remounts, without
+    // needing a second, separate way to signal "lock" into that component.
+    function handleLockNow() {
+        setPortalLocked();
+        window.location.reload();
+    }
+
     return (
 
         <header className="top-bar">
@@ -140,6 +166,20 @@ export default function TopBar() {
                         <span className="cloud-user-badge-provider">AWS</span>
                         {awsIdentityLabel}
                     </span>
+
+                )}
+
+                {pinConfigured && (
+
+                    <button
+                        type="button"
+                        className="lock-portal-btn"
+                        onClick={handleLockNow}
+                        title="Lock the portal — your PIN will be required to continue"
+                        aria-label="Lock the portal"
+                    >
+                        <LockIcon />
+                    </button>
 
                 )}
 

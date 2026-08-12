@@ -2222,6 +2222,46 @@ textarea{
 
 }
 
+.lock-portal-btn{
+
+    display:inline-flex;
+
+    align-items:center;
+
+    justify-content:center;
+
+    flex-shrink:0;
+
+    width:34px;
+
+    height:34px;
+
+    padding:0;
+
+    border:1px solid var(--border);
+
+    border-radius:50%;
+
+    background:var(--card-bg);
+
+    color:var(--text-muted);
+
+    cursor:pointer;
+
+    transition:background-color .15s ease, color .15s ease, transform .15s ease;
+
+}
+
+.lock-portal-btn:hover{
+
+    background:var(--table-row-hover);
+
+    color:var(--heading-accent);
+
+    transform:translateY(-2px);
+
+}
+
 .activity-bell{
 
     position:relative;

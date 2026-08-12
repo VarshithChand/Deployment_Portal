@@ -637,9 +637,17 @@ public class SettingsService
         if (root["UserGcpCredentials"] is JObject gcpUsers)
             gcpUsers.Remove(callerKey);
 
+        // The screen-lock PIN (see SetPinAsync/VerifyPinAsync below) is part
+        // of this same "your own security settings" scope - PinLockScreen's
+        // "Forgot your PIN?" link calls this same self-clear, and leaving
+        // the PIN in place would mean "forgot it" still locks the next
+        // visit behind the very PIN that was just declared forgotten.
+        if (root["SecurityPins"] is JObject pins)
+            pins.Remove(callerKey);
+
         await WriteRootAsync(root);
 
-        _log.LogInfo("Settings", "One visitor's own credentials cleared (GitHub/AWS/Azure/GCP).");
+        _log.LogInfo("Settings", "One visitor's own credentials cleared (GitHub/AWS/Azure/GCP/screen-lock PIN).");
 
         return BuildView(root);
     }

@@ -76,8 +76,8 @@ export default function PinLockScreen({ onUnlock }) {
                 </h2>
 
                 <p className="field-hint" style={{ marginTop: 0 }}>
-                    Your 10-minute check-in went unanswered. Enter your PIN to keep going —
-                    your GitHub/AWS/Azure/GCP credentials are untouched, still saved.
+                    Enter your PIN to keep going — your GitHub/AWS/Azure/GCP credentials are
+                    untouched, still saved.
                 </p>
 
                 <form onSubmit={handleSubmit}>

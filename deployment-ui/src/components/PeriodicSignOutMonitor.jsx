@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 
 import useAuth from "../hooks/useAuth";
 import performSelfClear from "../utils/performSelfClear";
+import { isPortalLocked, setPortalLocked, clearPortalLocked } from "../utils/portalLock";
 import PinLockScreen from "./PinLockScreen";
 
 const PROMPT_INTERVAL_MS = 10 * 60 * 1000;
@@ -28,7 +29,13 @@ export default function PeriodicSignOutMonitor() {
 
     const [warning, setWarning] = useState(false);
     const [secondsLeft, setSecondsLeft] = useState(WARNING_SECONDS);
-    const [locked, setLocked] = useState(false);
+
+    // Read from localStorage (see utils/portalLock), not just started as
+    // false - a lock engaged before a hard refresh (Ctrl+Shift+R) or a
+    // closed/reopened tab needs to still be locked the moment this
+    // component remounts, not reset back to unlocked along with every
+    // other piece of component state.
+    const [locked, setLocked] = useState(isPortalLocked);
 
     const timerRef = useRef(null);
 
@@ -47,9 +54,16 @@ export default function PeriodicSignOutMonitor() {
 
         if (!active) {
 
+            // Deliberately doesn't touch `locked` here - active flips false
+            // for two very different reasons (no session worth protecting
+            // at all, OR the auth check simply hasn't resolved yet on a
+            // fresh reload - see oauthStatusChecked elsewhere) and an
+            // engaged lock shouldn't silently lift just because this fired
+            // during that resolving window. It only ever lifts via a
+            // correct PIN (handleUnlocked) or a full data wipe
+            // (performSelfClear, which also clears the persisted flag).
             if (timerRef.current) clearTimeout(timerRef.current);
             setWarning(false);
-            setLocked(false);
             return;
 
         }
@@ -82,6 +96,7 @@ export default function PeriodicSignOutMonitor() {
         setWarning(false);
 
         if (pinConfigured) {
+            setPortalLocked();
             setLocked(true);
         }
         else {
@@ -108,20 +123,22 @@ export default function PeriodicSignOutMonitor() {
 
     function handleUnlocked() {
 
+        clearPortalLocked();
         setLocked(false);
         schedulePrompt();
 
     }
 
-    if (!active) {
-        return null;
-    }
-
+    // Checked before `active` - an engaged lock (manual or via the 10-
+    // minute prompt) stays up regardless of whether a session still looks
+    // "active" at this exact instant, which is also what makes it survive
+    // the brief window right after a hard refresh where active hasn't
+    // resolved to true yet.
     if (locked) {
         return <PinLockScreen onUnlock={handleUnlocked} />;
     }
 
-    if (!warning) {
+    if (!active || !warning) {
         return null;
     }
 
