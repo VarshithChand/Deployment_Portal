@@ -25,17 +25,16 @@ const MODES = [
 // A convenience picker, not a restriction — GEMINI_MODEL is still whatever
 // string ends up saved (see SettingsService.SaveAiAssistantAsync), so
 // picking "Custom / other model" below still works for anything Google
-// adds later. All of these are free-tier-eligible on Google AI Studio as
-// of this writing; Google can retire or rename one at any time, which is
-// exactly why free text always stays available as a fallback rather than
-// this being the only way to set GEMINI_MODEL.
+// adds or retires later. Google fully shut down the entire 2.0 Flash line
+// (gemini-2.0-flash/-lite and their -001 variants) on 2026-06-01 - the
+// current free-tier models are the 2.5 generation below. Note:
+// gemini-2.5-flash itself has an announced 2026-10-16 shutdown date
+// (replacement: gemini-3.5-flash, paid-only as of this writing) - if this
+// list is out of date by the time you're reading it, use "Custom" with
+// whatever model ai.google.dev/gemini-api/docs/models currently lists.
 const GEMINI_MODEL_OPTIONS = [
-    { value: "gemini-2.5-flash", label: "Gemini 2.5 Flash — balanced speed/quality" },
-    { value: "gemini-2.5-flash-lite", label: "Gemini 2.5 Flash-Lite — fastest, lightweight" },
-    { value: "gemini-2.0-flash", label: "Gemini 2.0 Flash — recommended, widely available" },
-    { value: "gemini-2.0-flash-lite", label: "Gemini 2.0 Flash-Lite — fast, lightweight" },
-    { value: "gemini-1.5-flash", label: "Gemini 1.5 Flash" },
-    { value: "gemini-1.5-flash-8b", label: "Gemini 1.5 Flash-8B — smallest, lightweight" }
+    { value: "gemini-2.5-flash", label: "Gemini 2.5 Flash — recommended, free tier" },
+    { value: "gemini-2.5-flash-lite", label: "Gemini 2.5 Flash-Lite — fastest, free tier" }
 ];
 
 const CUSTOM_MODEL_VALUE = "__custom__";
