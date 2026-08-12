@@ -22,6 +22,24 @@ const MODES = [
     { key: "ai", label: "AI Assistant" }
 ];
 
+// A convenience picker, not a restriction — GEMINI_MODEL is still whatever
+// string ends up saved (see SettingsService.SaveAiAssistantAsync), so
+// picking "Custom / other model" below still works for anything Google
+// adds later. All of these are free-tier-eligible on Google AI Studio as
+// of this writing; Google can retire or rename one at any time, which is
+// exactly why free text always stays available as a fallback rather than
+// this being the only way to set GEMINI_MODEL.
+const GEMINI_MODEL_OPTIONS = [
+    { value: "gemini-2.5-flash", label: "Gemini 2.5 Flash — balanced speed/quality" },
+    { value: "gemini-2.5-flash-lite", label: "Gemini 2.5 Flash-Lite — fastest, lightweight" },
+    { value: "gemini-2.0-flash", label: "Gemini 2.0 Flash — recommended, widely available" },
+    { value: "gemini-2.0-flash-lite", label: "Gemini 2.0 Flash-Lite — fast, lightweight" },
+    { value: "gemini-1.5-flash", label: "Gemini 1.5 Flash" },
+    { value: "gemini-1.5-flash-8b", label: "Gemini 1.5 Flash-8B — smallest, lightweight" }
+];
+
+const CUSTOM_MODEL_VALUE = "__custom__";
+
 // Pulled out of Settings.jsx's "credentials" view - its own nested
 // loading/repo-preview conditionals were the single largest contributor
 // to that page's cognitive complexity. Split into one "login mode" per
@@ -432,15 +450,40 @@ export default function CredentialsView({
             </div>
 
             <div className="form-group">
+
                 <label>Gemini Model</label>
-                <ClearableInput
-                    placeholder="e.g. gemini-2.0-flash"
-                    value={aiModel}
-                    onChange={(e) => setAiModel(e.target.value)}
-                    onClear={() => setAiModel("")}
-                    autoComplete="off"
-                    name="ai-model"
-                />
+
+                <select
+                    className="form-control"
+                    value={GEMINI_MODEL_OPTIONS.some((o) => o.value === aiModel) ? aiModel : CUSTOM_MODEL_VALUE}
+                    onChange={(e) => setAiModel(e.target.value === CUSTOM_MODEL_VALUE ? "" : e.target.value)}
+                >
+                    {GEMINI_MODEL_OPTIONS.map((o) => (
+                        <option key={o.value} value={o.value}>{o.label}</option>
+                    ))}
+                    <option value={CUSTOM_MODEL_VALUE}>Custom / other model...</option>
+                </select>
+
+                {!GEMINI_MODEL_OPTIONS.some((o) => o.value === aiModel) && (
+
+                    <ClearableInput
+                        placeholder="e.g. gemini-2.5-pro"
+                        value={aiModel}
+                        onChange={(e) => setAiModel(e.target.value)}
+                        onClear={() => setAiModel("")}
+                        autoComplete="off"
+                        name="ai-model-custom"
+                        style={{ marginTop: "8px" }}
+                    />
+
+                )}
+
+                <p className="field-hint" style={{ marginTop: "6px" }}>
+                    Free-tier models on Google AI Studio — pick "Custom" to enter any other model
+                    name. The portal never assumes a specific model; whatever's saved here is what
+                    Deployment Copilot uses.
+                </p>
+
             </div>
 
             <div className="form-group">
