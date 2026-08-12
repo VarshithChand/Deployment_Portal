@@ -6,7 +6,6 @@ import PageLayout from "../components/layout/PageLayout";
 import AllRepositoriesCard from "../components/dashboard/AllRepositoriesCard";
 import AwsServicesCard from "../components/dashboard/AwsServicesCard";
 import EnvironmentsCard from "../components/dashboard/EnvironmentsCard";
-import PublicRepoLookup from "../components/dashboard/PublicRepoLookup";
 
 export default function Dashboard() {
 
@@ -47,10 +46,6 @@ export default function Dashboard() {
             <br />
 
             <EnvironmentsCard />
-
-            <br />
-
-            <PublicRepoLookup />
 
         </PageLayout>
 

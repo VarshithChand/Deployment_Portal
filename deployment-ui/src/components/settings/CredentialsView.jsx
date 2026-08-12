@@ -35,6 +35,7 @@ export default function CredentialsView({
     setGithubRepoUrl,
     repoPreviewLoading,
     repoPreview,
+    userRepoResults,
     isRateLimited,
     githubToken,
     setGithubToken,
@@ -121,6 +122,7 @@ export default function CredentialsView({
                     setGithubRepoUrl={setGithubRepoUrl}
                     repoPreviewLoading={repoPreviewLoading}
                     repoPreview={repoPreview}
+                    userRepoResults={userRepoResults}
                     isRateLimited={isRateLimited}
                     githubToken={githubToken}
                     setGithubToken={setGithubToken}

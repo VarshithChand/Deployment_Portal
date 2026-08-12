@@ -1,6 +1,102 @@
 import ComboBox from "../common/ComboBox";
 import ClearableInput from "../common/ClearableInput";
 import parseRepoUrl from "../../utils/parseRepoUrl";
+import isValidGitHubUsername from "../../utils/githubUsername";
+
+// A plain rounded rectangle with a spine down the left edge — the same
+// "repository" glyph SwitchRepositoryModal and AllRepositoriesCard each
+// already keep their own copy of; a fourth tiny duplicate here follows
+// that same established precedent rather than introducing a shared import.
+function RepoIcon() {
+
+    return (
+
+        <svg className="repo-picker-icon" width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+            <rect x="2.5" y="2.5" width="11" height="11" rx="1.5" stroke="currentColor" strokeWidth="1.3" />
+            <line x1="5.5" y1="2.5" x2="5.5" y2="13.5" stroke="currentColor" strokeWidth="1.3" />
+        </svg>
+
+    );
+
+}
+
+// Renders when the Repository URL field holds a bare GitHub username
+// instead of a specific repo (see Settings.jsx's debounced lookup effect) -
+// every public repository that username owns, pick one to fill the field
+// above with. The same "browse any public GitHub user's repos" capability
+// the old Dashboard "Public Repository Lookup" card had.
+function UserRepoResults({ userRepoResults, onPick }) {
+
+    if (!userRepoResults.found) {
+
+        return (
+            <p className="field-hint field-hint-bad">
+                {userRepoResults.error || "User not found."}
+            </p>
+        );
+
+    }
+
+    if (userRepoResults.repositories.length === 0) {
+
+        return (
+            <p className="field-hint">
+                {userRepoResults.username} has no public repositories.
+            </p>
+        );
+
+    }
+
+    return (
+
+        <>
+
+        <p className="field-hint">
+            {userRepoResults.repositories.length} public {userRepoResults.repositories.length === 1 ? "repository" : "repositories"} for {userRepoResults.username} — pick one:
+        </p>
+
+        <div className="repo-picker-grid">
+
+            {userRepoResults.repositories.map((repo) => (
+
+                <button
+                    type="button"
+                    key={repo.htmlUrl}
+                    className="repo-picker-card"
+                    onClick={() => onPick(repo.htmlUrl)}
+                >
+
+                    <div className="repo-picker-title">
+                        <RepoIcon />
+                        <span className="repo-picker-name">
+                            <span className="repo-picker-owner">{repo.owner}/</span>
+                            {repo.name}
+                        </span>
+                    </div>
+
+                    <div className="repo-picker-meta">
+
+                        <span className={`badge ${repo.private ? "badge-secondary" : "badge-info"}`}>
+                            {repo.private ? "Private" : "Public"}
+                        </span>
+
+                        <span className="badge badge-secondary">
+                            {repo.stars} {repo.stars === 1 ? "star" : "stars"}
+                        </span>
+
+                    </div>
+
+                </button>
+
+            ))}
+
+        </div>
+
+        </>
+
+    );
+
+}
 
 // Pulled out of CredentialsView - the repo-switcher/URL-validity/preview
 // nested ternaries here were the single largest contributor to that
@@ -13,6 +109,7 @@ export default function GitHubAccessSection({
     setGithubRepoUrl,
     repoPreviewLoading,
     repoPreview,
+    userRepoResults,
     isRateLimited,
     githubToken,
     setGithubToken,
@@ -62,9 +159,9 @@ export default function GitHubAccessSection({
         )}
 
         <div className="form-group">
-            <label>Repository URL</label>
+            <label>Repository URL or GitHub Username</label>
             <ClearableInput
-                placeholder="https://github.com/owner/repo"
+                placeholder="https://github.com/owner/repo or octocat"
                 value={githubRepoUrl}
                 onChange={(e) => setGithubRepoUrl(e.target.value)}
                 onClear={() => setGithubRepoUrl("")}
@@ -80,11 +177,17 @@ export default function GitHubAccessSection({
                         {" "}&middot; Repository: <strong>{parseRepoUrl(githubRepoUrl).repository}</strong>
                     </p>
 
+                ) : isValidGitHubUsername(githubRepoUrl.trim()) ? (
+
+                    <p className="field-hint field-hint-good">
+                        Looking up public repositories owned by <strong>{githubRepoUrl.trim()}</strong>...
+                    </p>
+
                 ) : (
 
                     <p className="field-hint field-hint-bad">
-                        Doesn't look like a GitHub repository URL yet — expecting something like
-                        https://github.com/owner/repo
+                        Doesn't look like a GitHub repository URL or username yet — expecting
+                        something like https://github.com/owner/repo, or just a username.
                     </p>
 
                 )
@@ -92,7 +195,7 @@ export default function GitHubAccessSection({
             )}
 
             {repoPreviewLoading && (
-                <p className="field-hint">Fetching repository details...</p>
+                <p className="field-hint">Fetching from GitHub...</p>
             )}
 
             {!repoPreviewLoading && repoPreview && (
@@ -130,6 +233,15 @@ export default function GitHubAccessSection({
                     </p>
 
                 )
+
+            )}
+
+            {!repoPreviewLoading && userRepoResults && (
+
+                <UserRepoResults
+                    userRepoResults={userRepoResults}
+                    onPick={setGithubRepoUrl}
+                />
 
             )}
         </div>

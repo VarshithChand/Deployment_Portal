@@ -15,11 +15,14 @@ import {
     clearUserSidebarAccess,
     clearSettings,
     clearMySettings,
-    previewGitHubRepository
+    previewGitHubRepository,
+    previewGitHubUserRepositories
 } from "../services/settingsService";
 import { getAccountRepositories } from "../services/githubService";
 import { getLogs } from "../services/logsService";
 import { SIDEBAR_TABS } from "../constants/sidebarAccess";
+import { VIEWS, VIEW_TITLES, ADMIN_ONLY_VIEWS } from "../constants/settingsViews";
+import isValidGitHubUsername from "../utils/githubUsername";
 
 import LoadingSpinner from "../components/LoadingSpinner";
 import PageLayout from "../components/layout/PageLayout";
@@ -40,34 +43,14 @@ import useNavigation from "../hooks/useNavigation";
 import usePagination from "../hooks/usePagination";
 import parseRepoUrl from "../utils/parseRepoUrl";
 
-const VIEWS = ["hub", "credentials", "activity-log", "access-levels", "branches", "sidebar-access", "smoke-tests", "external-apis", "environments", "appearance"];
-
-// Every one of these requires Admin server-side (LogsController,
-// SmokeTestController, ExternalHealthController, and the /sidebar/*
-// endpoints all run through AdminGate) - showing any of them to a
-// non-admin would just be an empty/failed page. "environments" is
-// deliberately NOT here: GET /api/environments has always been open to
-// any visitor (it's the same data the Dashboard card and Environments
-// page already show everyone) - only saving changes is admin-gated
-// server-side, which EnvironmentsAdminView enforces itself by disabling
-// its edit controls for non-admins rather than hiding the whole page.
-const ADMIN_ONLY_VIEWS = new Set(["sidebar-access", "activity-log", "smoke-tests", "external-apis"]);
+// VIEWS/VIEW_TITLES/ADMIN_ONLY_VIEWS live in constants/settingsViews.js -
+// shared with HeaderSearch, which lists every sub-page below as its own
+// searchable result using the exact same labels/admin-gating this page
+// itself uses.
 
 // SIDEBAR_TABS/SIDEBAR_STATES live in constants/sidebarAccess.js - shared
 // with the Services page's per-PAT-user access popup, which manages the
 // exact same restriction data from a different entry point.
-
-const VIEW_TITLES = {
-    credentials: "Credentials",
-    "activity-log": "Activity Log",
-    "access-levels": "Access Levels",
-    branches: "Branches",
-    "sidebar-access": "Sidebar Access",
-    "smoke-tests": "Smoke Tests",
-    "external-apis": "External APIs",
-    environments: "Environments",
-    appearance: "Appearance"
-};
 
 // Mirrors the same "?tab=" pattern NavigationContext uses for the top-level
 // tab, one level down — so reloading (or bookmarking) a Settings sub-page
@@ -85,7 +68,11 @@ export default function Settings() {
     const toast = useToast();
     const { confirm, dialog } = useConfirm();
     const { user, isAdminSession, oauthStatusChecked, refreshOauthStatus } = useAuth();
-    const { pendingRepoUrl, setPendingRepoUrl, refreshSidebarAccess } = useNavigation();
+    const {
+        pendingRepoUrl, setPendingRepoUrl,
+        pendingSettingsView, setPendingSettingsView,
+        refreshSidebarAccess
+    } = useNavigation();
 
     // Sidebar Access controls what every other visitor can even reach, so
     // unlike the rest of this page (visible to everyone, gated only on
@@ -140,6 +127,13 @@ export default function Settings() {
     // is saved, since listing "your repos" needs to know whose account.
     const [accountRepos, setAccountRepos] = useState([]);
     const [loadingAccountRepos, setLoadingAccountRepos] = useState(false);
+
+    // Set instead of repoPreview when the Repository URL field holds a bare
+    // GitHub username rather than a specific repo/URL - lets someone browse
+    // every public repo an arbitrary GitHub user owns and pick one, the same
+    // capability the old Dashboard "Public Repository Lookup" card had,
+    // folded into this field instead of living as its own page.
+    const [userRepoResults, setUserRepoResults] = useState(null);
 
     // Drives the highlighted "Generate a token" link below — GitHub's 60/hour
     // anonymous limit is the single most common reason someone lands here.
@@ -245,8 +239,9 @@ export default function Settings() {
 
             await load();
 
-            // Applied after load() so a repo carried over from the Public
-            // Repository Lookup card wins over whatever was already saved.
+            // Applied after load() so a repo/username carried over from
+            // HeaderSearch's GitHub result wins over whatever was already
+            // saved.
             if (pendingRepoUrl) {
                 setGithubRepoUrl(pendingRepoUrl);
                 setPendingRepoUrl(null);
@@ -258,6 +253,21 @@ export default function Settings() {
 
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
+
+    // Same "pendingX" hand-off shape as pendingRepoUrl/pendingEnvironmentName
+    // (see NavigationContext) - HeaderSearch's Settings sub-page results set
+    // this then switch to the Settings tab. A dedicated effect (not folded
+    // into the mount-only init() above) so it also works when Settings is
+    // already mounted and the user picks a different sub-page result.
+    useEffect(() => {
+
+        if (pendingSettingsView) {
+            setView(pendingSettingsView);
+            setPendingSettingsView(null);
+        }
+
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [pendingSettingsView]);
 
     // Only fetched once this browser actually has admin authority — the
     // endpoint itself is admin-gated, so trying earlier (e.g. before a PAT
@@ -382,10 +392,18 @@ export default function Settings() {
 
     useEffect(() => {
 
-        const parsed = parseRepoUrl(githubRepoUrl);
+        const trimmed = githubRepoUrl.trim();
+        const parsed = parseRepoUrl(trimmed);
 
-        if (!parsed) {
-            setRepoPreview(null);
+        // Not a full repo URL/owner-repo - if it at least looks like a bare
+        // GitHub username, fall through to the browse-their-repos lookup
+        // below instead of just giving up.
+        const asUsername = !parsed && isValidGitHubUsername(trimmed) ? trimmed : null;
+
+        setRepoPreview(null);
+        setUserRepoResults(null);
+
+        if (!parsed && !asUsername) {
             setRepoPreviewLoading(false);
             return;
         }
@@ -398,10 +416,23 @@ export default function Settings() {
 
             try {
 
-                const preview = await previewGitHubRepository(parsed.owner, parsed.repository);
+                if (parsed) {
 
-                if (!cancelled) {
-                    setRepoPreview(preview);
+                    const preview = await previewGitHubRepository(parsed.owner, parsed.repository);
+
+                    if (!cancelled) {
+                        setRepoPreview(preview);
+                    }
+
+                }
+                else {
+
+                    const result = await previewGitHubUserRepositories(asUsername);
+
+                    if (!cancelled) {
+                        setUserRepoResults(result);
+                    }
+
                 }
 
             }
@@ -410,7 +441,12 @@ export default function Settings() {
                 console.error(err);
 
                 if (!cancelled) {
-                    setRepoPreview({ found: false, error: "Unable to reach GitHub." });
+
+                    const failure = { found: false, error: "Unable to reach GitHub." };
+
+                    if (parsed) setRepoPreview(failure);
+                    else setUserRepoResults(failure);
+
                 }
 
             }
@@ -891,6 +927,7 @@ export default function Settings() {
                     setGithubRepoUrl={setGithubRepoUrl}
                     repoPreviewLoading={repoPreviewLoading}
                     repoPreview={repoPreview}
+                    userRepoResults={userRepoResults}
                     isRateLimited={isRateLimited}
                     githubToken={githubToken}
                     setGithubToken={setGithubToken}

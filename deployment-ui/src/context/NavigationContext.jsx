@@ -22,6 +22,11 @@ export default function NavigationProvider({ children }) {
     const [tab, setTabState] = useState(readTabFromUrl);
     const [pendingRepoUrl, setPendingRepoUrl] = useState(null);
 
+    // Which Settings sub-page ("view", see Settings.jsx) to land on once the
+    // "settings" tab is active — same hand-off shape as pendingRepoUrl/
+    // pendingEnvironmentName below, driven by HeaderSearch's results.
+    const [pendingSettingsView, setPendingSettingsView] = useState(null);
+
     // Which environment the Environments page should open straight into —
     // set when the Dashboard's Environments card is clicked, cleared once
     // the page has consumed it (see Environments.jsx), same hand-off shape
@@ -75,10 +80,21 @@ export default function NavigationProvider({ children }) {
 
     }, []);
 
+    function goToSettingsView(view) {
+
+        setPendingSettingsView(view);
+        setTab("settings");
+
+    }
+
+    // Lands directly on the Credentials sub-page (rather than Settings'
+    // hub) since that's the only place githubRepoUrl/repoPreview actually
+    // render - without this, the field was set but invisible until someone
+    // manually clicked into Credentials themselves.
     function goToSettingsWithRepo(url) {
 
         setPendingRepoUrl(url);
-        setTab("settings");
+        goToSettingsView("credentials");
 
     }
 
@@ -94,6 +110,7 @@ export default function NavigationProvider({ children }) {
         <NavigationContext.Provider
             value={{
                 tab, setTab, pendingRepoUrl, setPendingRepoUrl, goToSettingsWithRepo,
+                pendingSettingsView, setPendingSettingsView, goToSettingsView,
                 pendingEnvironmentName, setPendingEnvironmentName, goToEnvironment,
                 mobileNavOpen, setMobileNavOpen,
                 sidebarAccess, refreshSidebarAccess

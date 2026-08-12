@@ -7,6 +7,7 @@ import Logo from "../common/Logo";
 import AccountAvatar from "../common/AccountAvatar";
 import ActivityBell from "./ActivityBell";
 import TopBarPublicBadge from "./TopBarPublicBadge";
+import HeaderSearch from "./HeaderSearch";
 import { getRateLimit } from "../../services/githubService";
 import { getPullRequestCount } from "../../services/pullRequestsService";
 import { getMyGitHubSettings } from "../../services/settingsService";
@@ -120,6 +121,8 @@ export default function TopBar() {
             >
                 <Logo showEyebrow={false} size={32} />
             </button>
+
+            <HeaderSearch />
 
             <div className="top-bar-actions">
 

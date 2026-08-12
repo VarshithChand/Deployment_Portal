@@ -29,10 +29,13 @@ import useToast from "../../hooks/useToast";
 
 // Approvals and Pull Requests are both gated on the same repo-admin
 // permission (canApproveReleases) — listed together so the filter below
-// can hide either with one check.
-const GATED_TABS = new Set(["approvals", "pullRequests"]);
+// can hide either with one check. Exported (with TABS/ADMIN_ONLY_TABS
+// below) so HeaderSearch can search the same page list under the same
+// visibility rules, instead of hand-maintaining a second copy that could
+// drift out of sync with what the Sidebar actually shows.
+export const GATED_TABS = new Set(["approvals", "pullRequests"]);
 
-const TABS = [
+export const TABS = [
     { key: "dashboard", label: "Dashboard", Icon: DashboardIcon },
     { key: "deploy", label: "Deploy", Icon: DeployIcon },
     { key: "approvals", label: "Approvals", Icon: ApprovalsIcon },
@@ -56,7 +59,7 @@ const TABS = [
 // admin-only for the same reason: its Users/Audit Log tabs now read the
 // real PAT-users list and activity log (see AdminUsersController/
 // SecurityAuditLogController), both already admin-gated server-side.
-const ADMIN_ONLY_TABS = new Set(["codeQuality", "services"]);
+export const ADMIN_ONLY_TABS = new Set(["codeQuality", "services"]);
 
 const STORAGE_KEY = "sidebar-collapsed";
 
