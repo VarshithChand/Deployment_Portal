@@ -1,0 +1,893 @@
+==================================================
+DEPLOYMENT PORTAL SECURITY ASSESSMENT
+==================================================
+
+Assessment Date: 2026-08-12
+Remediation Date: 2026-08-12 (same-day fix pass, see REMEDIATION STATUS below)
+Target: Deployment Portal (repo: VarshithChand/yaml) - DeploymentAPI (ASP.NET Core / .NET 10)
+         and deployment-ui (React 19 + Vite) source trees, local working copy
+Tester: Claude (Anthropic), acting as an authorized assessor at the request of the
+         repository owner
+Scope: Source code of DeploymentAPI and deployment-ui as present in the local working
+         copy at assessment time; local dependency manifests (package.json,
+         DeploymentAPI.csproj); local GitHub Actions workflow files
+         (.github/workflows/*.yml). NO live/deployed URL was provided as in-scope, and
+         no browser-automation tooling was available in this environment - see NOT
+         TESTED below for what this means in practice.
+
+==================================================
+EXECUTIVE SUMMARY
+==================================================
+
+Total Findings: 9 (excluding informational/positive-control items)
+Critical:       0
+High:           3
+Medium:         4
+Low:            2
+Informational:  8 (7 positive controls, 1 informational note)
+
+Overall Risk: MEDIUM (pre-remediation) -> LOW (post-remediation, see REMEDIATION STATUS)
+
+Remediation status: 8 of 9 findings are code-complete and verified (Findings 002, 003,
+004, 005, 006, 007, 008, 009); Finding 001 is mitigated as far as this assessor can
+act (the local file has been sanitized) but genuinely requires the repository owner to
+externally rotate any real credentials, which no amount of local code change can do.
+See REMEDIATION STATUS for the fix applied to each finding.
+
+No confirmed unauthenticated path to admin functionality, data deletion, or credential
+theft was found in this assessment. Every sensitive server-side endpoint reviewed
+(deployment triggering, approval/rejection, PAT user management, cache force-refresh,
+database management, application support) enforces authorization through the
+centralized AdminGate helper, not client-side hiding alone. The highest-impact issues
+found are: (1) a local, gitignored developer config file holding what appear to be
+live, unencrypted secrets, (2) two npm-audit-confirmed HIGH severity dependency
+vulnerabilities, and (3) the combination of no Content-Security-Policy header with a
+session identity token stored in localStorage, which would turn any future XSS finding
+into full session takeover rather than a contained defacement. None of these require
+authentication to fix - they are configuration/dependency/hardening gaps, not logic
+flaws in the authorization model itself.
+
+This was a white-box source review, not a live black-box penetration test - no
+deployed URL was authorized/provided, and no browser-automation tool was available in
+this environment. Findings involving live HTTP behavior (headers actually served,
+live SSRF/SQLi/XSS payload responses) are noted as such; everything else is based on
+direct source inspection of the exact code that would run, which for the areas
+covered is high-confidence but not a substitute for testing the deployed instance.
+
+==================================================
+FINDINGS
+==================================================
+
+[Finding 001]
+Title: Real-looking live credentials stored unencrypted in a local developer config file
+Severity: HIGH
+Category: Credential and secret exposure
+Affected Component: Local development environment (not the deployed app itself)
+Affected Endpoint: N/A - filesystem, not an API
+Affected Parameter: N/A
+
+Description:
+src/DeploymentAPI/appsettings.Local.json (the local-dev fallback SettingsService reads
+when DATABASE_URL is not set) contains a JWT signing secret, a GitHub Personal Access
+Token, a GitHub OAuth app client secret, a SonarCloud token, and one AWS access
+key/secret pair, all stored as plain text. These are distinguishable from several
+obviously-fake test entries in the same file (e.g. "ghp_test", "AKIAFAKE123",
+"secret_test") by having correctly-formatted, non-placeholder values.
+
+Security Impact:
+If genuine, these credentials grant repository access (GitHub PAT), the ability to
+mint valid GitHub OAuth tokens for this app's OAuth flow (client secret), SonarCloud
+project access, and whatever an AWS IAM principal with that access key can do. Anyone
+with local filesystem access to this machine - another OS user account, a compromised
+editor/build-tool extension, an unintended backup, or a CI step that accidentally
+archives the working directory - obtains these in final, directly usable form with no
+further exploitation needed.
+
+Steps to Reproduce:
+1. Open src/DeploymentAPI/appsettings.Local.json in the local working copy.
+2. Observe the UserGitHubCredentials, GitHubOAuth, Sonar, and UserAwsCredentials
+   sections.
+
+Evidence:
+File contains a "PersonalAccessToken" value matching the real GitHub PAT format
+(ghp_ + 36 alphanumeric characters), a "ClientSecret" matching GitHub OAuth's 40-hex-
+character format, a Sonar "Token" in the expected format, and an "AccessKeyId"
+matching AWS's AKIA-prefixed 20-character format paired with a plausible 40-character
+secret key. [Full values intentionally redacted from this report - see rule "never put
+real credentials in security_findings.txt."]
+
+Expected Behavior:
+Local developer config containing real secrets should not exist in this form, or
+should be understood as needing rotation the moment it's no longer needed for active
+local testing.
+
+Actual Behavior:
+Real-looking secrets sit in plain text in a file that, while correctly excluded from
+git via .gitignore (**/appsettings.Local.json - confirmed, this file has never reached
+the shared repository), remains unencrypted on disk indefinitely.
+
+Recommended Fix:
+1. If any of these values are genuine: rotate them now - revoke/reissue the GitHub
+   PAT and the OAuth app's client secret from GitHub's own settings, regenerate the
+   SonarCloud token, and deactivate/reissue the AWS access key from IAM.
+2. Confirm .gitignore continues to exclude this file (it currently does - this is a
+   "make sure it stays this way" item, not a fix needed today).
+3. Consider whether locally-tested secrets need to be real at all vs. scoped
+   throwaway test credentials (e.g. a PAT with minimal read-only scope on a disposable
+   test repo) to reduce blast radius if this file is ever exposed.
+
+Status: Partially Fixed - src/DeploymentAPI/appsettings.Local.json has been sanitized
+         (every real-looking value replaced with an obvious placeholder, e.g.
+         "REPLACE_WITH_YOUR_OWN_LOCAL_DEV_TOKEN"); the pre-existing obviously-fake test
+         entries were left untouched. This closes the "sits in plain text on this
+         machine" exposure going forward. It does NOT rotate anything - if any of the
+         original values were genuine, the repository owner must still revoke/reissue
+         the GitHub PAT and OAuth client secret, regenerate the SonarCloud token, and
+         deactivate/reissue the AWS access key from IAM directly, since that requires
+         action on GitHub/SonarCloud/AWS's own systems that a code change cannot
+         perform.
+
+
+[Finding 002]
+Title: js-yaml dependency has a known HIGH severity ReDoS vulnerability
+Severity: HIGH
+Category: Dependency / supply-chain security
+Affected Component: deployment-ui (frontend), direct dependency
+Affected Endpoint: N/A
+Affected Parameter: N/A
+
+Description:
+`npm audit` against deployment-ui's installed dependencies reports js-yaml
+5.0.0-5.2.1 (the version range currently installed, used directly per package.json)
+as vulnerable to exponential parsing time on crafted YAML flow collections
+(GHSA-pm4m-ph32-ghv5, CVSS 3.1 score 7.5, CWE-407).
+
+Security Impact:
+If this app parses any YAML content whose source isn't fully trusted (e.g. workflow
+YAML fetched from GitHub for the Template Tester / workflow-input-detection features),
+a maliciously crafted YAML document could cause the parsing call to consume CPU for an
+extremely long time, a denial-of-service condition for whichever request/session
+triggered it.
+
+Security Impact (continued):
+This is a frontend (browser-side) dependency, so the blast radius of a single
+exploited call is that one visitor's own tab, not the shared backend - still worth
+fixing since js-yaml is used to parse GitHub workflow YAML, which is attacker-
+influenced content for a public/multi-tenant style deployment.
+
+Steps to Reproduce:
+1. cd deployment-ui && npm audit
+2. Observe js-yaml listed as a direct, HIGH severity vulnerability with a fix
+   available.
+
+Evidence:
+npm audit --json output: {"js-yaml": {"severity":"high", "isDirect": true,
+"range":"5.0.0 - 5.2.1", "fixAvailable": true, "url":
+"https://github.com/advisories/GHSA-pm4m-ph32-ghv5"}}
+
+Expected Behavior:
+Dependencies with known HIGH severity advisories and an available fix should not sit
+unpatched.
+
+Actual Behavior:
+The installed js-yaml version falls inside the vulnerable range.
+
+Recommended Fix:
+Run `npm audit fix` (or manually bump js-yaml to the patched version referenced in the
+advisory) in deployment-ui, then re-run the full test/build/lint cycle before
+deploying, per this project's own "verify before every commit" workflow.
+
+Status: Fixed - `npm audit fix` applied in deployment-ui; js-yaml resolved to a
+         patched version outside the vulnerable range. Re-verified via `npm audit`,
+         `npm run lint`, and `npm run build` (all clean) after the fix.
+
+
+[Finding 003]
+Title: nanoid transitive dependency has a known HIGH severity infinite-loop vulnerability
+Severity: HIGH
+Category: Dependency / supply-chain security
+Affected Component: deployment-ui (frontend), transitive dependency
+Affected Endpoint: N/A
+Affected Parameter: N/A
+
+Description:
+npm audit reports nanoid <3.3.17 (a transitive dependency, pulled in by something else
+in the dependency tree, not referenced directly by this app's own code) as vulnerable
+to an infinite loop when a custom generator is invoked with size zero
+(GHSA-2v37-7h3g-55p8, CWE-835).
+
+Security Impact:
+Lower direct impact than Finding 002 since this app's own code doesn't call nanoid
+with attacker-controlled parameters directly (it's an indirect dependency of the build
+tooling), but it should still be resolved as part of routine dependency hygiene, and a
+transitive-dependency vulnerability can become directly reachable later if any
+dependency's usage pattern changes.
+
+Steps to Reproduce:
+1. cd deployment-ui && npm audit
+2. Observe nanoid listed as a transitive HIGH severity vulnerability with a fix
+   available.
+
+Evidence:
+npm audit --json output: {"nanoid": {"severity":"high", "isDirect": false,
+"range":"<3.3.17", "fixAvailable": true, "url":
+"https://github.com/advisories/GHSA-2v37-7h3g-55p8"}}
+
+Expected Behavior:
+Transitive dependencies with available fixes should be resolved via the normal
+lockfile-update path.
+
+Actual Behavior:
+The resolved nanoid version falls inside the vulnerable range.
+
+Recommended Fix:
+Run `npm audit fix` (this should resolve automatically via a lockfile update, since a
+non-breaking fix is available) and re-verify the build.
+
+Status: Fixed - `npm audit fix` applied in deployment-ui; nanoid resolved via lockfile
+         update to a version outside the vulnerable range. Re-verified via `npm audit`,
+         `npm run lint`, and `npm run build` (all clean) after the fix.
+
+
+[Finding 004]
+Title: No server-side rate limiting or lockout on screen-lock PIN verification
+Severity: MEDIUM
+Category: Authentication / Rate limiting
+Affected Component: DeploymentAPI - SettingsController
+Affected Endpoint: POST /api/settings/me/pin/verify
+Affected Parameter: pin (request body)
+
+Description:
+The screen-lock PIN feature (SecurityPinSection / PinLockScreen) is designed so that 5
+wrong guesses triggers performSelfClear() - a full wipe of that session's saved
+credentials. That counting and enforcement happens entirely in the React component
+(PinLockScreen.jsx's local `attempts` state). The backend endpoint
+(SettingsController.VerifyMyPin -> SettingsService.VerifyPinAsync) has no attempt
+counter, delay, or lockout of its own - it simply hashes the submitted PIN and
+compares it to the stored hash on every call, with no limit on how many times it can
+be called.
+
+Security Impact:
+The screen-lock PIN's threat model is explicitly "someone with physical/browser access
+to an already-open, idle session, who doesn't know the PIN" (see PinLockScreen.jsx's
+own comments). That is exactly the scenario where an attacker CAN reach this endpoint
+directly (they have the browser, and therefore its session identity) while bypassing
+the app's own UI and its 5-attempt limit entirely, by scripting direct POST requests.
+Typical PINs are 4-8 numeric digits (frontend enforces numeric input, maxLength 8);
+with no server-side rate limit, a 4-digit PIN (10,000 possibilities) is brute-forceable
+in a short scripted run with no meaningful obstacle.
+
+Steps to Reproduce:
+1. Set a screen-lock PIN for a session (Settings -> Credentials -> Screen Lock).
+2. Lock the session (via the periodic sign-out prompt's "Lock Now", or by waiting for
+   it).
+3. Instead of using the PinLockScreen UI, send repeated POST requests directly to
+   /api/settings/me/pin/verify with the same X-Session-Id header and varying `pin`
+   values.
+4. Observe that the server answers every guess with no increasing delay, error, or
+   lockout, regardless of how many wrong guesses have already been sent for that
+   session.
+
+Evidence:
+SettingsController.cs, VerifyMyPin action: calls SettingsService.VerifyPinAsync(key,
+pin) and returns { Valid: bool } directly, with no attempt-tracking call anywhere in
+the method. SettingsService.VerifyPinAsync itself only reads the stored hash and
+compares - no counter is read or written.
+
+Expected Behavior:
+The "N wrong attempts -> wipe credentials" rule the UI implies should be enforced by
+the server, which is the only place that can't be bypassed by calling the API
+directly.
+
+Actual Behavior:
+The rule exists only in the browser; the server-side check has unlimited attempts.
+
+Recommended Fix:
+Track failed-attempt counts server-side per session key (the existing in-memory
+SessionActivityService pattern - ConcurrentDictionary<string, X> - is a natural fit,
+matching how this project already tracks other per-session, reset-on-restart state).
+After N failures for a given key, either lock out further attempts for a cooldown
+period or trigger the same credential-clear SoftSignOutPatUserAsync-style action
+server-side, so a scripted bypass of the UI gets the same outcome a UI-following user
+would.
+
+Status: Fixed - SessionActivityService now tracks failed PIN attempts server-side per
+         session key (RecordFailedPinAttempt/GetFailedPinAttemptCount/
+         ClearFailedPinAttempts, matching the project's existing in-memory
+         ConcurrentDictionary pattern). SettingsController.VerifyMyPin enforces a
+         5-attempt cap (MaxPinAttempts), returning { Valid: false, Locked: true } and
+         calling SettingsService.ClearMyCredentialsAsync server-side once the cap is
+         hit - this is now enforced independently of the browser, closing the direct-
+         API-call bypass. SaveMyPin/ClearMyPin reset the counter. PinLockScreen.jsx was
+         also updated to defer to the server's `locked` field (not just its own local
+         `attempts` state), closing an edge case where a page reload reset the client
+         counter while the server counter kept counting. Verified via `dotnet build`
+         and `npm run lint` (both clean).
+
+
+[Finding 005]
+Title: Admin-configurable "External APIs" health-check feature is a Server-Side Request
+        Forgery primitive with response echoed to the caller
+Severity: MEDIUM
+Category: SSRF
+Affected Component: DeploymentAPI - ExternalHealthCheckService / ExternalHealthController
+Affected Endpoint: (health-check execution endpoint backing Settings -> External APIs)
+Affected Parameter: urls (admin-configured endpoint list)
+
+Description:
+ExternalHealthCheckService.CheckOneAsync validates only that a configured URL parses
+as an absolute http:// or https:// URI before issuing a server-side GET request to it,
+and returns up to 4000 characters of the response body plus status code and timing
+back to the caller. There is no blocklist/allowlist restricting private IP ranges,
+loopback addresses, or cloud metadata endpoints (e.g. 169.254.169.254). The code
+comment explicitly frames this as an accepted tradeoff ("this whole feature is
+admin-gated, so the caller is already trusted with arbitrary outbound requests").
+
+Security Impact:
+This is not an unauthenticated SSRF (the feature is admin-gated), so it is a
+privilege-scoped issue rather than a full bypass - but it is still a real
+authenticated-SSRF-with-response-echo primitive: an admin session (or anyone who has
+obtained admin authority through some other means) can direct the backend to make
+requests to internal/private network addresses reachable from wherever DeploymentAPI
+is hosted, or to a cloud metadata service if this backend is ever hosted somewhere one
+is reachable (e.g. an AWS/Azure/GCP compute instance with IMDS enabled), and read the
+response. This turns a config feature into a credential-theft or internal-network-
+reconnaissance tool for anyone who reaches admin authority.
+
+Steps to Reproduce:
+1. As an admin, add a URL such as http://169.254.169.254/latest/meta-data/ (if hosted
+   on AWS) or http://localhost:<internal-port>/ to the External APIs endpoint list in
+   Settings.
+2. Trigger a check.
+3. Observe the response body/status is returned directly in the check result.
+
+Evidence:
+ExternalHealthCheckService.cs, CheckOneAsync: the only validation before
+client.GetAsync(uri) is Uri.TryCreate + scheme check; no IP-range or hostname
+denylist/allowlist exists anywhere in the method or its callers.
+
+Expected Behavior:
+Outbound requests triggered by user/admin-supplied URLs should exclude loopback,
+link-local (including 169.254.169.254), and RFC1918 private ranges by default, even
+for a trusted/admin-gated feature, since the whole point of SSRF defenses is to
+protect the network the app itself runs on, not just to gate who can trigger the
+request.
+
+Actual Behavior:
+No such restriction exists; any syntactically valid http(s) URL is fetched.
+
+Recommended Fix:
+Resolve the URL's hostname and reject the request if it resolves to a loopback,
+link-local, or private (RFC1918) address, or to the specific cloud metadata addresses
+(169.254.169.254, fd00:ec2::254, metadata.google.internal, etc.), before issuing the
+outbound request. Re-check after any redirect, since DNS/IP validation done only on
+the original hostname can be bypassed by a redirect to a private address.
+
+Status: Fixed - ExternalHealthCheckService now calls IsDisallowedTargetAsync(host)
+         before every outbound request, resolving the hostname (Dns.GetHostAddressesAsync,
+         or IPAddress.TryParse for literal IPs) and rejecting loopback, RFC1918 private
+         ranges (10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16), link-local 169.254.0.0/16
+         (which covers all major cloud metadata endpoints, including 169.254.169.254),
+         0.0.0.0/8, and the IPv6 equivalents (fc00::/7, fe80::/10). The request now also
+         runs on a dedicated named HttpClient ("ExternalHealthCheck") with
+         AllowAutoRedirect = false, closing the redirect-based bypass the original
+         recommendation flagged (a redirect to a private address would otherwise never
+         be re-validated). Verified via `dotnet build` (clean).
+
+
+[Finding 006]
+Title: No encryption at rest for any stored credential
+Severity: MEDIUM
+Category: Credential and secret exposure / Database security
+Affected Component: DeploymentAPI - SettingsService, all credential storage
+Affected Endpoint: N/A - architectural
+Affected Parameter: N/A
+
+Description:
+Every credential this application stores server-side - per-session GitHub PATs,
+AWS/Azure secret keys, the Gemini API key, and the shared Docker/SonarCloud/GitHub
+OAuth secrets - is written as plain text inside the single portal_settings JSONB
+column in Postgres (or the local JSON file in local-dev mode). No IDataProtector,
+column-level encryption, or equivalent mechanism exists anywhere in the codebase. Only
+the screen-lock PIN is hashed (see Finding 004 for its own gap); everything else is
+stored exactly as submitted.
+
+Security Impact:
+Read access to the database - via a leaked DATABASE_URL, an overly broad database
+role, a database backup handled with less care than the primary instance, or a future
+SQL-injection finding elsewhere - yields every stored credential for every session in
+immediately usable plaintext. There is no additional barrier once database read access
+is obtained.
+
+Steps to Reproduce:
+1. Review SettingsService.cs's Save*Async / Get*CredentialsAsync methods for GitHub,
+   AWS, Azure, GCP, Docker, Sonar, and the AI Assistant sections.
+2. Observe that submitted values are written into the JObject and persisted via
+   WriteRootAsync with no transformation beyond what JSON serialization requires.
+
+Evidence:
+No reference to Microsoft.AspNetCore.DataProtection, IDataProtector, or any custom
+encryption helper exists anywhere in src/DeploymentAPI (confirmed via codebase
+search). SettingsService's own Save*Async methods (SaveDockerAsync, SaveSonarAsync,
+SaveAiAssistantAsync, SaveUserGitHubCredentialsAsync, etc.) all assign the raw
+submitted string directly onto the JObject.
+
+Expected Behavior:
+Credentials at rest are typically expected to have at least one layer of encryption
+independent of database access controls, so that a database-level compromise doesn't
+automatically mean full credential compromise.
+
+Actual Behavior:
+No such layer exists; database read access is equivalent to full credential
+compromise.
+
+Recommended Fix:
+Introduce an encryption layer (ASP.NET Core's built-in Data Protection API is a
+natural fit and integrates cleanly with the existing JObject read/write path) for at
+minimum: GitHub PATs, AWS/Azure/GCP secret keys, the Gemini API key, and the OAuth/
+Sonar/Docker secrets. This is a genuine architectural change, not a quick patch - plan
+for a migration step to re-encrypt already-stored values.
+
+Status: Fixed, with one deliberate, documented exception - SettingsService now uses
+         ASP.NET Core's Data Protection API (IDataProtector, application name
+         "DeploymentPortal.Credentials.v1") to encrypt every credential value at rest:
+         GitHub PAT, AWS SecretAccessKey/SessionSecretAccessKey/SessionToken (not the
+         AccessKeyId, which is an identifier, not a secret), Azure ClientSecret, GCP
+         ServiceAccountKeyJson, the Docker password, the Sonar token, and the Gemini
+         API key. Unprotect() catches CryptographicException and falls back to
+         returning the raw stored value, so already-stored plaintext keeps working with
+         no migration step and gets encrypted automatically the next time it's saved.
+         The Data Protection key ring itself is persisted to a new Postgres table
+         (data_protection_keys, via the new PostgresXmlRepository, auto-created via
+         CREATE TABLE IF NOT EXISTS) whenever DATABASE_URL is set, so the key survives
+         Render's ephemeral-disk redeploys - without this, losing the key on every
+         redeploy would make everything encrypted under it permanently undecryptable.
+         Wired up in Program.cs via AddDataProtection().SetApplicationName(...) plus a
+         conditional AddKeyManagementOptions() call. Verified via `dotnet build`
+         (clean).
+
+         Deliberate exception: GitHubOAuth.ClientSecret was NOT encrypted. It is
+         consumed through IOptionsMonitor<GitHubOAuthSettings> (IConfiguration binding
+         via HydrateLocalFileFromDatabaseAsync copying the raw JSON blob into the local
+         config file at startup), not through SettingsService's own read methods -
+         encrypting it here would silently break GitHub OAuth login for every user
+         unless HydrateLocalFileFromDatabaseAsync were also updated to decrypt before
+         that hydration step. This was scoped out as too risky to rush in this pass and
+         is a known, tracked limitation, not an oversight.
+
+
+[Finding 007]
+Title: Missing Content-Security-Policy and Permissions-Policy headers, compounding the
+        impact of any future XSS given session identity lives in localStorage
+Severity: MEDIUM
+Category: Security headers / Sensitive information disclosure
+Affected Component: DeploymentAPI - global response headers (Program.cs)
+Affected Endpoint: All responses
+Affected Parameter: N/A
+
+Description:
+Program.cs sets X-Content-Type-Options: nosniff, X-Frame-Options: DENY, and
+Referrer-Policy: strict-origin-when-cross-origin on every response, plus HSTS outside
+Development. No Content-Security-Policy or Permissions-Policy header is set anywhere.
+Separately, the frontend's primary session-identity mechanism (X-Session-Id, generated
+via crypto.randomUUID() and used on every API call - see deployment-ui/src/api/
+apiBase.js) is stored in localStorage, which is readable by any JavaScript executing
+on the page, unlike an HttpOnly cookie.
+
+Security Impact:
+This is not itself an exploitable vulnerability - no XSS was found in this
+assessment (see the positive-control note under Informational Findings: no
+dangerouslySetInnerHTML usage exists anywhere in the frontend). It is a hardening gap
+that raises the stakes of any XSS bug found in the future: without a CSP restricting
+script sources/execution, and with the session token sitting in a location any
+injected script can read, a successful XSS finding anywhere in this app would allow
+direct exfiltration of the X-Session-Id token and full session impersonation, not just
+a contained page-level defacement.
+
+Steps to Reproduce:
+1. Inspect any API response's headers from DeploymentAPI - no Content-Security-Policy
+   or Permissions-Policy header is present.
+2. Inspect localStorage in a browser session against this app - portalSessionId is
+   present in plain, script-readable form.
+
+Evidence:
+Program.cs's header-setting middleware (search for X-Content-Type-Options) sets
+exactly three headers; no CSP/Permissions-Policy directive exists anywhere in the
+codebase. apiBase.js's getSessionId() reads/writes localStorage directly.
+
+Expected Behavior:
+A defense-in-depth CSP (even a starting policy like default-src 'self') limits what an
+XSS payload can actually do (e.g. blocks exfiltration to arbitrary external domains,
+restricts inline script execution) even if one is eventually found.
+
+Actual Behavior:
+No such policy exists.
+
+Recommended Fix:
+Add a Content-Security-Policy header appropriate to this app's actual asset origins
+(the Cloudflare-hosted frontend, the Render-hosted API, GitHub avatar images, etc.) -
+start restrictive and loosen only as needed. Add a minimal Permissions-Policy (e.g.
+disabling geolocation/camera/microphone, none of which this app uses). The localStorage
+session-token pattern itself is a known, common tradeoff for this app's cross-origin
+frontend/backend architecture (see PortalIdentity.cs's own comment on why - SameSite
+cookie restrictions break cross-origin auth); the practical mitigation is reducing XSS
+likelihood/impact (CSP) rather than changing the session model, unless the frontend and
+backend are ever consolidated onto the same origin.
+
+Status: Fixed - two layers added. (1) DeploymentAPI (Program.cs) now sets
+         Content-Security-Policy ("default-src 'self'; script-src 'self'
+         'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:;
+         connect-src 'self'; frame-ancestors 'none'") and Permissions-Policy
+         ("geolocation=(), camera=(), microphone=()") on every response, alongside the
+         pre-existing headers ('unsafe-inline' kept for script/style specifically so
+         Swagger UI, which is enabled in every environment, keeps working). (2) Because
+         DeploymentAPI never actually serves index.html - only the Cloudflare-hosted
+         frontend does - the browser-enforced CSP that matters for XSS mitigation is
+         generated at frontend build time into a Cloudflare Pages/Workers Static Assets
+         `_headers` file (deployment-ui/vite.config.js's new writeSecurityHeadersPlugin),
+         with a stricter script-src 'self' (no 'unsafe-inline', since the frontend
+         doesn't need it) and connect-src interpolated from VITE_API_BASE_URL per
+         deploy. This required extracting index.html's inline theme-init <script> to an
+         external public/theme-init.js file, since 'unsafe-inline' is no longer allowed
+         for the frontend's own scripts. Verified via `npm run build`: dist/_headers and
+         dist/theme-init.js both generated and correctly populated; `npm run lint` and
+         `dotnet build` both clean.
+
+
+[Finding 008]
+Title: postcss dependency has a known MODERATE severity path-disclosure issue
+Severity: LOW
+Category: Dependency / supply-chain security
+Affected Component: deployment-ui build tooling (transitive dependency)
+Affected Endpoint: N/A
+Affected Parameter: N/A
+
+Description:
+npm audit reports postcss <=8.5.22 (transitive) as vulnerable to reading arbitrary
+.map files via an attacker-controlled sourceMappingURL when the `from` option is unset
+(GHSA-fxqj-rqcc-2cmp).
+
+Security Impact:
+This is a build-time tool, not something that ships into the deployed browser bundle
+or runs against production traffic - real-world exploitability against this app's own
+deployed instance is low. Still worth resolving as routine hygiene.
+
+Steps to Reproduce:
+1. cd deployment-ui && npm audit
+2. Observe postcss listed as a MODERATE, transitive vulnerability with a fix
+   available.
+
+Evidence:
+npm audit --json output: {"postcss": {"severity":"moderate", "isDirect": false,
+"range":"<=8.5.22", "fixAvailable": true}}
+
+Expected Behavior / Actual Behavior: as above.
+
+Recommended Fix:
+Run `npm audit fix`; verify the build still succeeds afterward.
+
+Status: Fixed - `npm audit fix` applied in deployment-ui; postcss resolved to a
+         version outside the vulnerable range. Re-verified via `npm audit`,
+         `npm run lint`, and `npm run build` (all clean) after the fix.
+
+
+[Finding 009]
+Title: Bootstrap mode (empty admin allowlist grants Admin to every visitor) could
+        silently apply to a live deployment if never configured
+Severity: LOW
+Category: Business logic / Misconfiguration risk
+Affected Component: DeploymentAPI - AdminGate.IsAdminOrBootstrap
+Affected Endpoint: Every AdminGate-protected endpoint, conditionally
+Affected Parameter: N/A
+
+Description:
+AdminGate.IsAdminOrBootstrap treats an empty AdminGitHubUsernames allowlist as
+"bootstrap mode": every visitor, authenticated or not, is treated as Admin. This is a
+deliberate, documented first-run convenience (someone has to be able to configure the
+very first admin before any login exists). It is not a coding bug - but it means the
+single most powerful state the app can be in (everyone is admin) is also its default,
+zero-configuration state.
+
+Security Impact:
+A production deployment that is stood up (e.g. a fresh Postgres database provisioned,
+or DATABASE_URL pointed at a new instance) without immediately configuring the admin
+allowlist is, until that step happens, fully open: any visitor can access Services,
+Database Management (subject to the separate VarshithChand-only super-admin check),
+Application Support, force a refresh for all users, trigger deployments, and change
+shared settings.
+
+Steps to Reproduce:
+1. Point a fresh instance at an empty/new database (or clear the Auth section via the
+   admin-allowlist-clearing flow, which the UI itself warns about before allowing).
+2. Observe that every AdminGate.DenyUnlessAdminAsync check passes for any caller while
+   AdminGitHubUsernames is empty.
+
+Evidence:
+AdminGate.cs, IsAdminOrBootstrap: `view.AdminGitHubUsernames.Count == 0 || (...)` -
+the bootstrap branch short-circuits the entire admin check.
+
+Expected Behavior / Actual Behavior:
+This is working as designed - flagged because "as designed" and "safe for production"
+are not automatically the same thing, and the failure mode (open admin access, not a
+locked-out app) is the more dangerous direction for a mistake to fail in.
+
+Recommended Fix:
+No code change strictly required - this is a deployment/operational checklist item:
+confirm the admin allowlist is configured immediately after any fresh deployment,
+before the instance is reachable by anyone other than the person doing that setup.
+Optionally, consider whether a fresh production environment variable (e.g.
+ASPNETCORE_ENVIRONMENT=Production) should narrow or disable bootstrap mode rather than
+relying purely on the allowlist being non-empty, if unconfigured-production exposure is
+a realistic risk in practice.
+
+Status: Fixed (the operational-risk part; the underlying bootstrap behavior itself is
+         left intact by design - see the recommendation) - Program.cs now runs a
+         startup check, in Production only, that logs an ERROR (both to
+         ActivityLogService and stderr, visible in Render's own logs) if the admin
+         allowlist is empty at boot: "Startup check: the admin allowlist is EMPTY -
+         this instance is in bootstrap mode, meaning every visitor is currently treated
+         as Admin. Configure Settings -> Credentials -> Admin Allowlist as soon as
+         possible." SettingsService.SaveAdminUsernamesAsync was also changed to log at
+         ERROR level (previously Info) whenever a save results in an empty list, so
+         clearing the allowlist is now loud in both directions - at boot and at the
+         moment it happens - rather than a silent, easy-to-miss state.
+
+==================================================
+INFORMATIONAL FINDINGS (POSITIVE CONTROLS / NOTES)
+==================================================
+
+[Info 001] No dangerouslySetInnerHTML usage found anywhere in deployment-ui. All
+Copilot/markdown rendering (CopilotMarkdown.jsx) builds real React elements rather than
+injecting raw HTML strings - the two matches for this string in the codebase are both
+comments documenting its deliberate absence, not actual usage.
+
+[Info 002] Deploy (POST /api/deployment/deploy) and Approvals (POST
+/api/approvals/decide) both enforce AdminGate.DenyUnlessAdminAsync server-side. Code
+comments on both indicate this was previously a gap ("any anonymous visitor could kick
+off a workflow run" / "anyone who called this endpoint directly could approve or
+reject") that has already been remediated - confirmed still enforced as of this
+assessment.
+
+[Info 003] CORS policy (Program.cs) uses an explicit configured origin allowlist
+(Cors:AllowedOrigins) with AllowCredentials, not AllowAnyOrigin - the correct
+combination per the CORS spec (wildcard origin + credentials is invalid/rejected by
+browsers, but an overly broad explicit list would still be a real risk; the
+configuration itself is sound, though the actual deployed allowlist contents were not
+verified since no live config was available).
+
+[Info 004] Session identity (X-Session-Id) is generated client-side via
+crypto.randomUUID() - 122 bits of entropy, not guessable/brute-forceable. The server-
+side session cookie fallback (PortalIdentity.cs) correctly ties SameSite=None to
+Secure=true based on Request.IsHttps, avoiding a common cookie-security misconfiguration.
+
+[Info 005] Backend NuGet dependencies: `dotnet list src/DeploymentAPI package
+--vulnerable --include-transitive` reports no known-vulnerable packages.
+
+[Info 006] Spot-check of all 19 GitHub Actions workflow files for the two most common
+dangerous CI/CD patterns (pull_request_target trigger; unsafe direct interpolation of
+github.event.pull_request/issue title or body into run steps) found neither pattern in
+use. This was a targeted spot-check, not an exhaustive line-by-line workflow audit -
+see NOT TESTED.
+
+[Info 007] Screen-lock PIN is stored as an unsalted single-round SHA-256 hash (never
+plaintext) - noted here rather than as its own finding because a short numeric PIN's
+real-world protection comes from attempt-limiting (see Finding 004), not hash strength;
+even a maximally strong hash doesn't meaningfully protect a 4-8 digit numeric space
+against unlimited offline guessing. Worth strengthening (e.g. PBKDF2/bcrypt with a
+per-session salt) as defense-in-depth alongside fixing Finding 004, not urgent on its
+own.
+
+[Info 008] Database Management (Services -> Database, restricted to a single named
+GitHub identity per DatabaseController) validates every dynamic table/column
+identifier against real information_schema/pg_catalog metadata (for existing
+tables/columns) or a strict regex allowlist (for new identifiers created via Create
+Table), and binds all values as parameters rather than string-interpolating them into
+SQL text. This design was reviewed via source inspection and appears sound; it was NOT
+live-tested with actual injection payloads against a running Postgres instance (no
+authorized live target was available) - see NOT TESTED.
+
+==================================================
+REMEDIATION STATUS (added 2026-08-12, same-day fix pass)
+==================================================
+
+Following this assessment, the repository owner requested every finding be fixed.
+Status by finding:
+
+  Finding 001 (HIGH)   - Partially Fixed: local file sanitized; real-credential
+                          rotation (GitHub/SonarCloud/AWS) is an external action only
+                          the repository owner can take.
+  Finding 002 (HIGH)   - Fixed: npm audit fix (js-yaml).
+  Finding 003 (HIGH)   - Fixed: npm audit fix (nanoid).
+  Finding 004 (MEDIUM) - Fixed: server-side PIN attempt-limiting/lockout.
+  Finding 005 (MEDIUM) - Fixed: SSRF denylist + disabled auto-redirect.
+  Finding 006 (MEDIUM) - Fixed, with one documented exception (GitHubOAuth.ClientSecret
+                          intentionally left unencrypted - see Finding 006 above):
+                          encryption at rest via Data Protection API, Postgres-backed
+                          key ring for redeploy durability.
+  Finding 007 (MEDIUM) - Fixed: CSP + Permissions-Policy, both backend headers and a
+                          build-time-generated Cloudflare `_headers` file for the
+                          actual frontend document.
+  Finding 008 (LOW)    - Fixed: npm audit fix (postcss).
+  Finding 009 (LOW)    - Fixed (operational visibility): startup + save-time ERROR
+                          logging when the admin allowlist is empty. Bootstrap mode
+                          itself remains intentional, documented behavior.
+
+Verification performed after all fixes: `dotnet build` (backend, 0 errors), `npm run
+lint` (frontend, 0 errors - only pre-existing Fast-Refresh warnings unrelated to this
+work), `npm run build` (frontend, succeeded; confirmed dist/_headers and
+dist/theme-init.js both generated correctly).
+
+Deployment note: the backend (DeploymentAPI, Render) auto-deploys on push to master -
+the new data_protection_keys table is created automatically on first connection
+(CREATE TABLE IF NOT EXISTS), and existing plaintext credentials keep working via the
+Unprotect() fallback, auto-encrypting on next individual save; no manual migration step
+is needed. The frontend (deployment-ui, Cloudflare Workers) deploys manually via
+`npx wrangler deploy` and must be redeployed for the CSP/_headers file and the PIN-
+lockout/theme-init.js changes to take effect live.
+
+==================================================
+SECURITY IMPROVEMENT RECOMMENDATIONS
+==================================================
+
+Priority order, independent of the fix-priority section below:
+
+1. Rotate any of the credentials in appsettings.Local.json that are genuine (Finding
+   001) - this is the only finding with a live-credential-exposure angle and should be
+   handled first regardless of its Confirmed/Needs-Verification status.
+2. Run `npm audit fix` in deployment-ui to resolve Findings 002/003/008 in one pass,
+   then re-run the full lint/build/test cycle.
+3. Add server-side attempt-limiting to PIN verification (Finding 004) - small, well-
+   contained change with a clear existing pattern to follow (SessionActivityService).
+4. Add a private-IP/metadata-endpoint denylist to ExternalHealthCheckService (Finding
+   005).
+5. Add a Content-Security-Policy header (Finding 007) - even a conservative starting
+   policy meaningfully reduces the blast radius of any future XSS.
+6. Plan (not urgent) an encryption-at-rest layer for stored credentials (Finding 006) -
+   this is the largest-effort item and should be scoped as its own piece of work.
+7. Operationally: add "confirm the admin allowlist is set" to whatever deployment
+   checklist exists for standing up a new environment (Finding 009).
+
+==================================================
+TESTS PERFORMED
+==================================================
+
+- Full source review of AdminGate.cs (bootstrap mode, CSRF/X-Session-Id check, OAuth-
+  role-then-PAT-fallback resolution, page-scoped grants, super-admin-only gate).
+- Full source review of PortalIdentity.cs (session key resolution, cookie
+  SameSite/Secure/HttpOnly configuration).
+- Source review of GitHubAuthService.cs (per-session token/repo isolation, token
+  fingerprint used as cache key rather than the raw token).
+- Source review of every AdminGate-protected controller action touched this
+  assessment: DeploymentController.Deploy, ApprovalsController.Decide,
+  AdminUsersController (all actions), AppVersionController.ClearCache,
+  DatabaseController (all actions), ApplicationSupportController (all actions),
+  SettingsController's admin-gated save/clear endpoints.
+- Source review of SettingsService.cs's credential storage methods for encryption/
+  hashing (all sections) and the PIN set/verify methods specifically.
+- Source review of DatabaseManagementService.cs's identifier validation and query-
+  parameterization approach.
+- Source review of AiToolsService.cs / ApplicationSupportToolsService.cs / GeminiService.cs
+  for API key handling, tool-call authorization scoping, and what data reaches the AI
+  provider.
+- Codebase-wide search for hardcoded secret-shaped strings (AWS/GitHub/Google key
+  patterns, password/apikey literal assignments) in current source - none found.
+- Codebase-wide search for dangerouslySetInnerHTML usage - none found (see Info 001).
+- Review of Program.cs for CORS policy, security headers, JWT secret sourcing/
+  fallback behavior, HSTS configuration.
+- Review of ExternalHealthCheckService.cs for SSRF protections.
+- Review of ActivityLogService.cs call sites for accidental logging of secret values -
+  none found.
+- Ran `npm audit --json` against deployment-ui's installed dependencies.
+- Ran `dotnet list src/DeploymentAPI package --vulnerable --include-transitive`
+  against the backend's NuGet dependencies.
+- Read appsettings.Local.json and confirmed its .gitignore exclusion.
+- Spot-checked all 19 files in .github/workflows for pull_request_target and unsafe
+  PR-content interpolation patterns.
+
+==================================================
+NOT TESTED
+==================================================
+
+The following were explicitly in scope per the assessment prompt but could not be
+performed in this environment/session, and are NOT reflected in the findings above:
+
+- Any live, black-box testing against a deployed/running instance - no authorized URL
+  was provided, and this session had no browser-automation tool available.
+- Full git commit history scan for previously-committed-then-removed secrets (a `git
+  log -p | grep <secret-pattern>` style scan across all history) - the sandbox this
+  assessment ran in blocked that specific command class as resembling bulk credential
+  harvesting, even in this authorized/defensive context. This should be run manually
+  or with an explicitly pre-approved command if history-level leak-checking is
+  required.
+- Live IDOR/BOLA testing across two distinct authenticated sessions (e.g. actually
+  creating two sessions and attempting to access one from the other's context) -
+  reviewed via source (per-session-key scoping pattern) but not exercised live.
+- Live XSS payload testing / DOM inspection in an actual browser.
+- Live SQL injection payload testing against a running PostgreSQL instance.
+- Live CSRF testing (e.g. confirming a crafted cross-origin form POST is actually
+  rejected in practice) - the X-Session-Id-header CSRF model was reviewed via source
+  only.
+- Live SSRF payload testing (e.g. actually confirming what an admin-configured
+  169.254.169.254 URL returns) for Finding 005 - reviewed via source only.
+- Full line-by-line audit of all 19 GitHub Actions workflow files beyond the two
+  specific dangerous-pattern spot-checks noted in Info 006.
+- Docker security review (Dockerfile contents, DockerApiService's interaction with the
+  Docker daemon/socket) - not reviewed in this pass.
+- Azure integration security review - not reviewed in this pass (no Azure credentials
+  or live Azure resources were available to exercise this path).
+- File upload / path traversal testing - no user-facing file upload feature was
+  identified in this app (artifacts are downloaded from GitHub, not uploaded by
+  users), so this category is likely not applicable, but was not exhaustively
+  confirmed absent.
+- Command injection testing beyond source review - ApplicationBuildInfoService.cs's
+  `git rev-parse HEAD` call uses fixed arguments with no user input interpolated
+  (reviewed, appears safe); DockerApiService's interaction with the Docker daemon was
+  not deep-dived for injection surface.
+- AI/Copilot adversarial prompt-injection testing (e.g. actually crafting a malicious
+  GitHub commit message/PR title designed to manipulate Deployment Copilot's or
+  Deployment Support Copilot's behavior when that content is later fed back to Gemini
+  as tool output) - the system instructions, read-only design, and narrow per-feature
+  tool scoping were reviewed via source and appear to meaningfully constrain this, but
+  no live adversarial testing against the actual Gemini API was performed.
+- Rate limiting on any endpoint other than PIN verification - confirmed via source that
+  no ASP.NET Core rate-limiting middleware is configured anywhere in the app (a
+  general gap, not specific to one endpoint), but live load/abuse testing was not
+  performed against any endpoint.
+- Full dependency-tree review beyond automated `npm audit` / `dotnet list --vulnerable`
+  output (e.g. manual review of individual packages for abandonment/suspicious
+  maintainer changes).
+
+==================================================
+FINAL RISK SUMMARY
+==================================================
+
+The authorization model itself (AdminGate, per-session credential isolation via
+PortalIdentity, the super-admin-only Database Management gate) is sound based on this
+review, and every sensitive action checked enforces its authorization server-side, not
+just in the UI - this is the most important thing this assessment set out to verify,
+and it held up. The confirmed issues are real but are hardening/hygiene gaps
+(rate limiting, encryption at rest, security headers, dependency patching, an SSRF
+allowlist) rather than authorization-bypass logic flaws. The one item that could be
+serious - Finding 001's local credential file - is a local-environment hygiene issue,
+not a flaw in the deployed application's own logic, and the file itself is correctly
+excluded from version control.
+
+Overall Risk: MEDIUM. Nothing found rises to Critical (no unauthenticated path to
+admin capability, data destruction, or full credential exfiltration was identified),
+but the HIGH findings should not wait for a routine maintenance window.
+
+==================================================
+FIX PRIORITY
+==================================================
+
+Priority 1 (Critical / High findings):
+- Finding 001: DONE (code side) - local file sanitized. REMAINING, owner-only: rotate
+  any genuine credentials found in the original appsettings.Local.json on GitHub/
+  SonarCloud/AWS directly.
+- Finding 002: DONE - js-yaml patched (npm audit fix).
+- Finding 003: DONE - nanoid patched (npm audit fix, transitive).
+
+Priority 2 (Medium findings):
+- Finding 004: DONE - server-side PIN attempt-limiting added.
+- Finding 005: DONE - private-IP/metadata-endpoint denylist added to the External APIs
+  health-check feature.
+- Finding 006: DONE - encryption-at-rest layer added for stored credentials (one
+  documented exception: GitHubOAuth.ClientSecret).
+- Finding 007: DONE - Content-Security-Policy and Permissions-Policy headers added
+  (backend response headers + frontend build-time `_headers` file).
+
+Priority 3 (Low / Informational findings):
+- Finding 008: DONE - postcss patched (npm audit fix).
+- Finding 009: DONE - startup/save-time warning logging added for empty admin
+  allowlist. REMAINING, owner-only: keep "confirm admin allowlist is configured" on
+  the deployment checklist for any new environment - this is a process step, not
+  something further code can enforce.
+
+REMAINING, OWNER ACTION REQUIRED (cannot be closed by a code change):
+- Rotate the GitHub PAT, GitHub OAuth client secret, SonarCloud token, and AWS access
+  key that were found in appsettings.Local.json, if any of them are genuine (Finding
+  001).
+- Redeploy: `git push` triggers the backend's auto-deploy on Render; the frontend
+  needs an explicit `npx wrangler deploy` for the CSP/_headers and PIN-lockout fixes
+  to take effect on the live site (Findings 004, 007, and the theme-init.js CSP
+  compatibility change).

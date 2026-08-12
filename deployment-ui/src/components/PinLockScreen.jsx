@@ -34,9 +34,23 @@ export default function PinLockScreen({ onUnlock }) {
                 return;
             }
 
+            setPin("");
+
+            // The server tracks its own attempt count independently of
+            // this component's local `attempts` state (see
+            // SettingsController.VerifyMyPin) - `locked` means it already
+            // hit the limit and cleared this session's credentials itself,
+            // which can happen even on this component's very first attempt
+            // after a page reload reset `attempts` back to 0 while the
+            // server's own counter kept counting. Deferring to the
+            // server's answer here is what closes that gap.
+            if (result.locked) {
+                performSelfClear();
+                return;
+            }
+
             const next = attempts + 1;
             setAttempts(next);
-            setPin("");
 
             if (next >= MAX_ATTEMPTS) {
                 performSelfClear();

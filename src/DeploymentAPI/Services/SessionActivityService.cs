@@ -24,6 +24,19 @@ public class SessionActivityService
     // value is never read.
     private readonly ConcurrentDictionary<string, ConcurrentDictionary<string, byte>> _usedEndpoints = new();
 
+    // Failed screen-lock PIN guesses for a session - the actual enforcement
+    // of "N wrong attempts locks this out," since the frontend's own
+    // attempt counter (PinLockScreen.jsx) is UI state only and can't stop
+    // someone from calling the verify endpoint directly, bypassing it
+    // entirely. See SettingsController.VerifyMyPin.
+    private readonly ConcurrentDictionary<string, int> _failedPinAttempts = new();
+
+    public int RecordFailedPinAttempt(string key) => _failedPinAttempts.AddOrUpdate(key, 1, (_, count) => count + 1);
+
+    public int GetFailedPinAttemptCount(string key) => _failedPinAttempts.TryGetValue(key, out var count) ? count : 0;
+
+    public void ClearFailedPinAttempts(string key) => _failedPinAttempts.TryRemove(key, out _);
+
     // Which frontend build a given session's browser is actually running -
     // reported once per app load (see AppVersionController's
     // frontend-heartbeat endpoint / deployment-ui's utils/buildInfo.js).

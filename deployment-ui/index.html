@@ -185,31 +185,9 @@
         }
       }
     </style>
-    <script>
-      // Read the persisted theme + style synchronously, before first paint,
-      // so the boot loader doesn't flash the wrong look for a split second
-      // (ThemeProvider/StyleProvider do the same read again once React
-      // mounts).
-      (function () {
-        try {
-          var stored = localStorage.getItem('theme');
-          var systemTheme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-          var theme = stored === 'light' || stored === 'dark' ? stored : systemTheme;
-          document.documentElement.dataset.theme = theme;
-        } catch (e) {
-          console.warn('Unable to read persisted theme preference', e);
-        }
-        try {
-          var storedStyle = localStorage.getItem('appStyle');
-          var validStyles = ['glass', 'brutal', 'minimal', 'neon', 'clay', 'midnight', 'sunset', 'mono'];
-          if (validStyles.indexOf(storedStyle) !== -1) {
-            document.documentElement.dataset.style = storedStyle;
-          }
-        } catch (e) {
-          console.warn('Unable to read persisted style preference', e);
-        }
-      })();
-    </script>
+    <!-- External, not inline - lets the CSP in public/_headers use a
+         strict script-src 'self' with no 'unsafe-inline' allowance. -->
+    <script src="/theme-init.js"></script>
   </head>
   <body>
     <div id="root">

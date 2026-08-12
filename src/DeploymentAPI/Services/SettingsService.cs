@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using DeploymentAPI.DTOs;
+using Microsoft.AspNetCore.DataProtection;
 using Newtonsoft.Json.Linq;
 using Npgsql;
 
@@ -18,13 +19,25 @@ public class SettingsService
     private readonly string? _connectionString;
     private readonly ActivityLogService _log;
 
+    // Encrypts every secret field at rest (GitHub PATs, AWS/Azure secret
+    // keys, Docker password, Sonar/Gemini API tokens) - see
+    // Protect/Unprotect below and security_findings.txt Finding 006. Keyed
+    // off a purpose string so a key compromise elsewhere in the app (were
+    // Data Protection ever used for something else) can't be replayed
+    // against these values. The key ring itself is persisted to Postgres
+    // when DATABASE_URL is set (see PostgresXmlRepository/Program.cs) so
+    // it survives Render redeploys - without that, every stored credential
+    // would become undecryptable the moment the container restarted with a
+    // fresh, ephemeral key.
+    private readonly IDataProtector _protector;
+
     // CREATE TABLE IF NOT EXISTS is idempotent and cheap, but there's no
     // reason to round-trip it on every single read/write within the same
     // process — a race between two requests both finding this false is
     // harmless (the statement is safe to run concurrently).
     private static bool _tableEnsured;
 
-    public SettingsService(IHostEnvironment env, ActivityLogService log)
+    public SettingsService(IHostEnvironment env, ActivityLogService log, IDataProtectionProvider dataProtectionProvider)
     {
         // SETTINGS_FILE_PATH lets a deployment point this at a mounted
         // persistent volume instead of the app's own content root. DATABASE_URL
@@ -43,6 +56,34 @@ public class SettingsService
             : BuildConnectionString(databaseUrl);
 
         _log = log;
+        _protector = dataProtectionProvider.CreateProtector("DeploymentPortal.Credentials.v1");
+    }
+
+    // Null/empty passes through unchanged - there's nothing to protect, and
+    // callers already use string.IsNullOrWhiteSpace to decide whether a
+    // field was actually submitted before ever reaching this.
+    private string? Protect(string? plaintext) =>
+        string.IsNullOrEmpty(plaintext) ? plaintext : _protector.Protect(plaintext);
+
+    // Every value already stored before this encryption layer existed is
+    // plain text, not Data-Protection ciphertext - Unprotect() throws
+    // CryptographicException on anything it doesn't recognize as its own
+    // format, which is exactly what tells those two cases apart. Passing
+    // the legacy value through as-is (rather than erroring) is what keeps
+    // every already-saved credential working without a migration step;
+    // it's re-encrypted automatically the next time that field is saved.
+    private string? Unprotect(string? stored)
+    {
+        if (string.IsNullOrEmpty(stored)) return stored;
+
+        try
+        {
+            return _protector.Unprotect(stored);
+        }
+        catch (CryptographicException)
+        {
+            return stored;
+        }
     }
 
     // Render (and Heroku before it) hand out Postgres connections as a
@@ -54,7 +95,11 @@ public class SettingsService
     // .github/workflows/smoke-tests.yml), which has no SSL configured at
     // all - Render itself never sets this, so production behavior is
     // unchanged.
-    private static string BuildConnectionString(string databaseUrl)
+    // internal, not private: Program.cs reuses this to build the connection
+    // string for the Data Protection key ring's own Postgres persistence
+    // (see PostgresXmlRepository) - same DATABASE_URL, no reason to parse
+    // it a second, slightly-different way.
+    internal static string BuildConnectionString(string databaseUrl)
     {
         var uri = new Uri(databaseUrl);
         var userInfo = uri.UserInfo.Split(':', 2);
@@ -150,7 +195,7 @@ public class SettingsService
         return new UserGitHubCredentials(
             entry?["Owner"]?.ToString() ?? string.Empty,
             entry?["Repository"]?.ToString() ?? string.Empty,
-            signedOut ? null : entry?["PersonalAccessToken"]?.ToString());
+            signedOut ? null : Unprotect(entry?["PersonalAccessToken"]?.ToString()));
     }
 
     // The raw SignedOut flag, unmasked by GetUserGitHubCredentialsAsync's
@@ -232,7 +277,7 @@ public class SettingsService
         if (!string.IsNullOrWhiteSpace(update.PersonalAccessToken))
         {
             var trimmedToken = update.PersonalAccessToken.Trim();
-            entry["PersonalAccessToken"] = trimmedToken;
+            entry["PersonalAccessToken"] = Protect(trimmedToken);
 
             // Reconnecting undoes an admin's earlier soft sign-out (see
             // SoftSignOutPatUserAsync) - typing a token back in is exactly
@@ -351,12 +396,12 @@ public class SettingsService
 
         return new UserAwsCredentials(
             entry?["AccessKeyId"]?.ToString(),
-            entry?["SecretAccessKey"]?.ToString(),
+            Unprotect(entry?["SecretAccessKey"]?.ToString()),
             entry?["Region"]?.ToString(),
             entry?["MfaSerialNumber"]?.ToString(),
             entry?["SessionAccessKeyId"]?.ToString(),
-            entry?["SessionSecretAccessKey"]?.ToString(),
-            entry?["SessionToken"]?.ToString(),
+            Unprotect(entry?["SessionSecretAccessKey"]?.ToString()),
+            Unprotect(entry?["SessionToken"]?.ToString()),
             DateTime.TryParse(entry?["ExpiresAtUtc"]?.ToString(), out var expiresAt) ? expiresAt : null,
             entry?["SsoAccountId"]?.ToString(),
             entry?["SsoAccountName"]?.ToString(),
@@ -380,7 +425,7 @@ public class SettingsService
             entry["AccessKeyId"] = update.AccessKeyId.Trim();
 
         if (!string.IsNullOrWhiteSpace(update.SecretAccessKey))
-            entry["SecretAccessKey"] = update.SecretAccessKey.Trim();
+            entry["SecretAccessKey"] = Protect(update.SecretAccessKey.Trim());
 
         if (!string.IsNullOrWhiteSpace(update.Region))
             entry["Region"] = update.Region.Trim();
@@ -391,8 +436,8 @@ public class SettingsService
         if (session != null)
         {
             entry["SessionAccessKeyId"] = session.AccessKeyId;
-            entry["SessionSecretAccessKey"] = session.SecretAccessKey;
-            entry["SessionToken"] = session.SessionToken;
+            entry["SessionSecretAccessKey"] = Protect(session.SecretAccessKey);
+            entry["SessionToken"] = Protect(session.SessionToken);
             entry["ExpiresAtUtc"] = session.ExpiresAtUtc.ToString("o");
             entry["SsoAccountId"] = session.SsoAccountId;
             entry["SsoAccountName"] = session.SsoAccountName;
@@ -427,7 +472,7 @@ public class SettingsService
         return new UserAzureCredentials(
             entry?["TenantId"]?.ToString(),
             entry?["ClientId"]?.ToString(),
-            entry?["ClientSecret"]?.ToString());
+            Unprotect(entry?["ClientSecret"]?.ToString()));
     }
 
     // Blank fields keep whatever was already saved - see SaveUserAwsCredentialsAsync.
@@ -444,7 +489,7 @@ public class SettingsService
             entry["ClientId"] = update.ClientId.Trim();
 
         if (!string.IsNullOrWhiteSpace(update.ClientSecret))
-            entry["ClientSecret"] = update.ClientSecret.Trim();
+            entry["ClientSecret"] = Protect(update.ClientSecret.Trim());
 
         users[key] = entry;
         root["UserAzureCredentials"] = users;
@@ -473,7 +518,7 @@ public class SettingsService
 
         return new UserGcpCredentials(
             entry?["ProjectId"]?.ToString(),
-            entry?["ServiceAccountKeyJson"]?.ToString());
+            Unprotect(entry?["ServiceAccountKeyJson"]?.ToString()));
     }
 
     // Blank fields keep whatever was already saved - see SaveUserAwsCredentialsAsync.
@@ -487,7 +532,7 @@ public class SettingsService
             entry["ProjectId"] = update.ProjectId.Trim();
 
         if (!string.IsNullOrWhiteSpace(update.ServiceAccountKeyJson))
-            entry["ServiceAccountKeyJson"] = update.ServiceAccountKeyJson.Trim();
+            entry["ServiceAccountKeyJson"] = Protect(update.ServiceAccountKeyJson.Trim());
 
         users[key] = entry;
         root["UserGcpCredentials"] = users;
@@ -519,7 +564,7 @@ public class SettingsService
         docker["Username"] = update.Username;
 
         if (!string.IsNullOrWhiteSpace(update.Password))
-            docker["Password"] = update.Password;
+            docker["Password"] = Protect(update.Password);
 
         root["Docker"] = docker;
 
@@ -568,7 +613,7 @@ public class SettingsService
         sonar["ProjectKey"] = update.ProjectKey ?? string.Empty;
 
         if (!string.IsNullOrWhiteSpace(update.Token))
-            sonar["Token"] = update.Token;
+            sonar["Token"] = Protect(update.Token);
 
         root["Sonar"] = sonar;
 
@@ -589,7 +634,7 @@ public class SettingsService
             sonar?["HostUrl"]?.ToString() is string h && !string.IsNullOrWhiteSpace(h) ? h : "https://sonarcloud.io",
             sonar?["Organization"]?.ToString() ?? string.Empty,
             sonar?["ProjectKey"]?.ToString() ?? string.Empty,
-            sonar?["Token"]?.ToString());
+            Unprotect(sonar?["Token"]?.ToString()));
     }
 
     // Deployment Copilot's Gemini API key/model - portal-wide, shared, same
@@ -618,7 +663,7 @@ public class SettingsService
         ai["Model"] = normalizedModel;
 
         if (!string.IsNullOrWhiteSpace(update.ApiKey))
-            ai["GeminiApiKey"] = update.ApiKey;
+            ai["GeminiApiKey"] = Protect(update.ApiKey);
 
         root["AiAssistant"] = ai;
 
@@ -636,7 +681,7 @@ public class SettingsService
         var ai = root["AiAssistant"] as JObject;
 
         return new AiAssistantCredentials(
-            ai?["GeminiApiKey"]?.ToString(),
+            Unprotect(ai?["GeminiApiKey"]?.ToString()),
             ai?["Model"]?.ToString() ?? string.Empty);
     }
 
@@ -683,7 +728,17 @@ public class SettingsService
 
         await WriteRootAsync(root);
 
-        _log.LogInfo("Settings", $"Admin allowlist saved: {string.Join(", ", update.AdminGitHubUsernames)}");
+        // An empty allowlist is "bootstrap mode" (see AdminGate.
+        // IsAdminOrBootstrap) - literally every visitor becomes Admin until
+        // this is configured again. The frontend already confirms this
+        // with the person saving it; logging it as an Error (not Info) is
+        // what makes it stand out in Activity Log for anyone checking on
+        // this instance's security posture afterward, not just at the
+        // moment it happened.
+        if (update.AdminGitHubUsernames.Count == 0)
+            _log.LogError("Settings", "Admin allowlist saved EMPTY - every visitor to this portal is now treated as Admin (bootstrap mode) until it's configured again.");
+        else
+            _log.LogInfo("Settings", $"Admin allowlist saved: {string.Join(", ", update.AdminGitHubUsernames)}");
 
         return BuildView(root);
     }

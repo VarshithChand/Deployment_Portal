@@ -4,6 +4,7 @@ using DeploymentAPI.Configuration;
 using DeploymentAPI.Helpers;
 using DeploymentAPI.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.IdentityModel.Tokens;
 
@@ -98,7 +99,39 @@ builder.Services.AddSwaggerGen();
 // HttpClient
 //
 builder.Services.AddHttpClient();
+
+// Used only by ExternalHealthCheckService, which validates the target
+// hostname's resolved IP against a private/loopback/link-local denylist
+// (see IsDisallowedTargetAsync) before every request - AllowAutoRedirect
+// is off so a redirect response can't retarget the request to an address
+// that check never saw, which per-hop redirect-following normally would.
+builder.Services.AddHttpClient("ExternalHealthCheck")
+    .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
+    {
+        AllowAutoRedirect = false
+    });
+
 builder.Services.AddMemoryCache();
+
+//
+// Data Protection - backs SettingsService's Protect()/Unprotect() encryption
+// of stored credentials (GitHub PAT, cloud secret keys, Docker/Sonar/Gemini
+// tokens). Reuses the same DATABASE_URL Postgres instance the rest of the
+// app's durable state already lives in - see PostgresXmlRepository - so the
+// key ring (and therefore every credential already encrypted under it)
+// survives Render's ephemeral disk being wiped on redeploy. Without this,
+// ASP.NET Core would fall back to persisting keys to local disk, which is
+// lost on every redeploy, permanently bricking anything encrypted under it.
+//
+var dataProtectionBuilder = builder.Services.AddDataProtection()
+    .SetApplicationName("DeploymentPortal");
+
+if (!string.IsNullOrWhiteSpace(databaseUrl))
+{
+    var keyRingConnectionString = SettingsService.BuildConnectionString(databaseUrl);
+    dataProtectionBuilder.AddKeyManagementOptions(options =>
+        options.XmlRepository = new PostgresXmlRepository(keyRingConnectionString));
+}
 
 //
 // Dependency Injection
@@ -281,6 +314,16 @@ app.Use(async (context, next) =>
     context.Response.Headers["X-Frame-Options"] = "DENY";
     context.Response.Headers["Referrer-Policy"] = "strict-origin-when-cross-origin";
 
+    // The real, browser-enforced CSP for this app's actual HTML document
+    // lives with the frontend (deployment-ui/vite.config.js writes a
+    // Cloudflare _headers file at build time) - DeploymentAPI never serves
+    // index.html. This one covers Swagger's own HTML UI below (still
+    // needs 'unsafe-inline' - Swashbuckle's bundled UI relies on inline
+    // script/style) and is harmless-but-low-value on plain JSON responses.
+    context.Response.Headers["Content-Security-Policy"] =
+        "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'";
+    context.Response.Headers["Permissions-Policy"] = "geolocation=(), camera=(), microphone=()";
+
     await next();
 });
 
@@ -367,6 +410,33 @@ app.Use(async (context, next) =>
 // Controllers
 //
 app.MapControllers();
+
+//
+// Startup checks
+// A visible warning (Activity Log + the process's own stdout, so it shows
+// up in Render's log stream too) if this instance is running in bootstrap
+// mode - see AdminGate.IsAdminOrBootstrap - the moment it comes up, not
+// just whenever someone happens to look at Activity Log. Only in
+// Production: bootstrap mode is the expected, harmless state for local
+// dev and doesn't need an alarm every time someone runs the API locally.
+//
+if (app.Environment.IsProduction())
+{
+    using var startupScope = app.Services.CreateScope();
+    var startupSettings = startupScope.ServiceProvider.GetRequiredService<SettingsService>();
+    var startupView = await startupSettings.GetViewAsync();
+
+    if (startupView.AdminGitHubUsernames.Count == 0)
+    {
+        var log = startupScope.ServiceProvider.GetRequiredService<ActivityLogService>();
+        const string message = "Startup check: the admin allowlist is EMPTY - this instance is in bootstrap " +
+            "mode, meaning every visitor is currently treated as Admin. Configure Settings -> Credentials -> " +
+            "Admin Allowlist as soon as possible.";
+
+        log.LogError("Startup", message);
+        Console.Error.WriteLine($"[SECURITY WARNING] {message}");
+    }
+}
 
 //
 // Run

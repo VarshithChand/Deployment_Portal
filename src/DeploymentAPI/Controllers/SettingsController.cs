@@ -24,14 +24,16 @@ public class SettingsController : ControllerBase
     private readonly CloudStatusService _cloud;
     private readonly GitHubAuthService _githubAuth;
     private readonly IAiAssistantService _ai;
+    private readonly SessionActivityService _activity;
 
-    public SettingsController(SettingsService settings, GitHubApiService github, CloudStatusService cloud, GitHubAuthService githubAuth, IAiAssistantService ai)
+    public SettingsController(SettingsService settings, GitHubApiService github, CloudStatusService cloud, GitHubAuthService githubAuth, IAiAssistantService ai, SessionActivityService activity)
     {
         _settings = settings;
         _github = github;
         _cloud = cloud;
         _githubAuth = githubAuth;
         _ai = ai;
+        _activity = activity;
     }
 
     [HttpGet]
@@ -408,6 +410,7 @@ public class SettingsController : ControllerBase
 
         var key = PortalIdentity.GetOrCreateKey(HttpContext);
         await _settings.SetPinAsync(key, request.Pin);
+        _activity.ClearFailedPinAttempts(key);
 
         return Ok(new { Configured = true });
     }
@@ -417,21 +420,52 @@ public class SettingsController : ControllerBase
     {
         var key = PortalIdentity.GetOrCreateKey(HttpContext);
         await _settings.ClearPinAsync(key);
+        _activity.ClearFailedPinAttempts(key);
         return Ok();
     }
 
-    // No rate limiting beyond the lockout the frontend itself enforces
-    // (PinLockScreen falls back to a full data wipe after too many wrong
-    // attempts) - a 4-8 digit PIN protecting local UI state, not an
-    // account, doesn't carry the same brute-force stakes a real
-    // authentication endpoint would.
+    // The PIN protects real saved credentials (GitHub/AWS/Azure/GCP), not
+    // just local UI state - a 4-8 digit numeric PIN is trivially brute-
+    // forceable with unlimited attempts, and PinLockScreen's own 5-attempt
+    // lockout is enforced entirely in the browser, which anyone calling
+    // this endpoint directly can simply skip. This mirrors that same
+    // 5-attempt rule server-side via SessionActivityService's in-memory
+    // per-session counter, so a scripted bypass of the UI gets the same
+    // "credentials wiped" outcome a UI-following attempt would - see
+    // security_findings.txt Finding 004.
+    private const int MaxPinAttempts = 5;
+
     [HttpPost("me/pin/verify")]
     public async Task<IActionResult> VerifyMyPin(SecurityPinUpdateDto request)
     {
         var key = PortalIdentity.GetOrCreateKey(HttpContext);
+
+        if (_activity.GetFailedPinAttemptCount(key) >= MaxPinAttempts)
+            return Ok(new { Valid = false, Locked = true });
+
         var valid = await _settings.VerifyPinAsync(key, request.Pin ?? string.Empty);
 
-        return Ok(new { Valid = valid });
+        if (valid)
+        {
+            _activity.ClearFailedPinAttempts(key);
+            return Ok(new { Valid = true, Locked = false });
+        }
+
+        var attempts = _activity.RecordFailedPinAttempt(key);
+
+        if (attempts >= MaxPinAttempts)
+        {
+            // Same outcome as the frontend's own performSelfClear - wipes
+            // this session's saved credentials and screen-lock PIN, so a
+            // scripted attacker who skipped the UI entirely still ends up
+            // exactly where a UI-following one would.
+            await _settings.ClearMyCredentialsAsync(key);
+            _activity.ClearFailedPinAttempts(key);
+
+            return Ok(new { Valid = false, Locked = true });
+        }
+
+        return Ok(new { Valid = false, Locked = false });
     }
 
     // "Clear All Data" for a non-admin - resets only the caller's own

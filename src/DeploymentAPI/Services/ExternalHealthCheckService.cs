@@ -1,4 +1,6 @@
 using System.Diagnostics;
+using System.Net;
+using System.Net.Sockets;
 using DeploymentAPI.DTOs;
 
 namespace DeploymentAPI.Services;
@@ -56,7 +58,22 @@ public class ExternalHealthCheckService
             return result;
         }
 
-        var client = _httpClientFactory.CreateClient();
+        // SSRF guard: even for an admin-gated feature, a hostname that
+        // resolves to loopback/link-local (this covers every cloud
+        // provider's 169.254.169.254 instance-metadata address)/private
+        // range would let this become a way to read the backend's own host
+        // network or steal instance credentials, with the response echoed
+        // straight back to the caller. Resolved once here, and redirects
+        // are disabled below (see the "ExternalHealthCheck" HttpClient
+        // registration in Program.cs) rather than re-validated per hop, so
+        // a redirect to a private address can't bypass this check.
+        if (await IsDisallowedTargetAsync(uri.Host))
+        {
+            result.Error = "This address is not allowed (private, loopback, or link-local).";
+            return result;
+        }
+
+        var client = _httpClientFactory.CreateClient("ExternalHealthCheck");
         client.Timeout = RequestTimeout;
 
         var stopwatch = Stopwatch.StartNew();
@@ -72,6 +89,13 @@ public class ExternalHealthCheckService
             result.Ok = response.IsSuccessStatusCode;
             result.ResponseTimeMs = Math.Round(stopwatch.Elapsed.TotalMilliseconds, 0);
             result.Body = body.Length > MaxBodyLength ? body[..MaxBodyLength] : body;
+
+            if ((int)response.StatusCode is >= 300 and < 400)
+            {
+                result.Error = "Received a redirect - redirects aren't followed automatically for this check " +
+                    "(the target address must be checked before every hop, so this stops instead of retargeting " +
+                    "itself to wherever the redirect points).";
+            }
         }
         catch (TaskCanceledException)
         {
@@ -83,5 +107,64 @@ public class ExternalHealthCheckService
         }
 
         return result;
+    }
+
+    private static async Task<bool> IsDisallowedTargetAsync(string host)
+    {
+        // A bare IP literal (e.g. someone pasted "http://169.254.169.254/")
+        // needs no DNS lookup at all.
+        if (IPAddress.TryParse(host, out var literalIp))
+            return IsDisallowedAddress(literalIp);
+
+        IPAddress[] addresses;
+
+        try
+        {
+            addresses = await Dns.GetHostAddressesAsync(host);
+        }
+        catch (SocketException)
+        {
+            // Can't resolve it at all - not our problem to explain, the
+            // actual HTTP call below will fail with its own clear error.
+            return false;
+        }
+
+        // A hostname can resolve to several addresses (round-robin DNS) -
+        // every single one has to be safe, since HttpClient/the OS is free
+        // to pick any of them.
+        return addresses.Any(IsDisallowedAddress);
+    }
+
+    private static bool IsDisallowedAddress(IPAddress address)
+    {
+        if (IPAddress.IsLoopback(address)) return true;
+
+        var bytes = address.GetAddressBytes();
+
+        if (address.AddressFamily == AddressFamily.InterNetwork)
+        {
+            // 10.0.0.0/8
+            if (bytes[0] == 10) return true;
+            // 172.16.0.0/12
+            if (bytes[0] == 172 && bytes[1] is >= 16 and <= 31) return true;
+            // 192.168.0.0/16
+            if (bytes[0] == 192 && bytes[1] == 168) return true;
+            // 169.254.0.0/16 - link-local, covers every major cloud
+            // provider's instance-metadata address (169.254.169.254).
+            if (bytes[0] == 169 && bytes[1] == 254) return true;
+            // 0.0.0.0/8
+            if (bytes[0] == 0) return true;
+        }
+        else if (address.AddressFamily == AddressFamily.InterNetworkV6)
+        {
+            // fc00::/7 - unique local addresses (IPv6's private-range
+            // equivalent).
+            if ((bytes[0] & 0xFE) == 0xFC) return true;
+            // fe80::/10 - link-local (covers fd00:ec2::254 and similar
+            // IPv6 metadata addresses some clouds use).
+            if (bytes[0] == 0xFE && (bytes[1] & 0xC0) == 0x80) return true;
+        }
+
+        return false;
     }
 }

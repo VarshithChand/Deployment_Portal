@@ -1,6 +1,59 @@
 import { execSync } from 'node:child_process'
+import { writeFileSync } from 'node:fs'
+import { dirname, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
+
+// ESM has no __dirname (this file runs as a module - see package.json's
+// "type": "module").
+const __dirname = dirname(fileURLToPath(import.meta.url))
+
+// Cloudflare Workers' static asset host reads a plain-text `_headers` file
+// from the deployed output and applies its rules to every matching
+// response - the actual place a browser-enforced CSP/Permissions-Policy
+// has to live, since DeploymentAPI (the backend) never serves index.html;
+// only this frontend does. Written here (not committed as a static
+// public/_headers file) so connect-src can include whatever
+// VITE_API_BASE_URL this specific build was made with - a wrong/missing
+// backend origin in connect-src would silently break every API call, so
+// this can't be a guessed, hand-maintained constant.
+function writeSecurityHeadersPlugin() {
+  return {
+    name: 'write-security-headers',
+    closeBundle() {
+      const apiOrigin = process.env.VITE_API_BASE_URL || ''
+
+      const connectSrc = apiOrigin
+        ? `'self' ${apiOrigin}`
+        : `'self'`
+
+      const csp = [
+        `default-src 'self'`,
+        `script-src 'self'`,
+        `style-src 'self' 'unsafe-inline' https://fonts.googleapis.com`,
+        `font-src 'self' https://fonts.gstatic.com`,
+        `img-src 'self' data: https://avatars.githubusercontent.com`,
+        `connect-src ${connectSrc}`,
+        `frame-ancestors 'none'`,
+        `base-uri 'self'`,
+        `form-action 'self'`
+      ].join('; ')
+
+      const headers = [
+        '/*',
+        `  Content-Security-Policy: ${csp}`,
+        '  X-Frame-Options: DENY',
+        '  X-Content-Type-Options: nosniff',
+        '  Referrer-Policy: strict-origin-when-cross-origin',
+        '  Permissions-Policy: geolocation=(), camera=(), microphone=()',
+        ''
+      ].join('\n')
+
+      writeFileSync(resolve(__dirname, 'dist/_headers'), headers)
+    }
+  }
+}
 
 // Real git state captured at build time, never invented - backs Services
 // -> Application Support's frontend version reporting (see
@@ -25,7 +78,7 @@ export default defineConfig({
     // Never fabricated when unset (see utils/buildInfo.js).
     __APP_VERSION__: JSON.stringify(process.env.VITE_APP_VERSION || null)
   },
-  plugins: [react()],
+  plugins: [react(), writeSecurityHeadersPlugin()],
   server: {
     proxy: {
       '/api': {
