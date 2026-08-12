@@ -103,13 +103,15 @@ export default function WorkflowActivityIndicator({ repos, runs }) {
 
         });
 
+    // Every checked repo with a finished run, not just a handful - the
+    // popover already scrolls (see .workflow-activity-popover's max-height)
+    // so there's no need to truncate the account down to a top few.
     const latest = checked
         .filter((repo) => {
             const run = runs[repo.fullName];
             return run && run.status === "completed";
         })
         .sort((a, b) => new Date(runs[b.fullName].createdAt) - new Date(runs[a.fullName].createdAt))
-        .slice(0, 6)
         .map((repo) => {
 
             const run = runs[repo.fullName];
