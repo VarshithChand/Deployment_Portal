@@ -4,7 +4,7 @@ import useAuth from "../../hooks/useAuth";
 import useNavigation from "../../hooks/useNavigation";
 import parseRepoUrl from "../../utils/parseRepoUrl";
 import isValidGitHubUsername from "../../utils/githubUsername";
-import { TABS, GATED_TABS, ADMIN_ONLY_TABS } from "./Sidebar";
+import { FLAT_TABS, GATED_TABS, ADMIN_ONLY_TABS } from "./Sidebar";
 import { VIEWS, VIEW_TITLES, ADMIN_ONLY_VIEWS } from "../../constants/settingsViews";
 
 function SearchIcon() {
@@ -72,7 +72,7 @@ export default function HeaderSearch() {
             return [];
         }
 
-        const tabResults = TABS
+        const tabResults = FLAT_TABS
             .filter((t) => !GATED_TABS.has(t.key) || canApproveReleases)
             .filter((t) => !ADMIN_ONLY_TABS.has(t.key) || isAdmin)
             .filter((t) => sidebarAccess[t.key] !== "hidden" && sidebarAccess[t.key] !== "locked")

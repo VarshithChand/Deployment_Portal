@@ -1677,6 +1677,77 @@ textarea{
 
 }
 
+/* ==========================================
+   SIDEBAR GROUPS ("GitHub" section)
+========================================== */
+
+.app-sidebar-group{
+
+    display:flex;
+
+    flex-direction:column;
+
+}
+
+.app-sidebar-group-header{
+
+    justify-content:flex-start;
+
+}
+
+.app-sidebar-group-header.group-active{
+
+    color:var(--heading-accent);
+
+}
+
+.app-sidebar-group-chevron{
+
+    flex-shrink:0;
+
+    display:flex;
+
+    margin-left:auto;
+
+    transition:transform .15s ease;
+
+}
+
+.app-sidebar-group-chevron.expanded{
+
+    transform:rotate(-90deg);
+
+}
+
+.app-sidebar-group-children{
+
+    display:flex;
+
+    flex-direction:column;
+
+    gap:2px;
+
+    padding-left:22px;
+
+    margin-top:2px;
+
+}
+
+/* Icon-only rail: no label/indent distinction left to show, so the
+   chevron and the indent both just add noise - hide/flatten them, same
+   as .app-sidebar-item-label above already does for every other item. */
+.app-sidebar.collapsed .app-sidebar-group-chevron{
+
+    display:none;
+
+}
+
+.app-sidebar.collapsed .app-sidebar-group-children{
+
+    padding-left:0;
+
+}
+
 /* Below 768px, Sidebar stops being a persistent rail — a rail that only
    ever gets as narrow as icon-only (the old fix here) still eats a fixed
    slice of a phone-width viewport permanently. Instead it becomes an
@@ -1728,6 +1799,21 @@ textarea{
     .app-sidebar.collapsed .app-sidebar-item-label{
 
         display:block;
+
+    }
+
+    /* Same reasoning as the label override above - the mobile drawer
+       always has full label width available, so the group chevron/indent
+       should reappear here too regardless of the desktop collapsed state. */
+    .app-sidebar.collapsed .app-sidebar-group-chevron{
+
+        display:flex;
+
+    }
+
+    .app-sidebar.collapsed .app-sidebar-group-children{
+
+        padding-left:22px;
 
     }
 

@@ -226,6 +226,20 @@ export function MoonIcon() {
     );
 }
 
+// A rounded rectangle with a spine down the left edge - the same
+// "repository" glyph already used everywhere a repo picker appears
+// (SwitchRepositoryModal, AllRepositoriesCard, HeaderSearch), reused here
+// for the sidebar's "GitHub" group header rather than inventing a
+// separate GitHub mark.
+export function GitHubGroupIcon() {
+    return (
+        <svg {...common}>
+            <rect x="3" y="3" width="12" height="12" rx="1.6" stroke="currentColor" strokeWidth="1.4" />
+            <line x1="6.5" y1="3" x2="6.5" y2="15" stroke="currentColor" strokeWidth="1.4" />
+        </svg>
+    );
+}
+
 export function ChevronIcon({ direction = "left" }) {
     return (
         <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true"
