@@ -4,12 +4,12 @@ import { forceAppRefreshForAllUsers } from "../../services/appVersionService";
 import useToast from "../../hooks/useToast";
 import useConfirm from "../../hooks/useConfirm";
 
-// Settings hub, admin-only - bumps the portal-wide version counter every
-// visitor's browser polls (see AppUpdateMonitor.jsx), prompting all of
-// them onto the latest deployed frontend build. Self-contained (own
-// state/API call) rather than threaded through Settings.jsx like the
-// credential sections, since nothing else on the page needs to know about
-// it - same reasoning as AwsLoginSection/GcpLoginSection being standalone.
+// Services -> Application Support, admin-only (moved here from Settings -
+// this and every other version/cache concern now live in one place).
+// Bumps the portal-wide version counter every visitor's browser polls (see
+// AppUpdateMonitor.jsx), prompting all of them onto the latest deployed
+// frontend build. Self-contained (own state/API call) since nothing else
+// on the page needs to know about it.
 export default function AppCacheControlCard() {
 
     const toast = useToast();
@@ -63,9 +63,9 @@ export default function AppCacheControlCard() {
 
             {dialog}
 
-            <h2 className="card-title">
-                Application Version
-            </h2>
+            <h3 className="settings-subhead" style={{ marginTop: 0 }}>
+                Force Refresh
+            </h3>
 
             <p className="empty-state" style={{ padding: "0 0 15px", textAlign: "left" }}>
                 Prompts every visitor to refresh onto the latest deployed frontend build, the next

@@ -1,5 +1,3 @@
-import AppCacheControlCard from "./AppCacheControlCard";
-
 // Pulled out of Settings.jsx's "hub" view - part of the same
 // cognitive-complexity cleanup as CredentialsView/SidebarAccessView/
 // ActivityLogView.
@@ -112,15 +110,6 @@ export default function SettingsHubView({ isAdmin, isSuperAdmin, setView, handle
             )}
 
         </div>
-
-        {isAdmin && (
-
-            <>
-                <AppCacheControlCard />
-                <br />
-            </>
-
-        )}
 
         <div className="card card-danger-zone">
 

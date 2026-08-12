@@ -6,12 +6,15 @@ import {
     getLatestDeployment,
     getUserVersions
 } from "../../services/applicationSupportService";
+import { getAppVersion } from "../../services/appVersionService";
+import { getLocalAppVersion } from "../../utils/appCacheManager";
 import { APP_COMMIT, APP_VERSION, APP_ENVIRONMENT } from "../../utils/buildInfo";
 import usePagination from "../../hooks/usePagination";
 import SectionTabs from "../common/SectionTabs";
 import SearchBox from "../common/SearchBox";
 import Pagination from "../common/Pagination";
 import ApplicationSupportCopilot from "./ApplicationSupportCopilot";
+import AppCacheControlCard from "./AppCacheControlCard";
 
 const SUB_SECTIONS = [
     { key: "version", label: "Application Version" },
@@ -59,17 +62,27 @@ export default function ApplicationSupportSection() {
 
     const [refreshing, setRefreshing] = useState(false);
 
+    // The same cache-bust counter AppUpdateMonitor polls in the background
+    // (see utils/appCacheManager.js) - surfaced here directly so "is the
+    // person looking at THIS page right now on the latest deployed build"
+    // has one clear, explicit answer instead of only being an invisible
+    // background check.
+    const [serverCacheVersion, setServerCacheVersion] = useState(null);
+    const localCacheVersion = getLocalAppVersion();
+
     async function loadVersion() {
 
         try {
 
-            const [versionData, healthData] = await Promise.all([
+            const [versionData, healthData, cacheVersionData] = await Promise.all([
                 getApplicationVersion(),
-                getApplicationHealth()
+                getApplicationHealth(),
+                getAppVersion()
             ]);
 
             setVersion(versionData);
             setHealth(healthData);
+            setServerCacheVersion(cacheVersionData.version);
 
         }
         catch (err) {
@@ -134,6 +147,10 @@ export default function ApplicationSupportSection() {
         ? version.backendCommit === APP_COMMIT
         : null;
 
+    const isOnLatestCacheVersion = serverCacheVersion != null && localCacheVersion != null
+        ? Number(localCacheVersion) >= Number(serverCacheVersion)
+        : null;
+
     const filteredUsers = useMemo(() => {
 
         const trimmed = userSearch.trim().toLowerCase();
@@ -196,6 +213,44 @@ export default function ApplicationSupportSection() {
                 ) : (
 
                     <>
+
+                        <div className="card">
+
+                            <h3 className="settings-subhead" style={{ marginTop: 0 }}>Your Version Status</h3>
+
+                            {isOnLatestCacheVersion === null ? (
+
+                                <p className="empty-state" style={{ textAlign: "left" }}>
+                                    Unable to determine — this browser hasn't checked in yet. Reload the page
+                                    once, then come back here.
+                                </p>
+
+                            ) : isOnLatestCacheVersion ? (
+
+                                <p style={{ margin: 0 }}>
+                                    <span className="badge badge-success">✓ Current</span>{" "}
+                                    You (this browser) are using the latest deployed version
+                                    (v{serverCacheVersion}).
+                                </p>
+
+                            ) : (
+
+                                <p style={{ margin: 0 }}>
+                                    <span className="badge badge-warning">⚠ Outdated</span>{" "}
+                                    You (this browser) are on v{localCacheVersion}, the latest deployed version
+                                    is v{serverCacheVersion}. Refresh this page to update — or wait, you'll be
+                                    prompted automatically within about 30 seconds.
+                                </p>
+
+                            )}
+
+                        </div>
+
+                        <br />
+
+                        <AppCacheControlCard />
+
+                        <br />
 
                         <div className="cloud-service-stat-grid">
 
