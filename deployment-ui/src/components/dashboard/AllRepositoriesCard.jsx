@@ -10,9 +10,17 @@ import SearchBox from "../common/SearchBox";
 import Pagination from "../common/Pagination";
 import ConfirmDialog from "../ConfirmDialog";
 import StatusBadge from "../StatusBadge";
+import WorkflowActivityIndicator from "./WorkflowActivityIndicator";
 
 const PAGE_SIZE = 6;
-const RUN_POLL_MS = 20000;
+
+// Every repo gets checked now (the header's running-workflow count needs
+// the whole account, not just the page on screen), so this interval is
+// wider than the old per-page 20s - 34 repos every 20s would multiply into
+// thousands of GitHub calls/hour on its own. The backend's own 20s cache
+// per repo (see GitHubApiService.GetCachedAsync) means switching pages or
+// searching between polls never adds extra calls either way.
+const RUN_POLL_MS = 60000;
 
 // A plain rounded rectangle with a spine down the left edge — same glyph
 // SwitchRepositoryModal uses, kept in sync so the two repo pickers read as
@@ -74,6 +82,29 @@ export default function AllRepositoriesCard({ repository }) {
     const [target, setTarget] = useState(null);
     const [switching, setSwitching] = useState(false);
 
+    // Shared by the initial repo load (fire the moment the list is known,
+    // rather than waiting for the next polling tick) and the recurring
+    // usePolling below - one fetch path, not two.
+    function fetchRunsFor(repoList) {
+
+        if (!githubRepoConfigured || repoList.length === 0) {
+            return;
+        }
+
+        repoList.forEach((repo) => {
+
+            getRepoLatestRun(repo.owner, repo.name)
+                .then((response) => {
+                    setRuns((prev) => ({ ...prev, [repo.fullName]: response.data || null }));
+                })
+                .catch(() => {
+                    setRuns((prev) => ({ ...prev, [repo.fullName]: null }));
+                });
+
+        });
+
+    }
+
     useEffect(() => {
 
         if (!githubRepoConfigured) {
@@ -87,7 +118,12 @@ export default function AllRepositoriesCard({ repository }) {
             .then((response) => {
 
                 if (!cancelled) {
-                    setRepos(Array.isArray(response.data) ? response.data : []);
+
+                    const list = Array.isArray(response.data) ? response.data : [];
+
+                    setRepos(list);
+                    fetchRunsFor(list);
+
                 }
 
             })
@@ -112,6 +148,7 @@ export default function AllRepositoriesCard({ repository }) {
             cancelled = true;
         };
 
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [githubRepoConfigured]);
 
     const filtered = repos.filter((repo) =>
@@ -128,30 +165,12 @@ export default function AllRepositoriesCard({ repository }) {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [search]);
 
-    // Only the page currently on screen gets checked for a running
-    // pipeline — checking every repo the token can see, on every poll,
-    // would multiply GitHub calls by the size of the whole account.
-    function loadRunsForVisiblePage() {
-
-        if (!githubRepoConfigured || pageItems.length === 0) {
-            return;
-        }
-
-        pageItems.forEach((repo) => {
-
-            getRepoLatestRun(repo.owner, repo.name)
-                .then((response) => {
-                    setRuns((prev) => ({ ...prev, [repo.fullName]: response.data || null }));
-                })
-                .catch(() => {
-                    setRuns((prev) => ({ ...prev, [repo.fullName]: null }));
-                });
-
-        });
-
-    }
-
-    usePolling(loadRunsForVisiblePage, RUN_POLL_MS);
+    // Every repo the token can see, not just the current page - the header
+    // running-workflow count needs the whole account. usePolling always
+    // calls the freshest closure (see its own comment), so this keeps
+    // seeing the latest `repos` even though the interval itself is set up
+    // once on mount.
+    usePolling(() => fetchRunsFor(repos), RUN_POLL_MS);
 
     const currentFullName = repository?.full_name
         || (repository?.owner?.login && repository?.name ? `${repository.owner.login}/${repository.name}` : null);
@@ -210,9 +229,17 @@ export default function AllRepositoriesCard({ repository }) {
                 </div>
 
                 {!loading && !error && (
-                    <span className="repo-picker-count">
-                        {totalCount} {totalCount === 1 ? "repository" : "repositories"}
-                    </span>
+
+                    <div className="repo-picker-header-badges">
+
+                        <span className="repo-picker-count">
+                            {totalCount} {totalCount === 1 ? "repository" : "repositories"}
+                        </span>
+
+                        <WorkflowActivityIndicator repos={repos} runs={runs} />
+
+                    </div>
+
                 )}
 
             </div>

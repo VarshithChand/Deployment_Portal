@@ -4171,6 +4171,243 @@ textarea{
 }
 
 /* ==========================================
+   WORKFLOW ACTIVITY INDICATOR (All Repositories header)
+========================================== */
+
+.repo-picker-header-badges{
+
+    display:flex;
+
+    flex-direction:column;
+
+    align-items:flex-end;
+
+    gap:6px;
+
+    flex-shrink:0;
+
+}
+
+@media(max-width:768px){
+
+    .repo-picker-header-badges{
+        align-items:flex-start;
+        flex-direction:row;
+        flex-wrap:wrap;
+    }
+
+}
+
+.workflow-activity-wrap{
+
+    position:relative;
+
+}
+
+.workflow-activity-trigger{
+
+    font-family:'Lexend','Segoe UI',Tahoma,Geneva,Verdana,sans-serif;
+
+    font-size:12px;
+
+    font-weight:600;
+
+    letter-spacing:.03em;
+
+    text-transform:uppercase;
+
+    color:var(--text-muted);
+
+    background:var(--bg);
+
+    border:1px solid var(--border);
+
+    border-radius:20px;
+
+    padding:5px 12px;
+
+    white-space:nowrap;
+
+    cursor:pointer;
+
+    transition:border-color .15s ease, color .15s ease;
+
+}
+
+.workflow-activity-trigger:hover,
+.workflow-activity-trigger:focus-visible{
+
+    border-color:var(--heading-accent);
+
+    color:var(--text);
+
+    outline:none;
+
+}
+
+.workflow-activity-trigger-active{
+
+    color:var(--heading-accent);
+
+    border-color:var(--heading-accent);
+
+}
+
+.workflow-activity-popover{
+
+    position:absolute;
+
+    top:calc(100% + 8px);
+
+    right:0;
+
+    z-index:60;
+
+    width:320px;
+
+    max-width:min(320px, 85vw);
+
+    max-height:380px;
+
+    overflow-y:auto;
+
+    background:var(--card-bg-strong, var(--card-bg));
+
+    border:1px solid var(--border);
+
+    border-radius:12px;
+
+    box-shadow:0 16px 40px -12px var(--card-shadow);
+
+    padding:14px 16px;
+
+    text-align:left;
+
+    animation:card-in .15s ease both;
+
+}
+
+.workflow-activity-title{
+
+    margin:0 0 10px;
+
+    font-weight:700;
+
+    font-size:14px;
+
+    color:var(--text);
+
+}
+
+.workflow-activity-section-title{
+
+    margin:12px 0 6px;
+
+    font-size:11px;
+
+    font-weight:600;
+
+    letter-spacing:.05em;
+
+    text-transform:uppercase;
+
+    color:var(--text-muted);
+
+}
+
+.workflow-activity-section-title:first-of-type{
+
+    margin-top:0;
+
+}
+
+.workflow-activity-empty{
+
+    margin:0;
+
+    font-size:12px;
+
+    color:var(--text-muted);
+
+}
+
+.workflow-activity-list{
+
+    display:flex;
+
+    flex-direction:column;
+
+    gap:8px;
+
+    list-style:none;
+
+    margin:0;
+
+    padding:0;
+
+}
+
+.workflow-activity-item{
+
+    display:flex;
+
+    align-items:flex-start;
+
+    gap:8px;
+
+}
+
+.workflow-activity-item-text{
+
+    display:flex;
+
+    flex-direction:column;
+
+    min-width:0;
+
+}
+
+.workflow-activity-item-repo{
+
+    font-size:12px;
+
+    font-weight:600;
+
+    color:var(--text);
+
+    overflow:hidden;
+
+    text-overflow:ellipsis;
+
+    white-space:nowrap;
+
+}
+
+.workflow-activity-item-workflow{
+
+    font-size:12px;
+
+    color:var(--text-muted);
+
+    overflow:hidden;
+
+    text-overflow:ellipsis;
+
+    white-space:nowrap;
+
+}
+
+.workflow-activity-item-meta{
+
+    font-size:11px;
+
+    color:var(--text-muted);
+
+    opacity:.8;
+
+}
+
+/* ==========================================
    AWS SERVICES CARD (Dashboard)
 ========================================== */
 
