@@ -235,6 +235,69 @@ public class AwsServiceGroupDto
     public List<AwsResourceItemDto> Items { get; set; } = new();
 }
 
+// The Cloud Services page's EC2 detail view - unlike the Dashboard's EC2
+// tile (deliberately running-only, see DescribeEc2InstancesAsync), this
+// shows both running AND stopped so "how many are running vs stopped"
+// is answerable from the click-through detail, not just "what's live".
+public class AwsEc2DetailDto
+{
+    public bool Configured { get; set; }
+
+    public string? Error { get; set; }
+
+    public int RunningCount { get; set; }
+
+    public int StoppedCount { get; set; }
+
+    public List<AwsEc2InstanceDto> Instances { get; set; } = new();
+}
+
+public class AwsEc2InstanceDto
+{
+    public string Name { get; set; } = string.Empty;
+
+    public string InstanceId { get; set; } = string.Empty;
+
+    public string InstanceType { get; set; } = string.Empty;
+
+    public string State { get; set; } = string.Empty;
+}
+
+// The Cloud Services page's ECS detail view - every cluster this access
+// key can see, and every service within each, with running/desired task
+// counts - answers "how many services in ECS, and which are stopped in
+// this cluster" at a glance, which the account-wide inventory's generic
+// Tagging API scan (see AwsResourceInventoryDto.Other) can't - task
+// counts aren't something a tag scan exposes, only a real ECS API call.
+public class AwsEcsDetailDto
+{
+    public bool Configured { get; set; }
+
+    public string? Error { get; set; }
+
+    public List<AwsEcsClusterDto> Clusters { get; set; } = new();
+}
+
+public class AwsEcsClusterDto
+{
+    public string ClusterName { get; set; } = string.Empty;
+
+    public string Status { get; set; } = string.Empty;
+
+    public List<AwsEcsServiceDto> Services { get; set; } = new();
+}
+
+public class AwsEcsServiceDto
+{
+    public string ServiceName { get; set; } = string.Empty;
+
+    public string Status { get; set; } = string.Empty;
+
+    public int RunningCount { get; set; }
+
+    public int DesiredCount { get; set; }
+}
+
 // The temporary credential set STS (MFA path) or AWS SSO's
 // GetRoleCredentials (SSO path) hands back — everything needed to make AWS
 // calls as that session until it expires. The Sso* fields are only set by

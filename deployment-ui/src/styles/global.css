@@ -5040,9 +5040,15 @@ textarea{
 
 }
 
-.cloud-service-card-category{
+.cloud-service-card-badges{
 
-    align-self:flex-start;
+    display:flex;
+
+    flex-wrap:wrap;
+
+    align-items:center;
+
+    gap:6px;
 
     margin-top:2px;
 
@@ -5105,6 +5111,86 @@ textarea{
     font-size:14px;
 
     line-height:1.7;
+
+}
+
+.cloud-service-live-stats{
+
+    display:flex;
+
+    gap:18px;
+
+    margin:8px 0;
+
+    font-size:14px;
+
+    color:var(--text-muted);
+
+}
+
+.cloud-service-live-stats strong{
+
+    color:var(--text);
+
+    font-size:18px;
+
+}
+
+/* Live-status resource lists (EC2 instances, ECS services, the generic
+   inventory fallback) - a row per resource rather than the bulleted
+   Common Uses list above, since these need a status badge and a right-
+   aligned detail column instead of plain prose. */
+.cloud-service-detail-list-plain{
+
+    list-style:none;
+
+    padding:0;
+
+    margin:8px 0;
+
+    display:flex;
+
+    flex-direction:column;
+
+    gap:6px;
+
+}
+
+.cloud-service-detail-list-plain li{
+
+    display:flex;
+
+    align-items:center;
+
+    gap:10px;
+
+    font-size:13px;
+
+}
+
+.cloud-service-detail-list-plain li > span:nth-child(2){
+
+    flex:1;
+
+    color:var(--text);
+
+    overflow:hidden;
+
+    text-overflow:ellipsis;
+
+    white-space:nowrap;
+
+}
+
+.cloud-service-ecs-cluster{
+
+    margin-bottom:14px;
+
+}
+
+.cloud-service-ecs-cluster:last-child{
+
+    margin-bottom:0;
 
 }
 

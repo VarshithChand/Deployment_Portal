@@ -1,6 +1,9 @@
 import { useMemo, useState } from "react";
 
 import AWS_SERVICES, { AWS_CATEGORIES } from "../data/awsServiceCatalog";
+import { getMyAwsResources } from "../services/settingsService";
+import { getLiveStatusForService } from "../utils/cloudServiceLiveStatus";
+import usePolling from "../hooks/usePolling";
 import PageLayout from "../components/layout/PageLayout";
 import SearchBox from "../components/common/SearchBox";
 import CloudServiceCard from "../components/cloudServices/CloudServiceCard";
@@ -49,10 +52,49 @@ export default function CloudServices() {
     const [category, setCategory] = useState("All");
     const [selectedService, setSelectedService] = useState(null);
 
+    // The account-wide inventory (see Dashboard's AWS Services card, same
+    // data source) - reused here rather than fetched twice, and it's what
+    // powers "which services am I actually using" below without hitting
+    // AWS once per catalog entry.
+    const [inventory, setInventory] = useState(null);
+    const [inventoryLoading, setInventoryLoading] = useState(true);
+
+    async function loadInventory() {
+
+        try {
+            setInventory(await getMyAwsResources());
+        }
+        catch (err) {
+            console.error(err);
+        }
+        finally {
+            setInventoryLoading(false);
+        }
+
+    }
+
+    // 45s - this already rides the same 20s server-side cache the
+    // Dashboard's own AWS Services card shares, so polling here doesn't
+    // add extra AWS calls beyond whichever card asks first.
+    usePolling(loadInventory, 45000);
+
     const providerServices = useMemo(
         () => AWS_SERVICES.filter((s) => s.provider === provider),
         [provider]
     );
+
+    const inUseServices = useMemo(() => {
+
+        if (provider !== "aws" || !inventory?.configured) {
+            return [];
+        }
+
+        return providerServices.filter((s) => {
+            const status = getLiveStatusForService(s, inventory);
+            return status && !status.error && status.count > 0;
+        });
+
+    }, [providerServices, inventory, provider]);
 
     const filtered = useMemo(() => {
 
@@ -90,6 +132,52 @@ export default function CloudServices() {
             </p>
 
             <div className="card">
+
+                <h2 className="card-title">Services You're Using</h2>
+
+                {inventoryLoading ? (
+
+                    <p className="empty-state">Checking your AWS account...</p>
+
+                ) : !inventory?.configured ? (
+
+                    <p className="empty-state" style={{ textAlign: "left" }}>
+                        Enter your AWS credentials in Settings → Credentials → AWS to see which of
+                        these services your account is actually using.
+                    </p>
+
+                ) : inUseServices.length === 0 ? (
+
+                    <p className="empty-state" style={{ textAlign: "left" }}>
+                        Nothing detected running in {inventory.region || "your AWS account"} yet.
+                    </p>
+
+                ) : (
+
+                    <div className="cloud-service-grid">
+
+                        {inUseServices.map((service) => (
+
+                            <CloudServiceCard
+                                key={service.id}
+                                service={service}
+                                onSelect={setSelectedService}
+                                liveCount={getLiveStatusForService(service, inventory)?.count}
+                            />
+
+                        ))}
+
+                    </div>
+
+                )}
+
+            </div>
+
+            <br />
+
+            <div className="card">
+
+                <h2 className="card-title">All AWS Services</h2>
 
                 <div className="form-group cloud-provider-select-group">
 
@@ -183,6 +271,7 @@ export default function CloudServices() {
                 service={selectedService}
                 onClose={() => setSelectedService(null)}
                 onSelectRelated={selectServiceById}
+                inventory={inventory}
             />
 
         </PageLayout>

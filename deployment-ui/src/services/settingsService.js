@@ -77,6 +77,19 @@ export const getMyAwsResources = async () => {
     return response.data;
 };
 
+// Cloud Services page's per-service detail click-through — richer than
+// getMyAwsResources above (running vs. stopped instance/task counts),
+// so each is its own call rather than folded into the account-wide scan.
+export const getMyAwsEc2Detail = async () => {
+    const response = await settingsApi.get("/me/aws/ec2-detail");
+    return response.data;
+};
+
+export const getMyAwsEcsDetail = async () => {
+    const response = await settingsApi.get("/me/aws/ecs-detail");
+    return response.data;
+};
+
 export const getMyAzureSettings = async () => {
     const response = await settingsApi.get("/me/azure");
     return response.data;

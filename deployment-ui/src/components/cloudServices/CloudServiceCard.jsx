@@ -17,7 +17,14 @@ function ServiceIconBadge({ name }) {
 // details modal (see CloudServiceDetailModal) - the "Open AWS Console"
 // pill is a second, independent way in for anyone who already knows what
 // they want and doesn't need the detour through details first.
-export default function CloudServiceCard({ service, onSelect }) {
+//
+// liveCount is optional - a resource count from the account-wide AWS
+// inventory (see utils/cloudServiceLiveStatus.js), only ever passed for
+// the "Services You're Using" overview, where it's already known to be
+// > 0. The plain catalog grid below it never passes this, since checking
+// every one of ~100 services just to render a badge nobody asked for
+// there would be wasted work.
+export default function CloudServiceCard({ service, onSelect, liveCount }) {
 
     return (
 
@@ -36,9 +43,19 @@ export default function CloudServiceCard({ service, onSelect }) {
                     <h3 className="cloud-service-card-name">{service.name}</h3>
                     <p className="cloud-service-card-fullname">{service.fullName}</p>
 
-                    <span className="badge badge-secondary cloud-service-card-category">
-                        {service.category}
-                    </span>
+                    <div className="cloud-service-card-badges">
+
+                        <span className="badge badge-secondary cloud-service-card-category">
+                            {service.category}
+                        </span>
+
+                        {typeof liveCount === "number" && (
+                            <span className="badge badge-success">
+                                {liveCount} in use
+                            </span>
+                        )}
+
+                    </div>
 
                     <p className="cloud-service-card-description">{service.description}</p>
 

@@ -307,6 +307,150 @@ public class CloudStatusService
         return result;
     }
 
+    // Cloud Services page's EC2 detail (click-through, not the Dashboard
+    // tile) - both running AND stopped, since "how many are running vs
+    // stopped" is exactly what this view exists to answer.
+    public async Task<AwsEc2DetailDto> GetEc2DetailAsync(UserAwsCredentials credentials, string? region)
+    {
+        var result = new AwsEc2DetailDto { Configured = credentials.IsConfigured };
+
+        if (!credentials.IsConfigured)
+            return result;
+
+        if (credentials.RequiresMfaRefresh)
+        {
+            result.Error = "MFA session expired — re-enter your 6-digit code in Settings → Credentials → AWS.";
+            return result;
+        }
+
+        var effectiveRegion = string.IsNullOrWhiteSpace(region) ? credentials.Region : region;
+
+        if (string.IsNullOrWhiteSpace(effectiveRegion))
+        {
+            result.Error = "No AWS region configured — set one in Settings → Credentials → AWS.";
+            return result;
+        }
+
+        try
+        {
+            using var client = new AmazonEC2Client(BuildCredentials(credentials), RegionEndpoint.GetBySystemName(effectiveRegion));
+
+            var response = await client.DescribeInstancesAsync(new DescribeInstancesRequest());
+
+            var instances = (response.Reservations ?? new List<Reservation>())
+                .SelectMany(r => r.Instances ?? new List<Instance>())
+                // Terminated instances linger in the API response for a
+                // while after deletion - neither "running" nor genuinely
+                // "stopped" in any way worth showing, so they're dropped
+                // rather than inflating the stopped count.
+                .Where(i => i.State?.Name != InstanceStateName.Terminated)
+                .ToList();
+
+            result.Instances = instances
+                .Select(i => new AwsEc2InstanceDto
+                {
+                    Name = i.Tags?.FirstOrDefault(t => t.Key == "Name")?.Value ?? i.InstanceId,
+                    InstanceId = i.InstanceId,
+                    InstanceType = i.InstanceType?.Value ?? "",
+                    State = i.State?.Name?.Value ?? "unknown"
+                })
+                .ToList();
+
+            result.RunningCount = result.Instances.Count(i => i.State == "running");
+            result.StoppedCount = result.Instances.Count(i => i.State == "stopped");
+        }
+        catch (Exception ex)
+        {
+            result.Error = ex.Message;
+        }
+
+        return result;
+    }
+
+    // Cloud Services page's ECS detail - every cluster this access key can
+    // see, and every service within each, with running/desired task
+    // counts. Capped at the first 10 clusters and first 20 services per
+    // cluster - this is a glance view, not an exhaustive account audit,
+    // and an account with dozens of clusters shouldn't make this call hang.
+    public async Task<AwsEcsDetailDto> GetEcsDetailAsync(UserAwsCredentials credentials, string? region)
+    {
+        var result = new AwsEcsDetailDto { Configured = credentials.IsConfigured };
+
+        if (!credentials.IsConfigured)
+            return result;
+
+        if (credentials.RequiresMfaRefresh)
+        {
+            result.Error = "MFA session expired — re-enter your 6-digit code in Settings → Credentials → AWS.";
+            return result;
+        }
+
+        var effectiveRegion = string.IsNullOrWhiteSpace(region) ? credentials.Region : region;
+
+        if (string.IsNullOrWhiteSpace(effectiveRegion))
+        {
+            result.Error = "No AWS region configured — set one in Settings → Credentials → AWS.";
+            return result;
+        }
+
+        try
+        {
+            using var client = new AmazonECSClient(BuildCredentials(credentials), RegionEndpoint.GetBySystemName(effectiveRegion));
+
+            var clusterArns = (await client.ListClustersAsync(new Amazon.ECS.Model.ListClustersRequest()))
+                .ClusterArns ?? new List<string>();
+
+            foreach (var clusterArn in clusterArns.Take(10))
+            {
+                var clusterName = clusterArn.Contains('/') ? clusterArn[(clusterArn.LastIndexOf('/') + 1)..] : clusterArn;
+                var clusterEntry = new AwsEcsClusterDto { ClusterName = clusterName };
+
+                try
+                {
+                    var serviceArns = (await client.ListServicesAsync(new Amazon.ECS.Model.ListServicesRequest { Cluster = clusterArn }))
+                        .ServiceArns ?? new List<string>();
+
+                    var toDescribe = serviceArns.Take(20).ToList();
+
+                    if (toDescribe.Count > 0)
+                    {
+                        var described = await client.DescribeServicesAsync(new Amazon.ECS.Model.DescribeServicesRequest
+                        {
+                            Cluster = clusterArn,
+                            Services = toDescribe
+                        });
+
+                        clusterEntry.Status = "ACTIVE";
+                        clusterEntry.Services = (described.Services ?? new List<Amazon.ECS.Model.Service>())
+                            .Select(s => new AwsEcsServiceDto
+                            {
+                                ServiceName = s.ServiceName,
+                                Status = s.Status,
+                                RunningCount = s.RunningCount ?? 0,
+                                DesiredCount = s.DesiredCount ?? 0
+                            })
+                            .ToList();
+                    }
+                }
+                catch (Exception ex)
+                {
+                    // One cluster's services failing to describe (e.g. a
+                    // permission gap scoped to just that cluster) shouldn't
+                    // blank out every other cluster already fetched.
+                    clusterEntry.Status = $"Error: {ex.Message}";
+                }
+
+                result.Clusters.Add(clusterEntry);
+            }
+        }
+        catch (Exception ex)
+        {
+            result.Error = ex.Message;
+        }
+
+        return result;
+    }
+
     // Filtered server-side to instance-state-name=running - a stopped
     // instance still exists (still shows in the Console, still billed for
     // its EBS volumes) but isn't actually running, and this tile is meant

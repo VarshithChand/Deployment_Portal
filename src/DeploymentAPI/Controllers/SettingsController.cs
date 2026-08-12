@@ -200,6 +200,30 @@ public class SettingsController : ControllerBase
         return Ok(await _cloud.GetAwsResourceInventoryAsync(creds, region));
     }
 
+    // Cloud Services page's per-service detail click-through - richer than
+    // the account-wide inventory above (running vs stopped instance
+    // counts), so it's its own call rather than folded into GetMyAwsResources.
+    [HttpGet("me/aws/ec2-detail")]
+    public async Task<IActionResult> GetMyAwsEc2Detail([FromQuery] string? region)
+    {
+        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var creds = await _settings.GetUserAwsCredentialsAsync(key);
+
+        return Ok(await _cloud.GetEc2DetailAsync(creds, region));
+    }
+
+    // Same reasoning as ec2-detail above - per-cluster/per-service task
+    // counts aren't something the account-wide inventory's generic tag
+    // scan can answer, only a real ECS API call can.
+    [HttpGet("me/aws/ecs-detail")]
+    public async Task<IActionResult> GetMyAwsEcsDetail([FromQuery] string? region)
+    {
+        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var creds = await _settings.GetUserAwsCredentialsAsync(key);
+
+        return Ok(await _cloud.GetEcsDetailAsync(creds, region));
+    }
+
     // AWS has no username/password sign-in API - the access key/secret is
     // the real "login," and when MfaSerialNumber+MfaCode are both present
     // this verifies that second factor via STS GetSessionToken before
