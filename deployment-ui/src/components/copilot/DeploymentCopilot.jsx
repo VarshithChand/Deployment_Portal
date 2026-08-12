@@ -78,6 +78,12 @@ export default function DeploymentCopilot() {
     const scrollRef = useRef(null);
     const checkedOnce = useRef(false);
 
+    // Gemini's Interactions API resolves conversation history server-side
+    // from this ID (see aiService.sendCopilotMessage) - the frontend only
+    // needs to remember the LAST one, not resend every prior turn. Null
+    // starts a fresh conversation on Gemini's end.
+    const interactionIdRef = useRef(null);
+
     // Lazy - only checked the first time someone actually opens the panel,
     // not on every page load for visitors who never touch it.
     useEffect(() => {
@@ -129,14 +135,21 @@ export default function DeploymentCopilot() {
         if (!text || sending) return;
 
         setInput("");
-
-        const nextMessages = [...messages, { role: "user", content: text }];
-        setMessages(nextMessages);
+        setMessages((prev) => [...prev, { role: "user", content: text }]);
         setSending(true);
 
         try {
 
-            const result = await sendCopilotMessage(nextMessages, readPageContext(tab));
+            const result = await sendCopilotMessage(text, interactionIdRef.current, readPageContext(tab));
+
+            // A failed turn's interactionId is deliberately not kept (see
+            // AiController.Chat - it's null on failure) - chaining the
+            // next message off a broken interaction would just repeat the
+            // same failure, so this leaves interactionIdRef pointing at
+            // the last known-good turn instead.
+            if (result.interactionId) {
+                interactionIdRef.current = result.interactionId;
+            }
 
             setMessages((prev) => [...prev, { role: "model", content: result.reply }]);
 

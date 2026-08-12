@@ -63,8 +63,8 @@ public class AiController : ControllerBase
     [HttpPost("chat")]
     public async Task<IActionResult> Chat([FromBody] AiChatRequestDto request)
     {
-        if (request.Messages == null || request.Messages.Count == 0)
-            return BadRequest(new { message = "messages is required." });
+        if (string.IsNullOrWhiteSpace(request.Message))
+            return BadRequest(new { message = "message is required." });
 
         var creds = await _settings.GetAiAssistantCredentialsAsync();
 
@@ -82,15 +82,13 @@ public class AiController : ControllerBase
         var tools = _tools.GetToolDefinitions(isSuperAdmin);
         var systemInstruction = BuildSystemInstruction(request.Context);
 
-        // The frontend keeps the full visible transcript, but only the most
-        // recent turns matter for maintaining context - capping this keeps
-        // a long-running conversation from silently growing every request's
-        // token usage without bound (section 23).
-        var history = request.Messages.TakeLast(20).ToList();
-
+        // No history to resend - Gemini's Interactions API resolves it
+        // server-side from PreviousInteractionId (see GeminiService); the
+        // frontend only ever sends the new message plus that ID.
         var result = await _ai.ChatAsync(
             systemInstruction,
-            history,
+            request.Message,
+            request.PreviousInteractionId,
             tools,
             (name, argsJson) => _tools.ExecuteToolAsync(name, argsJson, isSuperAdmin),
             creds.ApiKey!,
@@ -107,7 +105,13 @@ public class AiController : ControllerBase
             });
         }
 
-        return Ok(new AiChatResponseDto { Success = true, Reply = result.Reply, ToolsUsed = result.ToolsUsed });
+        return Ok(new AiChatResponseDto
+        {
+            Success = true,
+            Reply = result.Reply,
+            InteractionId = result.InteractionId,
+            ToolsUsed = result.ToolsUsed
+        });
     }
 
     // Records that Copilot was used and roughly what it looked at - never

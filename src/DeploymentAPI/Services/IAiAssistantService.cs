@@ -6,8 +6,9 @@ namespace DeploymentAPI.Services;
 // implementation today (see section 2/24 of the Deployment Copilot spec:
 // "start with Gemini, keep the provider replaceable"). Nothing outside
 // this interface (AiController, AiToolsService) knows it's talking to
-// Gemini specifically - a future OpenAiService/ClaudeService could
-// implement this same interface without either caller changing.
+// Gemini specifically, or that Gemini's own REST surface (the Interactions
+// API) works via ID-chained turns rather than a resent message array -
+// that's an implementation detail of GeminiService alone.
 public interface IAiAssistantService
 {
     // A lightweight round-trip used only by the Credentials page's "Test
@@ -15,16 +16,19 @@ public interface IAiAssistantService
     // this API key talk to this model at all."
     Task<AiTestConnectionResultDto> TestConnectionAsync(string apiKey, string model);
 
-    // The real chat turn, with tool/function-calling support: the provider
-    // may ask to call one or more of `tools` before giving a final answer,
-    // in which case `executeTool` is invoked (name, raw JSON arguments) and
-    // its string result fed back in — looped until the provider returns a
-    // plain text reply or a safety limit is hit. `executeTool` is supplied
-    // by the caller (AiToolsService) so this service never needs to know
-    // anything about GitHub/AWS/the database itself.
+    // One turn of the conversation. previousInteractionId chains onto the
+    // prior turn (null starts a fresh conversation) - the provider itself
+    // resolves history server-side from that ID, so the caller never needs
+    // to resend earlier turns. The provider may ask to call one or more of
+    // `tools` before giving a final answer, in which case `executeTool` is
+    // invoked (name, raw JSON arguments) and its string result fed back in
+    // - looped until a plain text reply comes back or a safety limit is
+    // hit. `executeTool` is supplied by the caller (AiToolsService) so this
+    // service never needs to know anything about GitHub/AWS/the database.
     Task<AiChatResultDto> ChatAsync(
         string systemInstruction,
-        List<AiChatMessageDto> history,
+        string message,
+        string? previousInteractionId,
         List<AiToolDefinition> tools,
         Func<string, string, Task<string>> executeTool,
         string apiKey,
@@ -38,6 +42,8 @@ public class AiChatResultDto
     public string Reply { get; set; } = string.Empty;
 
     public string? Error { get; set; }
+
+    public string? InteractionId { get; set; }
 
     public List<string> ToolsUsed { get; set; } = new();
 }
