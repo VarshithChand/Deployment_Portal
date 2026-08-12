@@ -59,16 +59,16 @@ export const TABS = [
             { key: "timeline", label: "Timeline", Icon: TimelineIcon },
             { key: "history", label: "History", Icon: HistoryIcon },
             { key: "environments", label: "Environments", Icon: EnvironmentsIcon },
-            { key: "templates", label: "Template Tester", Icon: TemplatesIcon },
-            // Deliberately NOT called "Services" - the top-level "services"
-            // tab below is a different, pre-existing admin feature (PAT
-            // user management + audit log). Two sidebar entries both
-            // labeled "Services" would be confusing even though only one
-            // of them is nested here; "Cloud Services" also matches this
-            // page's own <h1> title (see pages/CloudServices.jsx).
-            { key: "cloudServices", label: "Cloud Services", Icon: CloudServicesIcon }
+            { key: "templates", label: "Template Tester", Icon: TemplatesIcon }
         ]
     },
+    // A separate top-level page, not a GitHub sub-page - it browses AWS's
+    // own service catalog, not anything about this repo's pipeline.
+    // Deliberately NOT called "Services" either way - the top-level
+    // "services" tab below is a different, pre-existing admin feature (PAT
+    // user management + audit log); "Cloud Services" also matches this
+    // page's own <h1> title (see pages/CloudServices.jsx).
+    { key: "cloudServices", label: "Cloud Services", Icon: CloudServicesIcon },
     { key: "services", label: "Services", Icon: ServicesIcon },
     { key: "docker", label: "Docker", Icon: DockerIcon },
     { key: "codeQuality", label: "Code Quality", Icon: CodeQualityIcon },

@@ -1,7 +1,9 @@
-// The AWS service catalog behind the "Cloud Services" page (Sidebar >
-// GitHub > Cloud Services). Plain local data, not an API response - this
-// never changes at runtime, so there's no reason to fetch it (see
-// CloudServices.jsx's own comment on why it never calls AWS for this).
+// The AWS service catalog behind the "Cloud Services" page (its own
+// top-level Sidebar item, not a GitHub sub-page - it browses AWS's service
+// catalog, unrelated to any one repo's pipeline). Plain local data, not an
+// API response - this never changes at runtime, so there's no reason to
+// fetch it (see CloudServices.jsx's own comment on why it never calls AWS
+// for this).
 //
 // consoleUrl always points at the provider-agnostic console.aws.amazon.com
 // (or a service's own dedicated console subdomain, e.g. S3/Lightsail/
