@@ -125,6 +125,9 @@ builder.Services.AddScoped<PipelineExplanationService>();
 // same reuse rationale as DockerApiService) — every AWS/Azure credential
 // it uses is passed in per-call, never held on the instance itself.
 builder.Services.AddSingleton<CloudStatusService>();
+// Same statelessness as CloudStatusService above - every credential is
+// passed in per-call.
+builder.Services.AddSingleton<CloudServiceManagementService>();
 // Its only state is IMemoryCache-backed pending sign-ins, already a
 // Singleton itself - safe to share the same way.
 builder.Services.AddSingleton<AwsSsoService>();

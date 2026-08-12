@@ -13,10 +13,11 @@ function ServiceIconBadge({ name }) {
 
 }
 
-// One AWS service in the catalog grid. The card's main body opens the
-// details modal (see CloudServiceDetailModal) - the "Open AWS Console"
-// pill is a second, independent way in for anyone who already knows what
-// they want and doesn't need the detour through details first.
+// One AWS service in the catalog grid. The card's main body navigates to
+// this service's dedicated management page (see CloudServiceDetailPage) -
+// the "Open AWS Console" pill is a second, independent way in for anyone
+// who already knows what they want and doesn't need the detour through
+// the management page first.
 //
 // liveCount is optional - a resource count from the account-wide AWS
 // inventory (see utils/cloudServiceLiveStatus.js), only ever passed for

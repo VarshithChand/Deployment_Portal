@@ -5088,18 +5088,6 @@ textarea{
 
 }
 
-.cloud-service-detail-header{
-
-    display:flex;
-
-    align-items:center;
-
-    gap:14px;
-
-    margin-bottom:4px;
-
-}
-
 .cloud-service-detail-list{
 
     margin:0;
@@ -5114,49 +5102,93 @@ textarea{
 
 }
 
-.cloud-service-live-stats{
+/* ---- Breadcrumbs + detail-page header (CloudServiceDetailPage) ---- */
+
+.cloud-service-breadcrumbs{
 
     display:flex;
 
-    gap:18px;
+    flex-wrap:wrap;
 
-    margin:8px 0;
+    align-items:center;
 
-    font-size:14px;
+    gap:6px;
+
+    margin-bottom:14px;
+
+    font-size:13px;
+
+}
+
+.cloud-service-breadcrumb-link{
+
+    background:none;
+
+    border:none;
+
+    padding:0;
+
+    color:var(--heading-accent);
+
+    cursor:pointer;
+
+    font-family:inherit;
+
+    font-size:inherit;
+
+    text-decoration:none;
+
+}
+
+.cloud-service-breadcrumb-link:hover{
+
+    text-decoration:underline;
+
+}
+
+.cloud-service-breadcrumb-sep{
+
+    margin-right:6px;
 
     color:var(--text-muted);
 
 }
 
-.cloud-service-live-stats strong{
+.cloud-service-breadcrumb-current{
 
-    color:var(--text);
+    color:var(--text-muted);
 
-    font-size:18px;
+    font-weight:600;
 
 }
 
-/* Live-status resource lists (EC2 instances, ECS services, the generic
-   inventory fallback) - a row per resource rather than the bulleted
-   Common Uses list above, since these need a status badge and a right-
-   aligned detail column instead of plain prose. */
-.cloud-service-detail-list-plain{
-
-    list-style:none;
-
-    padding:0;
-
-    margin:8px 0;
+.cloud-service-detail-page-header{
 
     display:flex;
 
-    flex-direction:column;
+    flex-wrap:wrap;
 
-    gap:6px;
+    align-items:flex-start;
+
+    justify-content:space-between;
+
+    gap:16px;
 
 }
 
-.cloud-service-detail-list-plain li{
+.cloud-service-detail-page-header-main{
+
+    display:flex;
+
+    align-items:flex-start;
+
+    gap:16px;
+
+    min-width:0;
+
+}
+
+.cloud-service-detail-page-header-actions{
 
     display:flex;
 
@@ -5164,33 +5196,59 @@ textarea{
 
     gap:10px;
 
-    font-size:13px;
+    flex-shrink:0;
 
 }
 
-.cloud-service-detail-list-plain li > span:nth-child(2){
+/* ---- Summary stat tiles (every *ManagementPage) ---- */
 
-    flex:1;
+.cloud-service-stat-grid{
+
+    display:grid;
+
+    grid-template-columns:repeat(auto-fit, minmax(140px, 1fr));
+
+    gap:12px;
+
+    margin:16px 0;
+
+}
+
+.cloud-service-stat-tile{
+
+    display:flex;
+
+    flex-direction:column;
+
+    gap:4px;
+
+    padding:14px 16px;
+
+    background:var(--card-bg);
+
+    border:1px solid var(--border);
+
+    border-radius:12px;
+
+}
+
+.cloud-service-stat-tile span{
+
+    font-size:12px;
+
+    color:var(--text-muted);
+
+    text-transform:uppercase;
+
+    letter-spacing:.04em;
+
+}
+
+.cloud-service-stat-tile strong{
+
+    font-size:24px;
 
     color:var(--text);
-
-    overflow:hidden;
-
-    text-overflow:ellipsis;
-
-    white-space:nowrap;
-
-}
-
-.cloud-service-ecs-cluster{
-
-    margin-bottom:14px;
-
-}
-
-.cloud-service-ecs-cluster:last-child{
-
-    margin-bottom:0;
 
 }
 

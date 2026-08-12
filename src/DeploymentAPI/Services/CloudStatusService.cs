@@ -79,7 +79,10 @@ public class CloudStatusService
         }
     }
 
-    private static AWSCredentials BuildCredentials(UserAwsCredentials credentials) =>
+    // Internal (not private) so CloudServiceManagementService - the Cloud
+    // Services management pages' own AWS calls - can build the exact same
+    // credentials rather than duplicating this.
+    internal static AWSCredentials BuildCredentials(UserAwsCredentials credentials) =>
         credentials.HasValidSession
             ? new SessionAWSCredentials(credentials.SessionAccessKeyId, credentials.SessionSecretAccessKey, credentials.SessionToken)
             : new BasicAWSCredentials(credentials.AccessKeyId, credentials.SecretAccessKey);
@@ -352,7 +355,11 @@ public class CloudStatusService
                     Name = i.Tags?.FirstOrDefault(t => t.Key == "Name")?.Value ?? i.InstanceId,
                     InstanceId = i.InstanceId,
                     InstanceType = i.InstanceType?.Value ?? "",
-                    State = i.State?.Name?.Value ?? "unknown"
+                    State = i.State?.Name?.Value ?? "unknown",
+                    PrivateIp = i.PrivateIpAddress,
+                    PublicIp = i.PublicIpAddress,
+                    AvailabilityZone = i.Placement?.AvailabilityZone,
+                    LaunchTime = i.LaunchTime
                 })
                 .ToList();
 
@@ -437,7 +444,12 @@ public class CloudStatusService
                                 ServiceName = s.ServiceName,
                                 Status = s.Status,
                                 RunningCount = s.RunningCount ?? 0,
-                                DesiredCount = s.DesiredCount ?? 0
+                                DesiredCount = s.DesiredCount ?? 0,
+                                PendingCount = s.PendingCount ?? 0,
+                                TaskDefinition = s.TaskDefinition?.Contains('/') == true
+                                    ? s.TaskDefinition[(s.TaskDefinition.LastIndexOf('/') + 1)..]
+                                    : s.TaskDefinition,
+                                DeploymentStatus = s.Deployments?.FirstOrDefault()?.RolloutState?.Value
                             }));
                     }
 

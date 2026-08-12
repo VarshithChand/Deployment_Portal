@@ -261,6 +261,14 @@ public class AwsEc2InstanceDto
     public string InstanceType { get; set; } = string.Empty;
 
     public string State { get; set; } = string.Empty;
+
+    public string? PrivateIp { get; set; }
+
+    public string? PublicIp { get; set; }
+
+    public string? AvailabilityZone { get; set; }
+
+    public DateTime? LaunchTime { get; set; }
 }
 
 // The Cloud Services page's ECS detail view - every cluster this access
@@ -296,6 +304,120 @@ public class AwsEcsServiceDto
     public int RunningCount { get; set; }
 
     public int DesiredCount { get; set; }
+
+    public int PendingCount { get; set; }
+
+    public string? TaskDefinition { get; set; }
+
+    public string? DeploymentStatus { get; set; }
+}
+
+// The result of a mutating Cloud Services action (EC2 start/stop/reboot/
+// terminate, ECS scale, ECR create/delete) - AWS accepted the request or
+// it didn't. Never claims a final resource state itself (see section 25
+// of the request this came from: "Running -> Stopped" only ever comes
+// from a real follow-up AWS read, not from assuming the action worked) -
+// the frontend re-fetches the resource list after a successful action
+// rather than trusting this response to describe the new state.
+public class CloudServiceActionResultDto
+{
+    public bool Success { get; set; }
+
+    public string? Error { get; set; }
+
+    public string? Message { get; set; }
+}
+
+public class AwsEcrRepositoryDto
+{
+    public string Name { get; set; } = string.Empty;
+
+    public string Uri { get; set; } = string.Empty;
+
+    public int ImageCount { get; set; }
+
+    public DateTime? LatestPushedAt { get; set; }
+
+    public DateTime? CreatedAt { get; set; }
+}
+
+public class AwsEcrRepositoryListDto
+{
+    public bool Configured { get; set; }
+
+    public string? Error { get; set; }
+
+    public List<AwsEcrRepositoryDto> Repositories { get; set; } = new();
+}
+
+public class AwsEcrImageDto
+{
+    public string Tag { get; set; } = string.Empty;
+
+    public string Digest { get; set; } = string.Empty;
+
+    public long SizeBytes { get; set; }
+
+    public DateTime? PushedAt { get; set; }
+}
+
+public class AwsEcrImageListDto
+{
+    public bool Configured { get; set; }
+
+    public string? Error { get; set; }
+
+    public List<AwsEcrImageDto> Images { get; set; } = new();
+}
+
+public class AwsLambdaFunctionDto
+{
+    public string Name { get; set; } = string.Empty;
+
+    public string Runtime { get; set; } = string.Empty;
+
+    public string Architecture { get; set; } = string.Empty;
+
+    public int MemorySize { get; set; }
+
+    public int Timeout { get; set; }
+
+    public DateTime? LastModified { get; set; }
+}
+
+public class AwsLambdaFunctionListDto
+{
+    public bool Configured { get; set; }
+
+    public string? Error { get; set; }
+
+    public List<AwsLambdaFunctionDto> Functions { get; set; } = new();
+}
+
+public class AwsRdsInstanceDto
+{
+    public string Identifier { get; set; } = string.Empty;
+
+    public string Engine { get; set; } = string.Empty;
+
+    public string EngineVersion { get; set; } = string.Empty;
+
+    public string Status { get; set; } = string.Empty;
+
+    public string InstanceClass { get; set; } = string.Empty;
+
+    public int StorageGb { get; set; }
+
+    public string? AvailabilityZone { get; set; }
+}
+
+public class AwsRdsInstanceListDto
+{
+    public bool Configured { get; set; }
+
+    public string? Error { get; set; }
+
+    public List<AwsRdsInstanceDto> Instances { get; set; } = new();
 }
 
 // The temporary credential set STS (MFA path) or AWS SSO's

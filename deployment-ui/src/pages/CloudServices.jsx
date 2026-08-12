@@ -9,7 +9,7 @@ import PageLayout from "../components/layout/PageLayout";
 import SearchBox from "../components/common/SearchBox";
 import Pagination from "../components/common/Pagination";
 import CloudServiceCard from "../components/cloudServices/CloudServiceCard";
-import CloudServiceDetailModal from "../components/cloudServices/CloudServiceDetailModal";
+import CloudServiceDetailPage from "../components/cloudServices/CloudServiceDetailPage";
 
 // Matches the repo-picker grids' own convention (SwitchRepositoryModal,
 // AllRepositoriesCard both use 6-9) rather than the 10-per-page default
@@ -26,6 +26,29 @@ const PROVIDERS = [
     { key: "azure", label: "Azure", enabled: false },
     { key: "gcp", label: "GCP", enabled: false }
 ];
+
+// The Cloud Services-specific slice of the URL - kept local to this page
+// (not folded into NavigationContext) since these params only ever mean
+// anything here, the same way Settings.jsx owns its own "?view=" without
+// NavigationContext needing to know what a "view" is. pushState (not
+// NavigationContext's usual replaceState for top-level tab switches) is
+// deliberate - section 32 asks for real browser back/forward through
+// catalog -> service -> cluster -> service-within-cluster, which only
+// works with real history entries.
+const SERVICE_PARAM_KEYS = ["service", "cluster", "ecsService", "repo"];
+
+function readRouteParams() {
+
+    const params = new URLSearchParams(window.location.search);
+
+    return {
+        service: params.get("service"),
+        cluster: params.get("cluster"),
+        ecsService: params.get("ecsService"),
+        repo: params.get("repo")
+    };
+
+}
 
 function matchesQuery(service, query) {
 
@@ -47,17 +70,29 @@ function matchesQuery(service, query) {
 
 // The catalog is local, static configuration data (see
 // data/awsServiceCatalog.js), never fetched - there's nothing here an API
-// call would improve on, and calling AWS for "the list of AWS services"
-// on every page load would be both pointless and needlessly rate-limit-
-// hungry (see section 19/13 of the request: no AWS credentials touch this
-// page at all - every action is a plain link to the AWS Console using
-// whatever AWS session the visitor's own browser already has).
+// call would improve on. Live resource data (running instances, cluster
+// task counts, etc.) is fetched separately, only once a specific service
+// page is actually open - see the individual *ManagementPage components.
 export default function CloudServices() {
 
     const [provider, setProvider] = useState("aws");
     const [search, setSearch] = useState("");
     const [category, setCategory] = useState("All");
-    const [selectedService, setSelectedService] = useState(null);
+    const [routeParams, setRouteParams] = useState(readRouteParams);
+
+    // The browser's own Back/Forward buttons change the URL without
+    // calling navigate() below - this is what keeps this component's
+    // state in sync when that happens (section 32).
+    useEffect(() => {
+
+        function handlePopState() {
+            setRouteParams(readRouteParams());
+        }
+
+        window.addEventListener("popstate", handlePopState);
+        return () => window.removeEventListener("popstate", handlePopState);
+
+    }, []);
 
     // The account-wide inventory (see Dashboard's AWS Services card, same
     // data source) - reused here rather than fetched twice, and it's what
@@ -84,6 +119,42 @@ export default function CloudServices() {
     // Dashboard's own AWS Services card shares, so polling here doesn't
     // add extra AWS calls beyond whichever card asks first.
     usePolling(loadInventory, 45000);
+
+    // Pushes a new history entry (real Back/Forward support) with
+    // whichever of service/cluster/ecsService/repo the caller passes -
+    // any key it omits is cleared, so e.g. navigate({ service: "ecs" })
+    // from a service-detail page correctly drops the stale cluster/
+    // ecsService params rather than leaving them dangling.
+    function navigate(next) {
+
+        const url = new URL(window.location.href);
+        url.searchParams.set("tab", "cloudServices");
+
+        SERVICE_PARAM_KEYS.forEach((key) => {
+
+            if (next[key]) {
+                url.searchParams.set(key, next[key]);
+            }
+            else {
+                url.searchParams.delete(key);
+            }
+
+        });
+
+        window.history.pushState(null, "", url);
+
+        setRouteParams({
+            service: next.service || null,
+            cluster: next.cluster || null,
+            ecsService: next.ecsService || null,
+            repo: next.repo || null
+        });
+
+    }
+
+    function goBackToCatalog() {
+        navigate({});
+    }
 
     const providerServices = useMemo(
         () => AWS_SERVICES.filter((s) => s.provider === provider),
@@ -142,17 +213,42 @@ export default function CloudServices() {
         setCategory("All");
     }
 
-    // Related-service buttons inside the modal swap which service the same
-    // modal is showing, by id, rather than closing and reopening it.
-    function selectServiceById(id) {
+    const selectedService = routeParams.service
+        ? AWS_SERVICES.find((s) => s.id === routeParams.service)
+        : null;
 
-        const found = AWS_SERVICES.find((s) => s.id === id);
+    // Section 2's "primary click" behavior - a service card now navigates
+    // to its dedicated management page instead of opening a modal (the
+    // old CloudServiceDetailModal is gone). "Open AWS Console" on the
+    // card itself is untouched - that's still a direct link, unaffected
+    // by this.
+    function goToService(id) {
+        navigate({ service: id });
+    }
 
-        if (found) {
-            setSelectedService(found);
-        }
+    if (selectedService) {
+
+        return (
+
+            <PageLayout title="Cloud Services">
+
+                <CloudServiceDetailPage
+                    service={selectedService}
+                    routeParams={routeParams}
+                    inventory={inventory}
+                    onNavigate={navigate}
+                    onBack={goBackToCatalog}
+                />
+
+            </PageLayout>
+
+        );
 
     }
+
+    // routeParams.service pointed at an id no longer in the catalog (or a
+    // stale/hand-edited URL) - fall back to the catalog rather than a
+    // blank page.
 
     return (
 
@@ -192,7 +288,7 @@ export default function CloudServices() {
                             <CloudServiceCard
                                 key={service.id}
                                 service={service}
-                                onSelect={setSelectedService}
+                                onSelect={() => goToService(service.id)}
                                 liveCount={getLiveStatusForService(service, inventory)?.count}
                             />
 
@@ -289,7 +385,7 @@ export default function CloudServices() {
                                 <CloudServiceCard
                                     key={service.id}
                                     service={service}
-                                    onSelect={setSelectedService}
+                                    onSelect={() => goToService(service.id)}
                                 />
 
                             ))}
@@ -310,13 +406,6 @@ export default function CloudServices() {
                 )}
 
             </div>
-
-            <CloudServiceDetailModal
-                service={selectedService}
-                onClose={() => setSelectedService(null)}
-                onSelectRelated={selectServiceById}
-                inventory={inventory}
-            />
 
         </PageLayout>
 
