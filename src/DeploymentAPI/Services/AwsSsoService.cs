@@ -5,6 +5,7 @@ using Amazon.SSO.Model;
 using Amazon.SSOOIDC;
 using Amazon.SSOOIDC.Model;
 using DeploymentAPI.DTOs;
+using DeploymentAPI.Helpers;
 using Microsoft.Extensions.Caching.Memory;
 
 namespace DeploymentAPI.Services;
@@ -129,7 +130,7 @@ public class AwsSsoService
         }
         catch (Exception ex)
         {
-            return new AwsSsoPollResponseDto { Status = "error", Error = ex.Message };
+            return new AwsSsoPollResponseDto { Status = "error", Error = CloudErrorSanitizer.Describe(ex, "AWS", "SSO sign-in") };
         }
     }
 

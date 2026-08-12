@@ -11,6 +11,7 @@ using Amazon.RDS;
 using Amazon.RDS.Model;
 using Amazon.Runtime;
 using DeploymentAPI.DTOs;
+using DeploymentAPI.Helpers;
 
 namespace DeploymentAPI.Services;
 
@@ -66,7 +67,7 @@ public class CloudServiceManagementService
         }
         catch (Exception ex)
         {
-            return new CloudServiceActionResultDto { Success = false, Error = ex.Message };
+            return new CloudServiceActionResultDto { Success = false, Error = CloudErrorSanitizer.Describe(ex, "AWS", "EC2 start") };
         }
     }
 
@@ -86,7 +87,7 @@ public class CloudServiceManagementService
         }
         catch (Exception ex)
         {
-            return new CloudServiceActionResultDto { Success = false, Error = ex.Message };
+            return new CloudServiceActionResultDto { Success = false, Error = CloudErrorSanitizer.Describe(ex, "AWS", "EC2 stop") };
         }
     }
 
@@ -106,7 +107,7 @@ public class CloudServiceManagementService
         }
         catch (Exception ex)
         {
-            return new CloudServiceActionResultDto { Success = false, Error = ex.Message };
+            return new CloudServiceActionResultDto { Success = false, Error = CloudErrorSanitizer.Describe(ex, "AWS", "EC2 reboot") };
         }
     }
 
@@ -130,7 +131,7 @@ public class CloudServiceManagementService
         }
         catch (Exception ex)
         {
-            return new CloudServiceActionResultDto { Success = false, Error = ex.Message };
+            return new CloudServiceActionResultDto { Success = false, Error = CloudErrorSanitizer.Describe(ex, "AWS", "EC2 termination") };
         }
     }
 
@@ -162,7 +163,7 @@ public class CloudServiceManagementService
         }
         catch (Exception ex)
         {
-            return new CloudServiceActionResultDto { Success = false, Error = ex.Message };
+            return new CloudServiceActionResultDto { Success = false, Error = CloudErrorSanitizer.Describe(ex, "AWS", "ECS scale") };
         }
     }
 
@@ -230,7 +231,7 @@ public class CloudServiceManagementService
         }
         catch (Exception ex)
         {
-            result.Error = ex.Message;
+            result.Error = CloudErrorSanitizer.Describe(ex, "AWS", "ECR repository list");
         }
 
         return result;
@@ -273,7 +274,7 @@ public class CloudServiceManagementService
         }
         catch (Exception ex)
         {
-            result.Error = ex.Message;
+            result.Error = CloudErrorSanitizer.Describe(ex, "AWS", "ECR image list");
         }
 
         return result;
@@ -295,7 +296,7 @@ public class CloudServiceManagementService
         }
         catch (Exception ex)
         {
-            return new CloudServiceActionResultDto { Success = false, Error = ex.Message };
+            return new CloudServiceActionResultDto { Success = false, Error = CloudErrorSanitizer.Describe(ex, "AWS", "ECR repository creation") };
         }
     }
 
@@ -323,7 +324,7 @@ public class CloudServiceManagementService
         }
         catch (Exception ex)
         {
-            return new CloudServiceActionResultDto { Success = false, Error = ex.Message };
+            return new CloudServiceActionResultDto { Success = false, Error = CloudErrorSanitizer.Describe(ex, "AWS", "ECR repository deletion") };
         }
     }
 
@@ -372,7 +373,7 @@ public class CloudServiceManagementService
         }
         catch (Exception ex)
         {
-            result.Error = ex.Message;
+            result.Error = CloudErrorSanitizer.Describe(ex, "AWS", "Lambda function list");
         }
 
         return result;
@@ -424,7 +425,7 @@ public class CloudServiceManagementService
         }
         catch (Exception ex)
         {
-            result.Error = ex.Message;
+            result.Error = CloudErrorSanitizer.Describe(ex, "AWS", "RDS instance list");
         }
 
         return result;

@@ -91,12 +91,14 @@ public class SonarApiService
             // 404s on both calls above — surfaced as a normal, expected
             // state rather than a raw error, since it's the first thing
             // anyone configuring this will see before CI has run once.
+            Console.Error.WriteLine($"[SonarCloud] {ex}");
+
             return new SonarOverviewDto
             {
                 Configured = true,
                 DashboardUrl = dashboardUrl,
                 Error = "No analysis found yet for this project — run the Code Quality workflow at least once, " +
-                    $"or check the organization/project key. ({ex.Message})"
+                    "or check the organization/project key."
             };
         }
     }

@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using DeploymentAPI.Helpers;
 using DeploymentAPI.Services;
 using Microsoft.AspNetCore.Mvc;
 
@@ -67,14 +68,27 @@ public class HealthController : ControllerBase
             return StatusCode(503, new { status = "error", mode = result.Mode });
         }
 
+        // status/mode/responseTimeMs stay public - the smoke-tests CI
+        // workflow hits this with no session at all and only checks the
+        // HTTP status code (see .github/workflows/smoke-tests.yml). Host/
+        // port/database name are real infrastructure topology, though, so
+        // those only go to a caller AdminGate would actually recognize as
+        // Admin - the Smoke Test card in Settings already renders them
+        // conditionally (see SmokeTestCard.jsx), so leaving them null for
+        // everyone else needs no frontend change.
+        var view = await _settings.GetViewAsync();
+
+        var isAdmin = AdminGate.IsAdminOrBootstrap(this, view)
+            || await AdminGate.IsAdminViaPersonalAccessTokenAsync(this, view);
+
         return Ok(new
         {
             status = "ok",
             mode = result.Mode,
             responseTimeMs = result.ResponseTimeMs,
-            host = result.Host,
-            port = result.Port,
-            database = result.Database
+            host = isAdmin ? result.Host : null,
+            port = isAdmin ? result.Port : null,
+            database = isAdmin ? result.Database : null
         });
     }
 }

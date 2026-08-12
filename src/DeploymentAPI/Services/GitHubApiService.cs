@@ -43,6 +43,24 @@ public class GitHubApiService
         })!;
     }
 
+    // GitHub's own exception text (rate-limit messages, scope/permission
+    // detail, sometimes the exact API path requested) is diagnostic detail
+    // that shouldn't reach an anonymous caller — these Preview*/TokenPreview
+    // methods run before any admin gate exists to check. NotFound/
+    // Unauthorized/Forbidden collapse to the caller's own already-friendly
+    // message (GitHub itself uses 404 rather than 401/403 for private repos
+    // when unauthenticated, specifically so a "not found" and a real "you
+    // can't see this" can't be told apart from the outside either).
+    private static string DescribeGitHubError(HttpRequestException ex, string primaryMessage)
+    {
+        return ex.StatusCode switch
+        {
+            HttpStatusCode.NotFound or HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden => primaryMessage,
+            (HttpStatusCode)429 => "GitHub is rate-limiting these requests right now — try again shortly.",
+            _ => "Unable to reach GitHub right now."
+        };
+    }
+
     //===========================================================
     // Repository Preview (Settings page — check a repo before saving it)
     //===========================================================
@@ -102,9 +120,7 @@ public class GitHubApiService
             return new RepositoryPreviewDto
             {
                 Found = false,
-                Error = ex.StatusCode == HttpStatusCode.NotFound
-                    ? "Repository not found — check the URL, or it may be private."
-                    : ex.Message
+                Error = DescribeGitHubError(ex, "Repository not found — check the URL, or it may be private.")
             };
         }
     }
@@ -151,9 +167,7 @@ public class GitHubApiService
             {
                 Found = false,
                 Username = username,
-                Error = ex.StatusCode == HttpStatusCode.NotFound
-                    ? "No GitHub user found with that username."
-                    : ex.Message
+                Error = DescribeGitHubError(ex, "No GitHub user found with that username.")
             };
         }
     }
@@ -306,9 +320,7 @@ public class GitHubApiService
             return new TokenPreviewResponseDto
             {
                 Success = false,
-                Error = ex.StatusCode == HttpStatusCode.Unauthorized
-                    ? "That token was rejected by GitHub — check it's correct and hasn't expired."
-                    : ex.Message
+                Error = DescribeGitHubError(ex, "That token was rejected by GitHub — check it's correct and hasn't expired.")
             };
         }
     }
@@ -327,6 +339,28 @@ public class GitHubApiService
 
             return await HttpClientHelper.GetAsync(client, url);
         }, forceRefresh);
+
+    // The client-facing counterpart to GetRepository() above - that method's
+    // raw GitHub JSON string is still used internally (e.g.
+    // IsOrganizationOwnedAsync, SmokeTestService), but nothing outside this
+    // service should ever see GitHub's full repository object, which
+    // includes permissions, subscriber counts, and other account-level
+    // detail no portal feature actually needs.
+    public async Task<RepositorySummaryDto> GetRepositorySummaryAsync(bool forceRefresh = false)
+    {
+        var json = await GetRepository(forceRefresh);
+        var repo = JObject.Parse(json);
+
+        return new RepositorySummaryDto
+        {
+            FullName = repo["full_name"]?.ToString() ?? string.Empty,
+            Name = repo["name"]?.ToString() ?? string.Empty,
+            Owner = new RepositoryOwnerDto
+            {
+                Login = repo["owner"]?["login"]?.ToString() ?? string.Empty
+            }
+        };
+    }
 
     // Triage and Maintain are organization-only collaborator permission
     // levels — GitHub rejects them outright (422, "invalid value for
@@ -947,6 +981,25 @@ public class GitHubApiService
 
             return await HttpClientHelper.GetAsync(client, url);
         }, forceRefresh);
+
+    // The client-facing counterpart to GetWorkflows() above - that method's
+    // raw GitHub JSON string is still used internally (e.g.
+    // EnvironmentsController.DetectTarget), but nothing outside this service
+    // should ever see GitHub's full workflow-definition objects, which also
+    // carry badge_url/node_id/internal API and HTML URLs no portal feature
+    // actually needs.
+    public async Task<List<WorkflowDefinitionDto>> GetWorkflowDefinitionsAsync(bool forceRefresh = false)
+    {
+        var json = await GetWorkflows(forceRefresh);
+        var array = JObject.Parse(json)["workflows"] as JArray ?? new JArray();
+
+        return array.Select(w => new WorkflowDefinitionDto
+        {
+            Id = (long?)w["id"] ?? 0,
+            Name = w["name"]?.ToString() ?? string.Empty,
+            Path = w["path"]?.ToString() ?? string.Empty
+        }).ToList();
+    }
 
     //===========================================================
     // Workflow Inputs (parsed from the workflow's own YAML, so the Deploy

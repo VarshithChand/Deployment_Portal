@@ -19,6 +19,7 @@ using Amazon.SecurityToken.Model;
 using Amazon.SimpleNotificationService;
 using Amazon.SimpleNotificationService.Model;
 using DeploymentAPI.DTOs;
+using DeploymentAPI.Helpers;
 using Newtonsoft.Json.Linq;
 
 namespace DeploymentAPI.Services;
@@ -74,7 +75,7 @@ public class CloudStatusService
             return new AwsMfaVerificationResult
             {
                 Success = false,
-                Error = $"MFA verification failed: {ex.Message}"
+                Error = CloudErrorSanitizer.Describe(ex, "AWS", "MFA verification")
             };
         }
     }
@@ -205,7 +206,7 @@ public class CloudStatusService
         }
         catch (Exception ex)
         {
-            result.Error = AppendError(result.Error, $"ECS: {ex.Message}");
+            result.Error = AppendError(result.Error, CloudErrorSanitizer.Describe(ex, "AWS", "ECS"));
         }
     }
 
@@ -244,7 +245,7 @@ public class CloudStatusService
         }
         catch (Exception ex)
         {
-            result.Error = AppendError(result.Error, $"ECR: {ex.Message}");
+            result.Error = AppendError(result.Error, CloudErrorSanitizer.Describe(ex, "AWS", "ECR"));
         }
     }
 
@@ -368,7 +369,7 @@ public class CloudStatusService
         }
         catch (Exception ex)
         {
-            result.Error = ex.Message;
+            result.Error = CloudErrorSanitizer.Describe(ex, "AWS", "EC2 instance detail");
         }
 
         return result;
@@ -461,7 +462,7 @@ public class CloudStatusService
                     // One cluster's services failing to describe (e.g. a
                     // permission gap scoped to just that cluster) shouldn't
                     // blank out every other cluster already fetched.
-                    clusterEntry.Status = $"Error: {ex.Message}";
+                    clusterEntry.Status = $"Error: {CloudErrorSanitizer.Describe(ex, "AWS", $"cluster {clusterName}")}";
                 }
 
                 result.Clusters.Add(clusterEntry);
@@ -469,7 +470,7 @@ public class CloudStatusService
         }
         catch (Exception ex)
         {
-            result.Error = ex.Message;
+            result.Error = CloudErrorSanitizer.Describe(ex, "AWS", "ECS cluster detail");
         }
 
         return result;
@@ -515,7 +516,7 @@ public class CloudStatusService
         }
         catch (Exception ex)
         {
-            result.Ec2.Error = ex.Message;
+            result.Ec2.Error = CloudErrorSanitizer.Describe(ex, "AWS", "EC2 inventory");
         }
     }
 
@@ -541,7 +542,7 @@ public class CloudStatusService
         }
         catch (Exception ex)
         {
-            result.Ecr.Error = ex.Message;
+            result.Ecr.Error = CloudErrorSanitizer.Describe(ex, "AWS", "ECR inventory");
         }
     }
 
@@ -567,7 +568,7 @@ public class CloudStatusService
         }
         catch (Exception ex)
         {
-            result.Vpc.Error = ex.Message;
+            result.Vpc.Error = CloudErrorSanitizer.Describe(ex, "AWS", "VPC inventory");
         }
     }
 
@@ -589,7 +590,7 @@ public class CloudStatusService
         }
         catch (Exception ex)
         {
-            result.Lambda.Error = ex.Message;
+            result.Lambda.Error = CloudErrorSanitizer.Describe(ex, "AWS", "Lambda inventory");
         }
     }
 
@@ -616,7 +617,7 @@ public class CloudStatusService
         }
         catch (Exception ex)
         {
-            result.Sns.Error = ex.Message;
+            result.Sns.Error = CloudErrorSanitizer.Describe(ex, "AWS", "SNS inventory");
         }
     }
 
@@ -642,7 +643,7 @@ public class CloudStatusService
         }
         catch (Exception ex)
         {
-            result.S3.Error = ex.Message;
+            result.S3.Error = CloudErrorSanitizer.Describe(ex, "AWS", "S3 inventory");
         }
     }
 
@@ -668,7 +669,7 @@ public class CloudStatusService
         }
         catch (Exception ex)
         {
-            result.Route53.Error = ex.Message;
+            result.Route53.Error = CloudErrorSanitizer.Describe(ex, "AWS", "Route53 inventory");
         }
     }
 
@@ -772,7 +773,7 @@ public class CloudStatusService
         }
         catch (Exception ex)
         {
-            result.OtherError = ex.Message;
+            result.OtherError = CloudErrorSanitizer.Describe(ex, "AWS", "resource discovery");
         }
     }
 
@@ -867,7 +868,7 @@ public class CloudStatusService
         }
         catch (Exception ex)
         {
-            result.Error = $"Azure: {ex.Message}";
+            result.Error = CloudErrorSanitizer.Describe(ex, "Azure", "Web App status");
         }
 
         return result;

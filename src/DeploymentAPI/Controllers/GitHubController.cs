@@ -28,10 +28,7 @@ public class GitHubController : ControllerBase
     [HttpGet("repository")]
     public async Task<IActionResult> Repository([FromQuery] bool force = false)
     {
-        // GetRepository() returns GitHub's raw JSON as a string; Content()
-        // writes it through as-is instead of Ok() re-encoding it as a JSON string literal.
-        var json = await _service.GetRepository(force);
-        return Content(json, "application/json");
+        return Ok(await _service.GetRepositorySummaryAsync(force));
     }
 
     [HttpGet("branches")]
@@ -107,8 +104,7 @@ public class GitHubController : ControllerBase
     [HttpGet("workflows")]
     public async Task<IActionResult> Workflows([FromQuery] bool force = false)
     {
-        var json = await _service.GetWorkflows(force);
-        return Content(json, "application/json");
+        return Ok(await _service.GetWorkflowDefinitionsAsync(force));
     }
 
     [HttpGet("workflow-inputs")]

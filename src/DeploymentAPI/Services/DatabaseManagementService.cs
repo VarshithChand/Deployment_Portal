@@ -124,7 +124,8 @@ public class DatabaseManagementService
         }
         catch (Exception ex)
         {
-            return new DatabaseInspectionHealthDto { Connected = false, Error = ex.Message };
+            Console.Error.WriteLine($"[Database] {ex}");
+            return new DatabaseInspectionHealthDto { Connected = false, Error = "Unable to connect to the database." };
         }
     }
 
@@ -547,7 +548,7 @@ public class DatabaseManagementService
         }
         catch (PostgresException ex)
         {
-            return Fail(ex.MessageText);
+            return Fail(DescribePostgresError(ex));
         }
         catch (FormatException ex)
         {
@@ -600,7 +601,7 @@ public class DatabaseManagementService
         }
         catch (PostgresException ex)
         {
-            return Fail(ex.MessageText);
+            return Fail(DescribePostgresError(ex));
         }
         catch (FormatException ex)
         {
@@ -638,7 +639,7 @@ public class DatabaseManagementService
         }
         catch (PostgresException ex)
         {
-            return Fail(ex.MessageText);
+            return Fail(DescribePostgresError(ex));
         }
     }
 
@@ -709,7 +710,7 @@ public class DatabaseManagementService
         }
         catch (PostgresException ex)
         {
-            return Fail(ex.MessageText);
+            return Fail(DescribePostgresError(ex));
         }
     }
 
@@ -848,4 +849,34 @@ public class DatabaseManagementService
     }
 
     private static DatabaseMutationResultDto Fail(string error) => new() { Success = false, Error = error };
+
+    // Postgres's own MessageText is free-form server text - can echo back
+    // schema detail (table/column names already visible elsewhere in this
+    // same admin-only browser, but still not something that should leave
+    // the server as raw exception text per this app's general "no raw
+    // provider errors in API responses" rule). SqlState/ConstraintName/
+    // ColumnName are Npgsql's own STRUCTURED fields, not free text - safe
+    // to use directly to build an equally useful message. Full detail
+    // still goes to stderr for anyone actually debugging.
+    private static string DescribePostgresError(PostgresException ex)
+    {
+        Console.Error.WriteLine($"[Database] {ex}");
+
+        return ex.SqlState switch
+        {
+            PostgresErrorCodes.UniqueViolation =>
+                $"That would violate a uniqueness constraint{(string.IsNullOrEmpty(ex.ConstraintName) ? "" : $" ({ex.ConstraintName})")}.",
+            PostgresErrorCodes.ForeignKeyViolation =>
+                $"That would violate a foreign key constraint{(string.IsNullOrEmpty(ex.ConstraintName) ? "" : $" ({ex.ConstraintName})")}.",
+            PostgresErrorCodes.NotNullViolation =>
+                string.IsNullOrEmpty(ex.ColumnName) ? "A required column can't be null." : $"'{ex.ColumnName}' can't be null.",
+            PostgresErrorCodes.CheckViolation =>
+                $"That would violate a check constraint{(string.IsNullOrEmpty(ex.ConstraintName) ? "" : $" ({ex.ConstraintName})")}.",
+            PostgresErrorCodes.StringDataRightTruncation => "One of these values is too long for its column.",
+            PostgresErrorCodes.InvalidTextRepresentation => "One of these values doesn't match its column's data type.",
+            PostgresErrorCodes.UndefinedTable => "That table no longer exists.",
+            PostgresErrorCodes.UndefinedColumn => "That column no longer exists.",
+            _ => "The database rejected that operation."
+        };
+    }
 }

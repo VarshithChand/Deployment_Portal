@@ -256,7 +256,8 @@ public class AiToolsService
         }
         catch (Exception ex)
         {
-            return Serialize(new { error = $"Unable to retrieve that information right now ({ex.Message})." });
+            Console.Error.WriteLine($"[Copilot tool:{name}] {ex}");
+            return Serialize(new { error = "Unable to retrieve that information right now." });
         }
     }
 

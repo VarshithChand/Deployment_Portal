@@ -103,7 +103,14 @@ public class ExternalHealthCheckService
         }
         catch (Exception ex)
         {
-            result.Error = ex.Message;
+            Console.Error.WriteLine($"[ExternalHealthCheck] {ex}");
+
+            result.Error = ex switch
+            {
+                System.Net.Sockets.SocketException => "Couldn't resolve or reach that host.",
+                System.Net.Http.HttpRequestException => "Couldn't complete that request (connection or TLS error).",
+                _ => "Unable to reach that endpoint."
+            };
         }
 
         return result;

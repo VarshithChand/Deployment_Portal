@@ -4,6 +4,8 @@ DEPLOYMENT PORTAL SECURITY ASSESSMENT
 
 Assessment Date: 2026-08-12
 Remediation Date: 2026-08-12 (same-day fix pass, see REMEDIATION STATUS below)
+Round 2 Date: 2026-08-13 (global API response security hardening pass - see ROUND 2
+         below; adds Findings 010-016)
 Target: Deployment Portal (repo: VarshithChand/yaml) - DeploymentAPI (ASP.NET Core / .NET 10)
          and deployment-ui (React 19 + Vite) source trees, local working copy
 Tester: Claude (Anthropic), acting as an authorized assessor at the request of the
@@ -19,14 +21,17 @@ Scope: Source code of DeploymentAPI and deployment-ui as present in the local wo
 EXECUTIVE SUMMARY
 ==================================================
 
-Total Findings: 9 (excluding informational/positive-control items)
+Total Findings: 16 (9 from the initial assessment + 7 from the Round 2 global API
+         response hardening pass; excluding informational/positive-control items)
 Critical:       0
 High:           3
-Medium:         4
-Low:            2
+Medium:         8
+Low:            5
 Informational:  8 (7 positive controls, 1 informational note)
 
-Overall Risk: MEDIUM (pre-remediation) -> LOW (post-remediation, see REMEDIATION STATUS)
+Overall Risk: MEDIUM (pre-remediation) -> LOW (post-remediation, see REMEDIATION STATUS
+         and ROUND 2 below - all 16 findings are code-complete and verified except
+         Finding 001's owner-only credential-rotation step)
 
 Remediation status: 8 of 9 findings are code-complete and verified (Findings 002, 003,
 004, 005, 006, 007, 008, 009); Finding 001 is mitigated as far as this assessor can
@@ -891,3 +896,463 @@ REMAINING, OWNER ACTION REQUIRED (cannot be closed by a code change):
   needs an explicit `npx wrangler deploy` for the CSP/_headers and PIN-lockout fixes
   to take effect on the live site (Findings 004, 007, and the theme-init.js CSP
   compatibility change).
+
+==================================================
+ROUND 2 - GLOBAL API RESPONSE SECURITY HARDENING
+==================================================
+Date:    2026-08-13
+Trigger: a live response from GET /api/settings/me/aws/resources was observed
+         including AWS infrastructure identifiers (region, a VPC ID, a Lambda
+         function name) in a per-service Error/inventory field. Rather than
+         patching only that one endpoint, this round audited every controller
+         in the backend for the same general class of problem: internal
+         infrastructure detail or raw provider/database/exception text
+         reaching an API response.
+
+Approach: a full static inventory of all 26 controllers (every HTTP verb,
+route, and whether it's AdminGate-protected) plus an exhaustive grep sweep
+for exception-message leaks (`ex.Message`/`ex.ToString()`/`PostgresException.
+MessageText` reaching a response body) and raw provider-SDK-object returns.
+Every match was read in context and individually triaged - not every ex.
+Message occurrence is exploitable (a lot of this codebase's DTOs already had
+explicit Success/Error fields with SANE messages; only the ones that echoed
+the raw exception text itself were findings). Then fixed systematically:
+a shared sanitizer for AWS/Azure exceptions, a shared global exception-
+handling backstop, safe DTOs replacing two raw-JSON-passthrough endpoints,
+and per-site fixes everywhere else raw exception text reached a response.
+
+
+[Finding 010]
+Title: AWS/Azure SDK exception text (ARNs, account context, IAM detail) echoed
+        into "me/aws/*" and "me/azure" resource-inventory responses
+Severity: MEDIUM
+Category: Sensitive information disclosure (cloud infrastructure detail)
+Affected Component: CloudStatusService, CloudServiceManagementService, AwsSsoService
+Affected Endpoint: GET /api/settings/me/aws/resources, .../me/aws/ec2, .../me/aws/ecs,
+         .../me/azure, /api/cloudservices/* (EC2/ECS/ECR/Lambda/RDS actions),
+         /api/aws-sso/start, /api/environments/{name}/cloud-status
+Affected Parameter: N/A (response body Error fields)
+
+Description:
+This is the finding that triggered the round. 17 catch blocks across
+CloudStatusService.cs, CloudServiceManagementService.cs, AwsSsoService.cs, and
+AwsSsoController.cs set a DTO's `Error` field directly to the AWS/Azure SDK
+exception's own `.Message`, then returned that DTO straight to the caller.
+None of these endpoints are AdminGate-protected (they're self-service,
+scoped to whatever AWS/Azure credentials the calling user configured in
+their own session) - but the exception text itself can carry AWS/Azure
+infrastructure detail (IAM principal ARNs, account IDs, resource
+identifiers, region context) that shouldn't leave the server even back to
+the credential's own owner, and definitely shouldn't set the precedent of
+"provider exception text is safe to return" for the rest of the codebase.
+
+Security Impact:
+Read access to a portal session that has AWS/Azure credentials configured
+gets raw provider error text in every failure case (wrong permissions,
+expired MFA, throttling, etc.) instead of a clean, purpose-built message -
+inconsistent with the "no raw provider errors" principle applied everywhere
+else in this app, and a real infrastructure-detail leak in the specific
+case that triggered this round (region/VPC ID/Lambda name in a response).
+
+Evidence:
+Pre-fix example (representative, not the literal reported payload):
+CloudStatusService.cs's DescribeVpcsAsync: `catch (Exception ex) { result.
+Vpc.Error = ex.Message; }` - directly assigns the AWS SDK exception's own
+message text, unfiltered, to a field returned in the API response.
+
+Recommended Fix (Applied):
+Added Helpers/CloudErrorSanitizer.cs - maps known AWS `AmazonServiceException.
+ErrorCode` values (AccessDenied, InvalidClientTokenId, ExpiredToken,
+Throttling, etc.) to an equally useful but identifier-free message, always
+logs the full original exception to stderr (captured by Render's log
+aggregation) for real diagnosis, and falls back to a generic "Unable to
+reach {provider} for {context}." for anything unrecognized. Applied at all
+17 sites: CloudStatusService.cs (MFA verification, ECS, ECR, EC2 detail,
+ECS cluster detail, EC2/ECR/VPC/Lambda/SNS/S3/Route53 inventory, tagging-API
+"Other" discovery, Azure Web App status), CloudServiceManagementService.cs
+(EC2 start/stop/reboot/terminate, ECS scale, ECR list/create/delete, Lambda
+list, RDS list), AwsSsoService.cs (SSO poll), AwsSsoController.cs (SSO
+start). Verified via `dotnet build` (0 errors).
+
+Status: Fixed
+
+
+[Finding 011]
+Title: Two GitHub endpoints returned GitHub's raw repository/workflow JSON
+        verbatim instead of a filtered response
+Severity: LOW-MEDIUM
+Category: Response data minimization / over-exposure
+Affected Component: GitHubController, GitHubApiService
+Affected Endpoint: GET /api/github/repository, GET /api/github/workflows
+Affected Parameter: N/A
+
+Description:
+`GET /api/github/repository` and `GET /api/github/workflows` called
+`Content(json, "application/json")` with GitHub's own raw API response
+string, passed straight through with zero filtering - GitHub's full
+repository object (permissions, visibility flags, owner account metadata,
+subscriber/watcher counts, etc.) and full workflow-definition objects
+(badge_url, node_id, internal API/HTML URLs) reached the client, when the
+frontend (confirmed by reading AllRepositoriesCard.jsx and DeploymentForm.jsx)
+only ever reads `owner.login`/`name` from the repository and `id`/`name`/
+`path` from each workflow.
+
+Security Impact:
+Not a credential leak (both endpoints are already scoped to the caller's
+own configured repo/token, same as every other GitHubController read) - but
+a real over-exposure: response data minimization is a stated requirement,
+and "just pass through whatever GitHub returns" both violates that directly
+and creates risk that a FUTURE field GitHub adds to its API (or a future
+private/internal repo detail) gets exposed with no code change or review at
+all, since nothing filters it.
+
+Evidence:
+GitHubController.cs (pre-fix): `var json = await _service.GetRepository
+(force); return Content(json, "application/json");` - and the equivalent
+for GetWorkflows(). GitHubApiService.GetRepository()/GetWorkflows() fetch
+and cache GitHub's raw JSON string with no field-level filtering.
+
+Recommended Fix (Applied):
+Added two new DTOs - RepositorySummaryDto (FullName, Name, Owner.Login) and
+WorkflowDefinitionDto (Id, Name, Path) - covering exactly the fields the
+frontend reads (confirmed via grep of deployment-ui/src for every `.
+repository`/workflow-item field access). Added GetRepositorySummaryAsync()/
+GetWorkflowDefinitionsAsync() to GitHubApiService, which call the existing
+raw-string methods (still used internally by IsOrganizationOwnedAsync,
+SmokeTestService, and EnvironmentsController.DetectTarget - left unchanged,
+since those already parse only the specific fields they need and never
+forward the raw string further) and parse+map to the new DTOs.
+GitHubController's two actions now return `Ok(dto)` instead of raw Content
+passthrough. Verified via `dotnet build` (0 errors); confirmed via source
+that useGithubResources.js's fallback field-access pattern (`repository?.
+owner?.login && repository?.name`) and normalizeWorkflows' array-handling
+branch both work unchanged against the new response shapes with no frontend
+edit needed.
+
+Status: Fixed
+
+
+[Finding 012]
+Title: Swagger UI and the OpenAPI schema were served with no authentication in
+        every environment, including production
+Severity: MEDIUM
+Category: Attack surface / information disclosure
+Affected Component: Program.cs
+Affected Endpoint: GET /swagger/index.html, GET /swagger/v1/swagger.json
+Affected Parameter: N/A
+
+Description:
+`app.UseSwagger(); app.UseSwaggerUI();` were called unconditionally, with no
+environment check and no auth gate, backed by an explicit code comment
+framing this as intentional ("checkable on the deployed instance too").
+That's a defensible goal, but as implemented it handed the complete API
+surface - every route, every request/response DTO's field names and types,
+every parameter - to any anonymous visitor, plus Swagger UI's own
+interactive "Try it out" button that fires real requests at the live API.
+
+Security Impact:
+Every actual mutating action is still independently AdminGate-protected
+(confirmed in Round 2 of the original assessment and re-confirmed here), so
+this isn't an authorization bypass - but it's unnecessary reconnaissance
+surface for an internal ops tool that controls real AWS/Docker/GitHub/
+database infrastructure: an attacker gets a complete, accurate map of every
+endpoint and payload shape without needing to reverse-engineer the frontend
+bundle first.
+
+Evidence:
+Program.cs (pre-fix, then at what was lines 339-340): exactly `app.
+UseSwagger(); app.UseSwaggerUI();` with no surrounding conditional - verified
+by direct read of the file, not inferred.
+
+Recommended Fix (Applied):
+Moved the Swagger registration to run inside an `app.MapWhen(path starts
+with "/swagger", ...)` branch positioned AFTER UseAuthentication/
+UseAuthorization and the GitHubAuthService.LoadAsync() middleware (so both
+the OAuth-role check and the PAT-owner fallback have what they need already
+resolved). The branch replicates AdminGate's own "Admin OAuth role, OR an
+allowlisted PAT owner, OR bootstrap mode while the allowlist is empty" logic
+inline (AdminGate's own helpers are ControllerBase-coupled, not usable
+directly from middleware) and returns 404 - not 401/403 - on denial, so an
+anonymous prober can't even confirm Swagger exists here, consistent with
+how every other AdminGate-protected route in this app behaves. Verified via
+`dotnet build` (0 errors).
+
+Status: Fixed
+
+
+[Finding 013]
+Title: GET /api/health/db disclosed database host/port/database name to any
+        anonymous caller
+Severity: LOW
+Category: Sensitive information disclosure (infrastructure topology)
+Affected Component: HealthController
+Affected Endpoint: GET /api/health/db
+Affected Parameter: N/A
+
+Description:
+This endpoint is intentionally unauthenticated (it's polled by the smoke-
+tests CI workflow, which has no portal session at all - confirmed by
+reading .github/workflows/smoke-tests.yml, which only checks the HTTP
+status code and never parses the response body). On a successful check, the
+pre-fix response included `host`, `port`, and `database` alongside `status`/
+`mode`/`responseTimeMs` - real database topology, not credentials, but
+infrastructure detail an anonymous caller has no need to see.
+
+Security Impact:
+Low on its own (no credentials, and this doesn't grant any capability by
+itself) but it's exactly the kind of "infra detail visible to unauthorized
+users" this round set out to close, and it's gratuitous - the CI workflow
+that's the actual reason this endpoint has no auth doesn't read those
+fields at all, and the one UI surface that displays them (SmokeTestCard.jsx,
+inside the admin-only Settings page) already renders them conditionally,
+so removing them for non-admin callers needed no frontend change.
+
+Evidence:
+HealthController.cs's Database() action (pre-fix): `return Ok(new { status
+= "ok", mode = result.Mode, responseTimeMs = result.ResponseTimeMs, host =
+result.Host, port = result.Port, database = result.Database });` with no
+caller check anywhere in the method.
+
+Recommended Fix (Applied):
+status/mode/responseTimeMs stay unconditionally public (required for CI).
+host/port/database are now only populated when the caller resolves as Admin
+via the same check AdminGate itself uses (AdminGate.IsAdminOrBootstrap plus
+the PAT-owner fallback) - null otherwise. Verified via `dotnet build` (0
+errors); confirmed SmokeTestCard.jsx's existing `{health.host && (...)}`
+conditional rendering already handles the null case with no visual change
+for an admin viewer and no error for anyone else.
+
+Status: Fixed
+
+
+[Finding 014]
+Title: No centralized exception handler; the one global catch-all echoed raw
+        HttpRequestException.Message to the client
+Severity: MEDIUM
+Category: Error response security / information disclosure
+Affected Component: Program.cs
+Affected Endpoint: Every route (fallback path for anything not already
+         caught closer to its source)
+Affected Parameter: N/A
+
+Description:
+The only exception-handling middleware in the app was a hand-rolled `app.
+Use(async (context, next) => { try { await next(); } catch
+(HttpRequestException ex) { ... await context.Response.WriteAsJsonAsync(new
+{ message = ex.Message }); } catch (Exception ex) { ...; throw; } })`. Any
+unhandled HttpRequestException (from any of this app's many outbound HTTP
+calls - GitHub, Sonar, external health checks, Azure REST calls) that
+reached this middleware had its raw `.Message` written directly into the
+response body. Every other unhandled exception was logged then rethrown,
+falling through to ASP.NET Core's own default behavior with no guaranteed
+safe body shape, and no correlation mechanism existed to tie a generic
+error back to a specific server-side log entry.
+
+Security Impact:
+A single, predictable place where "something went wrong with an outbound
+request" always leaked raw exception text, on top of the many individual
+per-service leaks already covered by Finding 010/other Round 2 findings -
+and the complete absence of a real global handler meant any exception type
+NOT already caught somewhere closer to its source had no guaranteed-safe
+response shape at all.
+
+Evidence:
+Program.cs (pre-fix): the middleware block described above, immediately
+after `app.UseForwardedHeaders(...)`. No `UseExceptionHandler`, no
+`IExceptionHandler` registration, no `AddProblemDetails()` call existed
+anywhere in the file - confirmed by a full-file grep.
+
+Recommended Fix (Applied):
+Added Helpers/GlobalExceptionHandler.cs implementing ASP.NET Core's
+IExceptionHandler - logs full exception detail (type, message, stack trace,
+request path, correlation ID) to both the in-memory Activity Log
+(admin-visible at Settings) and stderr (Render's log aggregation), then
+writes a generic `{ error, code, correlationId }` body: HttpRequestException
+maps to its own status code (or 502) with code "UPSTREAM_REQUEST_FAILED";
+everything else maps to 500 with code "INTERNAL_ERROR". Registered via
+`builder.Services.AddExceptionHandler<GlobalExceptionHandler>()` +
+`AddProblemDetails()` + `app.UseExceptionHandler()`, replacing the old
+hand-rolled middleware entirely. A separate small correlation-ID middleware
+stamps `X-Correlation-Id: {TraceIdentifier}` on every response (success or
+failure), so a report that includes it can always be matched to the exact
+server-side log entry. Verified via `dotnet build` (0 errors).
+
+Status: Fixed
+
+
+[Finding 015]
+Title: Raw exception/PostgresException text reached the client at 15
+        additional sites across Docker, Database Management, GitHub preview,
+        External Health Check, SonarCloud, and AI Copilot tool-call error paths
+Severity: LOW-MEDIUM (varies by site - see breakdown)
+Category: Error response security / information disclosure
+Affected Component: DockerController, SettingsController, DatabaseManagementService,
+         GitHubApiService, ExternalHealthCheckService, SonarApiService,
+         GeminiService, AiToolsService, ApplicationSupportToolsService
+Affected Endpoint: various - see breakdown
+Affected Parameter: N/A
+
+Description:
+Beyond the AWS/Azure-specific sites in Finding 010, the same grep sweep
+found raw exception text reaching the client at 15 more sites, split
+roughly into three groups:
+  (a) Reachable without any admin gate: GitHubApiService's three Preview*/
+      TokenPreview methods (backing the anonymous repo/user/token preview
+      features on the Settings page) returned `ex.Message` on any
+      HttpRequestException that wasn't specifically a 404/401 case; three AI
+      Copilot tool-call catch blocks (GeminiService.cs, AiToolsService.cs -
+      reachable from the non-admin-gated AiController.Chat -
+      ApplicationSupportToolsService.cs) serialized `Tool failed: {ex.
+      Message}` into the JSON handed back to the Gemini model, which the
+      model can freely relay into its chat reply.
+  (b) Admin-gated but still raw: DockerController's ExtractMessage fell back
+      to the .NET exception's own `.Message` (rather than Docker's own
+      structured JSON error body) when the response wasn't parseable JSON;
+      SettingsController's Clear(section) echoed an ArgumentException's
+      message (in practice just reflecting the caller's own route
+      parameter, low risk, fixed anyway for consistency);
+      DatabaseManagementService's Insert/Update/Delete/CreateTable actions
+      returned raw `PostgresException.MessageText` on constraint violations
+      and its own DB-health check returned a raw connection-failure `ex.
+      Message`; SonarApiService interpolated `ex.Message` into an otherwise
+      friendly "no analysis found yet" message.
+  (c) ExternalHealthCheckService (admin-gated, but the target URL/response
+      itself is intentionally shown to the admin as the feature's whole
+      point) returned the raw .NET exception message for connection-level
+      failures (DNS, TLS) rather than a categorized message.
+
+Security Impact:
+Group (a) is the most significant - unauthenticated/lightly-authenticated
+surfaces echoing raw HTTP client exception text (which for GitHub can
+include rate-limit detail or other API-internal text) or feeding raw
+exception text into an LLM's context where it can be relayed back
+verbatim. Groups (b)/(c) are admin-only and lower severity - PostgresException.
+MessageText in particular is really only "the DB admin sees detail about
+the exact database they're already the super-admin for," but the general
+"no raw provider errors in API responses" rule was applied consistently
+regardless of severity.
+
+Evidence: file:line detail available in this assessor's working notes;
+representative example - DatabaseManagementService.cs's InsertRowAsync
+(pre-fix): `catch (PostgresException ex) { return Fail(ex.MessageText); }`.
+
+Recommended Fix (Applied):
+GitHubApiService: added a shared DescribeGitHubError() helper (NotFound/
+Unauthorized/Forbidden collapse to the caller's own already-friendly
+message; 429 gets a rate-limit-specific message; everything else gets a
+generic fallback) applied at all three Preview*/TokenPreview sites.
+AI Copilot tool-call sites: all three now log the full exception to stderr
+and return a generic "Unable to retrieve that information right now."/
+"That tool call failed" message instead of interpolating `ex.Message`.
+DockerController: Docker's own structured JSON error body is still passed
+through as-is (it's a purpose-built API error, not free-form text) - only
+the .NET-exception-message fallback path (when the body isn't parseable
+JSON at all) was changed to a generic message, with full detail logged to
+stderr. SettingsController.Clear: constructs its own message from the
+already-validated route parameter instead of the exception's text.
+DatabaseManagementService: added DescribePostgresError(), which builds a
+message from Npgsql's own STRUCTURED exception fields (SqlState,
+ConstraintName, ColumnName - not free text) rather than the raw MessageText,
+applied at all four PostgresException sites, plus a generic "Unable to
+connect to the database." for the health-check's connection-failure catch.
+SonarApiService: drops the interpolated `ex.Message`, logs it to stderr
+instead. ExternalHealthCheckService: categorizes SocketException/
+HttpRequestException into safe messages, logs full detail to stderr.
+Verified via `dotnet build` (0 errors) after every change in this group.
+
+Status: Fixed
+
+
+[Finding 016]
+Title: No Cache-Control header on any API response
+Severity: LOW
+Category: Security headers / defense-in-depth
+Affected Component: Program.cs
+Affected Endpoint: All responses
+Affected Parameter: N/A
+
+Description:
+`grep -rn "Cache-Control"` returned zero matches anywhere in src/DeploymentAPI
+prior to this fix - no response, sensitive or otherwise, ever set an
+explicit caching directive.
+
+Security Impact:
+Not currently exploitable (nothing observed indicates any caching layer
+sits in front of this API today), but several endpoints are scoped by the
+`X-Session-Id` request HEADER rather than the URL or a cookie - a value a
+typical CDN/reverse-proxy cache-key configuration would NOT vary on unless
+explicitly told to. If a caching layer were ever added in front of this
+origin for any reason (even one aimed at something unrelated, like static-
+looking JSON) without deliberately excluding these paths, one caller's
+per-session response could get served back to a completely different
+caller hitting the same URL - a real cross-user data leak via
+configuration drift, not a hypothetical one.
+
+Evidence: absence confirmed via exhaustive grep, not inferred.
+
+Recommended Fix (Applied):
+Added `Cache-Control: no-store` to the same global security-headers
+middleware in Program.cs that already sets X-Content-Type-Options/
+X-Frame-Options/Referrer-Policy, applying it uniformly to every response
+rather than needing to be added endpoint-by-endpoint. This app's API only
+ever returns dynamic, per-session, or admin data - there's no static/
+cacheable response type to preserve caching behavior for, so a blanket
+no-store is the correct default rather than a per-endpoint judgment call.
+Verified via `dotnet build` (0 errors).
+
+Status: Fixed
+
+
+==================================================
+ROUND 2 - REMEDIATION STATUS
+==================================================
+
+All 7 Round 2 findings (010-016) are code-complete and verified via
+`dotnet build` (0 errors, only the same 2 pre-existing unrelated warnings -
+a Microsoft.Extensions.Http NuGet-pruning notice and an obsolete-API notice
+on unrelated forwarded-headers config) and `npm run lint` (0 errors, only
+pre-existing Fast-Refresh warnings on files untouched by this round).
+
+New files: src/DeploymentAPI/Helpers/CloudErrorSanitizer.cs,
+src/DeploymentAPI/Helpers/GlobalExceptionHandler.cs,
+src/DeploymentAPI/DTOs/RepositorySummaryDto.cs,
+src/DeploymentAPI/DTOs/WorkflowDefinitionDto.cs.
+
+Changed files: Program.cs (global exception handler wiring, correlation-ID
+middleware, gated Swagger, Cache-Control), CloudStatusService.cs,
+CloudServiceManagementService.cs, AwsSsoService.cs, AwsSsoController.cs,
+GitHubController.cs, GitHubApiService.cs, DockerController.cs,
+SettingsController.cs, DatabaseManagementService.cs,
+ExternalHealthCheckService.cs, SonarApiService.cs, GeminiService.cs,
+AiToolsService.cs, ApplicationSupportToolsService.cs, HealthController.cs.
+
+No frontend changes were required - every response-shape change (Findings
+010, 011, 013) was confirmed against deployment-ui's actual field-access
+patterns (grepped directly, not assumed) and is backward compatible.
+
+Deployment note: same as the original REMEDIATION STATUS - the backend
+auto-deploys on push to master; the frontend needs no redeploy for this
+round specifically (no frontend files changed), though any pending
+frontend-only fixes from the original round still need `npx wrangler
+deploy` as previously noted.
+
+==================================================
+ROUND 2 - ENDPOINT SECURITY MATRIX (representative sample)
+==================================================
+
+Full 26-controller inventory (route, auth requirement, data classification)
+was built and used to drive this round's findings; kept internal per the
+original assessment's own instruction not to expose this matrix to normal
+users. Representative sample reflecting the classification scheme applied
+throughout:
+
+Endpoint                          Auth            Data Classification   Status
+GET  /api/settings/me/aws/*       Session-scoped  Private (own infra)   Fixed (010)
+GET  /api/github/repository       Session-scoped  Private (own repo)    Fixed (011)
+GET  /swagger/*                   Admin           Internal (API map)    Fixed (012)
+GET  /api/health/db               Public (CI)     Public+Admin-only     Fixed (013)
+POST /api/database/rows           Super-admin     Internal (DB)         Fixed (015)
+GET  /api/database/tables         Super-admin     Internal (DB)         Confirmed OK
+POST /api/deployment/deploy       Admin           Sensitive (CI/CD)     Confirmed OK
+GET  /api/health                  Public (CI)     Public (process only) Confirmed OK
+GET  /api/appversion              Public          Public (build info)   Confirmed OK

@@ -190,7 +190,13 @@ public class GeminiService : IAiAssistantService
                 }
                 catch (Exception ex)
                 {
-                    toolResult = JsonSerializer.Serialize(new { error = $"Tool failed: {ex.Message}" });
+                    // This result is fed straight back into the model's own
+                    // context as the tool's answer, and the model can freely
+                    // relay it back to the user in chat - so it gets the same
+                    // "no raw exception text" treatment as a direct API
+                    // response, not just a server-side log message.
+                    Console.Error.WriteLine($"[Copilot tool:{name}] {ex}");
+                    toolResult = JsonSerializer.Serialize(new { error = "That tool call failed - unable to complete the request." });
                 }
 
                 result.ToolsUsed.Add(name);

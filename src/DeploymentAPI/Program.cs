@@ -96,6 +96,17 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
 //
+// Global exception handling — see GlobalExceptionHandler for what this
+// actually does (log full detail server-side, never let raw exception text
+// reach the client). AddProblemDetails lets ASP.NET Core's own built-in
+// error paths (model binding failures, etc.) use the same RFC 7807 shape
+// consistently, alongside this handler's own JSON body for anything that
+// reaches it unhandled.
+//
+builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
+builder.Services.AddProblemDetails();
+
+//
 // HttpClient
 //
 builder.Services.AddHttpClient();
@@ -269,36 +280,25 @@ forwardedHeaderOptions.KnownProxies.Clear();
 app.UseForwardedHeaders(forwardedHeaderOptions);
 
 //
-// Error handling — surface GitHub API failures (rate limits, 404s, etc.) as a
-// clean JSON message instead of an unhandled 500 with no body reaching the UI.
-// Also the one place every request passes through, so it's where failures
-// get recorded for the Settings page's activity log.
+// Correlation ID — stamped on every response (success or failure) so a
+// report that includes it can be matched back to the exact server-side log
+// entry (see GlobalExceptionHandler), without needing any extra client-side
+// plumbing beyond echoing this header back if they choose to.
 //
-var activityLog = app.Services.GetRequiredService<ActivityLogService>();
-
 app.Use(async (context, next) =>
 {
-    try
-    {
-        await next();
-    }
-    catch (HttpRequestException ex)
-    {
-        activityLog.LogError("GitHub API", ex.Message);
-
-        context.Response.StatusCode = (int?)ex.StatusCode ?? StatusCodes.Status502BadGateway;
-        context.Response.ContentType = "application/json";
-        await context.Response.WriteAsJsonAsync(new { message = ex.Message });
-    }
-    catch (Exception ex)
-    {
-        // Logged, then rethrown unchanged — this middleware isn't meant to
-        // change how unexpected errors are handled, only to make sure
-        // they're visible somewhere besides the server's own console.
-        activityLog.LogError("Server", ex.Message);
-        throw;
-    }
+    context.Response.Headers["X-Correlation-Id"] = context.TraceIdentifier;
+    await next();
 });
+
+//
+// Error handling — GlobalExceptionHandler is the backstop for anything that
+// reaches here unhandled: it logs full detail server-side (Activity Log +
+// stderr) and returns a safe, generic JSON body instead of raw exception
+// text. Replaces this app's previous hand-rolled try/catch, which echoed
+// HttpRequestException.Message straight into the response body.
+//
+app.UseExceptionHandler();
 
 //
 // Security headers — this API only ever returns JSON (the frontend is a
@@ -314,6 +314,15 @@ app.Use(async (context, next) =>
     context.Response.Headers["X-Frame-Options"] = "DENY";
     context.Response.Headers["Referrer-Policy"] = "strict-origin-when-cross-origin";
 
+    // Every response here is dynamic, per-session, or admin data - none of
+    // it should ever be cached by a browser or an intermediary. Without an
+    // explicit no-store, a Cache Rule added later for this hostname (even
+    // one meant for something unrelated) could start serving one caller's
+    // response - several of which are scoped by the X-Session-Id request
+    // HEADER, not the URL, so a typical cache key wouldn't vary on it at
+    // all - back to a completely different caller.
+    context.Response.Headers["Cache-Control"] = "no-store";
+
     // The real, browser-enforced CSP for this app's actual HTML document
     // lives with the frontend (deployment-ui/vite.config.js writes a
     // Cloudflare _headers file at build time) - DeploymentAPI never serves
@@ -326,18 +335,6 @@ app.Use(async (context, next) =>
 
     await next();
 });
-
-//
-// Swagger
-// Enabled in every environment (not just Development) so the API surface
-// is checkable on the deployed instance too - it only documents request/
-// response shapes, the same ones already visible to anyone using the
-// portal's own frontend; every actual action still goes through the same
-// AdminGate/auth checks regardless of whether it was called via Swagger
-// or the real UI.
-//
-app.UseSwagger();
-app.UseSwaggerUI();
 
 //
 // HTTPS
@@ -405,6 +402,57 @@ app.Use(async (context, next) =>
     await githubAuth.LoadAsync();
     await next();
 });
+
+//
+// Swagger
+// Kept available in every environment (not just Development) so the API
+// surface is checkable on the deployed instance too - but gated behind the
+// same Admin authority (OAuth "Admin" role, or an allowlisted PAT owner,
+// or bootstrap mode when the allowlist is still empty - see AdminGate)
+// every other sensitive read in this app requires, instead of serving the
+// full route/DTO/parameter surface to anonymous visitors. Must come after
+// UseAuthentication/UseAuthorization and the GitHubAuthService.LoadAsync
+// middleware above so both the OAuth role check and the PAT-owner fallback
+// have what they need already resolved. 404 rather than 401/403 on denial
+// so an anonymous prober can't even confirm Swagger exists here, the same
+// as every other AdminGate-protected route in this app.
+//
+app.MapWhen(
+    context => context.Request.Path.StartsWithSegments("/swagger"),
+    swaggerBranch =>
+    {
+        swaggerBranch.Use(async (context, next) =>
+        {
+            var settings = context.RequestServices.GetRequiredService<SettingsService>();
+            var view = await settings.GetViewAsync();
+
+            var isAdmin = view.AdminGitHubUsernames.Count == 0
+                || (context.User.Identity?.IsAuthenticated == true && context.User.IsInRole("Admin"));
+
+            if (!isAdmin && view.AdminGitHubUsernames.Count > 0)
+            {
+                var auth = context.RequestServices.GetRequiredService<GitHubAuthService>();
+
+                if (auth.HasToken)
+                {
+                    var login = await auth.GetAuthenticatedLoginAsync();
+                    isAdmin = login != null && view.AdminGitHubUsernames.Any(
+                        u => string.Equals(u, login, StringComparison.OrdinalIgnoreCase));
+                }
+            }
+
+            if (!isAdmin)
+            {
+                context.Response.StatusCode = StatusCodes.Status404NotFound;
+                return;
+            }
+
+            await next();
+        });
+
+        swaggerBranch.UseSwagger();
+        swaggerBranch.UseSwaggerUI();
+    });
 
 //
 // Controllers

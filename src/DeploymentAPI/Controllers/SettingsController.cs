@@ -680,9 +680,9 @@ public class SettingsController : ControllerBase
 
             return Ok(await _settings.ClearAsync(section));
         }
-        catch (ArgumentException ex)
+        catch (ArgumentException)
         {
-            return BadRequest(ex.Message);
+            return BadRequest(new { message = $"'{section}' isn't a valid settings section.", code = "VALIDATION_ERROR" });
         }
     }
 }

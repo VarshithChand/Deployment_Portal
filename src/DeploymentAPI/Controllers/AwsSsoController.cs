@@ -38,7 +38,7 @@ public class AwsSsoController : ControllerBase
         }
         catch (Exception ex)
         {
-            return BadRequest(new { message = $"Unable to start AWS sign-in: {ex.Message}" });
+            return BadRequest(new { message = CloudErrorSanitizer.Describe(ex, "AWS", "SSO sign-in start") });
         }
     }
 

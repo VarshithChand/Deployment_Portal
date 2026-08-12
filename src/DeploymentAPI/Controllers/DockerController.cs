@@ -243,16 +243,29 @@ public class DockerController : ControllerBase
         }
     }
 
+    // Docker's own JSON error body ("message") is a structured, purpose-
+    // built API error meant for API consumers - safe to pass through as-is,
+    // the same way an AWS ErrorCode-derived message is (see
+    // CloudErrorSanitizer). Only the .NET-level exception message fallback
+    // (when the response body itself isn't parseable JSON - a rarer edge
+    // case, e.g. the daemon socket being unreachable) gets sanitized, since
+    // that one can carry internal detail like a Unix socket path.
     private static string ExtractMessage(DockerApiException ex)
     {
         try
         {
             var body = Newtonsoft.Json.Linq.JObject.Parse(ex.ResponseBody);
-            return body["message"]?.ToString() ?? ex.Message;
+            var message = body["message"]?.ToString();
+
+            if (!string.IsNullOrWhiteSpace(message))
+                return message;
         }
         catch
         {
-            return ex.Message;
+            // Falls through to the sanitized default below.
         }
+
+        Console.Error.WriteLine($"[Docker] {ex}");
+        return "Docker returned an error for that request.";
     }
 }
