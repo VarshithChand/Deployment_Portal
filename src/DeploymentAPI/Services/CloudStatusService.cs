@@ -72,6 +72,46 @@ public class CloudStatusService
             ? new SessionAWSCredentials(credentials.SessionAccessKeyId, credentials.SessionSecretAccessKey, credentials.SessionToken)
             : new BasicAWSCredentials(credentials.AccessKeyId, credentials.SecretAccessKey);
 
+    // "Which cloud user am I" for the top bar — SSO sessions already carry
+    // their own account/role (chosen on AWS's own sign-in page, no API call
+    // needed to know it); the plain access-key path has no equivalent until
+    // asked, so this calls STS's GetCallerIdentity, the one AWS API every
+    // credential (however scoped) is always allowed to call regardless of
+    // its actual permissions - existing purely to answer "who is this?".
+    // Region falls back to us-east-1 since STS answers identically from any
+    // region and a caller who hasn't set one yet shouldn't block on that.
+    public async Task<string?> GetCallerIdentityLabelAsync(UserAwsCredentials credentials)
+    {
+        if (credentials.IsSsoSession)
+            return $"{credentials.SsoAccountName}/{credentials.SsoRoleName}";
+
+        if (!credentials.IsConfigured)
+            return null;
+
+        try
+        {
+            var region = string.IsNullOrWhiteSpace(credentials.Region) ? "us-east-1" : credentials.Region;
+
+            using var stsClient = new AmazonSecurityTokenServiceClient(
+                BuildCredentials(credentials), RegionEndpoint.GetBySystemName(region));
+
+            var response = await stsClient.GetCallerIdentityAsync(new GetCallerIdentityRequest());
+
+            // arn:aws:iam::123456789012:user/varshith -> "varshith"
+            // arn:aws:sts::123456789012:assumed-role/RoleName/session -> "session"
+            var arn = response.Arn ?? string.Empty;
+            var lastSlash = arn.LastIndexOf('/');
+
+            return lastSlash >= 0 && lastSlash < arn.Length - 1 ? arn[(lastSlash + 1)..] : response.UserId;
+        }
+        catch
+        {
+            // Same "never break the caller" posture as the rest of this
+            // service - a bad/expired key just means no label, not a 500.
+            return null;
+        }
+    }
+
     public async Task<CloudStatusDto> GetEcsAndEcrStatusAsync(
         UserAwsCredentials credentials,
         string? region,

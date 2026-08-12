@@ -1,7 +1,7 @@
 import { createContext, useCallback, useEffect, useState } from "react";
 
 import { getMe, logout as logoutRequest } from "../services/authService";
-import { getSettings, getMyGitHubSettings } from "../services/settingsService";
+import { getSettings, getMyGitHubSettings, getMyAwsSettings } from "../services/settingsService";
 import { getTokenOwner } from "../services/githubService";
 import { API_BASE } from "../api/apiBase";
 import useToast from "../hooks/useToast";
@@ -74,6 +74,12 @@ export default function AuthProvider({ children }) {
 
     const [tokenOwner, setTokenOwner] = useState(null);
 
+    // Which AWS identity (IAM username, or account/role for an SSO
+    // session) this browser's saved credentials resolve to — shown as a
+    // TopBar badge, the AWS equivalent of the GitHub repo-name badge.
+    // Null whenever AWS isn't configured for this session at all.
+    const [awsIdentityLabel, setAwsIdentityLabel] = useState(null);
+
     // True when THIS session has admin authority — either a real GitHub
     // OAuth login as an allowlisted username, or (see AdminGate.
     // IsAdminViaPersonalAccessTokenAsync) a configured Personal Access
@@ -109,10 +115,13 @@ export default function AuthProvider({ children }) {
 
         try {
 
-            const [settings, myGitHub] = await Promise.all([
+            const [settings, myGitHub, myAws] = await Promise.all([
                 getSettings(),
-                getMyGitHubSettings()
+                getMyGitHubSettings(),
+                getMyAwsSettings()
             ]);
+
+            setAwsIdentityLabel(myAws.identityLabel || null);
 
             setOauthConfigured(
                 !!settings.gitHubOAuthClientId && !!settings.gitHubOAuthClientSecretConfigured
@@ -193,7 +202,7 @@ export default function AuthProvider({ children }) {
 
     return (
 
-        <AuthContext.Provider value={{ user, loading, login, logout, refresh, oauthConfigured, githubTokenConfigured, githubRepoConfigured, tokenOwner, canApproveReleases: !!tokenOwner?.canApprove, isAdminSession, oauthStatusChecked, refreshOauthStatus }}>
+        <AuthContext.Provider value={{ user, loading, login, logout, refresh, oauthConfigured, githubTokenConfigured, githubRepoConfigured, tokenOwner, canApproveReleases: !!tokenOwner?.canApprove, isAdminSession, oauthStatusChecked, refreshOauthStatus, awsIdentityLabel }}>
 
             {children}
 

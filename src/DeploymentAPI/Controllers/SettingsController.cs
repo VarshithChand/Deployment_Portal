@@ -165,6 +165,13 @@ public class SettingsController : ControllerBase
         var key = PortalIdentity.GetOrCreateKey(HttpContext);
         var creds = await _settings.GetUserAwsCredentialsAsync(key);
 
+        // Only asks AWS "who are you" when there's actually a credential to
+        // ask about - the common case (AWS never configured at all) stays a
+        // single cheap local read, no outbound call.
+        var identityLabel = creds.IsConfigured
+            ? await _cloud.GetCallerIdentityLabelAsync(creds)
+            : null;
+
         return Ok(new
         {
             Configured = creds.IsConfigured,
@@ -175,7 +182,8 @@ public class SettingsController : ControllerBase
             IsSsoSession = creds.IsSsoSession,
             SsoAccountName = creds.SsoAccountName,
             SsoRoleName = creds.SsoRoleName,
-            RequiresSsoSignIn = creds.RequiresSsoSignIn
+            RequiresSsoSignIn = creds.RequiresSsoSignIn,
+            IdentityLabel = identityLabel
         });
     }
 

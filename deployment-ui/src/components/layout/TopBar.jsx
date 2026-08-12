@@ -31,7 +31,7 @@ function MenuIcon() {
 // menu button opens (mobile-nav-toggle is hidden via CSS at wider widths).
 export default function TopBar() {
 
-    const { user, loading, login, logout, oauthConfigured, tokenOwner, canApproveReleases, isAdminSession } = useAuth();
+    const { user, loading, login, logout, oauthConfigured, tokenOwner, canApproveReleases, isAdminSession, awsIdentityLabel } = useAuth();
     const { setTab, mobileNavOpen, setMobileNavOpen } = useNavigation();
 
     const [rateLimit, setRateLimit] = useState(null);
@@ -127,6 +127,15 @@ export default function TopBar() {
 
                     <span className="repo-name-badge" title="Configured repository">
                         {repoName}
+                    </span>
+
+                )}
+
+                {awsIdentityLabel && (
+
+                    <span className="cloud-user-badge" title="Signed in as, for this session's saved AWS credentials">
+                        <span className="cloud-user-badge-provider">AWS</span>
+                        {awsIdentityLabel}
                     </span>
 
                 )}
