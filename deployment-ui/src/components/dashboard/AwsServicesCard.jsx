@@ -2,6 +2,7 @@ import { useState } from "react";
 
 import { getMyAwsResources } from "../../services/settingsService";
 import useAuth from "../../hooks/useAuth";
+import useNavigation from "../../hooks/useNavigation";
 import usePolling from "../../hooks/usePolling";
 
 const POLL_MS = 30000;
@@ -22,56 +23,72 @@ const SERVICES = [
 // worth surfacing — that's a real problem, not "nothing running"). A
 // clean zero-count service is deliberately not a tile at all; see
 // hasSomethingToShow below for the empty-account case.
-function AwsServiceTile({ label, status }) {
+//
+// onSelect is omitted for the synthetic "Other AWS Resources" error tile
+// (see the otherError push below) - it doesn't correspond to any one real
+// service on the Cloud Services page, so there's nowhere for a click on it
+// to actually go.
+function AwsServiceTile({ label, status, onSelect }) {
 
-    if (status.error) {
+    const clickable = typeof onSelect === "function";
+
+    const header = (
+
+        <div className="aws-service-tile-header">
+            <span>{label}</span>
+            {status.error ? (
+                <span className="badge badge-danger">Error</span>
+            ) : (
+                <span className="badge badge-success">{status.count}</span>
+            )}
+        </div>
+
+    );
+
+    const body = status.error ? (
+
+        <p className="field-hint field-hint-bad" style={{ margin: 0 }}>{status.error}</p>
+
+    ) : (
+
+        <ul className="aws-service-tile-list">
+
+            {status.items.slice(0, MAX_ITEMS_SHOWN).map((item, index) => (
+
+                <li key={index}>
+                    <span className="aws-service-tile-item-name">{item.name}</span>
+                    {item.detail && (
+                        <span className="aws-service-tile-item-detail">{item.detail}</span>
+                    )}
+                </li>
+
+            ))}
+
+            {status.count > MAX_ITEMS_SHOWN && (
+                <li className="aws-service-tile-more">+{status.count - MAX_ITEMS_SHOWN} more</li>
+            )}
+
+        </ul>
+
+    );
+
+    if (!clickable) {
 
         return (
-
             <div className="aws-service-tile">
-
-                <div className="aws-service-tile-header">
-                    <span>{label}</span>
-                    <span className="badge badge-danger">Error</span>
-                </div>
-
-                <p className="field-hint field-hint-bad" style={{ margin: 0 }}>{status.error}</p>
-
+                {header}
+                {body}
             </div>
-
         );
 
     }
 
     return (
 
-        <div className="aws-service-tile">
-
-            <div className="aws-service-tile-header">
-                <span>{label}</span>
-                <span className="badge badge-success">{status.count}</span>
-            </div>
-
-            <ul className="aws-service-tile-list">
-
-                {status.items.slice(0, MAX_ITEMS_SHOWN).map((item, index) => (
-
-                    <li key={index}>
-                        <span className="aws-service-tile-item-name">{item.name}</span>
-                        {item.detail && (
-                            <span className="aws-service-tile-item-detail">{item.detail}</span>
-                        )}
-                    </li>
-
-                ))}
-
-                {status.count > MAX_ITEMS_SHOWN && (
-                    <li className="aws-service-tile-more">+{status.count - MAX_ITEMS_SHOWN} more</li>
-                )}
-
-            </ul>
-
-        </div>
+        <button type="button" className="aws-service-tile aws-service-tile-clickable" onClick={onSelect}>
+            {header}
+            {body}
+        </button>
 
     );
 
@@ -89,6 +106,7 @@ function AwsServiceTile({ label, status }) {
 export default function AwsServicesCard() {
 
     const { githubRepoConfigured, awsIdentityLabel } = useAuth();
+    const { goToCloudService } = useNavigation();
 
     const [inventory, setInventory] = useState(null);
     const [loading, setLoading] = useState(true);
@@ -191,6 +209,7 @@ export default function AwsServicesCard() {
                             key={tile.key}
                             label={tile.label}
                             status={tile.status}
+                            onSelect={tile.key === "other-error" ? null : () => goToCloudService(tile.key)}
                         />
 
                     ))}

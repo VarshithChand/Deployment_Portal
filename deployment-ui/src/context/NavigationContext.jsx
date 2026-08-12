@@ -33,6 +33,12 @@ export default function NavigationProvider({ children }) {
     // as pendingRepoUrl/goToSettingsWithRepo above.
     const [pendingEnvironmentName, setPendingEnvironmentName] = useState(null);
 
+    // Which AWS service the Cloud Services page should open straight into —
+    // set when the Dashboard's AWS Services card is clicked, cleared once
+    // the page has consumed it (see CloudServices.jsx), same hand-off shape
+    // as pendingEnvironmentName above.
+    const [pendingCloudService, setPendingCloudService] = useState(null);
+
     // The mobile drawer (Sidebar becomes an off-canvas panel below the
     // 768px breakpoint — see global.css) and its hamburger trigger (TopBar)
     // are siblings, not parent/child, so this is the shared home for
@@ -105,6 +111,13 @@ export default function NavigationProvider({ children }) {
 
     }
 
+    function goToCloudService(serviceId) {
+
+        setPendingCloudService(serviceId);
+        setTab("cloudServices");
+
+    }
+
     return (
 
         <NavigationContext.Provider
@@ -112,6 +125,7 @@ export default function NavigationProvider({ children }) {
                 tab, setTab, pendingRepoUrl, setPendingRepoUrl, goToSettingsWithRepo,
                 pendingSettingsView, setPendingSettingsView, goToSettingsView,
                 pendingEnvironmentName, setPendingEnvironmentName, goToEnvironment,
+                pendingCloudService, setPendingCloudService, goToCloudService,
                 mobileNavOpen, setMobileNavOpen,
                 sidebarAccess, refreshSidebarAccess
             }}

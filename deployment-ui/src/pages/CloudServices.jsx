@@ -5,6 +5,7 @@ import { getMyAwsResources } from "../services/settingsService";
 import { getLiveStatusForService } from "../utils/cloudServiceLiveStatus";
 import usePolling from "../hooks/usePolling";
 import usePagination from "../hooks/usePagination";
+import useNavigation from "../hooks/useNavigation";
 import PageLayout from "../components/layout/PageLayout";
 import SearchBox from "../components/common/SearchBox";
 import Pagination from "../components/common/Pagination";
@@ -74,6 +75,8 @@ function matchesQuery(service, query) {
 // task counts, etc.) is fetched separately, only once a specific service
 // page is actually open - see the individual *ManagementPage components.
 export default function CloudServices() {
+
+    const { pendingCloudService, setPendingCloudService } = useNavigation();
 
     const [provider, setProvider] = useState("aws");
     const [search, setSearch] = useState("");
@@ -151,6 +154,22 @@ export default function CloudServices() {
         });
 
     }
+
+    // Landed here from the Dashboard's AWS Services card - open straight
+    // into that service's own management page (same "pendingX" hand-off as
+    // Environments' pendingEnvironmentName) rather than the catalog, then
+    // consume it so navigating away and back doesn't reopen it unexpectedly.
+    useEffect(() => {
+
+        if (pendingCloudService) {
+
+            navigate({ service: pendingCloudService });
+            setPendingCloudService(null);
+
+        }
+
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [pendingCloudService]);
 
     function goBackToCatalog() {
         navigate({});

@@ -4816,6 +4816,29 @@ textarea{
 
 }
 
+/* The Dashboard's AWS Services card tiles double as links straight into
+   that service's own Cloud Services page (see AwsServicesCard.jsx) -
+   a <button> reset so it still looks like the plain div tile above it. */
+.aws-service-tile-clickable{
+    display:block;
+    width:100%;
+    text-align:left;
+    font:inherit;
+    color:inherit;
+    cursor:pointer;
+    transition:border-color .15s ease, transform .15s ease;
+}
+
+.aws-service-tile-clickable:hover{
+    border-color:var(--heading-accent);
+    transform:translateY(-1px);
+}
+
+.aws-service-tile-clickable:focus-visible{
+    outline:2px solid var(--heading-accent);
+    outline-offset:2px;
+}
+
 .aws-service-tile-header{
 
     display:flex;
