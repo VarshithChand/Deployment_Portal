@@ -59,9 +59,18 @@ export default function AppCacheControlCard() {
 
     return (
 
-        <div className="card">
+        <>
 
-            {dialog}
+        {/* Rendered as a sibling of .card, not inside it - .card has its
+            own backdrop-filter (this app's glass theme), and any ancestor
+            with backdrop-filter/transform creates a new CSS containing
+            block for position:fixed descendants. Nested inside .card, the
+            confirm dialog's "fixed" backdrop was scoped to that card's own
+            bounds instead of the viewport - trapped inside a small
+            scrollable box instead of covering the page. */}
+        {dialog}
+
+        <div className="card">
 
             <h3 className="settings-subhead" style={{ marginTop: 0 }}>
                 Force Refresh
@@ -78,6 +87,8 @@ export default function AppCacheControlCard() {
             </button>
 
         </div>
+
+        </>
 
     );
 

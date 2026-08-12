@@ -273,9 +273,16 @@ export default function AccessLevels() {
 
     return (
 
-        <div className="card">
+        <>
 
-            {dialog}
+        {/* Sibling of .card, not nested inside it - .card has its own
+            backdrop-filter (this app's glass theme), which creates a new
+            CSS containing block for position:fixed descendants. Nested
+            inside .card, the confirm dialog's "fixed" backdrop was scoped
+            to that card's own bounds instead of the viewport. */}
+        {dialog}
+
+        <div className="card">
 
             <div className="access-panel-header">
 
@@ -506,6 +513,8 @@ export default function AccessLevels() {
             )}
 
         </div>
+
+        </>
 
     );
 
