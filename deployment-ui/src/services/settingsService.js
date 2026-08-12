@@ -68,6 +68,15 @@ export const clearMyAwsCredentials = async () => {
     return response.data;
 };
 
+// Dashboard's "AWS Services" container — EC2/VPC/S3/Lambda/Route53/SNS
+// across the whole account these credentials can see, not just the one
+// cluster/service an Environment happens to be wired to (that narrower
+// view is getEnvironmentCloudStatus, in environmentsService.js).
+export const getMyAwsResources = async () => {
+    const response = await settingsApi.get("/me/aws/resources");
+    return response.data;
+};
+
 export const getMyAzureSettings = async () => {
     const response = await settingsApi.get("/me/azure");
     return response.data;

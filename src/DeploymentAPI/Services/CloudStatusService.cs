@@ -1,11 +1,21 @@
 using Amazon;
+using Amazon.EC2;
+using Amazon.EC2.Model;
 using Amazon.ECR;
 using Amazon.ECR.Model;
 using Amazon.ECS;
 using Amazon.ECS.Model;
+using Amazon.Lambda;
+using Amazon.Lambda.Model;
+using Amazon.Route53;
+using Amazon.Route53.Model;
 using Amazon.Runtime;
+using Amazon.S3;
+using Amazon.S3.Model;
 using Amazon.SecurityToken;
 using Amazon.SecurityToken.Model;
+using Amazon.SimpleNotificationService;
+using Amazon.SimpleNotificationService.Model;
 using DeploymentAPI.DTOs;
 using Newtonsoft.Json.Linq;
 
@@ -210,7 +220,7 @@ public class CloudStatusService
             if (listResponse.ImageIds.Count == 0)
                 return;
 
-            var describeResponse = await ecrClient.DescribeImagesAsync(new DescribeImagesRequest
+            var describeResponse = await ecrClient.DescribeImagesAsync(new Amazon.ECR.Model.DescribeImagesRequest
             {
                 RepositoryName = ecrRepository,
                 ImageIds = listResponse.ImageIds
@@ -230,6 +240,212 @@ public class CloudStatusService
         catch (Exception ex)
         {
             result.Error = AppendError(result.Error, $"ECR: {ex.Message}");
+        }
+    }
+
+    // Dashboard's "AWS Services" container — a broader account-wide look
+    // than the Environments feature's ECS/ECR panel above, which only ever
+    // shows the one cluster/service/repository a specific environment
+    // happens to be wired to. This instead surveys the services teams
+    // actually watch day to day, all in parallel, each wrapped separately
+    // so one missing IAM permission (e.g. no route53:ListHostedZones) only
+    // blanks that one tile instead of the whole card.
+    public async Task<AwsResourceInventoryDto> GetAwsResourceInventoryAsync(UserAwsCredentials credentials, string? region)
+    {
+        var result = new AwsResourceInventoryDto { Configured = credentials.IsConfigured };
+
+        if (!credentials.IsConfigured)
+            return result;
+
+        if (credentials.RequiresMfaRefresh)
+        {
+            const string mfaError = "MFA session expired — re-enter your 6-digit code in Settings → Credentials → AWS.";
+            result.Ec2.Error = result.Vpc.Error = result.S3.Error = result.Lambda.Error = result.Route53.Error = result.Sns.Error = mfaError;
+            return result;
+        }
+
+        var effectiveRegion = string.IsNullOrWhiteSpace(region) ? credentials.Region : region;
+        result.Region = effectiveRegion;
+
+        var awsCredentials = BuildCredentials(credentials);
+        var tasks = new List<System.Threading.Tasks.Task>();
+
+        // EC2, VPC, and Lambda are regional - nothing to call without one.
+        if (!string.IsNullOrWhiteSpace(effectiveRegion))
+        {
+            var regionEndpoint = RegionEndpoint.GetBySystemName(effectiveRegion);
+
+            tasks.Add(DescribeEc2InstancesAsync(awsCredentials, regionEndpoint, result));
+            tasks.Add(DescribeVpcsAsync(awsCredentials, regionEndpoint, result));
+            tasks.Add(DescribeLambdaFunctionsAsync(awsCredentials, regionEndpoint, result));
+            tasks.Add(DescribeSnsTopicsAsync(awsCredentials, regionEndpoint, result));
+        }
+        else
+        {
+            const string noRegionError = "No AWS region configured — set one in Settings → Credentials → AWS.";
+            result.Ec2.Error = result.Vpc.Error = result.Lambda.Error = result.Sns.Error = noRegionError;
+        }
+
+        // S3 and Route 53 are global services - any region's endpoint sees
+        // the whole account, so these run regardless of the block above.
+        var globalEndpoint = string.IsNullOrWhiteSpace(effectiveRegion)
+            ? RegionEndpoint.USEast1
+            : RegionEndpoint.GetBySystemName(effectiveRegion);
+
+        tasks.Add(DescribeS3BucketsAsync(awsCredentials, globalEndpoint, result));
+        tasks.Add(DescribeRoute53ZonesAsync(awsCredentials, globalEndpoint, result));
+
+        await System.Threading.Tasks.Task.WhenAll(tasks);
+
+        return result;
+    }
+
+    private static async System.Threading.Tasks.Task DescribeEc2InstancesAsync(
+        AWSCredentials awsCredentials, RegionEndpoint regionEndpoint, AwsResourceInventoryDto result)
+    {
+        try
+        {
+            using var client = new AmazonEC2Client(awsCredentials, regionEndpoint);
+            var response = await client.DescribeInstancesAsync(new DescribeInstancesRequest());
+
+            var instances = response.Reservations.SelectMany(r => r.Instances).ToList();
+
+            result.Ec2.Items = instances
+                .Select(i => new AwsResourceItemDto
+                {
+                    Name = i.Tags?.FirstOrDefault(t => t.Key == "Name")?.Value ?? i.InstanceId,
+                    Detail = $"{i.InstanceType} · {i.State?.Name}"
+                })
+                .ToList();
+
+            result.Ec2.Count = instances.Count;
+            result.Ec2.Found = true;
+        }
+        catch (Exception ex)
+        {
+            result.Ec2.Error = ex.Message;
+        }
+    }
+
+    private static async System.Threading.Tasks.Task DescribeVpcsAsync(
+        AWSCredentials awsCredentials, RegionEndpoint regionEndpoint, AwsResourceInventoryDto result)
+    {
+        try
+        {
+            using var client = new AmazonEC2Client(awsCredentials, regionEndpoint);
+            var response = await client.DescribeVpcsAsync(new DescribeVpcsRequest());
+
+            result.Vpc.Items = response.Vpcs
+                .Select(v => new AwsResourceItemDto
+                {
+                    Name = v.Tags?.FirstOrDefault(t => t.Key == "Name")?.Value ?? v.VpcId,
+                    Detail = $"{v.CidrBlock}{(v.IsDefault == true ? " · default" : "")}"
+                })
+                .ToList();
+
+            result.Vpc.Count = response.Vpcs.Count;
+            result.Vpc.Found = true;
+        }
+        catch (Exception ex)
+        {
+            result.Vpc.Error = ex.Message;
+        }
+    }
+
+    private static async System.Threading.Tasks.Task DescribeLambdaFunctionsAsync(
+        AWSCredentials awsCredentials, RegionEndpoint regionEndpoint, AwsResourceInventoryDto result)
+    {
+        try
+        {
+            using var client = new AmazonLambdaClient(awsCredentials, regionEndpoint);
+            var response = await client.ListFunctionsAsync(new ListFunctionsRequest());
+
+            result.Lambda.Items = response.Functions
+                .Select(f => new AwsResourceItemDto { Name = f.FunctionName, Detail = f.Runtime })
+                .ToList();
+
+            result.Lambda.Count = response.Functions.Count;
+            result.Lambda.Found = true;
+        }
+        catch (Exception ex)
+        {
+            result.Lambda.Error = ex.Message;
+        }
+    }
+
+    private static async System.Threading.Tasks.Task DescribeSnsTopicsAsync(
+        AWSCredentials awsCredentials, RegionEndpoint regionEndpoint, AwsResourceInventoryDto result)
+    {
+        try
+        {
+            using var client = new AmazonSimpleNotificationServiceClient(awsCredentials, regionEndpoint);
+            var response = await client.ListTopicsAsync(new ListTopicsRequest());
+
+            result.Sns.Items = response.Topics
+                .Select(t => new AwsResourceItemDto
+                {
+                    // arn:aws:sns:us-east-1:123456789012:my-topic -> "my-topic"
+                    Name = t.TopicArn[(t.TopicArn.LastIndexOf(':') + 1)..],
+                    Detail = null
+                })
+                .ToList();
+
+            result.Sns.Count = response.Topics.Count;
+            result.Sns.Found = true;
+        }
+        catch (Exception ex)
+        {
+            result.Sns.Error = ex.Message;
+        }
+    }
+
+    private static async System.Threading.Tasks.Task DescribeS3BucketsAsync(
+        AWSCredentials awsCredentials, RegionEndpoint regionEndpoint, AwsResourceInventoryDto result)
+    {
+        try
+        {
+            using var client = new AmazonS3Client(awsCredentials, regionEndpoint);
+            var response = await client.ListBucketsAsync(new ListBucketsRequest());
+
+            result.S3.Items = response.Buckets
+                .Select(b => new AwsResourceItemDto
+                {
+                    Name = b.BucketName,
+                    Detail = b.CreationDate?.ToString("yyyy-MM-dd")
+                })
+                .ToList();
+
+            result.S3.Count = response.Buckets.Count;
+            result.S3.Found = true;
+        }
+        catch (Exception ex)
+        {
+            result.S3.Error = ex.Message;
+        }
+    }
+
+    private static async System.Threading.Tasks.Task DescribeRoute53ZonesAsync(
+        AWSCredentials awsCredentials, RegionEndpoint regionEndpoint, AwsResourceInventoryDto result)
+    {
+        try
+        {
+            using var client = new AmazonRoute53Client(awsCredentials, regionEndpoint);
+            var response = await client.ListHostedZonesAsync(new ListHostedZonesRequest());
+
+            result.Route53.Items = response.HostedZones
+                .Select(z => new AwsResourceItemDto
+                {
+                    Name = z.Name,
+                    Detail = $"{z.ResourceRecordSetCount} records"
+                })
+                .ToList();
+
+            result.Route53.Count = response.HostedZones.Count;
+            result.Route53.Found = true;
+        }
+        catch (Exception ex)
+        {
+            result.Route53.Error = ex.Message;
         }
     }
 

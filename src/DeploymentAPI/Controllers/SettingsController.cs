@@ -187,6 +187,19 @@ public class SettingsController : ControllerBase
         });
     }
 
+    // Dashboard's "AWS Services" container - EC2/VPC/S3/Lambda/Route53/SNS
+    // across the whole account this session's credentials can see, not
+    // just the one cluster/service an Environment happens to be wired to
+    // (see EnvironmentsController.GetCloudStatus for that narrower view).
+    [HttpGet("me/aws/resources")]
+    public async Task<IActionResult> GetMyAwsResources([FromQuery] string? region)
+    {
+        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var creds = await _settings.GetUserAwsCredentialsAsync(key);
+
+        return Ok(await _cloud.GetAwsResourceInventoryAsync(creds, region));
+    }
+
     // AWS has no username/password sign-in API - the access key/secret is
     // the real "login," and when MfaSerialNumber+MfaCode are both present
     // this verifies that second factor via STS GetSessionToken before

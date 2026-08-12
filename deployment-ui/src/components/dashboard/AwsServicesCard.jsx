@@ -1,96 +1,132 @@
 import { useState } from "react";
 
-import { getEnvironments, getEnvironmentCloudStatus } from "../../services/environmentsService";
-import useNavigation from "../../hooks/useNavigation";
+import { getMyAwsResources } from "../../services/settingsService";
 import useAuth from "../../hooks/useAuth";
 import usePolling from "../../hooks/usePolling";
 
-const STATUS_POLL_MS = 30000;
+const POLL_MS = 30000;
+const MAX_ITEMS_SHOWN = 4;
 
-// status is undefined while still loading, null if the check itself
-// failed, or the cloud-status DTO (see CloudStatusPanel) once it succeeds —
-// three distinct states, three distinct renders.
-function AwsServiceRow({ env, status, onOpen }) {
+const SERVICES = [
+    { key: "ec2", label: "EC2 Instances" },
+    { key: "vpc", label: "VPCs" },
+    { key: "s3", label: "S3 Buckets" },
+    { key: "lambda", label: "Lambda Functions" },
+    { key: "route53", label: "Route 53 Zones" },
+    { key: "sns", label: "SNS Topics" }
+];
 
-    const loading = status === undefined;
+// One AWS service's tile — status is undefined while the whole inventory
+// is still loading, or the per-service AwsServiceStatusDto (found/error/
+// count/items) once it's back. Each service fails independently (a
+// missing IAM permission on just one of the six shouldn't blank the rest).
+function AwsServiceTile({ label, status }) {
+
+    if (!status) {
+
+        return (
+
+            <div className="aws-service-tile">
+                <div className="aws-service-tile-header"><span>{label}</span></div>
+                <p className="field-hint" style={{ margin: 0 }}>Checking...</p>
+            </div>
+
+        );
+
+    }
+
+    if (status.error) {
+
+        return (
+
+            <div className="aws-service-tile">
+
+                <div className="aws-service-tile-header">
+                    <span>{label}</span>
+                    <span className="badge badge-danger">Error</span>
+                </div>
+
+                <p className="field-hint field-hint-bad" style={{ margin: 0 }}>{status.error}</p>
+
+            </div>
+
+        );
+
+    }
 
     return (
 
-        <tr className="table-row-clickable" onClick={onOpen}>
+        <div className="aws-service-tile">
 
-            <td>{env.name}</td>
+            <div className="aws-service-tile-header">
+                <span>{label}</span>
+                <span className={`badge ${status.count > 0 ? "badge-success" : "badge-secondary"}`}>
+                    {status.count}
+                </span>
+            </div>
 
-            <td>
-                {loading ? (
-                    <span className="empty-state">Checking...</span>
-                ) : status === null ? (
-                    <span className="badge badge-secondary">Unable to check</span>
-                ) : !status.configured ? (
-                    <span className="badge badge-secondary">No AWS credentials</span>
-                ) : !status.found ? (
-                    <span className="badge badge-danger">{status.error ? "Error" : "Not found"}</span>
-                ) : (
-                    <span className="badge badge-success">{status.ecsStatus || "Reachable"}</span>
-                )}
-            </td>
+            {status.count === 0 ? (
 
-            <td>
-                {!loading && status?.configured && status?.found
-                    ? `${status.runningCount ?? "-"} / ${status.desiredCount ?? "-"}`
-                    : "—"}
-            </td>
+                <p className="field-hint" style={{ margin: 0 }}>None found</p>
 
-            <td className="smoke-test-metric-mono">
-                {!loading && status?.configured && status?.found ? (status.taskDefinition || "—") : "—"}
-            </td>
+            ) : (
 
-        </tr>
+                <ul className="aws-service-tile-list">
+
+                    {status.items.slice(0, MAX_ITEMS_SHOWN).map((item, index) => (
+
+                        <li key={index}>
+                            <span className="aws-service-tile-item-name">{item.name}</span>
+                            {item.detail && (
+                                <span className="aws-service-tile-item-detail">{item.detail}</span>
+                            )}
+                        </li>
+
+                    ))}
+
+                    {status.count > MAX_ITEMS_SHOWN && (
+                        <li className="aws-service-tile-more">+{status.count - MAX_ITEMS_SHOWN} more</li>
+                    )}
+
+                </ul>
+
+            )}
+
+        </div>
 
     );
 
 }
 
-// Dashboard's persistent tracker for every AWS-backed environment, so
-// seeing whether an ECS service is actually healthy doesn't require
-// opening Environments and clicking into each one individually. Reuses
-// the exact same getEnvironmentCloudStatus call CloudStatusPanel already
-// makes on the environment detail page — no new backend endpoint needed.
+// Dashboard's account-wide AWS tracker — EC2, VPC, S3, Lambda, Route 53,
+// and SNS, all resolved from this session's own saved AWS credentials
+// (see AwsLoginSection), independent of the Environments feature's ECS/ECR
+// panel, which only ever showed the one cluster/service/repository a
+// specific environment happens to be wired to.
 export default function AwsServicesCard() {
 
-    const { goToEnvironment } = useNavigation();
-    const { githubRepoConfigured } = useAuth();
+    const { githubRepoConfigured, awsIdentityLabel } = useAuth();
 
-    const [environments, setEnvironments] = useState([]);
-    const [statuses, setStatuses] = useState({});
+    const [inventory, setInventory] = useState(null);
     const [loading, setLoading] = useState(true);
 
-    async function loadAwsEnvironments() {
+    async function loadInventory() {
 
-        // Same reasoning as EnvironmentsCard/RecentDeployments — this card
-        // mounts even behind RequireGitHubSetup's popup, so without this
-        // guard it polled regardless of whether a repo was configured yet.
+        // Same reasoning as every other Dashboard card — this mounts even
+        // behind RequireGitHubSetup's popup, so without this guard it
+        // polled regardless of whether a repo was configured yet.
         if (!githubRepoConfigured) {
             setLoading(false);
             return;
         }
 
-        const data = await getEnvironments();
-        const awsEnvs = Array.isArray(data) ? data.filter((env) => env.cloudProvider === "aws") : [];
-
-        setEnvironments(awsEnvs);
+        const data = await getMyAwsResources();
+        setInventory(data);
         setLoading(false);
-
-        awsEnvs.forEach((env) => {
-
-            getEnvironmentCloudStatus(env.name).then((result) => {
-                setStatuses((prev) => ({ ...prev, [env.name]: result }));
-            });
-
-        });
 
     }
 
-    usePolling(loadAwsEnvironments, STATUS_POLL_MS);
+    usePolling(loadInventory, POLL_MS);
 
     if (!githubRepoConfigured) {
         return null;
@@ -104,53 +140,41 @@ export default function AwsServicesCard() {
                 AWS Services
             </h2>
 
-            <p className="empty-state" style={{ padding: "0 0 15px", textAlign: "left" }}>
-                Live ECS status for every AWS-backed environment. Click a row to open it.
-            </p>
-
             {loading ? (
 
-                <p className="empty-state">Loading AWS environments...</p>
+                <p className="empty-state">Checking your AWS account...</p>
 
-            ) : environments.length === 0 ? (
+            ) : !inventory?.configured ? (
 
-                <p className="empty-state">No AWS-backed environments configured yet.</p>
+                <p className="empty-state" style={{ textAlign: "left" }}>
+                    Enter your AWS credentials in Settings → Credentials → AWS to see EC2, VPC, S3,
+                    Lambda, Route 53, and SNS resources here.
+                </p>
 
             ) : (
 
-                <div className="table-scroll">
+                <>
 
-                <table className="table">
+                <p className="field-hint" style={{ padding: "0 0 15px", margin: 0, textAlign: "left" }}>
+                    {awsIdentityLabel ? `Signed in as ${awsIdentityLabel}` : "Live account inventory"}
+                    {inventory.region ? ` · ${inventory.region}` : ""}
+                </p>
 
-                    <thead>
+                <div className="aws-service-grid">
 
-                        <tr>
-                            <th>Environment</th>
-                            <th>Status</th>
-                            <th>Tasks</th>
-                            <th>Task Definition</th>
-                        </tr>
+                    {SERVICES.map((service) => (
 
-                    </thead>
+                        <AwsServiceTile
+                            key={service.key}
+                            label={service.label}
+                            status={inventory[service.key]}
+                        />
 
-                    <tbody>
-
-                        {environments.map((env) => (
-
-                            <AwsServiceRow
-                                key={env.name}
-                                env={env}
-                                status={statuses[env.name]}
-                                onOpen={() => goToEnvironment(env.name)}
-                            />
-
-                        ))}
-
-                    </tbody>
-
-                </table>
+                    ))}
 
                 </div>
+
+                </>
 
             )}
 

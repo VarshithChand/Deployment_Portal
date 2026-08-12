@@ -156,6 +156,57 @@ public class EcrImageDto
     public long SizeBytes { get; set; }
 }
 
+// One resource in an AwsServiceStatusDto's list — deliberately just two
+// loose strings rather than a shape per AWS service, since Name/Detail
+// already covers "instance name + type/state", "bucket name + created",
+// "function name + runtime", etc. without six near-identical DTOs.
+public class AwsResourceItemDto
+{
+    public string Name { get; set; } = string.Empty;
+
+    public string? Detail { get; set; }
+}
+
+// One AWS service's slice of the Dashboard's "AWS Services" inventory —
+// same Found/Error shape as CloudStatusDto, repeated per service instead
+// of per environment, since one IAM user's permissions commonly cover some
+// services and not others (e.g. no route53:ListHostedZones) and each
+// service should fail independently rather than blanking the whole card.
+public class AwsServiceStatusDto
+{
+    public bool Found { get; set; }
+
+    public string? Error { get; set; }
+
+    public int Count { get; set; }
+
+    public List<AwsResourceItemDto> Items { get; set; } = new();
+}
+
+// The Dashboard's "AWS Services" container — a broader account-wide
+// inventory across the services teams actually use day to day (EC2, VPC,
+// S3, Lambda, Route 53, SNS), independent of the Environments feature's
+// ECS/ECR panel, which only ever showed the one cluster/service/repository
+// an environment happens to be wired to.
+public class AwsResourceInventoryDto
+{
+    public bool Configured { get; set; }
+
+    public string? Region { get; set; }
+
+    public AwsServiceStatusDto Ec2 { get; set; } = new();
+
+    public AwsServiceStatusDto Vpc { get; set; } = new();
+
+    public AwsServiceStatusDto S3 { get; set; } = new();
+
+    public AwsServiceStatusDto Lambda { get; set; } = new();
+
+    public AwsServiceStatusDto Route53 { get; set; } = new();
+
+    public AwsServiceStatusDto Sns { get; set; } = new();
+}
+
 // The temporary credential set STS (MFA path) or AWS SSO's
 // GetRoleCredentials (SSO path) hands back — everything needed to make AWS
 // calls as that session until it expires. The Sso* fields are only set by
