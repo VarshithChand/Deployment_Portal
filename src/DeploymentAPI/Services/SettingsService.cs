@@ -640,6 +640,37 @@ public class SettingsService
             ai?["Model"]?.ToString() ?? string.Empty);
     }
 
+    // Forces every visitor's browser to refresh to the latest deployed
+    // frontend build (see AppVersionController) - a portal-wide counter,
+    // same shared/admin-writable storage model as every other section
+    // here, just with no secret field to mask. GET is anonymous (even a
+    // visitor stuck at the pre-login setup screen should get prompted to
+    // refresh); only the increment is admin-gated.
+    public async Task<long> GetAppVersionAsync()
+    {
+        var root = await ReadRootAsync();
+        var cache = root["AppCache"] as JObject;
+
+        return cache?["Version"]?.Value<long>() ?? 1;
+    }
+
+    public async Task<long> IncrementAppVersionAsync()
+    {
+        var root = await ReadRootAsync();
+        var cache = root["AppCache"] as JObject ?? new JObject();
+
+        var next = (cache["Version"]?.Value<long>() ?? 1) + 1;
+        cache["Version"] = next;
+
+        root["AppCache"] = cache;
+
+        await WriteRootAsync(root);
+
+        _log.LogInfo("Settings", $"Application cache version bumped to {next} — every visitor will be prompted to refresh.");
+
+        return next;
+    }
+
     public async Task<SettingsViewDto> SaveAdminUsernamesAsync(AdminUsernamesUpdateDto update)
     {
         var root = await ReadRootAsync();
