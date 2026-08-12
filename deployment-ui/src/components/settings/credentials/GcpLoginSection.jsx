@@ -89,6 +89,16 @@ export default function GcpLoginSection() {
                 )}
             </h3>
 
+            {/* No API call needed for this one - the service account's own
+                JSON key already carries its email address (client_email),
+                so this is just the backend echoing back a field from what
+                you already pasted in, not a live lookup. */}
+            {!loading && status?.identityLabel && (
+                <p className="field-hint field-hint-good">
+                    Service account: <strong>{status.identityLabel}</strong>
+                </p>
+            )}
+
             <p className="empty-state" style={{ padding: "0 0 15px", textAlign: "left" }}>
                 Stored for future use — no feature in this portal reads it yet. A service
                 account's JSON key is what every GCP server-to-server API authenticates with.

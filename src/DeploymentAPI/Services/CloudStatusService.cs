@@ -301,7 +301,8 @@ public class CloudStatusService
         return result;
     }
 
-    private static async Task<string?> GetAzureAccessTokenAsync(string tenantId, string clientId, string clientSecret)
+    private static async Task<string?> GetAzureAccessTokenAsync(
+        string tenantId, string clientId, string clientSecret, string scope = "https://management.azure.com/.default")
     {
         var url = $"https://login.microsoftonline.com/{Uri.EscapeDataString(tenantId)}/oauth2/v2.0/token";
 
@@ -310,7 +311,7 @@ public class CloudStatusService
             ["grant_type"] = "client_credentials",
             ["client_id"] = clientId,
             ["client_secret"] = clientSecret,
-            ["scope"] = "https://management.azure.com/.default"
+            ["scope"] = scope
         });
 
         var response = await AzureHttpClient.PostAsync(url, form);
@@ -320,6 +321,51 @@ public class CloudStatusService
 
         var json = await response.Content.ReadAsStringAsync();
         return JObject.Parse(json)["access_token"]?.ToString();
+    }
+
+    // "Which App Registration am I" for the Settings > Azure tab, the
+    // Azure equivalent of GetCallerIdentityLabelAsync above. Unlike AWS's
+    // STS call (always allowed, no permission needed), reading a service
+    // principal's own display name from Microsoft Graph needs that app to
+    // actually have been granted a Graph read permission with admin
+    // consent - not guaranteed for an arbitrary App Registration set up
+    // only for Azure Resource Manager access. Best-effort: silently
+    // returns null (falls back to just showing "Configured") rather than
+    // surfacing a Graph permission error on what's meant to be a minor
+    // display nicety, not a required step.
+    public async Task<string?> GetAzureIdentityLabelAsync(UserAzureCredentials credentials)
+    {
+        if (!credentials.IsConfigured)
+            return null;
+
+        try
+        {
+            var token = await GetAzureAccessTokenAsync(
+                credentials.TenantId!, credentials.ClientId!, credentials.ClientSecret!,
+                "https://graph.microsoft.com/.default");
+
+            if (token == null)
+                return null;
+
+            var url = $"https://graph.microsoft.com/v1.0/servicePrincipals?$filter=appId eq '{Uri.EscapeDataString(credentials.ClientId!)}'&$select=displayName";
+
+            using var request = new HttpRequestMessage(HttpMethod.Get, url);
+            request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+
+            var response = await AzureHttpClient.SendAsync(request);
+
+            if (!response.IsSuccessStatusCode)
+                return null;
+
+            var json = await response.Content.ReadAsStringAsync();
+            var displayName = JObject.Parse(json)["value"]?.FirstOrDefault()?["displayName"]?.ToString();
+
+            return string.IsNullOrWhiteSpace(displayName) ? null : displayName;
+        }
+        catch
+        {
+            return null;
+        }
     }
 
     private static string AppendError(string? existing, string next) =>

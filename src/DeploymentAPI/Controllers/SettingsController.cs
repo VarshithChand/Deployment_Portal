@@ -250,7 +250,11 @@ public class SettingsController : ControllerBase
         var key = PortalIdentity.GetOrCreateKey(HttpContext);
         var creds = await _settings.GetUserAzureCredentialsAsync(key);
 
-        return Ok(new { Configured = creds.IsConfigured });
+        var identityLabel = creds.IsConfigured
+            ? await _cloud.GetAzureIdentityLabelAsync(creds)
+            : null;
+
+        return Ok(new { Configured = creds.IsConfigured, IdentityLabel = identityLabel });
     }
 
     [HttpPost("me/azure")]
@@ -289,7 +293,32 @@ public class SettingsController : ControllerBase
         var key = PortalIdentity.GetOrCreateKey(HttpContext);
         var creds = await _settings.GetUserGcpCredentialsAsync(key);
 
-        return Ok(new { Configured = creds.IsConfigured, ProjectId = creds.ProjectId });
+        // No live API call needed here, unlike AWS/Azure - a GCP service
+        // account's own JSON key already carries its email address as a
+        // field (client_email), so "who is this" is just a local parse of
+        // what's already stored, not a network round trip.
+        var identityLabel = ExtractGcpServiceAccountEmail(creds.ServiceAccountKeyJson);
+
+        return Ok(new { Configured = creds.IsConfigured, ProjectId = creds.ProjectId, IdentityLabel = identityLabel });
+    }
+
+    private static string? ExtractGcpServiceAccountEmail(string? serviceAccountKeyJson)
+    {
+        if (string.IsNullOrWhiteSpace(serviceAccountKeyJson))
+            return null;
+
+        try
+        {
+            var parsed = Newtonsoft.Json.Linq.JObject.Parse(serviceAccountKeyJson);
+            return parsed["client_email"]?.ToString();
+        }
+        catch
+        {
+            // Malformed/partial JSON (still being pasted, or genuinely
+            // invalid) just means no label yet, not an error the caller
+            // needs to see - the form itself still shows "Saved".
+            return null;
+        }
     }
 
     [HttpPost("me/gcp")]

@@ -89,6 +89,17 @@ export default function AzureLoginSection() {
                 )}
             </h3>
 
+            {/* Best-effort (see CloudStatusService.GetAzureIdentityLabelAsync)
+                - resolving an App Registration's own display name needs a
+                Graph permission that isn't guaranteed to be granted, so this
+                simply doesn't appear rather than showing an error when it
+                isn't available. */}
+            {!loading && status?.identityLabel && (
+                <p className="field-hint field-hint-good">
+                    Signed in as: <strong>{status.identityLabel}</strong>
+                </p>
+            )}
+
             <p className="empty-state" style={{ padding: "0 0 15px", textAlign: "left" }}>
                 Powers the Environments page's live Azure Web App status. A service
                 principal (App Registration) with read access to the Web App is enough.

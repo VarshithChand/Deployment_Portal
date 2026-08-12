@@ -254,6 +254,16 @@ export default function AwsLoginSection() {
                 {!loading && <MfaStatusBadge status={status} />}
             </h3>
 
+            {/* SSO sessions already show account/role via the badge above -
+                this only fires for the plain access-key path, where nothing
+                else on screen says which IAM user the key actually belongs
+                to (resolved server-side via STS GetCallerIdentity). */}
+            {!loading && status?.identityLabel && !status?.isSsoSession && (
+                <p className="field-hint field-hint-good">
+                    Signed in as: <strong>{status.identityLabel}</strong>
+                </p>
+            )}
+
             {ssoSessionExpired && (
                 <p className="error-message">
                     Your AWS SSO session expired — sign in again below.
