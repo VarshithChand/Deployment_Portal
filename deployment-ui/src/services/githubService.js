@@ -34,6 +34,13 @@ export const getRepoRuns = async (owner, repo) => {
     return await api.get("/repo-runs", { params: { owner, repo } });
 };
 
+// Batched version of getRepoRuns - one request for every repo in the grid
+// instead of one per repo. `repos` is [{ owner, repo }, ...]; the response
+// is a { "owner/repo": [...runs] } map.
+export const getRepoRunsBulk = async (repos) => {
+    return await api.post("/repo-runs/bulk", { repos });
+};
+
 export const getArtifacts = async (force = false) => {
     return await api.get("/artifacts", { params: force ? { force: true } : {} });
 };

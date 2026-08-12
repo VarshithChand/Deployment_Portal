@@ -1,3 +1,4 @@
+using DeploymentAPI.DTOs;
 using DeploymentAPI.Helpers;
 using DeploymentAPI.Services;
 using Microsoft.AspNetCore.Mvc;
@@ -68,6 +69,33 @@ public class GitHubController : ControllerBase
             return BadRequest("owner and repo are required.");
 
         return Ok(await _service.GetRecentRunsForRepoAsync(owner, repo));
+    }
+
+    // Same data as RepoRuns above, one repo at a time - this is the batched
+    // version the Dashboard grid actually calls, so an account with N repos
+    // costs the browser one request instead of N. GetRecentRunsForRepoAsync
+    // already swallows a single repo's own failure (disabled Actions,
+    // private-and-inaccessible, etc.) and returns an empty list for it - see
+    // that method's own comment - so one bad repo in the batch can't fail
+    // the others; Task.WhenAll runs every repo's GitHub call in parallel,
+    // the same fan-out that used to happen in the browser, just server-side.
+    [HttpPost("repo-runs/bulk")]
+    public async Task<IActionResult> RepoRunsBulk([FromBody] RepoRunsBulkRequestDto request)
+    {
+        var repos = (request?.Repos ?? new List<RepoRefDto>())
+            .Where(r => !string.IsNullOrWhiteSpace(r.Owner) && !string.IsNullOrWhiteSpace(r.Repo))
+            // Capped so one caller can't fan out an unbounded number of
+            // parallel GitHub API calls server-side in a single request.
+            .Take(100)
+            .ToList();
+
+        var results = await Task.WhenAll(repos.Select(async r => new
+        {
+            FullName = $"{r.Owner}/{r.Repo}",
+            Runs = await _service.GetRecentRunsForRepoAsync(r.Owner, r.Repo)
+        }));
+
+        return Ok(results.ToDictionary(r => r.FullName, r => r.Runs));
     }
 
     [HttpGet("artifacts")]

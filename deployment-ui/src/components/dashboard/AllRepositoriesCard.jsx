@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 
-import { getAccountRepositories, getRepoRuns } from "../../services/githubService";
+import { getAccountRepositories, getRepoRunsBulk } from "../../services/githubService";
 import { saveMyGitHubSettings } from "../../services/settingsService";
 import useAuth from "../../hooks/useAuth";
 import useToast from "../../hooks/useToast";
@@ -90,24 +90,24 @@ export default function AllRepositoriesCard({ repository }) {
 
     // Shared by the initial repo load (fire the moment the list is known,
     // rather than waiting for the next polling tick) and the recurring
-    // usePolling below - one fetch path, not two.
+    // usePolling below - one fetch path, not two. One batched request for
+    // every repo instead of one request per repo (see getRepoRunsBulk) -
+    // an account with 30 repos used to fire 30 parallel XHRs here on every
+    // poll tick; this collapses that to one.
     function fetchRunsFor(repoList) {
 
         if (!githubRepoConfigured || repoList.length === 0) {
             return;
         }
 
-        repoList.forEach((repo) => {
-
-            getRepoRuns(repo.owner, repo.name)
-                .then((response) => {
-                    setRunsByRepo((prev) => ({ ...prev, [repo.fullName]: Array.isArray(response.data) ? response.data : [] }));
-                })
-                .catch(() => {
-                    setRunsByRepo((prev) => ({ ...prev, [repo.fullName]: [] }));
-                });
-
-        });
+        getRepoRunsBulk(repoList.map((repo) => ({ owner: repo.owner, repo: repo.name })))
+            .then((response) => {
+                setRunsByRepo((prev) => ({ ...prev, ...(response.data || {}) }));
+            })
+            .catch(() => {
+                // Leave whatever runs are already showing rather than
+                // wiping every card out on one failed poll.
+            });
 
     }
 
