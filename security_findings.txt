@@ -3565,3 +3565,55 @@ Status: Complete for the code-level and API-level-verifiable portion;
 the actual two-device conflict/takeover behavior needs a real GitHub PAT
 tested from two real devices to confirm end-to-end, flagged above rather
 than claimed as tested.
+
+ROUND 22 - LIVE-KICK ON THE ADMIN DEDUPE ACTION TOO
+==================================================
+Date: 2026-08-13
+Trigger: user asked to leverage the PAT owner name already shown in
+Services > Users - when two rows resolve to the same PAT username, let
+the admin kick the older one out of the application.
+
+Investigation found this capability already existed: AdminUsersController's
+POST admin/users/dedupe (Services > Users' "Remove Duplicates" button,
+only shown when duplicatePatOwnerLogins is non-empty) already groups rows
+by matching RESOLVED PatOwnerLogin (excluding "Unknown" rows, same
+Round-15 safety reasoning as everywhere else in this app), keeps
+whichever key was seen most recently, and deletes the rest via
+DeletePatUserAsync. What it was missing was exactly the gap Round 20
+fixed for the reconnect-time eviction path: it only ever deleted the
+duplicate's stored DATA - if that browser tab was still open, it kept
+running against data that no longer existed server-side until something
+failed or it happened to reload, never an actual live "kick."
+
+Fix: one line, mirroring Round 20 exactly - _activity.ForceLogout(
+duplicate.Key, "device") added right alongside each DeletePatUserAsync
+call in the dedupe loop. GlobalLogoutMonitor's existing 15s session-epoch
+poll (already wired to react to this call from Round 20, no frontend
+changes needed) picks it up and signs that device out with the same
+"connected from another device" explanation. No new endpoint, no new UI -
+purely extending an already-correct grouping/selection algorithm to also
+notify, not just delete.
+
+Verification performed:
+  - `dotnet build` (isolated output dir): 0 errors, first try, same 3
+    pre-existing unrelated warnings as every prior round.
+  - No frontend changes - `npm run lint`/`npm run build` not re-run,
+    nothing to verify there.
+  - Live test against the deployed Render backend after push: POST
+    admin/users/dedupe from a non-admin session -> unchanged clean 403
+    with the expected message, confirming the ForceLogout addition
+    didn't disturb the existing admin gate or the rest of the action.
+  - Could NOT live-verify the actual live-kick itself (run dedupe against
+    two rows that share a real resolved PAT username while the older
+    row's tab is open, confirm it gets signed out within ~15 seconds) -
+    same standing real-GitHub-identity limitation as Rounds 20/21.
+    Recommend the user verify directly once two real duplicate rows
+    exist: click "Remove Duplicates" on Services > Users and confirm the
+    older device's open tab gets signed out with the new-device message
+    rather than silently breaking.
+
+Files changed: src/DeploymentAPI/Controllers/AdminUsersController.cs.
+
+Status: Complete for the code-level and API-level-verifiable portion;
+the live-kick itself needs two real duplicate sessions to confirm
+end-to-end, flagged above rather than claimed as tested.
