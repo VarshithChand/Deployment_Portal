@@ -1128,21 +1128,42 @@ public class SettingsService
         // "VarshithChand/yaml" for both an admin's own session and a
         // teammate's) — Owner/Repository alone can't tell them apart, so
         // this resolves each token's actual GitHub identity live, the same
-        // way AdminGate does for the admin-authority check itself.
-        var logins = await Task.WhenAll(
-            entries.Select(p => ResolvePatOwnerLoginAsync(((JObject)p.Value!)["PersonalAccessToken"]!.ToString()!)));
+        // way AdminGate does for the admin-authority check itself. Uses the
+        // richer status variant (not ResolvePatOwnerLoginAsync, kept
+        // unchanged for the security-sensitive eviction/migration callers
+        // that only need a plain match/no-match) so a genuinely bad
+        // credential and a merely-transient failure (GitHub rate limit, a
+        // network blip) don't collapse into the same misleading label.
+        var statuses = await Task.WhenAll(
+            entries.Select(p => ResolvePatOwnerStatusAsync(((JObject)p.Value!)["PersonalAccessToken"]!.ToString()!)));
 
         return entries.Select((p, i) =>
         {
             var entry = (JObject)p.Value!;
             var restrictionCount = (access?[p.Name] as JObject)?.Properties().Count() ?? 0;
+            var (login, failureReason) = statuses[i];
+
+            var ownerValue = entry["Owner"]?.ToString();
+            var repositoryValue = entry["Repository"]?.ToString();
+
+            // A hint, not a claim - kept inside the "Unknown (...)" label
+            // (never its own separate value) so AdminUsersController's
+            // dedupe feature, which explicitly skips anything starting
+            // with "Unknown" because there's no CONFIRMED identity to
+            // safely group same-named strangers by, keeps skipping it.
+            // Configured Owner/Repository is a real clue for a human
+            // admin reading this table, but not proof of identity the way
+            // a resolved GitHub login is.
+            var configuredForHint = !string.IsNullOrWhiteSpace(ownerValue) && !string.IsNullOrWhiteSpace(repositoryValue)
+                ? $" — configured for {ownerValue}/{repositoryValue}"
+                : string.Empty;
 
             return new PatUserSummaryDto
             {
                 Key = p.Name,
-                PatOwnerLogin = logins[i] ?? "Unknown (invalid or expired token)",
-                Owner = entry["Owner"]?.ToString() ?? string.Empty,
-                Repository = entry["Repository"]?.ToString() ?? string.Empty,
+                PatOwnerLogin = login ?? $"Unknown ({failureReason}{configuredForHint})",
+                Owner = ownerValue ?? string.Empty,
+                Repository = repositoryValue ?? string.Empty,
                 RestrictedTabCount = restrictionCount,
                 IsBlocked = blocked?.Any(k => k.ToString() == p.Name) ?? false,
                 IsSignedOut = entry["SignedOut"]?.Value<bool>() ?? false
@@ -1425,6 +1446,44 @@ public class SettingsService
         catch
         {
             return null;
+        }
+    }
+
+    // Same live /user lookup as ResolvePatOwnerLoginAsync above, for
+    // GetPatUsersAsync's admin-facing display specifically - distinguishes
+    // a genuinely bad credential (401, GitHub rejects the token itself)
+    // from a merely transient failure (rate limited, network error, a
+    // GitHub outage), which the plain string? version collapses into the
+    // same "null" either way. Kept as a separate method rather than
+    // changing ResolvePatOwnerLoginAsync's signature - its other callers
+    // (the one-session-per-account eviction/migration check) only ever
+    // need "did this resolve to a real login or not," not why it didn't.
+    private static async Task<(string? Login, string FailureReason)> ResolvePatOwnerStatusAsync(string token)
+    {
+        using var client = new HttpClient();
+
+        client.DefaultRequestHeaders.Add("Authorization", $"Bearer {token}");
+        client.DefaultRequestHeaders.Add("User-Agent", "DeploymentPortal");
+        client.DefaultRequestHeaders.Add("Accept", "application/vnd.github+json");
+
+        try
+        {
+            var response = await client.GetAsync("https://api.github.com/user");
+
+            if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized)
+                return (null, "invalid or expired token");
+
+            if (!response.IsSuccessStatusCode)
+                return (null, "unable to verify right now");
+
+            var json = await response.Content.ReadAsStringAsync();
+            var login = JObject.Parse(json)["login"]?.ToString();
+
+            return (login, "unable to verify right now");
+        }
+        catch
+        {
+            return (null, "unable to verify right now");
         }
     }
 
