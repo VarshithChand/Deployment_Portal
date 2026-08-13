@@ -170,6 +170,55 @@ public class AdminUsersController : ControllerBase
         return Ok(new { code });
     }
 
+    // Flags this user's GitHub identity as required to set up MFA -
+    // doesn't enroll them (only their own phone can scan a QR code), just
+    // makes MfaEnforcementGate's nudge mandatory for them the next time
+    // they load the app (see BootstrapController's MfaNudge block), same
+    // as already-saving an AWS/Azure/GCP credential does. Super-admin-
+    // only, same tier as generating a recovery code - deciding someone
+    // else's account now requires a security feature is a step up from
+    // the general admin allowlist.
+    [HttpPost("{key}/mfa/require")]
+    public async Task<IActionResult> RequireMfa(string key)
+    {
+        if (await AdminGate.DenyUnlessSuperAdminAsync(this, "require MFA for a PAT user") is IActionResult denied)
+            return denied;
+
+        if (await ResolveRealKeyAsync(key) is not string realKey)
+            return NotFound(new { message = "That user's session no longer exists." });
+
+        var login = await _settings.ResolveCurrentLoginForKeyAsync(realKey);
+
+        if (login == null)
+            return NotFound(new { message = "Unable to resolve that session's GitHub identity right now." });
+
+        await _settings.SetMfaRequiredAsync(login, true);
+
+        return Ok();
+    }
+
+    // Lifts a requirement set by RequireMfa above - never disables MFA
+    // that's already enabled (see SetMfaRequiredAsync), only stops the
+    // nudge from being mandatory for someone who hasn't enrolled yet.
+    [HttpPost("{key}/mfa/unrequire")]
+    public async Task<IActionResult> UnrequireMfa(string key)
+    {
+        if (await AdminGate.DenyUnlessSuperAdminAsync(this, "remove an MFA requirement for a PAT user") is IActionResult denied)
+            return denied;
+
+        if (await ResolveRealKeyAsync(key) is not string realKey)
+            return NotFound(new { message = "That user's session no longer exists." });
+
+        var login = await _settings.ResolveCurrentLoginForKeyAsync(realKey);
+
+        if (login == null)
+            return NotFound(new { message = "Unable to resolve that session's GitHub identity right now." });
+
+        await _settings.SetMfaRequiredAsync(login, false);
+
+        return Ok();
+    }
+
     // A real delete (see SettingsService.DeletePatUserAsync) - removes
     // this session's row entirely rather than just soft-signing it out.
     // Also forces an immediate sign-out for the same reason ForceLogout

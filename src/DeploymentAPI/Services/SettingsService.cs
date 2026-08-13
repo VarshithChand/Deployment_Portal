@@ -1224,6 +1224,9 @@ public class SettingsService
         var mfaEnabledFlags = await Task.WhenAll(
             statuses.Select(s => string.IsNullOrWhiteSpace(s.Login) ? Task.FromResult(false) : IsMfaEnabledAsync(s.Login!)));
 
+        var mfaRequiredFlags = await Task.WhenAll(
+            statuses.Select(s => string.IsNullOrWhiteSpace(s.Login) ? Task.FromResult(false) : IsMfaRequiredByAdminAsync(s.Login!)));
+
         return entries.Select((p, i) =>
         {
             var entry = (JObject)p.Value!;
@@ -1254,7 +1257,8 @@ public class SettingsService
                 RestrictedTabCount = restrictionCount,
                 IsBlocked = blocked?.Any(k => k.ToString() == p.Name) ?? false,
                 IsSignedOut = entry["SignedOut"]?.Value<bool>() ?? false,
-                IsMfaEnabled = mfaEnabledFlags[i]
+                IsMfaEnabled = mfaEnabledFlags[i],
+                IsMfaRequired = mfaRequiredFlags[i]
             };
         }).ToList();
     }
@@ -1572,12 +1576,67 @@ public class SettingsService
         return entry?["Enabled"]?.Value<bool>() ?? false;
     }
 
+    // Whether a super-admin has flagged this login as required to set up
+    // MFA (see SetMfaRequiredAsync) - independent of whether they've
+    // enrolled yet. Feeds BootstrapController's MfaNudge.Mandatory
+    // alongside the existing "this session has a cloud credential saved"
+    // trigger from Round 18 - this is the second, admin-initiated way a
+    // nudge can become mandatory rather than just a friendly suggestion.
+    public async Task<bool> IsMfaRequiredByAdminAsync(string login)
+    {
+        var root = await ReadRootAsync();
+        var entry = (root["Mfa"] as JObject)?[login] as JObject;
+
+        return entry?["AdminRequired"]?.Value<bool>() ?? false;
+    }
+
+    // Super-admin action (see AdminUsersController's mfa/require and
+    // mfa/unrequire actions) - flips the AdminRequired flag without
+    // touching anything else about this login's MFA state. Creates a
+    // bare, not-yet-enrolled Mfa[login] entry if none exists at all yet
+    // (Enabled stays false - flagging someone as required doesn't enroll
+    // them, only a nudge/block plus their own QR scan can do that; see
+    // MfaEnforcementGate). Un-requiring never disables an already-enabled
+    // account - it only stops the nudge from being mandatory going
+    // forward for someone who hasn't enrolled.
+    public async Task SetMfaRequiredAsync(string login, bool required)
+    {
+        var root = await ReadRootAsync();
+        var mfa = root["Mfa"] as JObject ?? new JObject();
+        var entry = mfa[login] as JObject;
+
+        if (entry == null)
+        {
+            if (!required) return;
+
+            entry = new JObject
+            {
+                ["Enabled"] = false,
+                ["CreatedAtUtc"] = DateTime.UtcNow,
+                ["RecoveryCodes"] = new JArray()
+            };
+
+            mfa[login] = entry;
+        }
+
+        entry["AdminRequired"] = required;
+        entry["UpdatedAtUtc"] = DateTime.UtcNow;
+
+        root["Mfa"] = mfa;
+        await WriteRootAsync(root);
+
+        _log.LogInfo("Settings", $"MFA {(required ? "required" : "no longer required")} by admin for '{login}'.");
+    }
+
     // Step 1 of enrollment - generates and stores a new secret with
     // Enabled left false, so an abandoned enrollment (closed the tab
     // before scanning the QR) never actually protects the account; only
     // VerifyMfaEnrollmentAsync flips it on. Safely overwrites any earlier
     // unverified pending secret for this login - starting over is fine as
-    // long as Enabled was never true.
+    // long as Enabled was never true. Preserves AdminRequired across the
+    // overwrite (SetMfaRequiredAsync above may have set it on a bare,
+    // not-yet-enrolled entry before this ever runs) - losing it here
+    // would silently un-require someone the moment they started enrolling.
     public async Task<(string Secret, string OtpAuthUri)> EnrollMfaAsync(string login)
     {
         var secret = GenerateTotpSecret();
@@ -1585,6 +1644,7 @@ public class SettingsService
 
         var root = await ReadRootAsync();
         var mfa = root["Mfa"] as JObject ?? new JObject();
+        var wasAdminRequired = (mfa[login] as JObject)?["AdminRequired"]?.Value<bool>() ?? false;
 
         mfa[login] = new JObject
         {
@@ -1593,7 +1653,8 @@ public class SettingsService
             ["CreatedAtUtc"] = now,
             ["UpdatedAtUtc"] = now,
             ["LastVerifiedAtUtc"] = null,
-            ["RecoveryCodes"] = new JArray()
+            ["RecoveryCodes"] = new JArray(),
+            ["AdminRequired"] = wasAdminRequired
         };
 
         root["Mfa"] = mfa;
@@ -1681,11 +1742,35 @@ public class SettingsService
     {
         var root = await ReadRootAsync();
 
-        if (root["Mfa"] is JObject mfa && mfa.Remove(login))
+        if (root["Mfa"] is not JObject mfa || mfa[login] is not JObject existing)
+            return;
+
+        // A full removal would also silently wipe AdminRequired - letting
+        // whoever disables (the user themselves, or an admin's reset-mfa)
+        // quietly escape a super-admin's requirement. If it was set,
+        // replace the entry with the same bare "not enrolled, still
+        // required" shape SetMfaRequiredAsync creates instead of removing
+        // it outright - the next bootstrap call picks this straight back
+        // up as mandatory, same as if they'd never enrolled at all.
+        var wasAdminRequired = existing["AdminRequired"]?.Value<bool>() ?? false;
+
+        if (wasAdminRequired)
         {
-            await WriteRootAsync(root);
-            _log.LogInfo("Settings", $"MFA disabled for '{login}'.");
+            mfa[login] = new JObject
+            {
+                ["Enabled"] = false,
+                ["CreatedAtUtc"] = DateTime.UtcNow,
+                ["RecoveryCodes"] = new JArray(),
+                ["AdminRequired"] = true
+            };
         }
+        else
+        {
+            mfa.Remove(login);
+        }
+
+        await WriteRootAsync(root);
+        _log.LogInfo("Settings", $"MFA disabled for '{login}'{(wasAdminRequired ? " (still required by admin - will be re-nudged)" : "")}.");
     }
 
     // Admin-triggered equivalent of DisableMfaAsync (see

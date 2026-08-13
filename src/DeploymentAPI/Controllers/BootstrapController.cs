@@ -117,10 +117,19 @@ public class BootstrapController : ControllerBase
         // confirmed GitHub identity behind this session's token - reusing
         // it here means checking MFA status costs no extra GitHub call.
         var mfaEnabled = tokenOwner != null && await _settings.IsMfaEnabledAsync(tokenOwner.Login);
+        var mfaRequiredByAdmin = tokenOwner != null && await _settings.IsMfaRequiredByAdminAsync(tokenOwner.Login);
         var hasCloudCredential = awsCreds.IsConfigured || azureCreds.IsConfigured || gcpCreds.IsConfigured;
 
         var mfaNudgeShow = githubCreds.IsConfigured && !mfaEnabled;
-        var mfaNudgeMandatory = mfaNudgeShow && hasCloudCredential;
+
+        // Mandatory either because this session has a cloud credential
+        // saved (Round 18's original trigger) OR because a super-admin
+        // explicitly flagged this identity as required (Admin Access'
+        // "Require MFA" - see AdminUsersController.RequireMfa) - either
+        // reason escalates the same nudge into the same full-screen block
+        // once the 2-skip budget is spent, MfaEnforcementGate doesn't
+        // need to know or care which one applied.
+        var mfaNudgeMandatory = mfaNudgeShow && (hasCloudCredential || mfaRequiredByAdmin);
 
         var authenticated = User.Identity?.IsAuthenticated == true;
 

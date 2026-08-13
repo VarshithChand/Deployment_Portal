@@ -3,7 +3,7 @@ import { useState } from "react";
 import ClearableInput from "../common/ClearableInput";
 import useToast from "../../hooks/useToast";
 import useConfirm from "../../hooks/useConfirm";
-import { resetUserMfa, generateMfaRecoveryCode } from "../../services/adminService";
+import { resetUserMfa, generateMfaRecoveryCode, requireUserMfa, unrequireUserMfa } from "../../services/adminService";
 
 // Settings > Admin Access - restricted to the single super-admin identity
 // (see constants/settingsViews.js's SUPER_ADMIN_ONLY_VIEWS, enforced here
@@ -29,7 +29,56 @@ export default function AdminAccessView({
 
     const [resettingKey, setResettingKey] = useState(null);
     const [generatingKey, setGeneratingKey] = useState(null);
+    const [requiringKey, setRequiringKey] = useState(null);
     const [revealedCode, setRevealedCode] = useState(null);
+
+    // Toggles the admin-set "must set up MFA" flag - doesn't enroll the
+    // user itself (only their own phone can scan a QR code), just makes
+    // MfaEnforcementGate's nudge mandatory for them next time they load
+    // the app, same escalation an AWS/Azure/GCP credential already
+    // triggers on its own (see BootstrapController's MfaNudge block).
+    async function handleToggleRequireMfa(user) {
+
+        const wasRequired = user.isMfaRequired;
+
+        if (!(await confirm({
+            title: wasRequired ? "Remove the MFA requirement?" : "Require MFA for this user?",
+            message: wasRequired
+                ? `'${user.patOwnerLogin}' will no longer be nudged to set up MFA on their next visit ` +
+                  "(unless a cloud credential they've saved makes it mandatory on its own)."
+                : `'${user.patOwnerLogin}' will see a mandatory "set up MFA" prompt the next time they ` +
+                  "load the portal, escalating to a full-screen block after 2 skips - same as saving " +
+                  "an AWS/Azure/GCP credential already triggers. This doesn't enroll them for you; " +
+                  "only their own authenticator app can do that.",
+            confirmLabel: wasRequired ? "Remove Requirement" : "Require MFA"
+        }))) {
+            return;
+        }
+
+        try {
+
+            setRequiringKey(user.key);
+            await (wasRequired ? unrequireUserMfa(user.key) : requireUserMfa(user.key));
+            toast.show(
+                wasRequired ? `MFA no longer required for '${user.patOwnerLogin}'.` : `MFA now required for '${user.patOwnerLogin}'.`,
+                "success"
+            );
+            refreshPatUsers();
+
+        }
+        catch (err) {
+
+            console.error(err);
+            toast.show(err.response?.data?.message || "Failed to update this user's MFA requirement.", "error");
+
+        }
+        finally {
+
+            setRequiringKey(null);
+
+        }
+
+    }
 
     async function handleResetMfa(user) {
 
@@ -156,10 +205,13 @@ export default function AdminAccessView({
             <h2 className="card-title">MFA Console</h2>
 
             <p className="empty-state" style={{ padding: "0 0 15px", textAlign: "left" }}>
-                Every PAT user's MFA status. "Reset MFA" removes their enrollment entirely (they
-                re-enroll from scratch). "Generate Recovery Code" issues a single one-time code for
-                someone locked out of their authenticator app, without resetting anything - users
-                never see their own recovery codes, only an admin can issue one.
+                Every PAT user's MFA status. "Require MFA" nudges a not-yet-enrolled user to set
+                theirs up, escalating to a full-screen block if they skip it twice - it doesn't
+                enroll them for you, only their own authenticator app can do that. "Reset MFA"
+                removes an existing enrollment entirely (they re-enroll from scratch). "Generate
+                Recovery Code" issues a single one-time code for someone locked out of their
+                authenticator app, without resetting anything - users never see their own recovery
+                codes, only an admin can issue one.
             </p>
 
             {patUsersLoading ? (
@@ -196,6 +248,11 @@ export default function AdminAccessView({
                                         <span className={`badge ${u.isMfaEnabled ? "badge-success" : "badge-secondary"}`}>
                                             {u.isMfaEnabled ? "Enabled" : "Off"}
                                         </span>
+                                        {!u.isMfaEnabled && u.isMfaRequired && (
+                                            <span className="badge badge-warning" style={{ marginLeft: 6 }}>
+                                                Required
+                                            </span>
+                                        )}
                                     </td>
 
                                     <td>
@@ -208,6 +265,19 @@ export default function AdminAccessView({
                                             cleanly (400/404 with a real message) when there's
                                             genuinely nothing to act on. */}
                                         <div className="button-row">
+
+                                                {!u.isMfaEnabled && (
+
+                                                    <button
+                                                        type="button"
+                                                        className={`btn btn-sm ${u.isMfaRequired ? "btn-secondary" : "btn-primary"}`}
+                                                        onClick={() => handleToggleRequireMfa(u)}
+                                                        disabled={requiringKey === u.key}
+                                                    >
+                                                        {requiringKey === u.key ? "..." : u.isMfaRequired ? "Remove Requirement" : "Require MFA"}
+                                                    </button>
+
+                                                )}
 
                                                 <button
                                                     type="button"

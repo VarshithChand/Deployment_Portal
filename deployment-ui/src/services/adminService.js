@@ -33,6 +33,19 @@ export const resetUserMfa = async (key) => await api.post(`/users/${encodeURICom
 export const generateMfaRecoveryCode = async (key) =>
     await api.post(`/users/${encodeURIComponent(key)}/mfa/recovery-code`);
 
+// Flags this user as required to set up MFA - doesn't enroll them (only
+// their own phone can scan a QR code), just makes MfaEnforcementGate's
+// nudge mandatory for them next time they load the app, same escalation
+// an AWS/Azure/GCP credential already triggers on its own.
+export const requireUserMfa = async (key) =>
+    await api.post(`/users/${encodeURIComponent(key)}/mfa/require`);
+
+// Lifts a requirement set by requireUserMfa above - never disables MFA
+// that's already enabled, only stops the nudge from being mandatory for
+// someone who hasn't enrolled yet.
+export const unrequireUserMfa = async (key) =>
+    await api.post(`/users/${encodeURIComponent(key)}/mfa/unrequire`);
+
 // Merges rows that resolve to the same real GitHub account, keeping
 // whichever was active most recently - a one-time cleanup for rows that
 // predate the one-session-per-PAT check saving now enforces.

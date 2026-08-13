@@ -19,6 +19,12 @@ public class PatUserSummaryDto
     // MFA" button and MFA badge.
     public bool IsMfaEnabled { get; set; }
 
+    // A super-admin has flagged this login as required to set up MFA
+    // (see SettingsService.SetMfaRequiredAsync) - independent of
+    // IsMfaEnabled, since this can be true before they've ever enrolled.
+    // Backs Admin Access's "Require MFA"/"Un-require" toggle.
+    public bool IsMfaRequired { get; set; }
+
     public string Owner { get; set; } = string.Empty;
 
     public string Repository { get; set; } = string.Empty;
