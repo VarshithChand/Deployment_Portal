@@ -215,6 +215,25 @@ public class GitHubApiService
             var userJson = await HttpClientHelper.GetAsync(client, "https://api.github.com/user");
             var user = JObject.Parse(userJson);
 
+            // No repository chosen yet - onboarding can finish with just a
+            // token now (picking one happens later, from the Dashboard),
+            // so a token-configured session with a blank Owner/Repository
+            // is a normal, expected state, not a bug. Calling
+            // /repos/{Owner}/{Repository} with either blank would 404
+            // against GitHub's real API - there's nothing to check "admin"
+            // permission against yet either way, so this just reports
+            // CanApprove: false until a repo is actually selected.
+            if (string.IsNullOrWhiteSpace(_auth.Owner) || string.IsNullOrWhiteSpace(_auth.Repository))
+            {
+                return new TokenOwnerDto
+                {
+                    Configured = true,
+                    Login = user["login"]?.ToString() ?? string.Empty,
+                    AvatarUrl = user["avatar_url"]?.ToString() ?? string.Empty,
+                    CanApprove = false
+                };
+            }
+
             // The repo endpoint includes a "permissions" block scoped to the
             // authenticated token when the token can see the repo at all.
             // "admin" is the same bit GitHub itself checks to let someone

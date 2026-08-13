@@ -3,6 +3,7 @@ import usePolling from "../hooks/usePolling";
 import { getWorkflowRuns } from "../services/historyService";
 import HistoryTable from "../components/HistoryTable";
 import LoadingSpinner from "../components/LoadingSpinner";
+import RequireRepoSelected from "../components/RequireRepoSelected";
 import PageLayout from "../components/layout/PageLayout";
 
 export default function History() {
@@ -65,17 +66,21 @@ export default function History() {
 
         <PageLayout title="Deployment History">
 
-            {error && (
+            <RequireRepoSelected>
 
-                <div className="error-message">
+                {error && (
 
-                    {error}
+                    <div className="error-message">
 
-                </div>
+                        {error}
 
-            )}
+                    </div>
 
-            <HistoryTable runs={runs} />
+                )}
+
+                <HistoryTable runs={runs} />
+
+            </RequireRepoSelected>
 
         </PageLayout>
 

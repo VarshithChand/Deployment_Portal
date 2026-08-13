@@ -14,13 +14,14 @@ import useNavigation from "../hooks/useNavigation";
 import useToast from "../hooks/useToast";
 import useConfirm from "../hooks/useConfirm";
 import LoadingSpinner from "../components/LoadingSpinner";
+import RequireRepoSelected from "../components/RequireRepoSelected";
 import PageLayout from "../components/layout/PageLayout";
 import PageAdminAccessButton from "../components/common/PageAdminAccessButton";
 import HistorySection from "../components/pullRequests/HistorySection";
 
 export default function PullRequests() {
 
-    const { githubTokenConfigured, tokenOwner, canApproveReleases } = useAuth();
+    const { githubTokenConfigured, githubRepoConfigured, tokenOwner, canApproveReleases } = useAuth();
     const { setTab } = useNavigation();
     const toast = useToast();
     const { confirm, dialog } = useConfirm();
@@ -72,14 +73,18 @@ export default function PullRequests() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [canApproveReleases]);
 
+    // See Approvals.jsx's identical effect for why githubRepoConfigured is
+    // required too - without a repo picked, canApproveReleases is
+    // correctly false but that's "pick a repo" territory, not "no approve
+    // rights on this repo".
     useEffect(() => {
 
-        if (githubTokenConfigured && tokenOwner && !canApproveReleases) {
+        if (githubTokenConfigured && githubRepoConfigured && tokenOwner && !canApproveReleases) {
             setTab("dashboard");
         }
 
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [githubTokenConfigured, tokenOwner, canApproveReleases]);
+    }, [githubTokenConfigured, githubRepoConfigured, tokenOwner, canApproveReleases]);
 
     async function loadHistory() {
 
@@ -202,7 +207,7 @@ export default function PullRequests() {
         endIndex: commitsEndIndex
     } = usePagination(commits, 10);
 
-    if (loading || resolvingAccess || (githubTokenConfigured && !canApproveReleases)) {
+    if (loading || resolvingAccess || (githubTokenConfigured && githubRepoConfigured && !canApproveReleases)) {
         return <LoadingSpinner />;
     }
 
@@ -229,6 +234,8 @@ export default function PullRequests() {
                 </div>
 
             ) : (
+
+                <RequireRepoSelected>
 
                 <>
 
@@ -334,6 +341,8 @@ export default function PullRequests() {
                 )}
 
                 </>
+
+                </RequireRepoSelected>
 
             )}
 

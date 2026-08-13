@@ -4,6 +4,7 @@ import usePolling from "../hooks/usePolling";
 import usePagination from "../hooks/usePagination";
 import { getWorkflowRuns } from "../services/historyService";
 import LoadingSpinner from "../components/LoadingSpinner";
+import RequireRepoSelected from "../components/RequireRepoSelected";
 import PageLayout from "../components/layout/PageLayout";
 import Pagination from "../components/common/Pagination";
 
@@ -57,6 +58,8 @@ export default function Timeline() {
 
         <PageLayout title="Deployment Timeline">
 
+            <RequireRepoSelected>
+
             <div className="card">
 
                 {runs.length === 0 ? (
@@ -99,6 +102,8 @@ export default function Timeline() {
                 />
 
             </div>
+
+            </RequireRepoSelected>
 
         </PageLayout>
 

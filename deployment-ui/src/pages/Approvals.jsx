@@ -8,6 +8,7 @@ import useNavigation from "../hooks/useNavigation";
 import useToast from "../hooks/useToast";
 import useConfirm from "../hooks/useConfirm";
 import LoadingSpinner from "../components/LoadingSpinner";
+import RequireRepoSelected from "../components/RequireRepoSelected";
 import PageLayout from "../components/layout/PageLayout";
 import PageAdminAccessButton from "../components/common/PageAdminAccessButton";
 import StatusBadge from "../components/StatusBadge";
@@ -15,7 +16,7 @@ import Pagination from "../components/common/Pagination";
 
 export default function Approvals() {
 
-    const { githubTokenConfigured, tokenOwner, canApproveReleases } = useAuth();
+    const { githubTokenConfigured, githubRepoConfigured, tokenOwner, canApproveReleases } = useAuth();
     const { setTab } = useNavigation();
     const toast = useToast();
     const { confirm, dialog } = useConfirm();
@@ -80,14 +81,20 @@ export default function Approvals() {
     // bookmarked/typed URL. Wait until tokenOwner has actually resolved
     // (not just "no token yet") before redirecting, so we don't bounce
     // someone away during the brief window before AuthContext settles.
+    // Also requires githubRepoConfigured - without a repo picked yet,
+    // canApproveReleases is correctly false (there's no repo to check
+    // permissions against), but that's "pick a repo" territory (see
+    // RequireRepoSelected below), not "you don't have approval rights on
+    // this repo" - the redirect only applies once a repo is actually
+    // configured and still comes back without approve permission.
     useEffect(() => {
 
-        if (githubTokenConfigured && tokenOwner && !canApproveReleases) {
+        if (githubTokenConfigured && githubRepoConfigured && tokenOwner && !canApproveReleases) {
             setTab("dashboard");
         }
 
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [githubTokenConfigured, tokenOwner, canApproveReleases]);
+    }, [githubTokenConfigured, githubRepoConfigured, tokenOwner, canApproveReleases]);
 
     function toggleEnv(runId, envId) {
 
@@ -173,7 +180,7 @@ export default function Approvals() {
         endIndex: historyEndIndex
     } = usePagination(history, 10);
 
-    if (loading || resolvingAccess || (githubTokenConfigured && !canApproveReleases)) {
+    if (loading || resolvingAccess || (githubTokenConfigured && githubRepoConfigured && !canApproveReleases)) {
         return <LoadingSpinner />;
     }
 
@@ -200,6 +207,8 @@ export default function Approvals() {
                 </div>
 
             ) : (
+
+                <RequireRepoSelected>
 
                 <>
 
@@ -362,6 +371,8 @@ export default function Approvals() {
                 </div>
 
                 </>
+
+                </RequireRepoSelected>
 
             )}
 

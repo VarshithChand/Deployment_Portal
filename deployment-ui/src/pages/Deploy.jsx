@@ -2,6 +2,7 @@ import { useGithubResources } from "../hooks/useGithubResources";
 
 import DeploymentForm from "../components/DeploymentForm";
 import LoadingSpinner from "../components/LoadingSpinner";
+import RequireRepoSelected from "../components/RequireRepoSelected";
 import PageLayout from "../components/layout/PageLayout";
 import PageAdminAccessButton from "../components/common/PageAdminAccessButton";
 
@@ -19,25 +20,29 @@ export default function Deploy() {
 
         <PageLayout title="Deployment Configuration" actions={<PageAdminAccessButton pageKey="deploy" pageLabel="Deploy" />}>
 
-            {
+            <RequireRepoSelected>
 
-                error &&
+                {
 
-                <div className="error-message">
+                    error &&
 
-                    {error}
+                    <div className="error-message">
 
-                </div>
+                        {error}
 
-            }
+                    </div>
 
-            <DeploymentForm
+                }
 
-                branches={branches}
-                artifacts={artifacts}
-                workflows={workflows}
+                <DeploymentForm
 
-            />
+                    branches={branches}
+                    artifacts={artifacts}
+                    workflows={workflows}
+
+                />
+
+            </RequireRepoSelected>
 
         </PageLayout>
 

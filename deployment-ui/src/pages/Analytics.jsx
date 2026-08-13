@@ -4,6 +4,7 @@ import usePolling from "../hooks/usePolling";
 import { getWorkflowRuns } from "../services/historyService";
 
 import LoadingSpinner from "../components/LoadingSpinner";
+import RequireRepoSelected from "../components/RequireRepoSelected";
 import PageLayout from "../components/layout/PageLayout";
 import StatTile from "../components/charts/StatTile";
 import Meter from "../components/charts/Meter";
@@ -110,6 +111,8 @@ export default function Analytics() {
 
         <PageLayout title="Analytics">
 
+            <RequireRepoSelected>
+
             <div className="stat-grid">
 
                 <StatTile label="Total deployments" value={runs.length} />
@@ -174,6 +177,8 @@ export default function Analytics() {
                 </div>
 
             </div>
+
+            </RequireRepoSelected>
 
         </PageLayout>
 

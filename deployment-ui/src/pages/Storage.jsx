@@ -4,6 +4,7 @@ import { getArtifacts, getDockerImages, deleteArtifact } from "../services/githu
 import { getSettings } from "../services/settingsService";
 
 import LoadingSpinner from "../components/LoadingSpinner";
+import RequireRepoSelected from "../components/RequireRepoSelected";
 import PageLayout from "../components/layout/PageLayout";
 import PageAdminAccessButton from "../components/common/PageAdminAccessButton";
 import ArtifactsTable from "../components/storage/ArtifactsTable";
@@ -134,26 +135,30 @@ export default function Storage() {
 
             {dialog}
 
-            <ArtifactsTable
-                artifacts={artifacts}
-                owner={owner}
-                repository={repository}
-                onDelete={handleDeleteArtifact}
-                deletingId={deletingId}
-            />
+            <RequireRepoSelected>
 
-            <br />
+                <ArtifactsTable
+                    artifacts={artifacts}
+                    owner={owner}
+                    repository={repository}
+                    onDelete={handleDeleteArtifact}
+                    deletingId={deletingId}
+                />
 
-            {imagesError && (
-                <div className="error-message">
-                    {imagesError}
-                </div>
-            )}
+                <br />
 
-            <DockerImagesTable
-                images={images}
-                owner={owner}
-            />
+                {imagesError && (
+                    <div className="error-message">
+                        {imagesError}
+                    </div>
+                )}
+
+                <DockerImagesTable
+                    images={images}
+                    owner={owner}
+                />
+
+            </RequireRepoSelected>
 
         </PageLayout>
 
