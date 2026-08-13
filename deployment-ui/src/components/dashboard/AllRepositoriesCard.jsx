@@ -68,6 +68,79 @@ function RepoRunStatus({ runs }) {
 
 }
 
+// Shown instead of the full picker when there's no token at all right now,
+// but this session still remembers which repo it was pointed at (Clear
+// Token only removes the token - see SettingsService.ClearUserGitHubTokenAsync,
+// which leaves Owner/Repository untouched). No need to browse/re-pick
+// anything already known - just the token to use it with again.
+function ReconnectPrompt({ owner, repository }) {
+
+    const toast = useToast();
+    const [token, setToken] = useState("");
+    const [connecting, setConnecting] = useState(false);
+
+    async function handleConnect(e) {
+
+        e.preventDefault();
+
+        if (!token.trim()) {
+            toast.show("A Personal Access Token is required to reconnect.", "error");
+            return;
+        }
+
+        setConnecting(true);
+
+        try {
+
+            await saveMyGitHubSettings({ owner, repository, personalAccessToken: token.trim() });
+            toast.show(`Reconnected to ${owner}/${repository}.`, "success");
+            setTimeout(() => window.location.reload(), 900);
+
+        }
+        catch (err) {
+
+            console.error(err);
+            toast.show(err.response?.data?.message || "Failed to reconnect.", "error");
+            setConnecting(false);
+
+        }
+
+    }
+
+    return (
+
+        <div className="card">
+
+            <h2 className="card-title" style={{ marginBottom: "4px" }}>Reconnect GitHub</h2>
+
+            <p className="field-hint" style={{ margin: "0 0 12px" }}>
+                Recently used: <strong>{owner}/{repository}</strong>. Paste a token to reconnect -
+                no need to pick a repository again.
+            </p>
+
+            <form onSubmit={handleConnect} className="button-row" style={{ flexWrap: "nowrap", gap: "8px" }}>
+
+                <input
+                    type="password"
+                    className="form-control"
+                    placeholder="ghp_..."
+                    value={token}
+                    onChange={(e) => setToken(e.target.value)}
+                    autoComplete="new-password"
+                />
+
+                <button type="submit" className="btn btn-primary" disabled={connecting} style={{ flexShrink: 0 }}>
+                    {connecting ? "Connecting..." : "Connect"}
+                </button>
+
+            </form>
+
+        </div>
+
+    );
+
+}
+
 // Dashboard's persistent view of every repository this token's account can
 // see — not just the one repo this session is currently pointed at. Reuses
 // SwitchRepositoryModal's repo-picker CSS and its saveMyGitHubSettings +
@@ -76,7 +149,10 @@ function RepoRunStatus({ runs }) {
 // a pipeline running on a repo you're not looking at doesn't go unnoticed.
 export default function AllRepositoriesCard({ repository }) {
 
-    const { githubTokenConfigured, githubPreviousOwner, githubPreviousRepository } = useAuth();
+    const {
+        githubTokenConfigured, githubOwner, githubRepository,
+        githubPreviousOwner, githubPreviousRepository
+    } = useAuth();
     const toast = useToast();
 
     const [repos, setRepos] = useState([]);
@@ -235,7 +311,11 @@ export default function AllRepositoriesCard({ repository }) {
     }
 
     if (!githubTokenConfigured) {
-        return null;
+
+        return githubOwner && githubRepository
+            ? <ReconnectPrompt owner={githubOwner} repository={githubRepository} />
+            : null;
+
     }
 
     return (
