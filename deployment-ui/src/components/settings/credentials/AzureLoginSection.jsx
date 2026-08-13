@@ -10,7 +10,7 @@ const EMPTY_FORM = { tenantId: "", clientId: "", clientSecret: "" };
 // token, kept only for this browser. Also powers the Environments page's
 // live Azure Web App status panel, which reads the exact same saved
 // credentials — entering them once here covers both.
-export default function AzureLoginSection() {
+export default function AzureLoginSection({ onCleared }) {
 
     const toast = useToast();
 
@@ -66,6 +66,11 @@ export default function AzureLoginSection() {
             await clearMyAzureCredentials();
             toast.show("Azure credentials cleared.", "success");
             refresh();
+
+            // See AwsLoginSection's own handleClear for why this matters -
+            // keeps CredentialsView's unlockedProviders Set in sync with
+            // the backend's per-provider revoke on Clear.
+            onCleared?.();
 
         }
         catch (err) {

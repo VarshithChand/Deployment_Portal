@@ -10,7 +10,7 @@ const EMPTY_FORM = { projectId: "", serviceAccountKeyJson: "" };
 // stored for future use only: no feature in this portal reads GCP
 // credentials yet, unlike AWS/Azure which power the Environments page's
 // live cloud status.
-export default function GcpLoginSection() {
+export default function GcpLoginSection({ onCleared }) {
 
     const toast = useToast();
 
@@ -66,6 +66,11 @@ export default function GcpLoginSection() {
             await clearMyGcpCredentials();
             toast.show("GCP credentials cleared.", "success");
             refresh();
+
+            // See AwsLoginSection's own handleClear for why this matters -
+            // keeps CredentialsView's unlockedProviders Set in sync with
+            // the backend's per-provider revoke on Clear.
+            onCleared?.();
 
         }
         catch (err) {

@@ -142,7 +142,7 @@ function AwsAccessKeyForm({ form, setForm, status, saving, missingSerialForCode,
 // for orgs on IAM Identity Center — your username/password/MFA happen on
 // AWS's own page, never here. The access key + optional MFA-code form
 // further down is the fallback for a plain IAM user with no SSO.
-export default function AwsLoginSection() {
+export default function AwsLoginSection({ onCleared }) {
 
     const toast = useToast();
 
@@ -218,6 +218,15 @@ export default function AwsLoginSection() {
             await clearMyAwsCredentials();
             toast.show("AWS credentials cleared.", "success");
             refresh();
+
+            // Mirrors the backend's own RevokeCredentialUnlock("aws") call
+            // (see SettingsController.ClearMyAws) - without this,
+            // CredentialsView's unlockedProviders Set keeps believing "aws"
+            // is still unlocked from an earlier PIN entry, showing this
+            // form with no PIN prompt even though the server has already
+            // re-locked it, so the NEXT save/clear attempt 403s with a
+            // confusing "enter your PIN" the user just entered.
+            onCleared?.();
 
         }
         catch (err) {

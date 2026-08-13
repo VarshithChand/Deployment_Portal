@@ -134,6 +134,32 @@ export default function CredentialsView({
         setUnlockedProviders(new Set(ALL_CREDENTIAL_PROVIDERS));
     }
 
+    // Clearing a credential revokes THAT ONE provider's unlock grant
+    // server-side (see RevokeCredentialUnlock calls in SettingsController),
+    // even though unlocking grants every provider together. Without this,
+    // unlockedProviders would keep saying "github still unlocked" after a
+    // Clear Token that just re-locked it server-side - the exact mismatch
+    // that shows the raw save/clear form with no PIN prompt, only to have
+    // the request itself 403 with CREDENTIAL_LOCKED.
+    function removeUnlocked(provider) {
+        setUnlockedProviders((prev) => {
+            const next = new Set(prev);
+            next.delete(provider);
+            return next;
+        });
+    }
+
+    // handleClear (passed down from Settings.jsx, covers github/docker/
+    // github-oauth/sonar/ai) already swallows its own errors/cancellation
+    // internally, so this always resolves - the provider is removed
+    // whether the clear actually went through or was cancelled/failed,
+    // which only costs an extra PIN prompt in the rare cancel/fail case,
+    // never a stale "still unlocked" belief.
+    async function handleClearAndRelock(section, label) {
+        await handleClear(section, label);
+        removeUnlocked(section);
+    }
+
     return (
 
         <>
@@ -197,7 +223,7 @@ export default function CredentialsView({
                             setGithubToken={setGithubToken}
                             handleSaveGitHub={handleSaveGitHub}
                             savingGitHub={savingGitHub}
-                            handleClear={handleClear}
+                            handleClear={handleClearAndRelock}
                         />
                     </CredentialPinGate>
 
@@ -217,7 +243,7 @@ export default function CredentialsView({
                         setGithubToken={setGithubToken}
                         handleSaveGitHub={handleSaveGitHub}
                         savingGitHub={savingGitHub}
-                        handleClear={handleClear}
+                        handleClear={handleClearAndRelock}
                     />
 
                 )
@@ -226,19 +252,19 @@ export default function CredentialsView({
 
             {mode === "aws" && (
                 <CredentialPinGate provider="aws" unlocked={unlockedProviders.has("aws")} onUnlocked={markAllUnlocked}>
-                    <AwsLoginSection />
+                    <AwsLoginSection onCleared={() => removeUnlocked("aws")} />
                 </CredentialPinGate>
             )}
 
             {mode === "azure" && (
                 <CredentialPinGate provider="azure" unlocked={unlockedProviders.has("azure")} onUnlocked={markAllUnlocked}>
-                    <AzureLoginSection />
+                    <AzureLoginSection onCleared={() => removeUnlocked("azure")} />
                 </CredentialPinGate>
             )}
 
             {mode === "gcp" && (
                 <CredentialPinGate provider="gcp" unlocked={unlockedProviders.has("gcp")} onUnlocked={markAllUnlocked}>
-                    <GcpLoginSection />
+                    <GcpLoginSection onCleared={() => removeUnlocked("gcp")} />
                 </CredentialPinGate>
             )}
 
@@ -309,7 +335,7 @@ export default function CredentialsView({
                     {savingDocker ? "Saving..." : "Save Docker Settings"}
                 </button>
 
-                <button type="button" className="btn btn-danger" onClick={() => handleClear("docker", "Docker password")}>
+                <button type="button" className="btn btn-danger" onClick={() => handleClearAndRelock("docker", "Docker password")}>
                     Clear Password
                 </button>
 
@@ -369,7 +395,7 @@ export default function CredentialsView({
                     {savingOAuth ? "Saving..." : "Save OAuth Settings"}
                 </button>
 
-                <button type="button" className="btn btn-danger" onClick={() => handleClear("github-oauth", "GitHub OAuth client secret")}>
+                <button type="button" className="btn btn-danger" onClick={() => handleClearAndRelock("github-oauth", "GitHub OAuth client secret")}>
                     Clear Secret
                 </button>
 
@@ -455,7 +481,7 @@ export default function CredentialsView({
                     {savingSonar ? "Saving..." : "Save Sonar Settings"}
                 </button>
 
-                <button type="button" className="btn btn-danger" onClick={() => handleClear("sonar", "Sonar token")}>
+                <button type="button" className="btn btn-danger" onClick={() => handleClearAndRelock("sonar", "Sonar token")}>
                     Clear Token
                 </button>
 
@@ -608,7 +634,7 @@ export default function CredentialsView({
                     {testingAi ? "Testing..." : "Test Connection"}
                 </button>
 
-                <button type="button" className="btn btn-danger" onClick={() => handleClear("ai", "Gemini API key")}>
+                <button type="button" className="btn btn-danger" onClick={() => handleClearAndRelock("ai", "Gemini API key")}>
                     Clear Key
                 </button>
 
