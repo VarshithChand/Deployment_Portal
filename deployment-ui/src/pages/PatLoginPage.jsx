@@ -2,6 +2,23 @@ import { useState } from "react";
 
 import { patLogin } from "../services/authLoginService";
 import Logo from "../components/common/Logo";
+import useTheme from "../hooks/useTheme";
+import { SunIcon, MoonIcon } from "../components/layout/SidebarIcons";
+
+// A key glyph, not a padlock - this field holds a token, not a password;
+// same stroke weight/line-cap style as Logo's own mark and Sidebar's
+// SunIcon/MoonIcon, so it reads as part of the same icon set rather than
+// a mismatched import.
+function KeyIcon() {
+    return (
+        <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true">
+            <circle cx="6" cy="9" r="3" stroke="currentColor" strokeWidth="1.5" />
+            <line x1="9" y1="9" x2="15.5" y2="9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+            <line x1="12.5" y1="9" x2="12.5" y2="11.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+            <line x1="15" y1="9" x2="15" y2="11.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+        </svg>
+    );
+}
 
 // Page 1 of the two-page login flow — the ONLY thing a not-yet-connected
 // visitor sees (see App.jsx's top-level gate; TopBar/Sidebar never mount
@@ -11,6 +28,8 @@ import Logo from "../components/common/Logo";
 // localStorage/sessionStorage/the URL — it lives only in this component's
 // state for the moment it takes to submit.
 export default function PatLoginPage({ wasSignedOut, onMfaRequired }) {
+
+    const { theme, toggleTheme } = useTheme();
 
     const [token, setToken] = useState("");
     const [submitting, setSubmitting] = useState(false);
@@ -63,7 +82,19 @@ export default function PatLoginPage({ wasSignedOut, onMfaRequired }) {
 
             <div className="auth-page-card" role="main" aria-labelledby="pat-login-title">
 
-                <Logo showEyebrow={false} size={40} />
+                <button
+                    type="button"
+                    className="auth-theme-toggle"
+                    onClick={toggleTheme}
+                    title={theme === "dark" ? "Light mode" : "Dark mode"}
+                    aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+                >
+                    {theme === "dark" ? <SunIcon /> : <MoonIcon />}
+                </button>
+
+                <div className="auth-page-logo">
+                    <Logo showEyebrow={false} compact size={34} />
+                </div>
 
                 <h1 id="pat-login-title" className="setup-gate-title">
                     Welcome back
@@ -84,16 +115,18 @@ export default function PatLoginPage({ wasSignedOut, onMfaRequired }) {
 
                     <div className="form-group">
                         <label htmlFor="pat-login-token">Personal Access Token</label>
-                        <input
-                            id="pat-login-token"
-                            type="password"
-                            className="form-control"
-                            placeholder="ghp_..."
-                            value={token}
-                            onChange={(e) => setToken(e.target.value)}
-                            autoComplete="new-password"
-                            autoFocus
-                        />
+                        <div className="auth-page-field">
+                            <KeyIcon />
+                            <input
+                                id="pat-login-token"
+                                type="password"
+                                placeholder="ghp_..."
+                                value={token}
+                                onChange={(e) => setToken(e.target.value)}
+                                autoComplete="new-password"
+                                autoFocus
+                            />
+                        </div>
                         <a
                             href="https://github.com/settings/tokens"
                             target="_blank"
