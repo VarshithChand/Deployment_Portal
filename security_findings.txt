@@ -2592,3 +2592,79 @@ AzureLoginSection,GcpLoginSection,ApiKeySection}.jsx.
 Status: Complete for the code-level-verifiable portion; the cross-
 session migration specifically needs a real-PAT live test to fully
 confirm, flagged above rather than claimed as verified.
+
+ROUND 15 - INFORMATIVE "UNKNOWN" PAT-OWNER LABEL + LIVE TEST-DATA CLEANUP
+==================================================
+Date: 2026-08-13
+Trigger: user's own screenshot of Services > Users showing two rows both
+labeled "Unknown (invalid or expired token)" - one with no repo
+configured, one showing a real-looking "VarshithChand/yaml" - asking why
+the real owner name wasn't shown.
+
+Investigation: GetPatUsersAsync's PatOwnerLogin already resolves live via
+ResolvePatOwnerLoginAsync (a GET to api.github.com/user with the stored
+token) - a bare `!response.IsSuccessStatusCode` check collapsed a
+genuinely bad/revoked/expired credential (401) and any OTHER failure
+(GitHub rate limiting, a network blip, a transient 5xx) into the exact
+same null result and label, with no way for an admin reading the table
+to tell which actually happened, or whose row it likely was.
+
+Fix: new ResolvePatOwnerStatusAsync (SettingsService.cs), used only by
+GetPatUsersAsync, distinguishes an actual 401 ("invalid or expired
+token") from anything else ("unable to verify right now"), and appends
+which Owner/Repository that session had configured when both are
+non-blank - e.g. "Unknown (invalid or expired token — configured for
+VarshithChand/yaml)". Deliberately kept the label starting with the
+literal word "Unknown": AdminUsersController's dedupe feature
+(POST services/users/dedupe) explicitly filters out anything
+`StartsWith("Unknown")` before grouping by PatOwnerLogin, specifically
+because grouping same-looking-but-unconfirmed rows together and
+auto-deleting all-but-one would risk merging (and destructively
+trimming) two unrelated people's sessions that just happen to share a
+now-unreadable token. A configured-repo hint is a real clue for a human
+reading the table; it is not proof of identity the way a resolved
+login is, and had to stay visibly distinct from one.
+ResolvePatOwnerLoginAsync itself (used by the security-sensitive
+one-session-per-account eviction/migration logic from Round 14) was left
+completely unchanged - that caller only ever needs "did this resolve to
+a real login or not," never why it didn't.
+
+Separately: recognized that this session's OWN earlier live verification
+testing (rounds 9-14) had left real residual data in the production
+database - specifically a blank-owner/repository test row from an
+anonymous, no-cookie-jar curl loop (Round 11's SaveMyGitHub validation
+poll) that can no longer be identified or cleaned up (no session ID was
+ever retained for it, since that loop didn't reuse a cookie jar across
+attempts). One OTHER leftover session (from Round 13's bootstrap-crash
+polling loop, which did reuse a cookie jar still present in this
+session's own tool environment) was found and self-service DELETE me/all
+'d immediately upon discovering this - confirmed via the same cookie
+jar, no admin action needed since a session can always clear only its
+own data. The remaining blank-owner/repository row is very likely also
+this session's leftover test debris and was flagged to the user to
+delete manually via the Users table's own "Delete" button, since no
+admin credentials are available in this session to do it any other way.
+The row showing "VarshithChand/yaml" does not match any owner/repo value
+used in this session's own testing (which only ever used octocat/*
+placeholders or blank) - almost certainly the real admin's own genuine
+session with a currently invalid/expired token, not leftover test data.
+
+Verification performed:
+  - `dotnet build` (isolated output dir): 0 errors, 3 pre-existing
+    unrelated warnings.
+  - Live cleanup confirmed: the recoverable leftover session's
+    DELETE me/all call returned 200 with a normal cleared-settings body.
+  - Did not attempt a live end-to-end re-check of the new label text
+    against a real invalid PAT in this pass - the fix is a straightforward
+    string-formatting change over already-live-tested resolution logic
+    (Round 13/14 both exercised ResolvePatOwnerLoginAsync's/GetPatUsersAsync's
+    surrounding paths), verified here via build success and code reading.
+
+Files changed: src/DeploymentAPI/Services/SettingsService.cs.
+
+Status: Complete. Also serves as a reminder to this assessor: prefer a
+reusable cookie jar (or an explicit X-Session-Id) for ANY live test that
+creates data on the shared production backend, specifically so it stays
+identifiable and cleanable afterward - the one test loop that skipped
+this is now unrecoverable orphaned data in a real user-facing admin
+table.
