@@ -153,11 +153,15 @@ export default function AuthProvider({ children }) {
             setIsAdminSession(!!data.settings.isAdminSession);
             setIsSuperAdminSession(!!data.settings.isSuperAdminSession);
 
-            setGithubTokenConfigured(!!data.github.tokenConfigured);
-            setGithubRepoConfigured(!!data.github.isConfigured);
-            setGithubOwner(data.github.owner || "");
-            setGithubRepository(data.github.repository || "");
-            setGithubWasSignedOut(!!data.github.wasSignedOut);
+            // "GitHub" camelCases to "gitHub" (capital H) - .NET's
+            // JsonNamingPolicy.CamelCase only lowercases the leading
+            // character, it doesn't know "GitHub" is meant to read as two
+            // words. Confirmed against the real wire response, not assumed.
+            setGithubTokenConfigured(!!data.gitHub.tokenConfigured);
+            setGithubRepoConfigured(!!data.gitHub.isConfigured);
+            setGithubOwner(data.gitHub.owner || "");
+            setGithubRepository(data.gitHub.repository || "");
+            setGithubWasSignedOut(!!data.gitHub.wasSignedOut);
 
             setAwsIdentityLabel(data.aws.identityLabel || null);
             setPinConfigured(!!data.pin.configured);
