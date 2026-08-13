@@ -2428,6 +2428,165 @@ Status: Complete. This closes the specific gap Round 11's unlock-all
 change opened (frontend optimism outliving a backend revoke) without
 touching the revoke behavior itself, which was correct all along.
 
+ROUND 16 - TOTP MFA (GOOGLE AUTHENTICATOR) FOR THE PAT-CONNECTION FLOW
+==================================================
+Date: 2026-08-13
+Trigger: user's own detailed 30-section MFA implementation spec, modeled
+on a classic "primary auth -> MFA gate -> dashboard" flow with an
+explicit requirement that MFA verification happen backend-side, never
+trusted from the frontend, plus an admin "reset a user's MFA" action.
+
+Pre-implementation research (3 parallel Explore agents, then a plan-mode
+review with the user) surfaced a fact the spec's flowchart didn't account
+for: this app has TWO independent identity paths, not one - an optional
+GitHub OAuth/JWT login (TopBar's "Login with GitHub" button, only grants
+Admin/Viewer role, nothing else depends on it) and the PAT-connection
+flow (RequireGitHubSetup, backed by POST me/github) that everyone
+actually uses and that alone gates Dashboard/Deploy/GitHub/AWS/Settings/
+Admin. Confirmed with the user via AskUserQuestion: MFA gates the
+PAT-connection flow specifically, not the rarely-used OAuth login - the
+only choice that actually protects the surface the spec cares about, and
+consistent with the user's own framing ("PAT" in their flowchart, "reset
+MFA for users" matching the PAT-based Services > Users table exactly).
+
+This also simplified the security model relative to the spec's classic
+"pending session" design: nothing is ever persisted until a token AND
+(if its resolved owner has MFA enabled) a valid code arrive together,
+verified atomically, backend-side, in the exact request that saves the
+credential (SettingsController.SaveMyGitHub, gated by the new MfaGate
+helper). A session either has a fully saved, MFA-satisfied connection or
+it has nothing at all - exactly the state RequireGitHubSetup's existing
+blocking dialog already handles, unchanged. This satisfies every
+"no bypass" acceptance criterion in the spec (multi-tab, browser refresh,
+direct API calls before MFA) without inventing new pending-auth-session
+machinery, since there is no intermediate authenticated-but-not-MFA'd
+state to defend in the first place.
+
+Data model: a new `Mfa` keyed sub-object in the SAME portal_settings
+JSONB blob every other setting already lives in (no new Postgres table -
+this app has none beyond that blob plus the unrelated Data Protection key
+ring) - `{SecretEncrypted, Enabled, CreatedAtUtc, UpdatedAtUtc,
+LastVerifiedAtUtc, RecoveryCodes:[{HashHex,UsedAtUtc}]}`, keyed by the
+RESOLVED GITHUB LOGIN (via the existing ResolvePatOwnerLoginAsync, the
+same identity resolution Round 14's cross-session credential migration
+and the admin Users table already use), not the PortalIdentity session
+key - MFA follows the person across browsers/devices, matching how
+credentials/PIN already behave since Round 14.
+
+TOTP itself is hand-rolled (RFC 6238 over System.Security.Cryptography.
+HMACSHA1, already used elsewhere in this codebase) rather than adding a
+new NuGet package - a new small Base32 encode/decode helper was the only
+new primitive needed. The QR code is rendered CLIENT-SIDE from the
+otpauth:// URI via a new small `qrcode` npm package - no QR image, and
+critically no secret, ever transits the network as an image; the backend
+returns the URI/secret once, at enrollment, and never again.
+
+Enforcement chain: PreviewMyGitHubToken (POST me/github/preview) now
+reports `mfaRequired` as a heads-up (piggybacked on the live GitHub
+/user lookup preview already makes, no extra API call) so
+RequireGitHubSetup can show the code-entry step immediately - but the
+REAL enforcement is MfaGate.DenyUnlessVerifiedAsync, called from
+SaveMyGitHub independently of what preview reported, so a client that
+skips preview or crafts a raw request can't bypass it. Rate-limited (5
+wrong attempts, 15-minute lockout) via new SessionActivityService
+methods mirroring the existing screen-lock PIN's attempt-counter pattern
+exactly, keyed by login rather than session key. A wrong/missing code
+returns 403 (MFA_REQUIRED / INVALID_MFA_CODE / MFA_LOCKED) and the token
+is never persisted - the session is left exactly where it started.
+
+Self-service enrollment lives behind a new MfaController (api/mfa):
+enroll (generates+stores a pending secret, Enabled stays false),
+enroll/verify (the first real code - only this call ever flips Enabled
+on and generates the 10 one-time recovery codes, returned exactly once),
+disable (requires a currently-valid code or recovery code first, then a
+full removal - not a soft flag), status. All require the CALLER's own
+already-connected session (GitHubAuthService.GetAuthenticatedLoginAsync,
+cached) - you have to successfully connect once, unprotected, before you
+can turn MFA on for yourself, the same as setting up MFA on any real
+service typically works.
+
+Admin recovery path: AdminUsersController gained POST
+{key}/reset-mfa (same AdminGate/ResolveRealKeyAsync pattern as the
+existing Block/Unblock/Delete actions), resolving that row's own stored
+token to its live GitHub login (a new SettingsService.
+ResolveCurrentLoginForKeyAsync, deliberately reading the RAW stored token
+rather than going through the SignedOut-masking GetUserGitHubCredentialsAsync,
+since a soft-signed-out/locked-out account is exactly the one an admin
+is most likely resetting MFA for) then calling the same
+ResetMfaForLoginAsync a self-disable would use - a full removal, so the
+user must fully re-enroll afterward, matching the user's own closing
+requirement ("the user should [re-]enable MFA"). PatUserSummaryDto
+gained IsMfaEnabled, populated in GetPatUsersAsync alongside the login
+resolution it already does per row (only ever true for a row that
+resolved to a real, confirmed login - never for one of Round 15's
+"Unknown (...)" placeholder rows, same reasoning as that round's dedupe-
+safety fix). Services.jsx's Users table gained an MFA column and a
+"Reset MFA" button (shown only when enabled), copying the existing
+Block/Unblock button-&gt;confirm()-&gt;service-&gt;toast-&gt;loadUsers() pattern
+exactly.
+
+Explicitly out of scope, stated to the user up front:
+  - OAuth login is NOT gated by MFA (the confirmed scope decision).
+  - No new automated test project - this repo has none today; verification
+    follows this session's established live-curl-against-the-deployed-
+    backend practice instead.
+  - "Remember this device" was not implemented, per the spec's own
+    instruction.
+
+Verification performed:
+  - `dotnet build` (isolated output dir): 0 errors, 3 pre-existing
+    unrelated warnings, first try.
+  - `npm run lint` / `npm run build`: 0 errors, pre-existing Fast-Refresh
+    warnings only. New `qrcode` dependency lands inside Settings' own
+    already-lazy-loaded chunk (Round 8's code-splitting), not the main
+    bundle.
+  - Live tests against the deployed Render backend (fresh X-Session-Id
+    per test, DELETE me/all cleanup after each):
+    - GET/POST me/mfa/* with no token connected -> clean 403 "Connect a
+      GitHub token first," not a crash.
+    - Same endpoints with a fake-but-configured token -> clean 403
+      "Unable to verify your GitHub identity right now" (GitHub
+      correctly rejects the fake token's own /user call - this is the
+      SAME limitation noted in Round 13/14's own findings, hit again
+      here since every MFA endpoint ultimately needs a real, live-
+      resolvable GitHub identity).
+    - Regression check: a normal token+repo connect with NO mfaCode
+      still succeeds unchanged (200) - confirms MfaGate correctly no-ops
+      when it can't resolve a real identity to check MFA status against,
+      exactly the fail-safe behavior intended for an invalid/unresolvable
+      token (a genuinely bad token still fails for its OWN reasons
+      elsewhere, unrelated to this feature). Preview's new mfaRequired
+      field also correctly reports false in this case.
+    - Admin reset-mfa correctly 403s a non-admin caller without crashing.
+  - Could NOT live-verify the actual happy path (enroll -> scan real QR
+    -> verify a real TOTP code -> gate a reconnect -> lock out after 5
+    wrong codes -> use a recovery code -> admin reset) - every one of
+    these needs a real, working GitHub PAT to resolve a real identity
+    against, which isn't available in this sandboxed session. This is
+    the same hard limitation already flagged in Round 13 (bootstrap fix)
+    and Round 14 (cross-session migration) - explicitly not claimed as
+    tested. Strongly recommended: the user walk through this full flow
+    themselves with a real PAT once deployed (npx wrangler deploy still
+    needed for the frontend, as with every prior round).
+
+Files changed: src/DeploymentAPI/Services/{SettingsService,
+SessionActivityService}.cs, Controllers/{SettingsController,
+AdminUsersController}.cs, Controllers/MfaController.cs (new),
+Helpers/MfaGate.cs (new), DTOs/{GitHubSettingsUpdateDto,
+PatUserSummaryDto,TokenPreviewDto}.cs, DTOs/MfaCodeRequestDto.cs (new);
+deployment-ui/src/api/mfaApi.js (new), services/mfaService.js (new),
+services/adminService.js, components/RequireGitHubSetup.jsx,
+components/settings/CredentialsView.jsx, components/settings/
+credentials/MfaSection.jsx (new), pages/Services.jsx,
+package.json (+qrcode).
+
+Status: Complete for the code-level-verifiable portion (guard clauses,
+regression safety, no crashes). The core TOTP enroll/verify/gate/lockout/
+recovery-code/admin-reset happy path is implemented and code-reviewed
+but NOT live-tested end-to-end, for the reason stated above - flagged
+explicitly rather than claimed, consistent with this file's own standing
+practice of never asserting a test that didn't actually run.
+
 ROUND 13 - FIX: BOOTSTRAP CRASH FOR TOKEN-ONLY SESSIONS + "PICK A REPO"
 MESSAGING ON GITHUB-SCOPED PAGES
 ==================================================
