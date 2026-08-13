@@ -40,6 +40,20 @@ function writeSecurityHeadersPlugin() {
         `form-action 'self'`
       ].join('; ')
 
+      // Cache-Control was never set explicitly before this, which left
+      // index.html at whatever Cloudflare's/the browser's own default
+      // caching behavior happened to be - risking a browser serving a
+      // stale index.html (and therefore stale hashed asset references)
+      // even after a real, successful redeploy, until something forced a
+      // hard refresh. no-cache (NOT no-store) on the HTML entry point
+      // means the browser always revalidates with the server - cheap,
+      // since index.html is tiny - while /assets/* (Vite's own content-
+      // hashed filenames, so a new build never reuses an old one) gets a
+      // full year of immutable caching. The more specific /assets/* block
+      // must come AFTER /* - Cloudflare merges matching _headers rules,
+      // later rules overriding earlier ones for the same header name, so
+      // this is what lets hashed assets keep every security header from
+      // /* while overriding just Cache-Control.
       const headers = [
         '/*',
         `  Content-Security-Policy: ${csp}`,
@@ -47,6 +61,10 @@ function writeSecurityHeadersPlugin() {
         '  X-Content-Type-Options: nosniff',
         '  Referrer-Policy: strict-origin-when-cross-origin',
         '  Permissions-Policy: geolocation=(), camera=(), microphone=()',
+        '  Cache-Control: no-cache',
+        '',
+        '/assets/*',
+        '  Cache-Control: public, max-age=31536000, immutable',
         ''
       ].join('\n')
 
