@@ -99,7 +99,16 @@ export default function AdminAccessView({
 
     }
 
-    const mfaUsers = (patUsers || []).filter((u) => !u.patOwnerLogin.startsWith("Unknown"));
+    // Deliberately NOT filtering out "Unknown (...)" rows the way Round
+    // 15's dedupe feature does - that filter exists so dedupe never
+    // merges two unrelated people who happen to share an unreadable
+    // token. Here it would do the opposite of what this console is for:
+    // hiding exactly the accounts an admin is most likely to need (a
+    // locked-out/signed-out session GitHub can't currently re-verify) -
+    // Round 16's own ResolveCurrentLoginForKeyAsync already reads the raw
+    // stored token directly for this exact reason, bypassing the masking
+    // that produces "Unknown" in the first place.
+    const mfaUsers = patUsers || [];
 
     return (
 
@@ -159,7 +168,7 @@ export default function AdminAccessView({
 
             ) : mfaUsers.length === 0 ? (
 
-                <p className="empty-state">No confirmed PAT users yet.</p>
+                <p className="empty-state">No PAT users yet.</p>
 
             ) : (
 
@@ -191,9 +200,14 @@ export default function AdminAccessView({
 
                                     <td>
 
-                                        {u.isMfaEnabled && (
-
-                                            <div className="button-row">
+                                        {/* Not gated on u.isMfaEnabled - that flag is only ever
+                                            meaningful for a row with a currently-resolvable login
+                                            (see GetPatUsersAsync), so a flaky/"Unknown" row would
+                                            hide both actions right when they're most needed. Both
+                                            backend actions re-resolve the login themselves and fail
+                                            cleanly (400/404 with a real message) when there's
+                                            genuinely nothing to act on. */}
+                                        <div className="button-row">
 
                                                 <button
                                                     type="button"
@@ -213,9 +227,7 @@ export default function AdminAccessView({
                                                     {resettingKey === u.key ? "..." : "Reset MFA"}
                                                 </button>
 
-                                            </div>
-
-                                        )}
+                                        </div>
 
                                     </td>
 
