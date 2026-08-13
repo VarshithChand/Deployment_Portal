@@ -1496,3 +1496,258 @@ Services/GitHubApiService.cs, deployment-ui/src/api/apiBase.js.
 Status: Complete - not a vulnerability finding, an architecture change
 requested and completed. No new security issues were found during this
 pass (the pre-work verification above covers what was checked).
+
+==================================================
+ROUND 5 - CREDENTIAL EXPOSURE AUDIT (highest priority: no user credentials
+in API responses)
+==================================================
+Date:    2026-08-13
+Trigger: user re-prioritized - before any further response-contract work,
+         verify with certainty (not assumption from prior rounds) that no
+         AWS/GitHub/Azure/GCP/Gemini/database credential, password, token,
+         or credential-bearing object ever reaches the browser in an API
+         response, browser storage, or logs, and that cross-user credential
+         access is blocked.
+
+Endpoints/areas audited (full list, per the request's own checklist):
+  - SettingsController: GET /me/github, /me/github/username, /me/aws,
+    /me/aws/resources, /me/aws/ec2-detail, /me/aws/ecs-detail, /me/azure,
+    /me/gcp, /me/pin, POST /me/aws, /me/azure (save paths), GET (master
+    settings), sidebar/*, page-admin-grants/*.
+  - AdminUsersController: GET / (Users list), POST {key}/logout,
+    {key}/block, {key}/unblock, DELETE {key}, POST dedupe.
+  - SecurityApiKeysController: GET /, POST /, DELETE /{id}, GET /mine,
+    POST /mine, DELETE /mine/{id}.
+  - DatabaseController / DatabaseManagementService: health, connection
+    string masking.
+  - ApplicationSupportController / ApplicationSupportToolsService:
+    user-versions (direct endpoint + 2 AI tool-call paths).
+  - AiToolsService, GeminiService: tool outputs, chat/test-connection
+    error paths, the Gemini API key's only appearance (an outbound request
+    URL, never echoed back).
+  - AuthController: /me, cookie-only JWT (re-confirmed from Round 4).
+  - Browser storage: every localStorage.setItem call site in deployment-ui.
+  - Logs: every _log.LogInfo/LogError call site referencing a
+    credential-shaped variable name across the whole backend.
+
+FINDING 017 (the one substantive issue found)
+Title: Admin-visible "Users"/"Sidebar Access"/"API Keys" panels exposed the
+        literal PortalIdentity session key - the same bearer value that
+        determines whose saved GitHub PAT a request uses
+Severity: HIGH
+Category: Credential/session impersonation (not a literal secret-string
+        leak, but functionally equivalent - a credential-bearing
+        identifier)
+Affected Component: AdminUsersController, SettingsController (sidebar
+        endpoints), SecurityApiKeysController, ApplicationSupportToolsService,
+        PatUserSummaryDto, ApiKeyDto, SettingsService (Activity Log messages)
+Affected Endpoint: GET /api/admin/users, POST/DELETE /api/admin/users/{key}/*,
+        GET /api/settings/sidebar/users, GET/POST/DELETE
+        /api/settings/sidebar/user, GET /api/security/api-keys(/mine),
+        GET /api/admin/application-support/user-versions, Activity Log
+        text (Settings > Logs / Security > Audit Log)
+Affected Parameter: `key` (PatUserSummaryDto), `ownerKey` (ApiKeyDto)
+
+Description:
+No literal AWS/GitHub/Azure secret value was ever found in a response body
+(see the negative-result endpoints below - the codebase's existing
+discipline here, largely from Round 1's encryption-at-rest work, was
+already solid). But PortalIdentity.GetOrCreateKey(context) - the function
+that decides which browser's saved GitHub/AWS/Azure/GCP credentials a
+given request uses - derives its key SOLELY from the X-Session-Id request
+header (or portal_session cookie) with no additional binding (no IP/
+fingerprint/etc.). PatUserSummaryDto.Key (returned by GET /api/admin/users
+and GET /api/settings/sidebar/users) and ApiKeyDto.OwnerKey (returned by
+GET /api/security/api-keys) both carried this exact raw value -
+"sess:{the-X-Session-Id-value}" - to the admin's own browser. Several
+Activity Log messages ("PAT user '{key}' blocked by admin", etc.) also
+interpolated the raw value into admin-visible log text.
+
+Security Impact:
+Any admin viewing the Users tab, Sidebar Access picker, API Keys panel, or
+Activity Log could copy another specific person's raw session key from the
+response/log text and set it as their OWN browser's X-Session-Id (a value
+the frontend already sends as a plain header, no server-side secret
+involved in constructing it). The backend would then resolve that
+admin's own subsequent requests as if they belonged to that other,
+specific person - transparently using THAT person's saved GitHub PAT for
+GitHub API calls, deployments, approvals, etc., with no need to ever see
+the PAT string itself. This goes beyond an admin's already-broad portal
+authority (clearing everyone's shared settings, force-logout, etc.) into
+silently acting AS a specific individual using their own external identity
+- a genuine privilege/impersonation escalation and an attribution problem
+(actions would appear to come from the impersonated person, not the admin
+who actually took them).
+
+Steps to Reproduce:
+1. As an admin, view Services -> Users (or Settings -> Sidebar Access, or
+   Settings -> Security -> API Keys).
+2. Note another user's row's `key`/`ownerKey` value in the API response
+   (visible in DevTools Network tab or Settings > Logs' recorded text).
+3. In a separate/incognito browser, set localStorage.portalSessionId to
+   that exact value before the app's first request.
+4. Every subsequent request from that browser now resolves to the
+   original user's PortalIdentity - their saved GitHub PAT is used for
+   any GitHub-touching action from that point on.
+
+Evidence:
+PortalIdentity.cs's GetOrCreateKey: `key = $"sess:{headerValue}"` - directly
+from the client-controlled X-Session-Id header, no server-side secret
+involved. SettingsService.GetPatUsersAsync (pre-fix): `Key = p.Name` where
+p.Name is literally that same string, used as the JSON object key
+UserGitHubCredentials is stored under (see
+SaveUserGitHubCredentialsAsync(key, ...) called with PortalIdentity's own
+key). ApiKeyDto.cs's own pre-fix comment even said "Harmless to leave in
+the response; same sensitivity level as PatUserSummaryDto's own Key field"
+- confirming this was a shared, repeated misunderstanding of that field's
+actual sensitivity, not an isolated oversight.
+
+Expected Behavior:
+An identifier the admin UI needs to target row-level actions (Block/
+Unblock/Logout/Delete/Sidebar Access) should be usable for exactly that,
+and nothing else - specifically, it should not also function as a valid
+bearer credential an admin could replay to impersonate the specific person
+it identifies.
+
+Actual Behavior:
+The identifier WAS the literal bearer credential.
+
+Recommended Fix (Applied):
+Added SettingsService.ComputeSessionRowIdAsync(sessionKey) - an HMAC-SHA256
+of the real key, keyed by a dedicated secret generated once and persisted
+in the settings store itself (Internal.RowIdSecret, the same portal_settings/
+appsettings.Local.json storage every other setting already uses) - and
+ResolveSessionKeyFromRowIdAsync(rowId), which reverses it by recomputing
+the HMAC for every currently-known PAT-user session key and returning
+whichever matches (cheap - the list is small, one row per browser/device
+that has ever configured a PAT; avoids needing a separate persisted
+rowId-to-key table). Every response-serialization point
+(AdminUsersController.GetAll, SettingsController.GetPatUsers,
+ApplicationSupportToolsService.GetConnectedUserVersionsAsync) now converts
+Key to the row ID as the LAST step, strictly after any internal
+per-real-key lookups (SessionActivityService etc., which remain keyed by
+the real value) have already run. Every mutating action that receives a
+`key` from the client (AdminUsersController's 4 actions, SettingsController's
+3 sidebar-user actions) now resolves it back to the real key via
+ResolveSessionKeyFromRowIdAsync first, returning 404 if it doesn't match
+any current PAT user - the ~90 other unrelated endpoints and the
+AdminGate checks themselves are untouched. ApiKeyDto.OwnerKey was removed
+entirely rather than converted (confirmed via grep it was never read by
+any frontend file - pure dead weight carrying the same exposure). Six
+Activity Log message sites in SettingsService.cs now log a truncated,
+non-replayable MaskKey(key) form (first 12 characters + "***") instead of
+the full value, closing the same exposure via Settings > Logs / Security >
+Audit Log (both already admin-gated, but still an admin-visible surface
+the row-ID scheme's whole point was to keep the real value out of).
+Confirmed via grep this was the ONLY place in the entire backend logging a
+credential-shaped session/secret value. No frontend change was needed -
+`key`/`ownerKey` were confirmed (via grep across deployment-ui) to be
+treated as fully opaque strings everywhere (used only as a React list key
+and echoed back verbatim on button clicks), so swapping what value
+populates them is fully transparent to every consumer.
+
+Status: Fixed
+
+NEGATIVE RESULTS (checked, no issue found - listed per the request's own
+"final report" checklist, since a clean result is still worth recording):
+  - AWS: GetMyAws/GetMyAwsResources/etc. return Configured/Region/
+    MfaEnrolled/MfaSessionActive/IdentityLabel/SSO account+role name -
+    never AccessKeyId/SecretAccessKey/SessionToken. SaveMyAws's response
+    is {Configured, MfaSessionActive} - never echoes the submitted key
+    back. MfaSerialNumber (which embeds an AWS account ID) is used
+    write-only, never returned.
+  - GitHub: GetMyGithub returns Owner/Repository/TokenConfigured(bool)/
+    IsConfigured - never the PAT. Preview/TokenPreview error paths were
+    already sanitized in Round 2 (Finding 015).
+  - Azure: GetMyAzure returns Configured/IdentityLabel only - never
+    ClientSecret/access or refresh tokens.
+  - GCP: GetMyGcp returns Configured/ProjectId/IdentityLabel (parsed
+    locally from the stored key's own client_email field) - never
+    ServiceAccountKeyJson itself, confirmed via grep it's never
+    referenced in any Ok(...) call anywhere in the codebase.
+  - Gemini: the API key's only appearance anywhere is as a query
+    parameter on the OUTBOUND request GeminiService itself makes to
+    Google - confirmed via source that every error path (HttpRequestException,
+    JSON parse failure, non-success status code) uses a fixed generic
+    message or Gemini's own response-body error.message field, never the
+    request URL or ex.Message, so the key cannot reach the client through
+    any exception path either.
+  - Database: BuildMaskedConnection already returns host:port/database
+    only (confirmed again this round) - username/password/full
+    DATABASE_URL never leave the server.
+  - Master settings (GET /api/settings): every credential field is
+    already a *Configured boolean by design (confirmed via BuildView's
+    source, which has its own pre-existing comment to this effect); the
+    admin allowlist is correctly blanked for non-admin callers.
+  - JWT: re-confirmed from Round 4 - only ever set as an HttpOnly/Secure
+    cookie, never in a response body; GET /api/auth/me returns exactly
+    {login, role}.
+  - PIN: GetMyPin returns {Configured} only; VerifyMyPin returns
+    {Valid, Locked} only - the PIN value/hash is never returned anywhere
+    (confirmed in Round 1/2 already, re-checked here).
+  - Browser storage: every localStorage.setItem call site in
+    deployment-ui inspected (9 total) - session ID (the app's own,
+    necessary session-identification mechanism, not a "credential" in the
+    AWS-key/PAT sense), theme/style/UI-state preferences, cache version,
+    an AWS SSO start URL (a non-secret portal URL). No AWS/GitHub/Azure/
+    GCP/Gemini/database secret value stored client-side anywhere. Cookies
+    (portal_token/portal_session/oauth_state) are all HttpOnly and are
+    session/CSRF tokens, not the AWS-key/PAT class of credential this
+    audit was scoped to.
+  - Logs: every _log.LogInfo/LogError call site referencing a
+    credential-shaped variable name (Token/Secret/Password/Key/Credential)
+    across the entire backend was individually read - all log
+    non-secret identifiers (Owner/Repository, Organization/ProjectKey,
+    OAuth Client ID (public by design), Docker registry/username) except
+    the six PortalIdentity-key sites fixed under Finding 017 above.
+  - Cross-user isolation: every /me/* endpoint resolves ownership via
+    PortalIdentity.GetOrCreateKey(HttpContext) - the server-side-derived
+    session identity - never from a client-supplied userId/key in the
+    request body/query. SecurityApiKeysController.RevokeMine explicitly
+    checks k.OwnerKey == callerKey server-side before allowing a delete
+    (re-confirmed, unaffected by the OwnerKey field's removal from the
+    DTO - that check happens before serialization). Admin-facing endpoints
+    that DO take a key/rowId from the client are gated by AdminGate first
+    (re-confirmed live: an unauthenticated/non-admin caller gets 403
+    before any row-ID resolution logic runs) and, after this round's fix,
+    resolve that value through ResolveSessionKeyFromRowIdAsync rather than
+    trusting it directly.
+
+Verification performed:
+  - `dotnet build`: 0 errors after every change (checked twice, once
+    after the row-ID/PatUserSummaryDto changes and once after the
+    ApiKeyDto/log-masking changes).
+  - `npm run lint`: 0 errors, only pre-existing unrelated warnings (no
+    frontend files were changed this round).
+  - Live test: built to an isolated output directory and ran the real
+    app; confirmed GET /api/settings still correctly returns only
+    *Configured booleans; confirmed the modified admin endpoints
+    (GET /api/admin/users, POST /api/admin/users/{key}/block) still
+    correctly 403 for an unauthenticated/non-admin caller BEFORE reaching
+    any of the new row-ID logic, proving AdminGate itself is unweakened
+    by this change.
+  - LIMITATION, stated plainly: full behavioral exercise of the row-ID
+    round trip (configure a real PAT user, confirm GET returns a hashed
+    value, confirm POST .../block with that hashed value successfully
+    resolves and works, confirm a garbage row ID correctly 404s) requires
+    real admin authority, which this local test environment couldn't
+    reach without a live GitHub OAuth login or a pre-populated database -
+    neither was available. This was instead verified via careful, repeated
+    source-level review of both ComputeSessionRowIdAsync (a small,
+    dependency-free HMAC computation) and ResolveSessionKeyFromRowIdAsync
+    (a small, dependency-free reverse-search loop), plus confirming every
+    call site places the conversion at the correct point relative to the
+    real-key-dependent lookups around it.
+
+Remaining/related items not addressed in this pass:
+  - The row-ID HMAC secret (Internal.RowIdSecret) is generated once and
+    persisted the same way every other setting is - if the settings store
+    were ever reset (e.g. a fresh DATABASE_URL with no prior data), this
+    secret regenerates and every previously-issued row ID would stop
+    resolving until the admin's browser reloads the list. Not a security
+    issue (the affected list is inherently ephemeral - session keys
+    themselves reset the same way on any full settings reset), noted for
+    completeness only.
+  - This audit's negative results are current as of this pass; they are
+    not a substitute for re-auditing after future credential-handling
+    changes to any of the areas listed above.

@@ -110,6 +110,10 @@ public class ApplicationSupportToolsService
 
         foreach (var user in users)
         {
+            // Real key needed for these lookups (SessionActivityService is
+            // keyed by it) - swapped for a non-replayable row ID last, same
+            // reasoning as AdminUsersController.GetAll (Key is otherwise the
+            // literal bearer value for "whose saved GitHub PAT to use").
             user.LastActiveUtc = _activity.GetLastSeen(user.Key);
 
             var frontendBuild = _activity.GetFrontendBuild(user.Key);
@@ -117,6 +121,8 @@ public class ApplicationSupportToolsService
             user.FrontendVersion = frontendBuild?.Version;
             user.FrontendEnvironment = frontendBuild?.Environment;
             user.FrontendLastSeenUtc = frontendBuild?.ReportedAtUtc;
+
+            user.Key = await _settings.ComputeSessionRowIdAsync(user.Key);
         }
 
         return users;

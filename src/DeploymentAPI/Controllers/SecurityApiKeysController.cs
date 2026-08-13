@@ -121,7 +121,6 @@ public class SecurityApiKeysController : ControllerBase
             Prefix = dto.Prefix,
             CreatedAt = dto.CreatedAt,
             Revoked = dto.Revoked,
-            OwnerKey = dto.OwnerKey,
             OwnerLogin = dto.OwnerLogin,
             Key = rawKey
         };
@@ -138,7 +137,6 @@ public class SecurityApiKeysController : ControllerBase
             Prefix = key.Prefix,
             CreatedAt = key.CreatedAt,
             Revoked = key.Revoked,
-            OwnerKey = key.OwnerKey,
             OwnerLogin = owner?.PatOwnerLogin ?? "Unknown owner"
         };
     }

@@ -585,7 +585,19 @@ public class SettingsController : ControllerBase
         if (await AdminGate.DenyUnlessAdminAsync(this, _settings, "view PAT users") is IActionResult denied)
             return denied;
 
-        return Ok(await _settings.GetPatUsersAsync());
+        var users = await _settings.GetPatUsersAsync();
+
+        // Key here is the literal PortalIdentity session key - the same
+        // value that determines whose saved GitHub PAT a request uses (see
+        // PortalIdentity.GetOrCreateKey). Returning it as-is would let an
+        // admin replay it as their own X-Session-Id and silently act as
+        // that specific other person - swapped for a non-reversible row ID
+        // right before the response goes out (see
+        // SettingsService.ComputeSessionRowIdAsync).
+        foreach (var user in users)
+            user.Key = await _settings.ComputeSessionRowIdAsync(user.Key);
+
+        return Ok(users);
     }
 
     [HttpGet("sidebar/user")]
@@ -597,7 +609,10 @@ public class SettingsController : ControllerBase
         if (string.IsNullOrWhiteSpace(key))
             return BadRequest("key is required.");
 
-        return Ok(await _settings.GetSidebarAccessAsync(key));
+        if (await _settings.ResolveSessionKeyFromRowIdAsync(key) is not string realKey)
+            return NotFound(new { message = "That user's session no longer exists." });
+
+        return Ok(await _settings.GetSidebarAccessAsync(realKey));
     }
 
     [HttpPost("sidebar/user")]
@@ -609,7 +624,10 @@ public class SettingsController : ControllerBase
         if (string.IsNullOrWhiteSpace(key))
             return BadRequest("key is required.");
 
-        return Ok(await _settings.SaveSidebarAccessAsync(key, request.States));
+        if (await _settings.ResolveSessionKeyFromRowIdAsync(key) is not string realKey)
+            return NotFound(new { message = "That user's session no longer exists." });
+
+        return Ok(await _settings.SaveSidebarAccessAsync(realKey, request.States));
     }
 
     [HttpDelete("sidebar/user")]
@@ -621,8 +639,11 @@ public class SettingsController : ControllerBase
         if (string.IsNullOrWhiteSpace(key))
             return BadRequest("key is required.");
 
-        await _settings.ClearSidebarAccessAsync(key);
-        return Ok(await _settings.GetSidebarAccessAsync(key));
+        if (await _settings.ResolveSessionKeyFromRowIdAsync(key) is not string realKey)
+            return NotFound(new { message = "That user's session no longer exists." });
+
+        await _settings.ClearSidebarAccessAsync(realKey);
+        return Ok(await _settings.GetSidebarAccessAsync(realKey));
     }
 
     // Scoped admin grants — a GitHub login can be handed admin authority for

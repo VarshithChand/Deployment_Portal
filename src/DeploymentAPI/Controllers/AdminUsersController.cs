@@ -38,6 +38,10 @@ public class AdminUsersController : ControllerBase
 
         foreach (var user in users)
         {
+            // Every per-key lookup below needs the REAL session key
+            // (SessionActivityService is keyed by it too) - the swap to a
+            // non-replayable row ID happens last, only in the value that
+            // actually reaches the response.
             user.LastActiveUtc = _activity.GetLastSeen(user.Key);
             user.Device = DeviceInfo.Describe(_activity.GetLastUserAgent(user.Key));
             user.IpAddress = _activity.GetLastIpAddress(user.Key);
@@ -48,6 +52,8 @@ public class AdminUsersController : ControllerBase
             user.FrontendVersion = frontendBuild?.Version;
             user.FrontendEnvironment = frontendBuild?.Environment;
             user.FrontendLastSeenUtc = frontendBuild?.ReportedAtUtc;
+
+            user.Key = await _settings.ComputeSessionRowIdAsync(user.Key);
         }
 
         return Ok(users);
@@ -67,8 +73,11 @@ public class AdminUsersController : ControllerBase
         if (await AdminGate.DenyUnlessAdminAsync(this, _settings, "sign out a PAT user", "services") is IActionResult denied)
             return denied;
 
-        await _settings.SoftSignOutPatUserAsync(key);
-        _activity.ForceLogout(key);
+        if (await ResolveRealKeyAsync(key) is not string realKey)
+            return NotFound(new { message = "That user's session no longer exists." });
+
+        await _settings.SoftSignOutPatUserAsync(realKey);
+        _activity.ForceLogout(realKey);
 
         return Ok();
     }
@@ -86,7 +95,10 @@ public class AdminUsersController : ControllerBase
         if (await AdminGate.DenyUnlessAdminAsync(this, _settings, "block a PAT user", "services") is IActionResult denied)
             return denied;
 
-        await _settings.BlockPatUserAsync(key);
+        if (await ResolveRealKeyAsync(key) is not string realKey)
+            return NotFound(new { message = "That user's session no longer exists." });
+
+        await _settings.BlockPatUserAsync(realKey);
         return Ok();
     }
 
@@ -96,7 +108,10 @@ public class AdminUsersController : ControllerBase
         if (await AdminGate.DenyUnlessAdminAsync(this, _settings, "unblock a PAT user", "services") is IActionResult denied)
             return denied;
 
-        await _settings.UnblockPatUserAsync(key);
+        if (await ResolveRealKeyAsync(key) is not string realKey)
+            return NotFound(new { message = "That user's session no longer exists." });
+
+        await _settings.UnblockPatUserAsync(realKey);
         return Ok();
     }
 
@@ -111,11 +126,22 @@ public class AdminUsersController : ControllerBase
         if (await AdminGate.DenyUnlessAdminAsync(this, _settings, "delete a PAT user", "services") is IActionResult denied)
             return denied;
 
-        await _settings.DeletePatUserAsync(key);
-        _activity.ForceLogout(key);
+        if (await ResolveRealKeyAsync(key) is not string realKey)
+            return NotFound(new { message = "That user's session no longer exists." });
+
+        await _settings.DeletePatUserAsync(realKey);
+        _activity.ForceLogout(realKey);
 
         return Ok();
     }
+
+    // key here is a non-reversible row ID (see SettingsService.
+    // ComputeSessionRowIdAsync), not the real PortalIdentity session key -
+    // every mutating action above needs the real key back before it can
+    // act, since that's what SettingsService/SessionActivityService are
+    // actually keyed by.
+    private async Task<string?> ResolveRealKeyAsync(string rowId) =>
+        await _settings.ResolveSessionKeyFromRowIdAsync(rowId);
 
     // Cleans up rows that predate SaveUserGitHubCredentialsAsync's one-
     // session-per-PAT check (added after this list already had repeat

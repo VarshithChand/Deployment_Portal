@@ -229,7 +229,7 @@ public class SettingsService
             entry["SignedOut"] = true;
             await WriteRootAsync(root);
 
-            _log.LogInfo("Settings", $"PAT user '{key}' signed out by admin (soft - token kept, marked inactive).");
+            _log.LogInfo("Settings", $"PAT user '{MaskKey(key)}' signed out by admin (soft - token kept, marked inactive).");
         }
     }
 
@@ -254,7 +254,7 @@ public class SettingsService
 
         await WriteRootAsync(root);
 
-        _log.LogInfo("Settings", $"PAT user '{key}' deleted by admin.");
+        _log.LogInfo("Settings", $"PAT user '{MaskKey(key)}' deleted by admin.");
     }
 
     public async Task<UserGitHubCredentials> SaveUserGitHubCredentialsAsync(string login, GitHubSettingsUpdateDto update)
@@ -897,8 +897,8 @@ public class SettingsService
         await WriteRootAsync(root);
 
         _log.LogInfo("Settings", entry.Properties().Any()
-            ? $"Sidebar access updated for '{key}': {string.Join(", ", entry.Properties().Select(p => $"{p.Name}={p.Value}"))}"
-            : $"Sidebar access reset for '{key}' — every tab visible again.");
+            ? $"Sidebar access updated for '{MaskKey(key)}': {string.Join(", ", entry.Properties().Select(p => $"{p.Name}={p.Value}"))}"
+            : $"Sidebar access reset for '{MaskKey(key)}' — every tab visible again.");
 
         return await GetSidebarAccessAsync(key);
     }
@@ -1075,6 +1075,80 @@ public class SettingsService
         }).ToList();
     }
 
+    // GetPatUsersAsync's `Key` above is the literal PortalIdentity session
+    // key ("sess:{X-Session-Id}") - the exact bearer value that determines
+    // whose saved GitHub PAT a request uses (see PortalIdentity.
+    // GetOrCreateKey). Returning that raw value to an admin's browser would
+    // let them replay it as their OWN X-Session-Id header and silently
+    // start acting with a completely different, specific person's GitHub
+    // identity - a real credential-impersonation path, not just visibility.
+    // Controllers call this to swap Key for a stable-but-non-reversible
+    // row identifier immediately before serializing the response; ONLY
+    // after any internal per-key lookups (SessionActivityService etc.,
+    // which are still keyed by the real value) have already run.
+    public async Task<string> ComputeSessionRowIdAsync(string sessionKey)
+    {
+        var secret = await GetOrCreateRowIdSecretAsync();
+
+        using var hmac = new HMACSHA256(secret);
+        var hash = hmac.ComputeHash(Encoding.UTF8.GetBytes(sessionKey));
+
+        return Convert.ToHexString(hash);
+    }
+
+    // The reverse of ComputeSessionRowIdAsync - HMAC output can't be
+    // un-hashed, so this instead recomputes the row ID for every currently
+    // known PAT-user session key and returns whichever one matches. The
+    // list this scans is small (one row per browser/device that has ever
+    // configured a GitHub PAT), so this stays cheap despite being called
+    // on every admin action (Block/Unblock/Logout/Delete/Sidebar Access)
+    // instead of a persisted rowId-to-key table.
+    public async Task<string?> ResolveSessionKeyFromRowIdAsync(string rowId)
+    {
+        var root = await ReadRootAsync();
+        var users = root["UserGitHubCredentials"] as JObject;
+
+        if (users == null)
+            return null;
+
+        foreach (var property in users.Properties())
+        {
+            if (await ComputeSessionRowIdAsync(property.Name) == rowId)
+                return property.Name;
+        }
+
+        return null;
+    }
+
+    // Same reasoning as ComputeSessionRowIdAsync, applied to Activity Log
+    // text instead of an API response - Settings > Logs / Security > Audit
+    // Log are both admin-only, but they're still an admin-visible surface,
+    // and the whole point of the row-ID scheme is that this raw value
+    // should never be fully reconstructible from anything an admin can see.
+    // Keeps just enough of the key (a short prefix) for one admin-visible
+    // event to be visually distinguished from another in the log, without
+    // being replayable as a real X-Session-Id.
+    private static string MaskKey(string key) =>
+        key.Length <= 12 ? "sess:***" : $"{key[..12]}***";
+
+    private async Task<byte[]> GetOrCreateRowIdSecretAsync()
+    {
+        var root = await ReadRootAsync();
+        var existing = root["Internal"]?["RowIdSecret"]?.ToString();
+
+        if (!string.IsNullOrWhiteSpace(existing))
+            return Convert.FromBase64String(existing);
+
+        var generated = RandomNumberGenerator.GetBytes(32);
+
+        var section = root["Internal"] as JObject ?? new JObject();
+        section["RowIdSecret"] = Convert.ToBase64String(generated);
+        root["Internal"] = section;
+        await WriteRootAsync(root);
+
+        return generated;
+    }
+
     // A blocked key is rejected outright by every request (see the block-
     // check middleware in Program.cs), even with a still-valid token —
     // stronger than clearing their credentials, which they could just
@@ -1100,7 +1174,7 @@ public class SettingsService
         root["BlockedPatUsers"] = blocked;
         await WriteRootAsync(root);
 
-        _log.LogInfo("Settings", $"PAT user '{key}' blocked by admin.");
+        _log.LogInfo("Settings", $"PAT user '{MaskKey(key)}' blocked by admin.");
     }
 
     public async Task UnblockPatUserAsync(string key)
@@ -1114,7 +1188,7 @@ public class SettingsService
             await WriteRootAsync(root);
         }
 
-        _log.LogInfo("Settings", $"PAT user '{key}' unblocked by admin.");
+        _log.LogInfo("Settings", $"PAT user '{MaskKey(key)}' unblocked by admin.");
     }
 
     // Backs the Services page's "Security" tab's API Keys panel — persisted
@@ -1286,7 +1360,7 @@ public class SettingsService
         if (root["SidebarAccess"] is JObject users && users.Remove(key))
         {
             await WriteRootAsync(root);
-            _log.LogInfo("Settings", $"Sidebar access reset for '{key}' — every tab visible again.");
+            _log.LogInfo("Settings", $"Sidebar access reset for '{MaskKey(key)}' — every tab visible again.");
         }
     }
 
