@@ -2517,3 +2517,78 @@ Status: Complete for the code-level-verifiable portion. The
 GetTokenOwnerAsync fix is the higher-confidence, higher-impact half of
 this round - it likely resolves multiple previously-unexplained symptoms
 at once, not just the one it was found while investigating.
+
+ROUND 14 - CROSS-SESSION CREDENTIAL/PIN CARRYOVER FOR THE SAME PAT
+OWNER + PIN-SUGGESTION NUDGE
+==================================================
+Date: 2026-08-13
+Trigger: user asked that a screen-lock PIN set after connecting a PAT be
+"linked" to that PAT - no need to re-set it up on every login - and that
+AWS/Azure/GCP/etc. credentials similarly "come up" whenever logging in
+with the same PAT, rather than starting over. Also asked that saving any
+credential with no PIN configured suggest setting one.
+
+Security framing considered before writing any code: the request could
+be read as "key everything by GitHub login directly" - explicitly NOT
+done. A GitHub username is public, not a secret; making it the lookup
+key for stored AWS/Azure/GCP credentials would mean anyone who can
+merely NAME your GitHub account (not prove they control it) gets a path
+toward your other stored secrets. The existing per-session model (keyed
+by an opaque PortalIdentity key, see apiBase.js's crypto.randomUUID())
+was kept as the storage model. Instead, this hooks into
+SaveUserGitHubCredentialsAsync's PRE-EXISTING "one session per real
+GitHub account" logic, which already calls ResolvePatOwnerLoginAsync -
+an actual GitHub API round trip with the caller's own token, i.e.
+already requires PROVING control of the account, not just naming it.
+That's the only point where "this new session is genuinely the same
+person as that old one" is ever established with real confidence, so
+it's the only point data now gets carried forward.
+
+Fix 1 (migration): new SettingsService.MigrateSessionDataAsync(fromKey,
+toKey), called immediately before the existing DeletePatUserAsync(other.Key)
+eviction call. Copies UserAwsCredentials, UserAzureCredentials,
+UserGcpCredentials, SecurityPins, and SidebarAccess entries from the
+old session key to the new one - only when the new session doesn't
+already have its own entry for that field, so anything genuinely
+entered during THIS visit is never silently overwritten by older
+migrated data. SonarQube/Docker/GitHub OAuth/Admin Allowlist were
+already excluded from this entirely (and explained to the user as such)
+- those are shared, portal-wide settings already, never per-session, so
+there was nothing to "link to a PAT" for them in the first place. API
+keys (a List<ApiKey> keyed by OwnerKey, not a per-session dict) were
+left out of this round's migration - a known, smaller gap, not
+attempted here given the different storage shape.
+
+Fix 2 (PIN suggestion nudge): AwsLoginSection.jsx, AzureLoginSection.jsx,
+GcpLoginSection.jsx, and ApiKeySection.jsx each read pinConfigured from
+useAuth() and append/show a one-line "Tip: set a screen-lock PIN..."
+suggestion on a successful save when no PIN is configured yet - never a
+requirement, matching Screen Lock's existing fully-opt-in design.
+GitHub's own save (Settings.jsx's handleSaveGitHub) was deliberately
+skipped - it triggers a fast window.location.reload() right after its
+own toast, leaving too little time for a second message to be useful.
+
+Verification performed:
+  - `dotnet build` (isolated output dir): 0 errors, 3 pre-existing
+    unrelated warnings.
+  - `npm run lint` / `npm run build`: 0 errors, pre-existing Fast-Refresh
+    warnings only.
+  - Live regression check against the deployed Render backend: a normal
+    single-session GitHub token+repo save still succeeds unchanged.
+  - Could NOT fully live-verify the actual migration end-to-end in this
+    session - ResolvePatOwnerLoginAsync (and therefore the whole
+    "reconnecting as the same person" path) requires a real, working
+    GitHub PAT to resolve an identity from, which isn't available here
+    (same limitation noted in Round 13's bootstrap fix). Recommend
+    testing with a real PAT: set a PIN and AWS credentials on one
+    browser, then enter the same PAT on a second browser/incognito
+    window and confirm both come up automatically once that second
+    session's save completes.
+
+Files changed: src/DeploymentAPI/Services/SettingsService.cs;
+deployment-ui/src/components/settings/credentials/{AwsLoginSection,
+AzureLoginSection,GcpLoginSection,ApiKeySection}.jsx.
+
+Status: Complete for the code-level-verifiable portion; the cross-
+session migration specifically needs a real-PAT live test to fully
+confirm, flagged above rather than claimed as verified.
