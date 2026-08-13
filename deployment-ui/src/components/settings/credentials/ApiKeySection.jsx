@@ -3,7 +3,11 @@ import { useEffect, useState } from "react";
 import CopyButton from "../../common/CopyButton";
 import useToast from "../../../hooks/useToast";
 import useConfirm from "../../../hooks/useConfirm";
+import useAuth from "../../../hooks/useAuth";
 import { getMyApiKeys, createMyApiKey, revokeMyApiKey } from "../../../services/securityService";
+
+// See AwsLoginSection's own copy of this for the full reasoning.
+const PIN_SUGGESTION = "Tip: set a screen-lock PIN (Screen Lock tab) to keep this secured.";
 
 // Self-service API key management — the non-admin counterpart to
 // Services > Security's admin-only "everyone's keys" panel. Session-
@@ -14,6 +18,7 @@ export default function ApiKeySection() {
 
     const toast = useToast();
     const { confirm, dialog } = useConfirm();
+    const { pinConfigured } = useAuth();
 
     const [keys, setKeys] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -43,6 +48,10 @@ export default function ApiKeySection() {
             setJustCreatedKey(response.data);
             setNewKeyName("");
             refresh();
+
+            if (!pinConfigured) {
+                toast.show(PIN_SUGGESTION, "success");
+            }
 
         }
         catch (err) {

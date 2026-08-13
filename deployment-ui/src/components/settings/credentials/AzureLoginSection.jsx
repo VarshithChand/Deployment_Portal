@@ -2,9 +2,13 @@ import { useEffect, useState } from "react";
 
 import ClearableInput from "../../common/ClearableInput";
 import useToast from "../../../hooks/useToast";
+import useAuth from "../../../hooks/useAuth";
 import { getMyAzureSettings, saveMyAzureSettings, clearMyAzureCredentials } from "../../../services/settingsService";
 
 const EMPTY_FORM = { tenantId: "", clientId: "", clientSecret: "" };
+
+// See AwsLoginSection's own copy of this for the full reasoning.
+const PIN_SUGGESTION = " Tip: set a screen-lock PIN (Screen Lock tab) to keep this secured.";
 
 // Session-scoped (see PortalIdentity) — same isolation as your GitHub
 // token, kept only for this browser. Also powers the Environments page's
@@ -13,6 +17,7 @@ const EMPTY_FORM = { tenantId: "", clientId: "", clientSecret: "" };
 export default function AzureLoginSection({ onCleared }) {
 
     const toast = useToast();
+    const { pinConfigured } = useAuth();
 
     const [status, setStatus] = useState(null);
     const [loading, setLoading] = useState(true);
@@ -40,7 +45,7 @@ export default function AzureLoginSection({ onCleared }) {
         try {
 
             await saveMyAzureSettings(form);
-            toast.show("Azure credentials saved for this session.", "success");
+            toast.show("Azure credentials saved for this session." + (pinConfigured ? "" : PIN_SUGGESTION), "success");
             setForm(EMPTY_FORM);
             refresh();
 

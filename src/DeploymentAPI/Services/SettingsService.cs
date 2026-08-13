@@ -272,6 +272,47 @@ public class SettingsService
         _log.LogInfo("Settings", $"PAT user '{MaskKey(key)}' deleted by admin.");
     }
 
+    // Carries a reconnecting PAT owner's own saved data across to the new
+    // session that just proved ownership of their token - AWS/Azure/GCP
+    // credentials, their screen-lock PIN, and any admin-set sidebar
+    // restrictions. Without this, logging in with the same PAT from a
+    // different browser (or after localStorage/portalSessionId resets)
+    // meant starting over from nothing even though it's genuinely the
+    // same person - SaveUserGitHubCredentialsAsync already detects this
+    // exact situation (see ResolvePatOwnerLoginAsync below) to evict the
+    // old session; this runs right before that eviction so the data isn't
+    // simply lost. Only ever copies a field the destination doesn't
+    // already have - anything already entered in the new session during
+    // THIS visit wins over older data being migrated in, rather than
+    // being silently overwritten by it.
+    private async Task MigrateSessionDataAsync(string fromKey, string toKey)
+    {
+        var root = await ReadRootAsync();
+        var changed = false;
+
+        void MigrateField(string sectionName)
+        {
+            if (root[sectionName] is not JObject section) return;
+            if (!section.TryGetValue(fromKey, out var value)) return;
+            if (section.ContainsKey(toKey)) return;
+
+            section[toKey] = value.DeepClone();
+            changed = true;
+        }
+
+        MigrateField("UserAwsCredentials");
+        MigrateField("UserAzureCredentials");
+        MigrateField("UserGcpCredentials");
+        MigrateField("SecurityPins");
+        MigrateField("SidebarAccess");
+
+        if (changed)
+        {
+            await WriteRootAsync(root);
+            _log.LogInfo("Settings", $"Migrated saved AWS/Azure/GCP/PIN/sidebar data to the reconnecting session for '{MaskKey(toKey)}'.");
+        }
+    }
+
     public async Task<UserGitHubCredentials> SaveUserGitHubCredentialsAsync(string login, GitHubSettingsUpdateDto update)
     {
         var root = await ReadRootAsync();
@@ -331,6 +372,7 @@ public class SettingsService
 
                 foreach (var other in existing.Where(u => u.Key != login && u.PatOwnerLogin == resolvedLogin))
                 {
+                    await MigrateSessionDataAsync(other.Key, login);
                     await DeletePatUserAsync(other.Key);
                     evictedDuplicateLogin = resolvedLogin;
                 }

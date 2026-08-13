@@ -2,9 +2,13 @@ import { useEffect, useState } from "react";
 
 import ClearableInput from "../../common/ClearableInput";
 import useToast from "../../../hooks/useToast";
+import useAuth from "../../../hooks/useAuth";
 import { getMyGcpSettings, saveMyGcpSettings, clearMyGcpCredentials } from "../../../services/settingsService";
 
 const EMPTY_FORM = { projectId: "", serviceAccountKeyJson: "" };
+
+// See AwsLoginSection's own copy of this for the full reasoning.
+const PIN_SUGGESTION = " Tip: set a screen-lock PIN (Screen Lock tab) to keep this secured.";
 
 // Session-scoped (see PortalIdentity), same as AWS/Azure above — but
 // stored for future use only: no feature in this portal reads GCP
@@ -13,6 +17,7 @@ const EMPTY_FORM = { projectId: "", serviceAccountKeyJson: "" };
 export default function GcpLoginSection({ onCleared }) {
 
     const toast = useToast();
+    const { pinConfigured } = useAuth();
 
     const [status, setStatus] = useState(null);
     const [loading, setLoading] = useState(true);
@@ -40,7 +45,7 @@ export default function GcpLoginSection({ onCleared }) {
         try {
 
             await saveMyGcpSettings(form);
-            toast.show("GCP credentials saved for this session.", "success");
+            toast.show("GCP credentials saved for this session." + (pinConfigured ? "" : PIN_SUGGESTION), "success");
             setForm(EMPTY_FORM);
             refresh();
 

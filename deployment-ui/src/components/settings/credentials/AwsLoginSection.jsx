@@ -4,8 +4,15 @@ import ClearableInput from "../../common/ClearableInput";
 import ComboBox from "../../common/ComboBox";
 import AwsSsoSignIn from "./AwsSsoSignIn";
 import useToast from "../../../hooks/useToast";
+import useAuth from "../../../hooks/useAuth";
 import { getMyAwsSettings, saveMyAwsSettings, clearMyAwsCredentials } from "../../../services/settingsService";
 import AWS_REGIONS from "../../../data/awsRegions";
+
+// Appended to a credential's own save toast whenever no screen-lock PIN is
+// set yet - the same PIN that gates the Credentials page's own tabs (see
+// CredentialPinGate) once configured. A nudge, not a requirement: Screen
+// Lock stays fully opt-in either way.
+const PIN_SUGGESTION = " Tip: set a screen-lock PIN (Screen Lock tab) to keep this secured.";
 
 const EMPTY_FORM = { accessKeyId: "", secretAccessKey: "", region: "", mfaSerialNumber: "", mfaCode: "" };
 
@@ -145,6 +152,7 @@ function AwsAccessKeyForm({ form, setForm, status, saving, missingSerialForCode,
 export default function AwsLoginSection({ onCleared }) {
 
     const toast = useToast();
+    const { pinConfigured } = useAuth();
 
     const [status, setStatus] = useState(null);
     const [loading, setLoading] = useState(true);
@@ -187,9 +195,10 @@ export default function AwsLoginSection({ onCleared }) {
             const result = await saveMyAwsSettings(form);
 
             toast.show(
-                result.mfaSessionActive
+                (result.mfaSessionActive
                     ? "AWS MFA code verified — session active for the next 12 hours."
-                    : "AWS credentials saved for this session.",
+                    : "AWS credentials saved for this session.")
+                + (pinConfigured ? "" : PIN_SUGGESTION),
                 "success"
             );
 
