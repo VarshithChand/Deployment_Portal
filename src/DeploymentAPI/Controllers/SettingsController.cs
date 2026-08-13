@@ -154,7 +154,12 @@ public class SettingsController : ControllerBase
             return mfaDenied;
         }
 
-        var creds = await _settings.SaveUserGitHubCredentialsAsync(key, request);
+        var result = await _settings.SaveUserGitHubCredentialsAsync(key, request);
+
+        if (!result.Success)
+            return Conflict(new { message = result.ConflictMessage, code = "ALREADY_CONNECTED_ELSEWHERE" });
+
+        var creds = result.Credentials!;
 
         return Ok(new
         {

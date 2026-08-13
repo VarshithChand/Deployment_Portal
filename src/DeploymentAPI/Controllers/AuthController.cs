@@ -128,14 +128,32 @@ public class AuthController : ControllerBase
 
         var key = PortalIdentity.GetOrCreateKey(HttpContext);
 
+        // Checked before even asking for an MFA code - no point making
+        // someone type one just to be told no. SaveUserGitHubCredentialsAsync
+        // re-checks this itself right before actually saving anything
+        // (both the no-MFA branch just below and MfaVerify's own save),
+        // since that's the real, race-safe enforcement point - this is
+        // purely a UX shortcut for the common case.
+        if (await _settings.IsLoginActiveOnAnotherSessionAsync(preview.Username, key))
+        {
+            return Ok(new
+            {
+                success = false,
+                message = "This GitHub account is already signed in on another device. Sign out there first, then try again."
+            });
+        }
+
         if (!await _settings.IsMfaEnabledAsync(preview.Username))
         {
-            await _settings.SaveUserGitHubCredentialsAsync(key, new GitHubSettingsUpdateDto
+            var result = await _settings.SaveUserGitHubCredentialsAsync(key, new GitHubSettingsUpdateDto
             {
                 Owner = string.Empty,
                 Repository = string.Empty,
                 PersonalAccessToken = token
             });
+
+            if (!result.Success)
+                return Ok(new { success = false, message = result.ConflictMessage });
 
             return Ok(new { success = true, authenticated = true, mfaRequired = false });
         }
@@ -214,12 +232,21 @@ public class AuthController : ControllerBase
         _activity.ClearFailedMfaAttempts(login);
         _activity.ClearPendingPatSession(key);
 
-        await _settings.SaveUserGitHubCredentialsAsync(key, new GitHubSettingsUpdateDto
+        // Re-checked here too (PatLogin's own early check already covered
+        // the common case) - the 10-minute pending-session TTL is plenty
+        // of time for a different device to have connected as this same
+        // account in between, and this is the actual write, so it's the
+        // point that has to stay correct regardless of what the earlier
+        // check saw.
+        var result = await _settings.SaveUserGitHubCredentialsAsync(key, new GitHubSettingsUpdateDto
         {
             Owner = string.Empty,
             Repository = string.Empty,
             PersonalAccessToken = _settings.UnprotectValue(encryptedToken)
         });
+
+        if (!result.Success)
+            return Ok(new { success = false, code = "ALREADY_CONNECTED_ELSEWHERE", message = result.ConflictMessage });
 
         return Ok(new { success = true, authenticated = true });
     }

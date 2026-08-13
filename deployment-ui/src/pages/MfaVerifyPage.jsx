@@ -95,6 +95,16 @@ export default function MfaVerifyPage({ onBack }) {
                     return;
                 }
 
+                // Retrying the code won't help here - the code was right,
+                // but this same account is already active on another
+                // device (see AuthController.MfaVerify). Bouncing back to
+                // login (same as an expired session) rather than leaving
+                // them stuck re-entering a code that was never the problem.
+                if (result.code === "ALREADY_CONNECTED_ELSEWHERE") {
+                    onBack(result.message);
+                    return;
+                }
+
                 setError(result.message || "Invalid verification code. Please try again.");
                 setSubmitting(false);
                 return;

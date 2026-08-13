@@ -322,12 +322,92 @@ public class SettingsService
         }
     }
 
-    public async Task<UserGitHubCredentials> SaveUserGitHubCredentialsAsync(string login, GitHubSettingsUpdateDto update)
+    // A session must be silent for this long before its device slot counts
+    // as abandoned rather than "someone's actively using this right now" -
+    // comfortably longer than GlobalLogoutMonitor's 15s session-epoch poll
+    // (so ordinary poll jitter or a brief network hiccup never falsely
+    // reads as abandoned) but short enough that closing a tab and trying
+    // again a few minutes later isn't blocked by your own old session.
+    private static readonly TimeSpan ActiveDeviceWindow = TimeSpan.FromMinutes(2);
+
+    // Public so AuthController.PatLogin can reject a duplicate-device
+    // login BEFORE asking for an MFA code (better UX - no point making
+    // someone type a code just to be told no) - SaveUserGitHubCredentialsAsync
+    // below still re-checks this itself right before actually writing
+    // anything, since a login this cheap has no other way to stay correct
+    // against a race (a second device finishing its own connect in the
+    // gap between this preview check and the eventual save).
+    public async Task<bool> IsLoginActiveOnAnotherSessionAsync(string resolvedLogin, string excludingKey)
+    {
+        var existing = await GetPatUsersAsync();
+        var other = existing.FirstOrDefault(u => u.Key != excludingKey && u.PatOwnerLogin == resolvedLogin);
+
+        if (other == null) return false;
+
+        var lastSeen = _activity.GetLastSeen(other.Key);
+        return lastSeen.HasValue && DateTime.UtcNow - lastSeen.Value < ActiveDeviceWindow;
+    }
+
+    public async Task<SaveGitHubCredentialsResult> SaveUserGitHubCredentialsAsync(string login, GitHubSettingsUpdateDto update)
     {
         var root = await ReadRootAsync();
 
         var users = root["UserGitHubCredentials"] as JObject ?? new JObject();
         var entry = users[login] as JObject ?? new JObject();
+
+        // Resolved BEFORE any mutation below, and rejected outright (no
+        // write at all) if that identity is currently active on some
+        // OTHER device - one PAT, one device at a time, enforced by
+        // refusing the second login rather than silently kicking the
+        // first one out. A session that's gone quiet for a couple of
+        // minutes (ActiveDeviceWindow) is treated as abandoned instead -
+        // still safe to take over automatically, same as before.
+        string? evictedDuplicateLogin = null;
+
+        if (!string.IsNullOrWhiteSpace(update.PersonalAccessToken))
+        {
+            var trimmedToken = update.PersonalAccessToken.Trim();
+            var resolvedLogin = await ResolvePatOwnerLoginAsync(trimmedToken);
+
+            if (!string.IsNullOrWhiteSpace(resolvedLogin))
+            {
+                var existing = await GetPatUsersAsync();
+                var other = existing.FirstOrDefault(u => u.Key != login && u.PatOwnerLogin == resolvedLogin);
+
+                if (other != null)
+                {
+                    var lastSeen = _activity.GetLastSeen(other.Key);
+                    var stillActive = lastSeen.HasValue && DateTime.UtcNow - lastSeen.Value < ActiveDeviceWindow;
+
+                    if (stillActive)
+                    {
+                        return new SaveGitHubCredentialsResult(false,
+                            "This GitHub account is already signed in on another device. Sign out there first, then try again.",
+                            null);
+                    }
+
+                    // Abandoned, not active - safe to take over: migrate
+                    // useful data forward, then remove the stale row (see
+                    // DeletePatUserAsync). ForceLogout is still worth
+                    // calling in case a background tab somewhere is
+                    // technically still open but just hasn't polled
+                    // recently - harmless no-op if it really is gone.
+                    await MigrateSessionDataAsync(other.Key, login);
+                    await DeletePatUserAsync(other.Key);
+                    _activity.ForceLogout(other.Key, "device");
+
+                    evictedDuplicateLogin = resolvedLogin;
+
+                    // DeletePatUserAsync above wrote its own fresh copy of
+                    // root - re-read so this save doesn't clobber that
+                    // with the stale root captured at the top of this
+                    // method.
+                    root = await ReadRootAsync();
+                    users = root["UserGitHubCredentials"] as JObject ?? new JObject();
+                    entry = users[login] as JObject ?? new JObject();
+                }
+            }
+        }
 
         // Trimmed defensively: a stray leading/trailing space (easy to pick
         // up copy-pasting from a browser or terminal) makes GitHub reject
@@ -355,57 +435,14 @@ public class SettingsService
         entry["Owner"] = newOwner;
         entry["Repository"] = newRepository;
 
-        string? evictedDuplicateLogin = null;
-
         if (!string.IsNullOrWhiteSpace(update.PersonalAccessToken))
         {
-            var trimmedToken = update.PersonalAccessToken.Trim();
-            entry["PersonalAccessToken"] = Protect(trimmedToken);
+            entry["PersonalAccessToken"] = Protect(update.PersonalAccessToken.Trim());
 
             // Reconnecting undoes an admin's earlier soft sign-out (see
             // SoftSignOutPatUserAsync) - typing a token back in is exactly
             // the recovery path that flag exists to require.
             entry.Remove("SignedOut");
-
-            // One session per real GitHub account: if this token belongs
-            // to an identity that some OTHER key already has stored,
-            // that older session is deleted outright (see
-            // DeletePatUserAsync) instead of being left as a duplicate
-            // row - the browser saving right now becomes the one and
-            // only session for that GitHub account.
-            var resolvedLogin = await ResolvePatOwnerLoginAsync(trimmedToken);
-
-            if (!string.IsNullOrWhiteSpace(resolvedLogin))
-            {
-                var existing = await GetPatUsersAsync();
-
-                foreach (var other in existing.Where(u => u.Key != login && u.PatOwnerLogin == resolvedLogin))
-                {
-                    await MigrateSessionDataAsync(other.Key, login);
-                    await DeletePatUserAsync(other.Key);
-
-                    // The evicted device's own open tab (if any) is still
-                    // running against data that's now gone server-side -
-                    // this is what actually kicks it out live, via the
-                    // exact same session-epoch poll GlobalLogoutMonitor
-                    // already uses for an admin's force-logout, just with
-                    // a "device" reason instead of "admin" so that tab
-                    // shows an accurate explanation rather than blaming an
-                    // admin for something nobody did.
-                    _activity.ForceLogout(other.Key, "device");
-
-                    evictedDuplicateLogin = resolvedLogin;
-                }
-
-                // DeletePatUserAsync above wrote its own fresh copy of
-                // root - re-read so this save doesn't clobber that with
-                // the stale root captured at the top of this method.
-                if (evictedDuplicateLogin != null)
-                {
-                    root = await ReadRootAsync();
-                    users = root["UserGitHubCredentials"] as JObject ?? new JObject();
-                }
-            }
         }
 
         users[login] = entry;
@@ -415,9 +452,9 @@ public class SettingsService
 
         _log.LogInfo("Settings", $"GitHub settings saved for '{login}': {update.Owner}/{update.Repository}"
             + (string.IsNullOrWhiteSpace(update.PersonalAccessToken) ? "" : " (token updated)")
-            + (evictedDuplicateLogin != null ? $" (replaced an existing session for @{evictedDuplicateLogin})" : ""));
+            + (evictedDuplicateLogin != null ? $" (replaced an abandoned session for @{evictedDuplicateLogin})" : ""));
 
-        return await GetUserGitHubCredentialsAsync(login);
+        return new SaveGitHubCredentialsResult(true, null, await GetUserGitHubCredentialsAsync(login));
     }
 
     public async Task ClearUserGitHubTokenAsync(string login)
