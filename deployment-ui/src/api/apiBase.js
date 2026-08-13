@@ -32,6 +32,51 @@ function getSessionId() {
 
 }
 
+// Every controller action's response is wrapped server-side in a standard
+// {success,data} / {success,error:{code,message,correlationId}} envelope
+// (see DeploymentAPI's ApiResponseWrapperFilter) - unwrapped back out here,
+// in the one place every API client in this app is built, so none of this
+// codebase's many `response.data` call sites (the DTO itself, an array,
+// etc.) needed to change to match. A DTO that has its own unrelated
+// `success`/`error` fields (e.g. CloudServiceActionResultDto) is untouched -
+// this only ever unwraps the outer envelope, one level, never anything
+// nested inside `data`.
+function unwrapEnvelope(client) {
+
+    client.interceptors.response.use(
+        (response) => {
+
+            const body = response.data;
+
+            if (body !== null && typeof body === "object" && "success" in body && "data" in body) {
+                response.data = body.data;
+            }
+
+            return response;
+
+        },
+        (error) => {
+
+            const body = error.response?.data;
+
+            // Flattens error.message/code/correlationId back onto the top
+            // level too, so the `err.response?.data?.message || "..."`
+            // fallback pattern already used throughout this codebase keeps
+            // reading the real backend message instead of silently falling
+            // back to the generic default everywhere.
+            if (body && typeof body === "object" && body.success === false && body.error) {
+                body.message = body.error.message;
+                body.code = body.error.code;
+                body.correlationId = body.error.correlationId;
+            }
+
+            return Promise.reject(error);
+
+        }
+    );
+
+}
+
 export function createApiClient(path, options = {}) {
 
     const client = axios.create({
@@ -44,6 +89,8 @@ export function createApiClient(path, options = {}) {
         config.headers["X-Session-Id"] = getSessionId();
         return config;
     });
+
+    unwrapEnvelope(client);
 
     return client;
 

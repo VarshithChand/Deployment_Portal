@@ -264,8 +264,7 @@ public class GitHubApiService
                 FullName = x["full_name"]?.ToString() ?? string.Empty,
                 Owner = x["owner"]?["login"]?.ToString() ?? string.Empty,
                 Name = x["name"]?.ToString() ?? string.Empty,
-                Private = (bool?)x["private"] ?? false,
-                HtmlUrl = x["html_url"]?.ToString() ?? string.Empty
+                Private = (bool?)x["private"] ?? false
             }).ToList();
         });
     }
@@ -310,8 +309,7 @@ public class GitHubApiService
                     FullName = x["full_name"]?.ToString() ?? string.Empty,
                     Owner = x["owner"]?["login"]?.ToString() ?? string.Empty,
                     Name = x["name"]?.ToString() ?? string.Empty,
-                    Private = (bool?)x["private"] ?? false,
-                    HtmlUrl = x["html_url"]?.ToString() ?? string.Empty
+                    Private = (bool?)x["private"] ?? false
                 }).ToList()
             };
         }

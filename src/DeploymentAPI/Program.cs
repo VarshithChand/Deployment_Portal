@@ -1,6 +1,8 @@
 using System.Security.Cryptography;
 using System.Text;
 using DeploymentAPI.Configuration;
+using DeploymentAPI.DTOs.Common;
+using DeploymentAPI.Filters;
 using DeploymentAPI.Helpers;
 using DeploymentAPI.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -86,8 +88,12 @@ builder.Services.AddHttpContextAccessor();
 
 //
 // Controllers
+// ApiResponseWrapperFilter applies the app-wide {success,data}/
+// {success,error} response envelope globally - see the filter's own
+// comment for why this is the one place that contract is implemented,
+// rather than hand-edited into every action.
 //
-builder.Services.AddControllers();
+builder.Services.AddControllers(options => options.Filters.Add<ApiResponseWrapperFilter>());
 
 //
 // Swagger
@@ -252,6 +258,49 @@ builder.Services
                 }
 
                 return Task.CompletedTask;
+            },
+
+            // [Authorize] (used only by GET /api/auth/me - every other
+            // endpoint's authorization goes through AdminGate instead,
+            // which already produces the standard envelope via
+            // ApiResponseWrapperFilter) short-circuits before the MVC
+            // action/result-filter pipeline ever runs, so without this its
+            // 401/403 would bypass that filter and come back as an empty
+            // body instead of the same {success,error:{...}} shape every
+            // other error response uses.
+            OnChallenge = async context =>
+            {
+                context.HandleResponse();
+                context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+                context.Response.ContentType = "application/json";
+
+                await context.Response.WriteAsJsonAsync(new ApiErrorResponse
+                {
+                    Success = false,
+                    Error = new ApiError
+                    {
+                        Code = "AUTH_REQUIRED",
+                        Message = "Authentication is required.",
+                        CorrelationId = context.HttpContext.TraceIdentifier
+                    }
+                });
+            },
+
+            OnForbidden = async context =>
+            {
+                context.Response.StatusCode = StatusCodes.Status403Forbidden;
+                context.Response.ContentType = "application/json";
+
+                await context.Response.WriteAsJsonAsync(new ApiErrorResponse
+                {
+                    Success = false,
+                    Error = new ApiError
+                    {
+                        Code = "ACCESS_DENIED",
+                        Message = "You don't have permission to do that.",
+                        CorrelationId = context.HttpContext.TraceIdentifier
+                    }
+                });
             }
         };
     });

@@ -11,6 +11,4 @@ public class AccountRepositoryDto
     public string Name { get; set; } = string.Empty;
 
     public bool Private { get; set; }
-
-    public string HtmlUrl { get; set; } = string.Empty;
 }

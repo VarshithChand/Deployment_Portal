@@ -1,3 +1,4 @@
+using DeploymentAPI.DTOs.Common;
 using DeploymentAPI.Services;
 using Microsoft.AspNetCore.Diagnostics;
 
@@ -39,11 +40,16 @@ public class GlobalExceptionHandler : IExceptionHandler
         httpContext.Response.Headers["X-Correlation-Id"] = correlationId;
         httpContext.Response.ContentType = "application/json";
 
-        await httpContext.Response.WriteAsJsonAsync(new
+        // Matches the {success,error:{code,message,correlationId}} shape
+        // ApiResponseWrapperFilter applies to every other error response in
+        // the app - this handler runs on ASP.NET Core's exception-handling
+        // pipeline, a separate path from the MVC result-filter pipeline the
+        // wrapper filter sits on, so it has to build the same shape by hand
+        // rather than going through that filter.
+        await httpContext.Response.WriteAsJsonAsync(new ApiErrorResponse
         {
-            error = message,
-            code,
-            correlationId
+            Success = false,
+            Error = new ApiError { Code = code, Message = message, CorrelationId = correlationId }
         }, cancellationToken);
 
         return true;

@@ -6,6 +6,10 @@ Assessment Date: 2026-08-12
 Remediation Date: 2026-08-12 (same-day fix pass, see REMEDIATION STATUS below)
 Round 2 Date: 2026-08-13 (global API response security hardening pass - see ROUND 2
          below; adds Findings 010-016)
+Round 3 Date: 2026-08-13 (batched a per-repo N+1 polling pattern on the Dashboard -
+         performance, not a security finding; see ROUND 3 below)
+Round 4 Date: 2026-08-13 (complete API response envelope redesign - architecture
+         change, not new vulnerability findings; see ROUND 4 below)
 Target: Deployment Portal (repo: VarshithChand/yaml) - DeploymentAPI (ASP.NET Core / .NET 10)
          and deployment-ui (React 19 + Vite) source trees, local working copy
 Tester: Claude (Anthropic), acting as an authorized assessor at the request of the
@@ -1356,3 +1360,139 @@ GET  /api/database/tables         Super-admin     Internal (DB)         Confirme
 POST /api/deployment/deploy       Admin           Sensitive (CI/CD)     Confirmed OK
 GET  /api/health                  Public (CI)     Public (process only) Confirmed OK
 GET  /api/appversion              Public          Public (build info)   Confirmed OK
+
+==================================================
+ROUND 3 - DASHBOARD REQUEST-PATTERN FIX (performance, not a security finding)
+==================================================
+Date: 2026-08-13
+
+Not a vulnerability - logged here only for a complete change history.
+DevTools inspection showed AllRepositoriesCard.jsx firing one GET
+/api/github/repo-runs request PER repository (25-30+ parallel requests for
+an account with that many repos), repeated every 60s poll tick - a
+contributor to slow Dashboard loads, not a data-exposure issue (repo names
+in a request URL, visible only in the authenticated user's own DevTools,
+are not sensitive).
+
+Fix: added POST /api/github/repo-runs/bulk (GitHubController.cs +
+RepoRunsBulkRequestDto.cs), which takes the repo list and fans out to
+GitHub server-side via Task.WhenAll (still one GitHub API call per repo -
+this only moves the fan-out from the browser to the server), returning one
+{ "owner/repo": [...runs] } map. AllRepositoriesCard.jsx now makes one
+request instead of N. Verified via `dotnet build`/`npm run lint`/`npm run
+build` (all clean).
+
+==================================================
+ROUND 4 - COMPLETE API RESPONSE ENVELOPE REDESIGN
+==================================================
+Date:    2026-08-13
+Trigger: user inspected a GET /api/github/account-repositories response
+         (fullName/owner/name/private/htmlUrl) and, while agreeing it
+         wasn't necessarily a vulnerability by itself, asked for a complete
+         response-contract redesign across the whole API: a standard
+         {success,data} / {success,error:{code,message,correlationId}}
+         envelope on every endpoint, plus a fresh full-codebase sweep for
+         secrets/tokens/raw-exception leaks.
+
+Pre-work verification (before writing any code): confirmed the flagged
+example was already an explicit, hand-built DTO (AccountRepositoryDto),
+not a raw GitHub SDK object - Round 2 had already fixed the two endpoints
+that DID leak raw provider JSON (Finding 011). Confirmed the existing
+convention across all ~90 endpoints was "return the DTO directly, no
+envelope" and that every frontend API client (30+ files, zero exceptions)
+goes through one shared createApiClient() factory with no response
+unwrapping. Confirmed JSON naming is already uniformly camelCase
+everywhere (ASP.NET Core's default System.Text.Json policy, unmodified).
+Confirmed the JWT is never returned in a response body anywhere - only set
+as an HttpOnly/Secure cookie (AuthController.Callback); GET /api/auth/me
+already returns exactly { login, role }.
+
+Given the rewrite's real cost (touching ~90 backend actions and
+potentially ~50 frontend consumer files, including the ubiquitous
+`err.response?.data?.message` error-display pattern used throughout the
+UI) against a benefit that was mostly consistency/architecture rather than
+a new vulnerability closed, this was raised with the user as an explicit
+choice (full rewrite vs. a scoped audit) before proceeding. The user chose
+the full rewrite.
+
+Architecture chosen (de-risking the blast radius to near zero):
+  - Backend: a single global ASP.NET Core result filter
+    (Filters/ApiResponseWrapperFilter.cs, registered via
+    AddControllers(o => o.Filters.Add<ApiResponseWrapperFilter>())) wraps
+    every action's response into the envelope AFTER the action runs - none
+    of the ~90 individual actions were touched; they still return bare
+    Ok(dto)/BadRequest(new{message})/NotFound()/etc. exactly as before,
+    including every existing AdminGate.StatusCode(403, new{message=...})
+    call. The filter extracts an existing `message`/`code` via reflection
+    when present, and falls back to a sensible default per HTTP status
+    otherwise. File downloads, redirects (GitHub OAuth), and 204 No
+    Content responses are explicitly left unwrapped.
+  - GlobalExceptionHandler.cs (from Round 2's Finding 014 fix) and a new
+    JwtBearerEvents.OnChallenge/OnForbidden pair (for GET /api/auth/me,
+    the ONLY [Authorize]-attributed endpoint in the app - every other
+    authorization check goes through AdminGate, which the result filter
+    already covers) were updated to emit the identical envelope shape,
+    since both run on pipeline stages the result filter doesn't reach.
+  - Frontend: the ENTIRE migration lives in one function
+    (unwrapEnvelope() in api/apiBase.js, called once inside
+    createApiClient()) - a response interceptor unwraps `data` back out on
+    success and flattens `error.message`/`error.code`/`error.correlationId`
+    back onto the top level on failure, so literally none of the ~50
+    frontend consumer files needed to change. Confirmed by source review:
+    array-checking helpers (normalizeList/normalizeWorkflows), DTOs with
+    their own unrelated `success`/`error` fields (e.g.
+    CloudServiceActionResultDto), and every `err.response?.data?.message`
+    fallback site all continue to work unmodified.
+
+Verification performed:
+  - `dotnet build`: 0 errors after every change.
+  - Live smoke test: built to an isolated output directory (to avoid
+    colliding with what appeared to be the user's own already-running
+    local dev processes - confirmed via `Get-Process`/`Get-NetTCPConnection`
+    before touching anything, left them untouched) and ran the real app,
+    then curled representative cases against it:
+      * GET /api/health (success) -> {"success":true,"data":{"status":
+        "ok",...}}
+      * GET /api/auth/session-epoch (success, anonymous) -> correctly
+        wrapped
+      * GET /api/auth/me unauthenticated -> 401 {"success":false,"error":
+        {"code":"AUTH_REQUIRED","message":"Authentication is required.",
+        "correlationId":"..."}} - confirms the JwtBearerEvents fix works,
+        since this specific path bypasses the result filter entirely
+      * GET /api/database/health with no X-Session-Id -> 403 with
+        AdminGate's real "Missing required request header." message
+        correctly extracted and reflected as the error message (not
+        replaced by a generic default)
+      * GET /api/database/health with a session but not admin -> 403 with
+        AdminGate's real, specific denial message preserved
+      * A malformed PUT (wrong content type) -> even this ASP.NET
+        Core-generated 415 came back correctly wrapped, confirming the
+        filter's generic IStatusCodeActionResult branch works for
+        framework-generated responses too, not just controller-authored
+        ones
+    Confirmed X-Correlation-Id and Cache-Control: no-store headers (Round
+    2 hardening) are unaffected by this change.
+  - `npm run lint` / `npm run build`: 0 errors, only pre-existing unrelated
+    Fast-Refresh warnings.
+  - No browser-automation tool was available in this session to visually
+    click through the running app - stated plainly rather than implied.
+    Verification instead relied on the live backend curl tests above plus
+    exhaustive source-level tracing of every frontend consumption pattern
+    the interceptor needed to stay compatible with.
+
+Data minimization spot-check (per the audit's own checklist item):
+AccountRepositoryDto.HtmlUrl - confirmed via grep unused by all 5
+frontend files that consume GET /api/github/account-repositories - removed
+from the DTO and both of its two mapping sites in GitHubApiService.cs.
+Beyond this, Round 2's earlier audit had already confirmed DTOs across
+AWS/Azure/GitHub/Database services are explicit and hand-built (not raw
+SDK passthrough) - no new over-exposure found in this pass.
+
+New files: DTOs/Common/ApiResponse.cs, Filters/ApiResponseWrapperFilter.cs.
+Changed files: Program.cs (filter registration, JwtBearerEvents),
+Helpers/GlobalExceptionHandler.cs, DTOs/AccountRepositoryDto.cs,
+Services/GitHubApiService.cs, deployment-ui/src/api/apiBase.js.
+
+Status: Complete - not a vulnerability finding, an architecture change
+requested and completed. No new security issues were found during this
+pass (the pre-work verification above covers what was checked).
