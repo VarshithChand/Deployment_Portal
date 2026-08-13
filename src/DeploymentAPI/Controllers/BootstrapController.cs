@@ -120,7 +120,17 @@ public class BootstrapController : ControllerBase
         var mfaRequiredByAdmin = tokenOwner != null && await _settings.IsMfaRequiredByAdminAsync(tokenOwner.Login);
         var hasCloudCredential = awsCreds.IsConfigured || azureCreds.IsConfigured || gcpCreds.IsConfigured;
 
-        var mfaNudgeShow = githubCreds.IsConfigured && !mfaEnabled;
+        // TokenConfigured, not IsConfigured - IsConfigured also requires
+        // Owner/Repository to be set, but Round 17's two-page login flow
+        // deliberately saves a fresh connection with both blank (repo
+        // selection happens afterward, from the Dashboard's own picker -
+        // see PatLoginPage/MfaVerifyPage). Using IsConfigured here meant
+        // the entire nudge/mandatory/block system silently never
+        // activated for anyone who'd connected a token but hadn't yet
+        // picked a repo from the Dashboard - MFA is about protecting the
+        // account/credential itself, not something that should wait on
+        // an unrelated repo-selection step.
+        var mfaNudgeShow = githubCreds.TokenConfigured && !mfaEnabled;
 
         // Mandatory either because this session has a cloud credential
         // saved (Round 18's original trigger) OR because a super-admin
