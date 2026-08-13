@@ -76,7 +76,7 @@ function RepoRunStatus({ runs }) {
 // a pipeline running on a repo you're not looking at doesn't go unnoticed.
 export default function AllRepositoriesCard({ repository }) {
 
-    const { githubRepoConfigured, githubPreviousOwner, githubPreviousRepository } = useAuth();
+    const { githubTokenConfigured, githubPreviousOwner, githubPreviousRepository } = useAuth();
     const toast = useToast();
 
     const [repos, setRepos] = useState([]);
@@ -96,7 +96,7 @@ export default function AllRepositoriesCard({ repository }) {
     // poll tick; this collapses that to one.
     function fetchRunsFor(repoList) {
 
-        if (!githubRepoConfigured || repoList.length === 0) {
+        if (!githubTokenConfigured || repoList.length === 0) {
             return;
         }
 
@@ -113,7 +113,7 @@ export default function AllRepositoriesCard({ repository }) {
 
     useEffect(() => {
 
-        if (!githubRepoConfigured) {
+        if (!githubTokenConfigured) {
             setLoading(false);
             return;
         }
@@ -155,7 +155,7 @@ export default function AllRepositoriesCard({ repository }) {
         };
 
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [githubRepoConfigured]);
+    }, [githubTokenConfigured]);
 
     const filtered = repos.filter((repo) =>
         repo.fullName.toLowerCase().includes(search.toLowerCase())
@@ -234,7 +234,7 @@ export default function AllRepositoriesCard({ repository }) {
 
     }
 
-    if (!githubRepoConfigured) {
+    if (!githubTokenConfigured) {
         return null;
     }
 

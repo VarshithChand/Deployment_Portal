@@ -107,7 +107,7 @@ function AwsServiceTile({ label, status, onSelect }) {
 // repository a specific environment happens to be wired to.
 export default function AwsServicesCard() {
 
-    const { githubRepoConfigured, awsIdentityLabel } = useAuth();
+    const { githubTokenConfigured, awsIdentityLabel } = useAuth();
     const { goToCloudService } = useNavigation();
 
     const [inventory, setInventory] = useState(null);
@@ -122,8 +122,10 @@ export default function AwsServicesCard() {
 
         // Same reasoning as every other Dashboard card — this mounts even
         // behind RequireGitHubSetup's popup, so without this guard it
-        // polled regardless of whether a repo was configured yet.
-        if (!githubRepoConfigured) {
+        // polled before a token was even connected. Gated on the token,
+        // not a chosen repo (this card has nothing to do with which repo
+        // is selected) - RequireGitHubSetup itself no longer requires one.
+        if (!githubTokenConfigured) {
             setLoading(false);
             return;
         }
@@ -144,7 +146,7 @@ export default function AwsServicesCard() {
 
     }
 
-    if (!githubRepoConfigured) {
+    if (!githubTokenConfigured) {
         return null;
     }
 

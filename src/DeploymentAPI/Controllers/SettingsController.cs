@@ -114,8 +114,13 @@ public class SettingsController : ControllerBase
         // URLs across this app's lifetime, not just this one request -
         // rejecting anything outside a real GitHub name's character set
         // here means every one of those later uses is safe from a crafted
-        // value redirecting a request onto an unintended API path.
-        if (!GitHubNameValidator.IsValid(request.Owner) || !GitHubNameValidator.IsValid(request.Repository))
+        // value redirecting a request onto an unintended API path. Blank is
+        // explicitly allowed through (not validated) - RequireGitHubSetup
+        // now saves a token with no repo chosen yet, picked later from the
+        // Dashboard's own picker; only a non-blank, malformed value is
+        // rejected here.
+        if ((!string.IsNullOrEmpty(request.Owner) && !GitHubNameValidator.IsValid(request.Owner))
+            || (!string.IsNullOrEmpty(request.Repository) && !GitHubNameValidator.IsValid(request.Repository)))
             return BadRequest(new { message = "Owner and repository must be valid GitHub names (letters, numbers, hyphens, underscores, periods only)." });
 
         var key = PortalIdentity.GetOrCreateKey(HttpContext);
@@ -517,10 +522,13 @@ public class SettingsController : ControllerBase
 
     // Per-credential unlock (see CredentialGate/SessionActivityService) -
     // verifying the SAME screen-lock PIN here grants a short-lived, in-
-    // memory pass to manage exactly one provider's credential, not the
-    // whole portal. Reuses VerifyMyPin's exact rate-limit/wipe-on-5-fails
-    // machinery so there's a single security boundary for "guess the PIN,"
-    // not a second weaker one a scripted attacker could target instead.
+    // memory pass covering EVERY gated provider at once (CredentialGate.
+    // AllProviders), not just whichever tab the prompt happened to appear
+    // on - one PIN entry unlocks Credentials for the rest of this grant's
+    // lifetime, rather than re-prompting on every tab switch. Reuses
+    // VerifyMyPin's exact rate-limit/wipe-on-5-fails machinery so there's a
+    // single security boundary for "guess the PIN," not a second weaker one
+    // a scripted attacker could target instead.
     [HttpPost("me/credentials/{provider}/unlock")]
     public async Task<IActionResult> UnlockMyCredential(string provider, SecurityPinUpdateDto request)
     {
@@ -541,7 +549,10 @@ public class SettingsController : ControllerBase
         if (valid)
         {
             _activity.ClearFailedPinAttempts(key);
-            _activity.GrantCredentialUnlock(key, provider, TimeSpan.FromMinutes(5));
+
+            foreach (var grantedProvider in CredentialGate.AllProviders)
+                _activity.GrantCredentialUnlock(key, grantedProvider, TimeSpan.FromMinutes(5));
+
             return Ok(new { Valid = true, Locked = false });
         }
 

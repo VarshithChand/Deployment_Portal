@@ -5,43 +5,22 @@ import {
     getMyGitHubUsername,
     previewGitHubToken
 } from "../services/settingsService";
-import parseRepoUrl from "../utils/parseRepoUrl";
 import useAuth from "../hooks/useAuth";
 import useToast from "../hooks/useToast";
-import usePagination from "../hooks/usePagination";
-import ClearableInput from "./common/ClearableInput";
-import SearchBox from "./common/SearchBox";
 import Logo from "./common/Logo";
 
-const PAGE_SIZE = 9;
-
-// A plain rounded rectangle with a spine down the left edge — same "repo"
-// glyph SwitchRepositoryModal uses, duplicated rather than shared since
-// both are a few lines and this is the only other place that needs it.
-function RepoIcon() {
-
-    return (
-
-        <svg className="repo-picker-icon" width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-            <rect x="2.5" y="2.5" width="11" height="11" rx="1.5" stroke="currentColor" strokeWidth="1.3" />
-            <line x1="5.5" y1="2.5" x2="5.5" y2="13.5" stroke="currentColor" strokeWidth="1.3" />
-        </svg>
-
-    );
-
-}
-
-// Blocks every other page behind a one-time "point this at your repo" flow.
-// Every portal visitor brings their own GitHub repo + token now (see
+// Blocks every other page behind a one-time "connect your token" flow.
+// Every portal visitor brings their own GitHub token now (see
 // SettingsController's api/settings/me/github) instead of the whole portal
 // sharing one — this is where anyone who hasn't set theirs up yet is asked
 // for it, before they can reach anything else.
 //
-// Two steps: paste a token, then pick a repo from whatever that token can
-// actually see (via /me/github/preview — nothing's saved yet at that
-// point) instead of needing to already know and correctly type an exact
-// repository URL. A manual URL entry is still there as a fallback for a
-// repo the preview's affiliation filter doesn't surface.
+// One step: paste a token, it's validated (via /me/github/preview - nothing
+// saved yet at that point) and saved with no repository chosen. Picking
+// which repo to point at happens afterward, from the Dashboard's own
+// searchable picker (AllRepositoriesCard) - this dialog used to also make
+// you pick one here first, but that's a decision worth making from the
+// Dashboard itself, not a blocking prerequisite to ever reaching it.
 //
 // Not gated on GitHub OAuth login: api/settings/me/github works for anyone,
 // logged in or not — PortalIdentity resolves an isolated anonymous session
@@ -58,30 +37,62 @@ export default function RequireGitHubSetup({ children }) {
     // fails OPEN on a genuine fetch failure (bootstrapError) rather than on
     // "still checking", so a transient network blip can't lock someone out
     // of the whole app - same behavior the old local try/catch implemented.
-    const { oauthStatusChecked, bootstrapError, githubRepoConfigured, githubWasSignedOut } = useAuth();
+    // Gated on the TOKEN alone (not githubRepoConfigured, which also
+    // requires a repo) - that's what this dialog exists to collect; which
+    // repo to point at is the Dashboard picker's job now.
+    const { oauthStatusChecked, bootstrapError, githubTokenConfigured, githubWasSignedOut } = useAuth();
 
     const checking = !oauthStatusChecked;
-    const configured = bootstrapError || githubRepoConfigured;
+    const configured = bootstrapError || githubTokenConfigured;
     const wasSignedOut = githubWasSignedOut;
 
-    // "token" -> "pick-repo" -> "connected"
+    // "token" -> "connected"
     const [step, setStep] = useState("token");
 
     const [token, setToken] = useState("");
     const [previewing, setPreviewing] = useState(false);
     const [previewError, setPreviewError] = useState("");
 
-    const [tokenOwner, setTokenOwner] = useState(null);
-    const [repos, setRepos] = useState([]);
-    const [search, setSearch] = useState("");
-
-    const [manualUrl, setManualUrl] = useState("");
-    const [showManualUrl, setShowManualUrl] = useState(false);
-
     const [connecting, setConnecting] = useState(false);
     const [connectedAs, setConnectedAs] = useState(null);
 
-    async function handlePreviewToken(e) {
+    async function connectWithToken(username) {
+
+        setConnecting(true);
+
+        try {
+
+            await saveMyGitHubSettings({
+                owner: "",
+                repository: "",
+                personalAccessToken: token.trim()
+            });
+
+            // Separate request from the save above on purpose — see
+            // getMyGitHubUsername's own note on why this can't just reuse
+            // the username the preview step already resolved (belt-and-
+            // suspenders here since we already know it, but confirms what
+            // actually saved).
+            const resolvedUsername = await getMyGitHubUsername();
+
+            toast.show("GitHub token connected.", "success");
+            setConnectedAs({ username: resolvedUsername || username });
+            setStep("connected");
+
+            setTimeout(() => window.location.reload(), 1600);
+
+        }
+        catch (err) {
+
+            console.error(err);
+            toast.show(err.response?.data?.message || "Failed to save GitHub settings.", "error");
+            setConnecting(false);
+
+        }
+
+    }
+
+    async function handleConnect(e) {
 
         e.preventDefault();
 
@@ -95,6 +106,9 @@ export default function RequireGitHubSetup({ children }) {
 
         try {
 
+            // Still previewed first (nothing saved yet at this point) so a
+            // bad/expired token gets a clear "GitHub rejected it" message
+            // instead of failing on the save with a less specific one.
             const result = await previewGitHubToken(token.trim());
 
             if (!result.success) {
@@ -102,9 +116,7 @@ export default function RequireGitHubSetup({ children }) {
                 return;
             }
 
-            setTokenOwner({ username: result.username, avatarUrl: result.avatarUrl });
-            setRepos(result.repositories || []);
-            setStep("pick-repo");
+            await connectWithToken(result.username);
 
         }
         catch (err) {
@@ -121,75 +133,19 @@ export default function RequireGitHubSetup({ children }) {
 
     }
 
-    async function connectTo(owner, repository) {
-
-        setConnecting(true);
-
-        try {
-
-            await saveMyGitHubSettings({
-                owner,
-                repository,
-                personalAccessToken: token.trim()
-            });
-
-            // Separate request from the save above on purpose — see
-            // getMyGitHubUsername's own note on why this can't just reuse
-            // tokenOwner from the preview step (belt-and-suspenders here
-            // since we already know it, but confirms what actually saved).
-            const username = await getMyGitHubUsername();
-
-            toast.show(`Connected to ${owner}/${repository}.`, "success");
-            setConnectedAs({ username: username || tokenOwner?.username, owner, repository });
-            setStep("connected");
-
-            setTimeout(() => window.location.reload(), 1600);
-
-        }
-        catch (err) {
-
-            console.error(err);
-            toast.show(err.response?.data?.message || "Failed to save GitHub settings.", "error");
-            setConnecting(false);
-
-        }
-
-    }
-
-    function handleManualConnect(e) {
-
-        e.preventDefault();
-
-        const parsed = parseRepoUrl(manualUrl);
-
-        if (!parsed) {
-            toast.show("Enter a valid GitHub repository URL, e.g. https://github.com/owner/repo", "error");
-            return;
-        }
-
-        connectTo(parsed.owner, parsed.repository);
-
-    }
-
-    const filteredRepos = repos.filter((repo) =>
-        repo.fullName.toLowerCase().includes(search.toLowerCase())
-    );
-
-    const { page, setPage, pageCount, pageItems, totalCount, startIndex, endIndex } =
-        usePagination(filteredRepos, PAGE_SIZE);
-
     // children mount immediately, unconditionally - never gated behind
     // `checking`. Blocking the whole app shell on the bootstrap round trip
     // (as this used to do, swapping in a full-page spinner) was the single
     // biggest LCP cost in the app: the Dashboard heading/cards couldn't
     // paint at all until that request resolved, even though none of them
     // actually needed the answer to render their own shell - each already
-    // gates its OWN data fetch on githubRepoConfigured/oauthStatusChecked
-    // independently (see useGithubResources, AllRepositoriesCard,
-    // AwsServicesCard), so nothing fires prematurely either way. The setup
-    // dialog is the only thing that genuinely has to wait for the real
-    // answer - it renders as an overlay on top of the already-visible app
-    // shell once bootstrap resolves and confirms nothing is configured.
+    // gates its OWN data fetch on githubTokenConfigured/githubRepoConfigured/
+    // oauthStatusChecked independently (see useGithubResources,
+    // AllRepositoriesCard, AwsServicesCard), so nothing fires prematurely
+    // either way. The setup dialog is the only thing that genuinely has to
+    // wait for the real answer - it renders as an overlay on top of the
+    // already-visible app shell once bootstrap resolves and confirms
+    // nothing is configured.
     return (
 
         <>
@@ -210,8 +166,7 @@ export default function RequireGitHubSetup({ children }) {
                 <div className="dialog-backdrop">
 
                     <div
-                        className={`dialog setup-gate-dialog ${step === "pick-repo" ? "dialog-wide" : ""}`}
-                        style={step === "pick-repo" ? { alignItems: "stretch" } : undefined}
+                        className="dialog setup-gate-dialog"
                         role="dialog"
                         aria-modal="true"
                         aria-labelledby="github-setup-title"
@@ -231,11 +186,11 @@ export default function RequireGitHubSetup({ children }) {
 
                             <p className="field-hint" style={{ textAlign: "center" }}>
                                 {connectedAs.username ? (
-                                    <>Signed in as <strong>@{connectedAs.username}</strong>, connected to{" "}</>
+                                    <>Signed in as <strong>@{connectedAs.username}</strong>.{" "}</>
                                 ) : (
-                                    <>Connected to{" "}</>
+                                    <>Token connected.{" "}</>
                                 )}
-                                <strong>{connectedAs.owner}/{connectedAs.repository}</strong>.
+                                Pick a repository from the Dashboard whenever you're ready.
                                 Loading the portal...
                             </p>
 
@@ -248,16 +203,16 @@ export default function RequireGitHubSetup({ children }) {
                             <>
 
                             <h1 id="github-setup-title" className="setup-gate-title">
-                                Connect your GitHub repository
+                                Connect your GitHub account
                             </h1>
 
                             <p className="field-hint" style={{ textAlign: "center" }}>
                                 Every user of this portal points at their own repo with their own token —
-                                this is saved to your account only. Paste a token below and pick from
-                                whatever repos it can see.
+                                this is saved to your account only. Paste a token below; you'll pick a
+                                repository from the Dashboard afterward.
                             </p>
 
-                            <form onSubmit={handlePreviewToken} className="setup-gate-form">
+                            <form onSubmit={handleConnect} className="setup-gate-form">
 
                                 <div className="form-group">
                                     <label>Personal Access Token</label>
@@ -284,159 +239,11 @@ export default function RequireGitHubSetup({ children }) {
                                     <p className="field-hint field-hint-bad">{previewError}</p>
                                 )}
 
-                                <button type="submit" className="btn btn-primary" disabled={previewing}>
-                                    {previewing ? "Checking..." : "Continue"}
+                                <button type="submit" className="btn btn-primary" disabled={previewing || connecting}>
+                                    {previewing || connecting ? "Connecting..." : "Connect"}
                                 </button>
 
                             </form>
-
-                            </>
-
-                        )}
-
-                        {step === "pick-repo" && (
-
-                            <>
-
-                            <div className="repo-picker-header">
-
-                                <div>
-                                    <h1 id="github-setup-title" className="setup-gate-title" style={{ textAlign: "left" }}>
-                                        {tokenOwner?.username ? `Hi, @${tokenOwner.username} — pick a repository` : "Pick a repository"}
-                                    </h1>
-                                    <p className="field-hint">
-                                        Every repo this token can see. Not seeing the one you want?{" "}
-                                        <button
-                                            type="button"
-                                            className="token-help-link"
-                                            style={{ background: "none", border: "none", padding: 0, cursor: "pointer" }}
-                                            onClick={() => setShowManualUrl((v) => !v)}
-                                        >
-                                            Enter a URL directly
-                                        </button>
-                                    </p>
-                                </div>
-
-                                {repos.length > 0 && (
-                                    <span className="repo-picker-count">
-                                        {totalCount} {totalCount === 1 ? "repository" : "repositories"}
-                                    </span>
-                                )}
-
-                            </div>
-
-                            {showManualUrl && (
-
-                                <form onSubmit={handleManualConnect} className="setup-gate-form" style={{ marginBottom: "16px" }}>
-
-                                    <div className="form-group">
-                                        <ClearableInput
-                                            placeholder="https://github.com/owner/repo"
-                                            value={manualUrl}
-                                            onChange={(e) => setManualUrl(e.target.value)}
-                                            onClear={() => setManualUrl("")}
-                                            autoComplete="off"
-                                            autoFocus
-                                        />
-                                    </div>
-
-                                    <button type="submit" className="btn btn-primary" disabled={connecting}>
-                                        {connecting ? "Connecting..." : "Use this URL"}
-                                    </button>
-
-                                </form>
-
-                            )}
-
-                            <SearchBox
-                                placeholder="Search repositories..."
-                                value={search}
-                                onChange={setSearch}
-                            />
-
-                            <div className="repo-picker-grid">
-
-                                {repos.length === 0 && (
-                                    <p className="empty-state">
-                                        That token can't see any repositories — check its scopes on GitHub,
-                                        or enter a repository URL directly above.
-                                    </p>
-                                )}
-
-                                {repos.length > 0 && filteredRepos.length === 0 && (
-                                    <p className="empty-state">No repositories match "{search}".</p>
-                                )}
-
-                                {pageItems.map((repo) => (
-
-                                    <button
-                                        type="button"
-                                        key={repo.fullName}
-                                        className="repo-picker-card"
-                                        disabled={connecting}
-                                        onClick={() => connectTo(repo.owner, repo.name)}
-                                    >
-
-                                        <div className="repo-picker-title">
-                                            <RepoIcon />
-                                            <span className="repo-picker-name">
-                                                <span className="repo-picker-owner">{repo.owner}/</span>
-                                                {repo.name}
-                                            </span>
-                                        </div>
-
-                                        <div className="repo-picker-meta">
-                                            <span className={`badge ${repo.private ? "badge-secondary" : "badge-info"}`}>
-                                                {repo.private ? "Private" : "Public"}
-                                            </span>
-                                        </div>
-
-                                    </button>
-
-                                ))}
-
-                            </div>
-
-                            {filteredRepos.length > PAGE_SIZE && (
-
-                                <div className="button-row" style={{ justifyContent: "center", margin: "8px 0" }}>
-
-                                    <button
-                                        type="button"
-                                        className="btn btn-secondary btn-sm"
-                                        disabled={page <= 1}
-                                        onClick={() => setPage(page - 1)}
-                                    >
-                                        ← Prev
-                                    </button>
-
-                                    <span className="field-hint">
-                                        {startIndex}–{endIndex} of {totalCount}
-                                    </span>
-
-                                    <button
-                                        type="button"
-                                        className="btn btn-secondary btn-sm"
-                                        disabled={page >= pageCount}
-                                        onClick={() => setPage(page + 1)}
-                                    >
-                                        Next →
-                                    </button>
-
-                                </div>
-
-                            )}
-
-                            <div>
-                                <button
-                                    type="button"
-                                    className="btn"
-                                    onClick={() => { setStep("token"); setPreviewError(""); }}
-                                    disabled={connecting}
-                                >
-                                    ← Back
-                                </button>
-                            </div>
 
                             </>
 

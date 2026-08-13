@@ -20,7 +20,7 @@ export default function Dashboard() {
     // spinner for a full network round trip. Each card already manages its
     // own loading/empty state independently (AllRepositoriesCard,
     // AwsServicesCard, EnvironmentsCard all gate their own fetch on
-    // githubRepoConfigured themselves) - none of them actually needed this
+    // githubTokenConfigured themselves) - none of them actually needed this
     // page-level gate to behave correctly, only to paint later than they
     // had to.
     const { repository, error } = useGithubResources({ includeRepository: true });

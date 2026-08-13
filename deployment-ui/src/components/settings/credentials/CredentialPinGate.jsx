@@ -8,13 +8,15 @@ const MAX_ATTEMPTS = 5;
 
 // Per-credential counterpart to PinLockScreen — same screen-lock PIN, same
 // 5-wrong-attempts-wipes-everything behavior (see UnlockMyCredential on the
-// backend), but scoped to unlocking ONE provider's Credentials tab rather
-// than the whole portal. Skips the prompt entirely when no screen-lock PIN
-// is set at all (pinConfigured is false) - Screen Lock is opt-in, and this
-// rides on top of it rather than becoming a second, separate "must set a
-// PIN to use this app" requirement. `unlocked`/`onUnlocked` are lifted to
-// CredentialsView so switching tabs and back doesn't re-prompt for a
-// provider already unlocked this visit.
+// backend). One correct PIN entry here unlocks every gated provider at
+// once (CredentialGate.AllProviders on the backend), not just the tab that
+// happened to prompt - `onUnlocked` is CredentialsView's markAllUnlocked,
+// not a per-provider callback. Skips the prompt entirely when no
+// screen-lock PIN is set at all (pinConfigured is false) - Screen Lock is
+// opt-in, and this rides on top of it rather than becoming a second,
+// separate "must set a PIN to use this app" requirement. `unlocked`/
+// `onUnlocked` are lifted to CredentialsView so switching tabs and back
+// doesn't re-prompt once any provider has been unlocked this visit.
 export default function CredentialPinGate({ provider, unlocked, onUnlocked, children }) {
 
     const { pinConfigured } = useAuth();

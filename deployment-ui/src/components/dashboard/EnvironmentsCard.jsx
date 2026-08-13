@@ -20,7 +20,7 @@ const PROVIDER_LABEL = {
 export default function EnvironmentsCard() {
 
     const { goToEnvironment } = useNavigation();
-    const { githubRepoConfigured } = useAuth();
+    const { githubTokenConfigured } = useAuth();
 
     const [environments, setEnvironments] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -29,9 +29,10 @@ export default function EnvironmentsCard() {
 
         // Same reasoning as RecentDeployments — this card mounts even
         // behind RequireGitHubSetup's popup, so without this guard it
-        // polled GitHub every 30s regardless of whether a repo was
-        // configured yet.
-        if (!githubRepoConfigured) {
+        // polled GitHub every 30s before a token was even connected. Gated
+        // on the token, not a chosen repo - RequireGitHubSetup itself no
+        // longer requires one before letting you in.
+        if (!githubTokenConfigured) {
             setLoading(false);
             return;
         }

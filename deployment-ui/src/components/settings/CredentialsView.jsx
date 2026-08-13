@@ -23,6 +23,13 @@ const MODES = [
     { key: "ai", label: "AI Assistant" }
 ];
 
+// Every provider key CredentialPinGate can gate - matches the backend's
+// CredentialGate.AllProviders exactly (github/aws/azure/gcp/apikey/
+// docker/github-oauth/sonar/ai). One successful unlock now grants all of
+// them there, so the frontend mirrors that here instead of only marking
+// whichever single tab prompted for the PIN.
+const ALL_CREDENTIAL_PROVIDERS = ["github", "aws", "azure", "gcp", "apikey", "docker", "github-oauth", "sonar", "ai"];
+
 // A convenience picker, not a restriction — GEMINI_MODEL is still whatever
 // string ends up saved (see SettingsService.SaveAiAssistantAsync), so
 // picking "Custom / other model" below still works for anything Google
@@ -119,8 +126,12 @@ export default function CredentialsView({
     // (see SessionActivityService.GrantCredentialUnlock) - never persisted.
     const [unlockedProviders, setUnlockedProviders] = useState(() => new Set());
 
-    function markUnlocked(provider) {
-        setUnlockedProviders((prev) => new Set(prev).add(provider));
+    // One successful PIN entry unlocks every gated provider at once (see
+    // CredentialGate.AllProviders on the backend, which now grants all of
+    // them together) - so every gate's onUnlocked marks the whole set,
+    // not just the tab that happened to prompt.
+    function markAllUnlocked() {
+        setUnlockedProviders(new Set(ALL_CREDENTIAL_PROVIDERS));
     }
 
     return (
@@ -170,7 +181,7 @@ export default function CredentialsView({
                     <CredentialPinGate
                         provider="github"
                         unlocked={unlockedProviders.has("github")}
-                        onUnlocked={() => markUnlocked("github")}
+                        onUnlocked={markAllUnlocked}
                     >
                         <GitHubAccessSection
                             githubTokenConfigured={githubTokenConfigured}
@@ -214,25 +225,25 @@ export default function CredentialsView({
             )}
 
             {mode === "aws" && (
-                <CredentialPinGate provider="aws" unlocked={unlockedProviders.has("aws")} onUnlocked={() => markUnlocked("aws")}>
+                <CredentialPinGate provider="aws" unlocked={unlockedProviders.has("aws")} onUnlocked={markAllUnlocked}>
                     <AwsLoginSection />
                 </CredentialPinGate>
             )}
 
             {mode === "azure" && (
-                <CredentialPinGate provider="azure" unlocked={unlockedProviders.has("azure")} onUnlocked={() => markUnlocked("azure")}>
+                <CredentialPinGate provider="azure" unlocked={unlockedProviders.has("azure")} onUnlocked={markAllUnlocked}>
                     <AzureLoginSection />
                 </CredentialPinGate>
             )}
 
             {mode === "gcp" && (
-                <CredentialPinGate provider="gcp" unlocked={unlockedProviders.has("gcp")} onUnlocked={() => markUnlocked("gcp")}>
+                <CredentialPinGate provider="gcp" unlocked={unlockedProviders.has("gcp")} onUnlocked={markAllUnlocked}>
                     <GcpLoginSection />
                 </CredentialPinGate>
             )}
 
             {mode === "apikey" && (
-                <CredentialPinGate provider="apikey" unlocked={unlockedProviders.has("apikey")} onUnlocked={() => markUnlocked("apikey")}>
+                <CredentialPinGate provider="apikey" unlocked={unlockedProviders.has("apikey")} onUnlocked={markAllUnlocked}>
                     <ApiKeySection />
                 </CredentialPinGate>
             )}
@@ -241,7 +252,7 @@ export default function CredentialsView({
 
             {mode === "docker" && (
 
-            <CredentialPinGate provider="docker" unlocked={unlockedProviders.has("docker")} onUnlocked={() => markUnlocked("docker")}>
+            <CredentialPinGate provider="docker" unlocked={unlockedProviders.has("docker")} onUnlocked={markAllUnlocked}>
 
             <div className="settings-subsection">
 
@@ -312,7 +323,7 @@ export default function CredentialsView({
 
             {mode === "oauth" && (
 
-            <CredentialPinGate provider="github-oauth" unlocked={unlockedProviders.has("github-oauth")} onUnlocked={() => markUnlocked("github-oauth")}>
+            <CredentialPinGate provider="github-oauth" unlocked={unlockedProviders.has("github-oauth")} onUnlocked={markAllUnlocked}>
 
             <div className="settings-subsection">
 
@@ -372,7 +383,7 @@ export default function CredentialsView({
 
             {mode === "sonarqube" && (
 
-            <CredentialPinGate provider="sonar" unlocked={unlockedProviders.has("sonar")} onUnlocked={() => markUnlocked("sonar")}>
+            <CredentialPinGate provider="sonar" unlocked={unlockedProviders.has("sonar")} onUnlocked={markAllUnlocked}>
 
             <div className="settings-subsection">
 
@@ -496,7 +507,7 @@ export default function CredentialsView({
 
             {mode === "ai" && (
 
-            <CredentialPinGate provider="ai" unlocked={unlockedProviders.has("ai")} onUnlocked={() => markUnlocked("ai")}>
+            <CredentialPinGate provider="ai" unlocked={unlockedProviders.has("ai")} onUnlocked={markAllUnlocked}>
 
             <div className="settings-subsection">
 

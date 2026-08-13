@@ -5,11 +5,13 @@ namespace DeploymentAPI.Helpers;
 
 // Per-credential authorization, distinct from AdminGate (portal-wide admin
 // authority) and from the Screen Lock PIN's own whole-portal lock
-// (PeriodicSignOutMonitor/PinLockScreen). This gates one specific
-// credential provider (GitHub, AWS, Azure, GCP, API Key, Docker, Sonar,
-// GitHub OAuth, AI Assistant) behind the SAME screen-lock PIN, verified
-// fresh via POST me/credentials/{provider}/unlock before that provider's
-// save/clear actions will run - unlocking AWS does not unlock GitHub.
+// (PeriodicSignOutMonitor/PinLockScreen). This gates every credential
+// provider (GitHub, AWS, Azure, GCP, API Key, Docker, Sonar, GitHub OAuth,
+// AI Assistant) behind the SAME screen-lock PIN. One successful PIN entry
+// via POST me/credentials/{provider}/unlock grants all of them at once
+// (see SettingsController.UnlockMyCredential) - a per-provider prompt on
+// every single tab switch was more friction than the security model
+// needed, since it's the same PIN either way.
 //
 // Deliberately a no-op whenever the caller has no PIN configured at all:
 // Screen Lock itself is optional and off by default, and this rides on
@@ -17,6 +19,14 @@ namespace DeploymentAPI.Helpers;
 // this to use the app" requirement.
 public static class CredentialGate
 {
+    // The full set of provider keys UnlockMyCredential grants together on
+    // one successful PIN entry. Kept here (not duplicated at each call
+    // site) so adding a future gated provider is a one-line change.
+    public static readonly IReadOnlyList<string> AllProviders = new[]
+    {
+        "github", "aws", "azure", "gcp", "apikey", "docker", "github-oauth", "sonar", "ai"
+    };
+
     public static async Task<IActionResult?> DenyUnlessUnlockedAsync(
         ControllerBase controller, SettingsService settings, SessionActivityService activity, string provider)
     {
