@@ -3345,3 +3345,35 @@ the wall-clock timing and full browser walkthrough are flagged above for
 the user to confirm live, consistent with every prior round's honesty
 about what a sandboxed session without a real browser can and can't
 verify.
+
+ROUND 19 ADDENDUM - SIGN OUT FOR ADMINS TOO
+==================================================
+Date: 2026-08-13
+Trigger: user's own screenshot of the Settings hub as VarshithChand
+(Admin badge visible), showing the Danger Zone still displaying "Clear
+All Data" - Round 19's own design had deliberately kept that destructive
+bulk-wipe path for admin sessions specifically (wiping Docker/OAuth/Sonar
+alongside the admin's own GitHub/AWS/Azure/GCP credentials), reasoning it
+was a legitimate, distinct admin power tool. The user confirmed that
+wasn't wanted even for their own admin session.
+
+Fix: removed Settings.jsx's handleClearAll function and the clearingAll
+state entirely (along with the now-unused clearMySettings import -
+clearSettings itself is still used elsewhere, by handleClear's per-
+provider actions). SettingsHubView.jsx's isAdmin ternary around the
+Danger Zone card is gone - every role now sees the exact same
+non-destructive "Sign Out" card and button, no exceptions. No backend
+changes were needed - the self-service signout endpoint added earlier
+this round already worked for any session regardless of admin status.
+
+Verification performed:
+  - `npm run lint` / `npm run build`: 0 errors, pre-existing warnings
+    only; Settings' own chunk shrank slightly (dead code removed).
+  - No backend files changed - nothing new to live-test against Render.
+  - Grepped the frontend for any leftover handleClearAll/clearingAll
+    reference after the removal - none found.
+
+Files changed: deployment-ui/src/components/settings/SettingsHubView.jsx,
+pages/Settings.jsx.
+
+Status: Complete.
