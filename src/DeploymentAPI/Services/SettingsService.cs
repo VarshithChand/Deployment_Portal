@@ -1447,6 +1447,16 @@ public class SettingsService
     private const int TotpDigits = 6;
     private const int TotpStepSeconds = 30;
 
+    // Public wrappers around Protect/Unprotect above - AuthController's
+    // two-page login flow needs to hold a PAT encrypted in
+    // SessionActivityService's short-lived in-memory pending-session
+    // store (see SetPendingPatSession) between the PAT-login and MFA-
+    // verify requests, using the exact same protection every other
+    // stored secret in this app already gets, not a separate scheme.
+    public string ProtectValue(string value) => Protect(value)!;
+
+    public string UnprotectValue(string value) => Unprotect(value)!;
+
     // Public wrapper around the private ResolvePatOwnerLoginAsync below -
     // MfaGate needs to resolve a not-yet-saved token's real owner the
     // exact same way SaveUserGitHubCredentialsAsync's own duplicate-

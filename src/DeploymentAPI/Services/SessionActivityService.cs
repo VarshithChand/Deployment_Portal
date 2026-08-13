@@ -59,6 +59,34 @@ public class SessionActivityService
     public bool IsMfaLockedOut(string login) =>
         _mfaLockoutUntil.TryGetValue(login, out var until) && until > DateTime.UtcNow;
 
+    // The two-page PAT-login flow's "already proved the PAT, waiting on a
+    // code" state (see AuthController's pat-login/mfa/verify actions) -
+    // keyed by PortalIdentity session key (unlike the MFA attempt/lockout
+    // dictionaries above, which are per-login) since this is specifically
+    // "what THIS browser is mid-login with," not an attribute of the
+    // GitHub account itself. In-memory only, same "gone on restart is
+    // fine" reasoning as everything else here - worst case a mid-login
+    // visitor has to paste their token again, never a security hole. The
+    // token itself is stored encrypted (see SettingsService.ProtectValue)
+    // even for this short in-memory life, not held as plaintext.
+    private readonly ConcurrentDictionary<string, (string EncryptedToken, string Login, DateTime ExpiresAtUtc)> _pendingPatSessions = new();
+
+    public void SetPendingPatSession(string key, string encryptedToken, string login, TimeSpan ttl) =>
+        _pendingPatSessions[key] = (encryptedToken, login, DateTime.UtcNow.Add(ttl));
+
+    // Null once expired, not just removed - an expired-but-still-present
+    // entry must read as "nothing pending" everywhere it's checked,
+    // exactly like the credential-unlock grants above already do.
+    public (string EncryptedToken, string Login)? GetPendingPatSession(string key)
+    {
+        if (!_pendingPatSessions.TryGetValue(key, out var entry) || entry.ExpiresAtUtc <= DateTime.UtcNow)
+            return null;
+
+        return (entry.EncryptedToken, entry.Login);
+    }
+
+    public void ClearPendingPatSession(string key) => _pendingPatSessions.TryRemove(key, out _);
+
     // Per-credential PIN unlock grants (see CredentialGate) - a browser
     // that's verified the screen-lock PIN for one provider (say, AWS) does
     // NOT automatically get GitHub/Azure/etc. too; each is tracked

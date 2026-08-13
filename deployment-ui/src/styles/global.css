@@ -6162,17 +6162,44 @@ textarea{
     font-size:13px;
 }
 
-/* RequireGitHubSetup — the mandatory "connect your repo" popup every
-   logged-in user sees once, before reaching any other page. Backdrop/card
-   chrome comes from .dialog-backdrop/.dialog (see ConfirmDialog) — this
-   just adds the extra layout .dialog itself doesn't need. */
-.setup-gate-dialog{
+/* PatLoginPage / MfaVerifyPage — the two full, bare pages a not-yet-
+   connected visitor sees before reaching any other page (see App.jsx's
+   top-level gate). Unlike .dialog-backdrop/.dialog (ConfirmDialog), this
+   is a real page, not an overlay on top of already-visible app chrome —
+   no backdrop, no fixed positioning, no blur-over-content — but the card
+   itself reuses .dialog's exact surface/border/shadow values so it still
+   reads as the same visual language. body::before/body::after already
+   paint the app's aurora gradient behind everything, so this only needs
+   to center content on top of it. */
+.auth-page{
+    min-height:100vh;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    padding:20px;
+}
+
+.auth-page-card{
+    background:var(--card-bg-strong);
+    color:var(--text);
+    border:1px solid var(--stroke);
+    border-radius:16px;
+    padding:25px;
+    width:100%;
+    max-width:420px;
+    box-shadow:0 24px 60px -18px rgba(0,0,0,.35);
+    backdrop-filter:blur(24px) saturate(160%);
+    -webkit-backdrop-filter:blur(24px) saturate(160%);
+    animation:dialog-in .22s cubic-bezier(0.4,0,0.2,1) both;
     display:flex;
     flex-direction:column;
     align-items:center;
     gap:14px;
 }
 
+/* Title/form styling shared by PatLoginPage and MfaVerifyPage (name
+   predates the two-page rework, kept as-is rather than churning every
+   call site). */
 .setup-gate-title{
     font-size:20px;
     font-weight:600;

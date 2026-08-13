@@ -1,11 +1,12 @@
-import { lazy, Suspense, useEffect } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 
 import Dashboard from "./pages/Dashboard";
 import TopBar from "./components/layout/TopBar";
 import Sidebar from "./components/layout/Sidebar";
 import Footer from "./components/layout/Footer";
 import ErrorBoundary from "./components/common/ErrorBoundary";
-import RequireGitHubSetup from "./components/RequireGitHubSetup";
+import PatLoginPage from "./pages/PatLoginPage";
+import MfaVerifyPage from "./pages/MfaVerifyPage";
 import PeriodicSignOutMonitor from "./components/PeriodicSignOutMonitor";
 import GlobalLogoutMonitor from "./components/GlobalLogoutMonitor";
 import AppUpdateMonitor from "./components/AppUpdateMonitor";
@@ -16,6 +17,7 @@ import useAuth from "./hooks/useAuth";
 import useToast from "./hooks/useToast";
 import useCardTilt from "./hooks/useCardTilt";
 import { reportFrontendHeartbeat } from "./services/appVersionService";
+import { getMfaPendingStatus } from "./services/authLoginService";
 import { APP_COMMIT, APP_VERSION, APP_ENVIRONMENT } from "./utils/buildInfo";
 
 // Dashboard (imported above) is the default landing tab (see
@@ -49,10 +51,32 @@ const ADMIN_ONLY_TABS = new Set(["codeQuality", "services"]);
 function App(){
 
     const { tab, setTab, sidebarAccess } = useNavigation();
-    const { isAdminSession, oauthStatusChecked } = useAuth();
+    const { isAdminSession, oauthStatusChecked, bootstrapError, githubTokenConfigured, githubWasSignedOut } = useAuth();
     const toast = useToast();
 
     useCardTilt();
+
+    // Which of the two pre-auth pages to show — "checking" until a real
+    // GET api/auth/mfa/pending answers it, so a browser refresh that lands
+    // mid-MFA goes straight back to the MFA page instead of bouncing to
+    // PAT login first (the server's pending state is what decides this,
+    // never an assumption). Only resolved once per "not yet connected"
+    // stretch — see the guard on authStage === "checking" below.
+    const [authStage, setAuthStage] = useState("checking");
+
+    const checking = !oauthStatusChecked;
+    const configured = bootstrapError || githubTokenConfigured;
+
+    useEffect(() => {
+
+        if (checking || configured || authStage !== "checking") return;
+
+        getMfaPendingStatus()
+            .then((result) => setAuthStage(result.pending ? "mfa" : "pat"))
+            .catch(() => setAuthStage("pat"));
+
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [checking, configured, authStage]);
 
     // Fired once per real app load (not polled) - reports this browser's
     // own build-time commit so Services -> Application Support can show
@@ -97,6 +121,40 @@ function App(){
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [tab, sidebarAccess, isAdminSession, oauthStatusChecked]);
 
+    // Gated BEFORE any app chrome renders — TopBar/Sidebar must not appear
+    // at all until a real credential exists (see the mockups: bare pages,
+    // no chrome). A deliberate, scoped reversal of the "app shell mounts
+    // immediately" LCP optimization, for this one pre-auth moment only —
+    // an already-connected returning visitor is unaffected either way,
+    // since bootstrap resolves configured before anything below renders.
+    if (checking) return <LoadingSpinner />;
+
+    if (!configured) {
+
+        if (authStage === "checking") return <LoadingSpinner />;
+
+        if (authStage === "mfa") {
+
+            return (
+                <MfaVerifyPage
+                    onBack={(message) => {
+                        if (message) toast.show(message, "error");
+                        setAuthStage("pat");
+                    }}
+                />
+            );
+
+        }
+
+        return (
+            <PatLoginPage
+                wasSignedOut={githubWasSignedOut}
+                onMfaRequired={() => setAuthStage("mfa")}
+            />
+        );
+
+    }
+
     return(
 
         <>
@@ -108,45 +166,41 @@ function App(){
             <AppUpdateMonitor />
             <DeploymentCopilot />
 
-            <RequireGitHubSetup>
+            <div className="app-body">
 
-                <div className="app-body">
+                <Sidebar />
 
-                    <Sidebar />
+                <div className="app-content-column">
 
-                    <div className="app-content-column">
+                    <ErrorBoundary key={tab} onRecover={() => setTab("dashboard")}>
 
-                        <ErrorBoundary key={tab} onRecover={() => setTab("dashboard")}>
+                        <Suspense fallback={<LoadingSpinner />}>
 
-                            <Suspense fallback={<LoadingSpinner />}>
+                            {tab === "dashboard" && <Dashboard/>}
+                            {tab === "deploy" && <Deploy/>}
+                            {tab === "approvals" && <Approvals/>}
+                            {tab === "pullRequests" && <PullRequests/>}
+                            {tab === "storage" && <Storage/>}
+                            {tab === "analytics" && <Analytics/>}
+                            {tab === "timeline" && <Timeline/>}
+                            {tab === "history" && <History/>}
+                            {tab === "environments" && <Environments/>}
+                            {tab === "templates" && <TemplateTester/>}
+                            {tab === "cloudServices" && <CloudServices/>}
+                            {tab === "services" && <Services/>}
+                            {tab === "docker" && <Docker/>}
+                            {tab === "codeQuality" && <CodeQuality/>}
+                            {tab === "settings" && <Settings/>}
 
-                                {tab === "dashboard" && <Dashboard/>}
-                                {tab === "deploy" && <Deploy/>}
-                                {tab === "approvals" && <Approvals/>}
-                                {tab === "pullRequests" && <PullRequests/>}
-                                {tab === "storage" && <Storage/>}
-                                {tab === "analytics" && <Analytics/>}
-                                {tab === "timeline" && <Timeline/>}
-                                {tab === "history" && <History/>}
-                                {tab === "environments" && <Environments/>}
-                                {tab === "templates" && <TemplateTester/>}
-                                {tab === "cloudServices" && <CloudServices/>}
-                                {tab === "services" && <Services/>}
-                                {tab === "docker" && <Docker/>}
-                                {tab === "codeQuality" && <CodeQuality/>}
-                                {tab === "settings" && <Settings/>}
+                        </Suspense>
 
-                            </Suspense>
+                    </ErrorBoundary>
 
-                        </ErrorBoundary>
-
-                        <Footer />
-
-                    </div>
+                    <Footer />
 
                 </div>
 
-            </RequireGitHubSetup>
+            </div>
 
         </>
 
