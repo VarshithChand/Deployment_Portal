@@ -3161,3 +3161,73 @@ interaction, enrolling and confirming it lifts, and - as VarshithChand -
 visiting the new Admin Access page to confirm the MFA console and
 Generate Recovery Code flow both work end-to-end against a real locked-
 out account.
+
+ROUND 18 ADDENDUM - REMOVE SELF-SERVICE MFA TAB + ADMIN ACCESS EMPTY-TABLE BUG
+==================================================
+Date: 2026-08-13
+Trigger: user reviewed the two screenshots (a non-admin session's
+Credentials > MFA tab showing "Enabled"/"Disable MFA"; VarshithChand's
+new Admin Access page showing "No confirmed PAT users yet." despite that
+same connected user existing) and asked why a non-admin could see/manage
+MFA at all when it should be admin-only. A follow-up AskUserQuestion
+(keep self-service enrollment with admin oversight vs. remove the tab
+entirely, since TOTP enrollment fundamentally needs the user's own phone
+to scan the QR regardless of who "controls" it) came back: remove it
+from regular users.
+
+Fix 1 (self-service tab removed): deleted the "MFA" entry from
+CredentialsView.jsx's MODES array and its mode==="mfa" render block
+entirely - a regular user no longer has a standing Settings menu item to
+voluntarily enable or disable MFA whenever they like. Enrollment is now
+ONLY reachable through MfaEnforcementGate (Round 18's own nudge banner /
+full-screen block), which already embeds MfaSection for exactly this
+reason - this keeps the QR-scan step working (still needs the user's own
+phone) while removing the free-standing toggle. This resolves cleanly
+without a redesign: MfaEnforcementGate only ever renders MfaSection while
+mfaEnabled is false (mfaNudgeShow = githubCreds.IsConfigured &&
+!mfaEnabled), so once someone enrolls, the gate stops appearing and there
+is no longer any UI path back to MfaSection's "already enabled" branch
+(the Disable MFA button) for that user - disabling is now exclusively
+Reset MFA from the admin's Admin Access console.
+
+Fix 2 (Admin Access empty-table bug): AdminAccessView's MFA console was
+filtering out any row whose PatOwnerLogin started with "Unknown" (a
+filter copied from Round 15's dedupe-safety feature without reconsidering
+whether it applied here) - meaning a session whose live GitHub identity
+check happened to fail at THIS specific table's fetch (rate limiting, a
+transient blip - same class of issue as Round 15's own findings) was
+hidden from the table entirely, even though that same account's MFA
+status resolved fine moments earlier through the self-service status
+endpoint's cached lookup (a different resolution path). This is exactly
+backwards for an admin RECOVERY tool - Round 16's own
+ResolveCurrentLoginForKeyAsync deliberately reads the raw stored token
+rather than the masked value for the identical reason (a locked-out/
+flaky account is exactly the one an admin is most likely acting on).
+Removed the filter entirely, and stopped gating the Reset MFA/Generate
+Recovery Code buttons on the table's own (sometimes-stale) isMfaEnabled
+flag - both backend actions already re-resolve the login themselves at
+request time and fail cleanly (400/404 with a real message) when there's
+genuinely nothing to act on, so the frontend no longer needs to guess
+first.
+
+Verification performed:
+  - `npm run lint` / `npm run build`: 0 errors, pre-existing Fast-Refresh
+    warnings only. Confirmed MfaSection still lands in its own on-demand
+    chunk (not the main bundle) now that CredentialsView no longer
+    imports it directly either - only MfaEnforcementGate's lazy() import
+    references it.
+  - Grepped the whole frontend for any leftover "mfa"/MfaSection
+    reference in CredentialsView.jsx after the removal - none found.
+  - No backend files changed this round - nothing to live-test against
+    Render; the fix is entirely frontend (a removed tab, a removed
+    filter). Could not visually confirm the Admin Access table now shows
+    a previously-hidden row, or that MfaEnforcementGate's nudge/block
+    still enrolls correctly with the tab gone - same standing
+    real-PAT-required limitation as every MFA round this session.
+
+Files changed: deployment-ui/src/components/settings/{AdminAccessView,
+CredentialsView}.jsx.
+
+Status: Complete. Recommend the user re-check the Admin Access page
+(after `npx wrangler deploy`) to confirm the previously-hidden
+connected account now appears in the MFA console.
