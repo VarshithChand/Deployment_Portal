@@ -258,8 +258,12 @@ export default function AllRepositoriesCard({ repository }) {
 
             <div className="repo-picker-grid">
 
+                {/* min-height approximates a loaded grid's typical size - the
+                    loading text alone is a single line, while the loaded
+                    grid can be several rows tall, so without this the page
+                    below jumps up as soon as repositories arrive (CLS). */}
                 {loading && (
-                    <p className="field-hint">Loading repositories...</p>
+                    <p className="field-hint" style={{ minHeight: "96px" }}>Loading repositories...</p>
                 )}
 
                 {!loading && error && (

@@ -68,22 +68,42 @@ public class BootstrapController : ControllerBase
         if (!isAdmin)
             settingsView.AdminGitHubUsernames = new List<string>();
 
-        var githubCreds = await _settings.GetUserGitHubCredentialsAsync(key);
-        var awsCreds = await _settings.GetUserAwsCredentialsAsync(key);
-        var pinConfigured = await _settings.HasPinAsync(key);
-        var wasSignedOut = await _settings.IsPatUserSignedOutAsync(key);
+        // These four are independent of each other and of the isAdmin
+        // resolution above - each just reads the same settings blob
+        // GetViewAsync already pulled in (and cached for this request, see
+        // SettingsService.ReadRootAsync), so running them concurrently
+        // costs nothing extra and the cache is already warm by the time
+        // they start (no risk of a race populating it twice).
+        var githubCredsTask = _settings.GetUserGitHubCredentialsAsync(key);
+        var awsCredsTask = _settings.GetUserAwsCredentialsAsync(key);
+        var pinConfiguredTask = _settings.HasPinAsync(key);
+        var wasSignedOutTask = _settings.IsPatUserSignedOutAsync(key);
 
-        // Same "only ask AWS if there's actually a credential to ask
-        // about" guard SettingsController.GetMyAws uses.
-        var identityLabel = awsCreds.IsConfigured
-            ? await _cloud.GetCallerIdentityLabelAsync(awsCreds)
-            : null;
+        await Task.WhenAll(githubCredsTask, awsCredsTask, pinConfiguredTask, wasSignedOutTask);
 
-        // Same "don't call GitHub for nothing" guard the frontend used to
-        // apply itself before calling /token-owner.
-        var tokenOwner = githubCreds.TokenConfigured
-            ? await _github.GetTokenOwnerAsync()
-            : null;
+        var githubCreds = githubCredsTask.Result;
+        var awsCreds = awsCredsTask.Result;
+        var pinConfigured = pinConfiguredTask.Result;
+        var wasSignedOut = wasSignedOutTask.Result;
+
+        // Both of these are real outbound calls (AWS STS, GitHub's own
+        // API) and independent of each other - only run when their own
+        // credential is actually configured (same guards the standalone
+        // GetMyAws/token-owner endpoints already used), and run together
+        // rather than one after the other when both happen to apply.
+        var identityLabelTask = awsCreds.IsConfigured
+            ? _cloud.GetCallerIdentityLabelAsync(awsCreds)
+            : Task.FromResult<string?>(null);
+
+        async Task<TokenOwnerDto?> GetTokenOwnerIfConfiguredAsync() =>
+            githubCreds.TokenConfigured ? await _github.GetTokenOwnerAsync() : null;
+
+        var tokenOwnerTask = GetTokenOwnerIfConfiguredAsync();
+
+        await Task.WhenAll(identityLabelTask, tokenOwnerTask);
+
+        var identityLabel = identityLabelTask.Result;
+        var tokenOwner = tokenOwnerTask.Result;
 
         var authenticated = User.Identity?.IsAuthenticated == true;
 

@@ -61,7 +61,11 @@ export default function EnvironmentsCard() {
 
             {loading ? (
 
-                <p className="empty-state">Loading environments...</p>
+                // min-height approximates a loaded environment list's
+                // typical size (see AllRepositoriesCard's own version of
+                // this) - reduces how far the page below jumps once real
+                // environments arrive.
+                <p className="empty-state" style={{ minHeight: "96px" }}>Loading environments...</p>
 
             ) : environments.length === 0 ? (
 

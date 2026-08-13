@@ -12,7 +12,6 @@ import usePagination from "../hooks/usePagination";
 import ClearableInput from "./common/ClearableInput";
 import SearchBox from "./common/SearchBox";
 import Logo from "./common/Logo";
-import LoadingSpinner from "./LoadingSpinner";
 
 const PAGE_SIZE = 9;
 
@@ -179,14 +178,23 @@ export default function RequireGitHubSetup({ children }) {
     const { page, setPage, pageCount, pageItems, totalCount, startIndex, endIndex } =
         usePagination(filteredRepos, PAGE_SIZE);
 
-    // Renders behind the popup rather than being replaced by it — the app
-    // shell mounts normally (so there's no jarring swap once the flow is
-    // done), the modal on top is what actually blocks interacting with it.
+    // children mount immediately, unconditionally - never gated behind
+    // `checking`. Blocking the whole app shell on the bootstrap round trip
+    // (as this used to do, swapping in a full-page spinner) was the single
+    // biggest LCP cost in the app: the Dashboard heading/cards couldn't
+    // paint at all until that request resolved, even though none of them
+    // actually needed the answer to render their own shell - each already
+    // gates its OWN data fetch on githubRepoConfigured/oauthStatusChecked
+    // independently (see useGithubResources, AllRepositoriesCard,
+    // AwsServicesCard), so nothing fires prematurely either way. The setup
+    // dialog is the only thing that genuinely has to wait for the real
+    // answer - it renders as an overlay on top of the already-visible app
+    // shell once bootstrap resolves and confirms nothing is configured.
     return (
 
         <>
 
-            {checking ? <LoadingSpinner /> : children}
+            {children}
 
             {!checking && !configured && wasSignedOut && (
 

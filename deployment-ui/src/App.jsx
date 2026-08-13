@@ -1,21 +1,6 @@
-import { useEffect } from "react";
+import { lazy, Suspense, useEffect } from "react";
 
 import Dashboard from "./pages/Dashboard";
-import Deploy from "./pages/Deploy";
-import Approvals from "./pages/Approvals";
-import PullRequests from "./pages/PullRequests";
-import Storage from "./pages/Storage";
-import History from "./pages/History";
-import Environments from "./pages/Environments";
-import Analytics from "./pages/Analytics";
-import Timeline from "./pages/Timeline";
-import TemplateTester from "./pages/TemplateTester";
-import CloudServices from "./pages/CloudServices";
-import Services from "./pages/Services";
-import Docker from "./pages/Docker";
-import CodeQuality from "./pages/CodeQuality";
-import Settings from "./pages/Settings";
-
 import TopBar from "./components/layout/TopBar";
 import Sidebar from "./components/layout/Sidebar";
 import Footer from "./components/layout/Footer";
@@ -25,12 +10,36 @@ import PeriodicSignOutMonitor from "./components/PeriodicSignOutMonitor";
 import GlobalLogoutMonitor from "./components/GlobalLogoutMonitor";
 import AppUpdateMonitor from "./components/AppUpdateMonitor";
 import DeploymentCopilot from "./components/copilot/DeploymentCopilot";
+import LoadingSpinner from "./components/LoadingSpinner";
 import useNavigation from "./hooks/useNavigation";
 import useAuth from "./hooks/useAuth";
 import useToast from "./hooks/useToast";
 import useCardTilt from "./hooks/useCardTilt";
 import { reportFrontendHeartbeat } from "./services/appVersionService";
 import { APP_COMMIT, APP_VERSION, APP_ENVIRONMENT } from "./utils/buildInfo";
+
+// Dashboard (imported above) is the default landing tab (see
+// NavigationContext's readTabFromUrl) - kept as a real, eager import so it
+// ships in the same chunk as the app shell instead of costing a second
+// network round trip before the very first thing a visitor sees can even
+// start loading. Every other page is lazy - none of them are needed until
+// the user actually clicks their way there, so there's no reason for their
+// code to sit in the initial JS bundle competing with Dashboard for
+// parse/execute time.
+const Deploy = lazy(() => import("./pages/Deploy"));
+const Approvals = lazy(() => import("./pages/Approvals"));
+const PullRequests = lazy(() => import("./pages/PullRequests"));
+const Storage = lazy(() => import("./pages/Storage"));
+const History = lazy(() => import("./pages/History"));
+const Environments = lazy(() => import("./pages/Environments"));
+const Analytics = lazy(() => import("./pages/Analytics"));
+const Timeline = lazy(() => import("./pages/Timeline"));
+const TemplateTester = lazy(() => import("./pages/TemplateTester"));
+const CloudServices = lazy(() => import("./pages/CloudServices"));
+const Services = lazy(() => import("./pages/Services"));
+const Docker = lazy(() => import("./pages/Docker"));
+const CodeQuality = lazy(() => import("./pages/CodeQuality"));
+const Settings = lazy(() => import("./pages/Settings"));
 
 // Admin-only regardless of Sidebar Access state — same guard the Sidebar
 // tabs themselves already get (see Sidebar.jsx's ADMIN_ONLY_TABS), needed
@@ -109,21 +118,25 @@ function App(){
 
                         <ErrorBoundary key={tab} onRecover={() => setTab("dashboard")}>
 
-                            {tab === "dashboard" && <Dashboard/>}
-                            {tab === "deploy" && <Deploy/>}
-                            {tab === "approvals" && <Approvals/>}
-                            {tab === "pullRequests" && <PullRequests/>}
-                            {tab === "storage" && <Storage/>}
-                            {tab === "analytics" && <Analytics/>}
-                            {tab === "timeline" && <Timeline/>}
-                            {tab === "history" && <History/>}
-                            {tab === "environments" && <Environments/>}
-                            {tab === "templates" && <TemplateTester/>}
-                            {tab === "cloudServices" && <CloudServices/>}
-                            {tab === "services" && <Services/>}
-                            {tab === "docker" && <Docker/>}
-                            {tab === "codeQuality" && <CodeQuality/>}
-                            {tab === "settings" && <Settings/>}
+                            <Suspense fallback={<LoadingSpinner />}>
+
+                                {tab === "dashboard" && <Dashboard/>}
+                                {tab === "deploy" && <Deploy/>}
+                                {tab === "approvals" && <Approvals/>}
+                                {tab === "pullRequests" && <PullRequests/>}
+                                {tab === "storage" && <Storage/>}
+                                {tab === "analytics" && <Analytics/>}
+                                {tab === "timeline" && <Timeline/>}
+                                {tab === "history" && <History/>}
+                                {tab === "environments" && <Environments/>}
+                                {tab === "templates" && <TemplateTester/>}
+                                {tab === "cloudServices" && <CloudServices/>}
+                                {tab === "services" && <Services/>}
+                                {tab === "docker" && <Docker/>}
+                                {tab === "codeQuality" && <CodeQuality/>}
+                                {tab === "settings" && <Settings/>}
+
+                            </Suspense>
 
                         </ErrorBoundary>
 

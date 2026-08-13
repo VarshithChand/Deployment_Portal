@@ -1,6 +1,5 @@
 import { useGithubResources } from "../hooks/useGithubResources";
 
-import LoadingSpinner from "../components/LoadingSpinner";
 import PageLayout from "../components/layout/PageLayout";
 
 import AllRepositoriesCard from "../components/dashboard/AllRepositoriesCard";
@@ -13,13 +12,18 @@ export default function Dashboard() {
     // which card to mark "Current". branches/artifacts/workflows backed the
     // removed Repository Statistics card; still fetched by the shared hook
     // (Deploy needs them too) but no longer read on this page.
-    const { repository, loading, error } = useGithubResources({ includeRepository: true });
-
-    if (loading) {
-
-        return <LoadingSpinner />;
-
-    }
+    //
+    // Deliberately NOT blocking the page on `loading` here anymore - this
+    // hook's loading starts true and only clears once AuthContext's own
+    // bootstrap check resolves, so gating the whole Dashboard behind it
+    // meant the page title and every card's own shell sat behind a blank
+    // spinner for a full network round trip. Each card already manages its
+    // own loading/empty state independently (AllRepositoriesCard,
+    // AwsServicesCard, EnvironmentsCard all gate their own fetch on
+    // githubRepoConfigured themselves) - none of them actually needed this
+    // page-level gate to behave correctly, only to paint later than they
+    // had to.
+    const { repository, error } = useGithubResources({ includeRepository: true });
 
     return (
 

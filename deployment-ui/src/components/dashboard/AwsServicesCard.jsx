@@ -176,7 +176,11 @@ export default function AwsServicesCard() {
 
             {loading ? (
 
-                <p className="empty-state">Checking your AWS account...</p>
+                // min-height approximates a loaded tile grid's typical size
+                // (see AllRepositoriesCard's own version of this) - reduces
+                // how far the page below jumps once the real inventory (up
+                // to several rows of tiles) arrives.
+                <p className="empty-state" style={{ minHeight: "96px" }}>Checking your AWS account...</p>
 
             ) : !inventory?.configured ? (
 

@@ -37,6 +37,19 @@ public class SettingsService
     // harmless (the statement is safe to run concurrently).
     private static bool _tableEnsured;
 
+    // Memoized for the lifetime of THIS request only - SettingsService is
+    // registered AddScoped (one instance per HTTP request, see Program.cs),
+    // so there's no cross-request staleness risk here at all, just a plain
+    // instance field. Before this, a single request that touched several
+    // Get*Async methods (exactly what BootstrapController does - view,
+    // GitHub creds, AWS creds, pin status, signed-out flag) paid for a
+    // separate file read or Postgres round trip per call, all fetching the
+    // exact same JSON blob. WriteRootAsync updates this to the just-written
+    // value rather than clearing it, so a read that follows a write within
+    // the same request still sees the fresh state instead of falling back
+    // to a second real read.
+    private JObject? _cachedRoot;
+
     public SettingsService(IHostEnvironment env, ActivityLogService log, IDataProtectionProvider dataProtectionProvider)
     {
         // SETTINGS_FILE_PATH lets a deployment point this at a mounted
@@ -1498,17 +1511,27 @@ public class SettingsService
 
     private async Task<JObject> ReadRootAsync()
     {
+        if (_cachedRoot != null)
+            return _cachedRoot;
+
+        JObject root;
+
         if (_connectionString != null)
-            return await ReadRootFromDatabaseAsync();
+        {
+            root = await ReadRootFromDatabaseAsync();
+        }
+        else if (!File.Exists(_localSettingsPath))
+        {
+            root = new JObject();
+        }
+        else
+        {
+            var text = await File.ReadAllTextAsync(_localSettingsPath);
+            root = string.IsNullOrWhiteSpace(text) ? new JObject() : JObject.Parse(text);
+        }
 
-        if (!File.Exists(_localSettingsPath))
-            return new JObject();
-
-        var text = await File.ReadAllTextAsync(_localSettingsPath);
-
-        return string.IsNullOrWhiteSpace(text)
-            ? new JObject()
-            : JObject.Parse(text);
+        _cachedRoot = root;
+        return root;
     }
 
     // Used by the /api/health/db smoke-test endpoint - a genuine connect +
@@ -1556,6 +1579,11 @@ public class SettingsService
 
     private async Task WriteRootAsync(JObject root)
     {
+        // Keeps ReadRootAsync's per-request cache correct for any read that
+        // follows this write later in the same request, rather than either
+        // serving stale pre-write data or forcing an unnecessary re-read.
+        _cachedRoot = root;
+
         if (_connectionString != null)
         {
             await WriteRootToDatabaseAsync(root);
