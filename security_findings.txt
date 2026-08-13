@@ -3377,3 +3377,85 @@ Files changed: deployment-ui/src/components/settings/SettingsHubView.jsx,
 pages/Settings.jsx.
 
 Status: Complete.
+
+ROUND 20 - LIVE CROSS-DEVICE FORCE-LOGOUT ON RECONNECT
+==================================================
+Date: 2026-08-13
+Trigger: user's own screenshot of Services > Users showing three rows for
+what's likely the same underlying PAT owner, connected from three
+different devices (Linux/Chrome, Windows/Chrome x2) simultaneously -
+asking that when the same PAT logs in on a new device, the OTHER device
+be notified and signed out, not just silently left with stale data.
+
+Investigation found the "one session per real GitHub account" rule
+already existed (Round 14): SaveUserGitHubCredentialsAsync resolves the
+connecting token's real login and, on a match against some OTHER stored
+session, migrates useful data forward then calls DeletePatUserAsync on
+the older key - a real, silent server-side delete. What was missing was
+ever telling that older device's own open tab about it - if it was still
+sitting on a loaded page, it kept working against data that no longer
+existed server-side until something failed or it happened to reload.
+
+The live-notification mechanism for exactly this ("this session should
+sign out right now") already existed too, just for a different trigger:
+GlobalLogoutMonitor polls GET api/auth/session-epoch every 15s and reacts
+to mySessionForceLogoutEpoch changing by calling performLogout - today
+used only for an admin's manual "Force Logout"/"Delete" actions on
+Services > Users (SessionActivityService.ForceLogout). This round wires
+the SAME mechanism into the eviction path above instead of building a
+second one.
+
+Fix: SessionActivityService.ForceLogout gained a reason parameter
+(defaulting to "admin", so AdminUsersController's two existing call
+sites - ForceLogout and Delete - needed no changes at all) - the
+dictionary now stores (Timestamp, Reason) instead of a bare timestamp.
+AuthController's session-epoch response gained mySessionForceLogoutReason
+alongside the existing epoch field. SaveUserGitHubCredentialsAsync's
+eviction loop now calls _activity.ForceLogout(other.Key, "device")
+immediately after DeletePatUserAsync(other.Key) - required injecting
+SessionActivityService (AddSingleton) into SettingsService (AddScoped)
+for the first time; a shorter-lived service depending on a longer-lived
+one is a safe direction with no lifetime/circular-dependency risk (
+confirmed SessionActivityService has no dependency back on SettingsService).
+GlobalLogoutMonitor.jsx now passes data.mySessionForceLogoutReason through
+to performLogout instead of hardcoding "admin", and AuthContext gained a
+"device" case in describeLoggedOutReason with copy that doesn't blame an
+admin for something nobody did ("this GitHub account was just connected
+from another device").
+
+Verification performed:
+  - `dotnet build` (isolated output dir): 0 errors, first try, same 3
+    pre-existing unrelated warnings as every prior round.
+  - `npm run lint` / `npm run build`: 0 errors, pre-existing Fast-Refresh
+    warnings only.
+  - Live tests against the deployed Render backend after push (fresh
+    X-Session-Id, DELETE me/all cleanup after):
+    - GET api/auth/session-epoch on a fresh session -> confirmed the new
+      mySessionForceLogoutReason field is present and null alongside the
+      existing (also null) epoch field - no crash, additive change only.
+    - Regression: POST api/admin/users/{key}/logout from a non-admin
+      caller -> still a clean 403 with the expected message, confirming
+      ForceLogout's new optional reason parameter didn't disturb the
+      existing admin-triggered call sites' behavior or signatures.
+  - Could NOT live-verify the actual end-to-end eviction-triggers-live-
+    kick path (reconnect the SAME real PAT from a second browser while
+    the first browser has an open tab polling session-epoch, confirm that
+    first tab gets redirected within 15 seconds with the new "connected
+    from another device" message) - identical standing limitation to
+    every identity-resolution-dependent round this session (13/14/16/17/18):
+    ResolvePatOwnerLoginAsync needs a REAL, live-resolvable GitHub token to
+    ever detect a duplicate in the first place, which isn't available
+    here. Recommend the user verify directly: connect the same real PAT
+    from two different browsers/devices, leave the first one's tab open,
+    and confirm it gets kicked to the login screen with the new message
+    within about 15 seconds of the second device connecting.
+
+Files changed: src/DeploymentAPI/Controllers/AuthController.cs,
+Services/{SessionActivityService,SettingsService}.cs;
+deployment-ui/src/components/GlobalLogoutMonitor.jsx,
+context/AuthContext.jsx.
+
+Status: Complete for the code-level and API-level-verifiable portion;
+the actual live cross-device kick needs a real GitHub PAT tested from two
+real devices to confirm end-to-end, flagged above rather than claimed as
+tested.
