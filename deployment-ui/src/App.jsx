@@ -57,27 +57,36 @@ function App(){
 
     useCardTilt();
 
-    // Which of the two pre-auth pages to show — "checking" until a real
-    // GET api/auth/mfa/pending answers it, so a browser refresh that lands
-    // mid-MFA goes straight back to the MFA page instead of bouncing to
-    // PAT login first (the server's pending state is what decides this,
-    // never an assumption). Only resolved once per "not yet connected"
-    // stretch — see the guard on authStage === "checking" below.
-    const [authStage, setAuthStage] = useState("checking");
-
-    const checking = !oauthStatusChecked;
-    const configured = bootstrapError || githubTokenConfigured;
+    // Which of the two pre-auth pages to show — null (still checking)
+    // until a real GET api/auth/mfa/pending answers it, so a browser
+    // refresh that lands mid-MFA goes straight back to the MFA page
+    // instead of bouncing to PAT login first (the server's pending state
+    // is what decides this, never an assumption).
+    //
+    // Fired immediately on mount, in PARALLEL with AuthContext's own
+    // bootstrap fetch below (not sequenced after it, which is what this
+    // used to do via a "wait for oauthStatusChecked, THEN start this"
+    // effect) - a Lighthouse run against a first-time visitor showed a
+    // weak Speed Index, and chaining two network round trips back-to-back
+    // before ANY real content could paint was a real, fixable part of
+    // that. Racing them instead means the pre-auth gate's total wait is
+    // max(bootstrap, mfa-pending) rather than their sum. The extra
+    // GET mfa/pending call this now fires even for an already-configured
+    // returning visitor (whose result never ends up used) is a trivial
+    // in-memory dictionary lookup server-side - cheap enough that always
+    // firing it is simpler and safer than adding a second gate to skip it.
+    const [mfaPending, setMfaPending] = useState(null);
 
     useEffect(() => {
 
-        if (checking || configured || authStage !== "checking") return;
-
         getMfaPendingStatus()
-            .then((result) => setAuthStage(result.pending ? "mfa" : "pat"))
-            .catch(() => setAuthStage("pat"));
+            .then((result) => setMfaPending(!!result.pending))
+            .catch(() => setMfaPending(false));
 
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [checking, configured, authStage]);
+    }, []);
+
+    const checking = !oauthStatusChecked;
+    const configured = bootstrapError || githubTokenConfigured;
 
     // Fired once per real app load (not polled) - reports this browser's
     // own build-time commit so Services -> Application Support can show
@@ -128,19 +137,24 @@ function App(){
     // immediately" LCP optimization, for this one pre-auth moment only —
     // an already-connected returning visitor is unaffected either way,
     // since bootstrap resolves configured before anything below renders.
+    // mfaPending is deliberately NOT part of this first check - an
+    // authenticated/configured visitor never needs its answer at all, so
+    // making them wait on it too (as an earlier version of this gate
+    // briefly did) would reintroduce exactly the kind of unnecessary
+    // sequential wait this change set out to remove.
     if (checking) return <LoadingSpinner />;
 
     if (!configured) {
 
-        if (authStage === "checking") return <LoadingSpinner />;
+        if (mfaPending === null) return <LoadingSpinner />;
 
-        if (authStage === "mfa") {
+        if (mfaPending) {
 
             return (
                 <MfaVerifyPage
                     onBack={(message) => {
                         if (message) toast.show(message, "error");
-                        setAuthStage("pat");
+                        setMfaPending(false);
                     }}
                 />
             );
@@ -150,7 +164,7 @@ function App(){
         return (
             <PatLoginPage
                 wasSignedOut={githubWasSignedOut}
-                onMfaRequired={() => setAuthStage("mfa")}
+                onMfaRequired={() => setMfaPending(true)}
             />
         );
 
