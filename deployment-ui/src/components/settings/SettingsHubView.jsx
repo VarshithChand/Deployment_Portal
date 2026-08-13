@@ -3,7 +3,6 @@
 // ActivityLogView.
 export default function SettingsHubView({
     isAdmin, isSuperAdmin, setView,
-    handleClearAll, clearingAll,
     handleSignOut, signingOut
 }) {
 
@@ -128,60 +127,33 @@ export default function SettingsHubView({
 
         </div>
 
-        {isAdmin ? (
+        {/* Every role sees the same non-destructive Sign Out here now -
+            an earlier version of this card kept a separate "Clear All
+            Data" bulk wipe for admins, removed after the user confirmed
+            they didn't want that even for their own admin session. */}
+        <div className="card">
 
-            <div className="card card-danger-zone">
+            <h2 className="card-title">
+                Sign Out
+            </h2>
 
-                <h2 className="card-title">
-                    Danger Zone
-                </h2>
+            <p className="empty-state" style={{ padding: "0 0 15px", textAlign: "left" }}>
+                Signs you out and returns you to the login screen — nothing is cleared. Your
+                GitHub token and any AWS/Azure/GCP credentials are still there the next time
+                you sign back in with the same token. To actually remove a saved credential
+                instead, use its own "Clear" button on the Credentials page.
+            </p>
 
-                <p className="empty-state" style={{ padding: "0 0 15px", textAlign: "left" }}>
-                    Wipes everything on the Credentials page at once — your repository URL,
-                    GitHub token, AWS/Azure/GCP credentials, Docker credentials, OAuth
-                    settings, and Sonar settings — instead of clearing one section at a time.
-                    The admin allowlist is kept as-is.
-                    {" "}You'll land back on the "connect your repository" screen afterward.
-                </p>
+            <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={handleSignOut}
+                disabled={signingOut}
+            >
+                {signingOut ? "Signing out..." : "Sign Out"}
+            </button>
 
-                <button
-                    type="button"
-                    className="btn btn-danger"
-                    onClick={handleClearAll}
-                    disabled={clearingAll}
-                >
-                    {clearingAll ? "Clearing..." : "Clear All Data"}
-                </button>
-
-            </div>
-
-        ) : (
-
-            <div className="card">
-
-                <h2 className="card-title">
-                    Sign Out
-                </h2>
-
-                <p className="empty-state" style={{ padding: "0 0 15px", textAlign: "left" }}>
-                    Signs you out and returns you to the login screen — nothing is cleared. Your
-                    GitHub token and any AWS/Azure/GCP credentials are still there the next time
-                    you sign back in with the same token. To actually remove a saved credential
-                    instead, use its own "Clear" button on the Credentials page.
-                </p>
-
-                <button
-                    type="button"
-                    className="btn btn-secondary"
-                    onClick={handleSignOut}
-                    disabled={signingOut}
-                >
-                    {signingOut ? "Signing out..." : "Sign Out"}
-                </button>
-
-            </div>
-
-        )}
+        </div>
 
         </>
 

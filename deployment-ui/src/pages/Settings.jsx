@@ -16,7 +16,6 @@ import {
     saveUserSidebarAccess,
     clearUserSidebarAccess,
     clearSettings,
-    clearMySettings,
     previewGitHubRepository,
     previewGitHubUserRepositories
 } from "../services/settingsService";
@@ -118,7 +117,6 @@ export default function Settings() {
     const [savingOAuth, setSavingOAuth] = useState(false);
     const [savingAdmins, setSavingAdmins] = useState(false);
     const [savingSonar, setSavingSonar] = useState(false);
-    const [clearingAll, setClearingAll] = useState(false);
     const [signingOut, setSigningOut] = useState(false);
 
     const [githubRepoUrl, setGithubRepoUrl] = useState("");
@@ -898,85 +896,15 @@ export default function Settings() {
 
     }
 
-    // Unlike handleClear, this wipes the repository URL/owner too (not
-    // just the token) plus Docker, OAuth, and Sonar — a full reset of
-    // everything EXCEPT the admin allowlist, which is deliberately kept so
-    // this can never drop the portal into bootstrap mode (see
-    // ClearAllAsync). Every other page already loaded data for whatever
-    // repo was configured before this, so a reload is what actually clears
-    // that everywhere — and with this session's own GitHub token gone,
-    // that reload lands back on RequireGitHubSetup's "connect your repo"
-    // gate automatically.
-    //
-    // Non-admins get a narrower version: only their own GitHub/AWS/Azure/
-    // GCP credentials, via /me/all (no AdminGate - resetting your own data
-    // never needed admin rights for any of these individually either).
-    // The shared, portal-wide sections (Docker/OAuth/Sonar) only an admin
-    // can touch, via clearSettings("all") - previously this whole button
-    // was wired to that admin-only endpoint regardless of who clicked it,
-    // so a normal user resetting just their own token hit "Admin login
-    // required" for no reason.
-    async function handleClearAll() {
-
-        const message = isAdmin
-            ? "Clear ALL saved data? This removes your GitHub repository URL and token, your " +
-              "AWS/Azure/GCP credentials, the Docker credentials, OAuth settings, and Sonar " +
-              "settings. The admin allowlist is kept as-is — this won't affect who has admin " +
-              "access. Other users' own GitHub repo/token are untouched — this only clears " +
-              "yours. This cannot be undone."
-            : "Clear all your saved data? This removes your GitHub repository URL and token, " +
-              "plus your AWS/Azure/GCP credentials. This cannot be undone.";
-
-        if (!(await confirm({
-            title: "Clear all data?",
-            message,
-            confirmLabel: "Clear All Data",
-            danger: true
-        }))) {
-            return;
-        }
-
-        try {
-
-            setClearingAll(true);
-
-            await (isAdmin ? clearSettings("all") : clearMySettings());
-
-            toast.show("All data cleared — reconnect your GitHub repository to continue.", "success");
-
-            // A full navigation (not just reload()) so this lands on the
-            // Dashboard instead of reloading back into Settings - RequireGitHubSetup's
-            // "connect your repo" gate still shows on top of it either way,
-            // since that's driven by whether GitHub credentials are
-            // configured, not which tab is active.
-            setTimeout(() => {
-
-                const url = new URL(window.location.href);
-                url.searchParams.set("tab", "dashboard");
-                url.searchParams.delete("view");
-                window.location.href = url.toString();
-
-            }, 900);
-
-        }
-        catch (err) {
-
-            console.error(err);
-            toast.show(err.response?.data?.message || "Failed to clear all data.", "error");
-            setClearingAll(false);
-
-        }
-
-    }
-
-    // Non-admin Danger Zone action - a real sign-out (see
-    // SoftSignOutPatUserAsync/performSignOut.js), not a wipe. Nothing
-    // saved is cleared - the same token, and every AWS/Azure/GCP
-    // credential tied to this session, are still there the moment it's
-    // entered again. An admin still sees the destructive "Clear All Data"
-    // path above instead (SettingsHubView branches on isAdmin) - that's a
-    // deliberate bulk-reset tool for shared portal settings, not something
-    // this round touches.
+    // Danger Zone action for every role, admin included - a real sign-out
+    // (see SoftSignOutPatUserAsync/performSignOut.js), not a wipe. Round
+    // 19 originally kept a separate, still-destructive "Clear All Data"
+    // bulk reset for admins here (wiping Docker/OAuth/Sonar too, via
+    // clearSettings("all")/clearMySettings) - removed after the user
+    // confirmed that wasn't wanted even for an admin session, so this is
+    // now the only Danger Zone action for everyone. Nothing saved is
+    // cleared - the same token, and every AWS/Azure/GCP credential tied to
+    // this session, are still there the moment it's entered again.
     async function handleSignOut() {
 
         if (!(await confirm({
@@ -1029,8 +957,6 @@ export default function Settings() {
                     isAdmin={isAdmin}
                     isSuperAdmin={isSuperAdminSession}
                     setView={setView}
-                    handleClearAll={handleClearAll}
-                    clearingAll={clearingAll}
                     handleSignOut={handleSignOut}
                     signingOut={signingOut}
                 />
