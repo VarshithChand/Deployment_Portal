@@ -3681,3 +3681,86 @@ Status: Complete for the code-level and API-level-verifiable portion;
 the proven-MFA takeover itself needs a real MFA-enabled account tested
 from two real devices to confirm end-to-end, flagged above rather than
 claimed as tested.
+
+ROUND 24 - REAL BUG: EVERY PAT OWNER NAME SHOWED "UNKNOWN" (ENCRYPTED
+TOKEN SENT TO GITHUB VERBATIM), PLUS A PRE-AUTH LOAD-TIME FIX
+==================================================
+Date: 2026-08-14
+Trigger: user's own screenshots of the Admin Access MFA Console and
+Services > Users - every single row, across both tables, showed "Unknown
+(invalid or expired token)". Initial read (based on ResolvePatOwnerStatusAsync's
+own distinction between a confirmed 401 and a merely transient failure)
+was that these were genuinely stale/expired tokens accumulated from this
+session's own extensive testing - the user pushed back repeatedly ("i
+need to the pat user names"), which prompted actually re-reading the
+resolution code instead of re-asserting the earlier read.
+
+Root cause found: GetPatUsersAsync (SettingsService.cs) resolves each
+row's live GitHub identity by reading entry["PersonalAccessToken"]
+straight out of storage and passing it directly to
+ResolvePatOwnerStatusAsync as the Bearer token - but that stored value is
+the Data-Protection-ENCRYPTED ciphertext (see Protect() in
+SaveUserGitHubCredentialsAsync), never the raw token. Every single
+identity-resolution call this method ever made was sending GitHub
+garbage as credentials, which GitHub correctly 401s every time -
+indistinguishable from a genuinely bad token in the UI, so EVERY row
+showed "Unknown (invalid or expired token)" regardless of whether the
+real underlying PAT actually still worked. This affected both Services >
+Users and the new Admin Access > MFA Console (Round 18), since both read
+from the same GetPatUsersAsync.
+
+The correct pattern already existed a few hundred lines away in the same
+file - ResolveCurrentLoginForKeyAsync calls Unprotect() on the stored
+token before ever passing it to ResolvePatOwnerLoginAsync. This one call
+site (added in Round 15, when the richer ResolvePatOwnerStatusAsync
+variant was introduced) simply never did. Fix: added the missing
+Unprotect() call. This has apparently been broken since Round 15 - every
+PAT owner name shown in this app's admin tables since then would have
+been affected, not something newly introduced by recent rounds' changes.
+
+Separately, the user shared a live Lighthouse audit of the deployed
+site's root URL (an unauthenticated first visit, landing on PatLoginPage)
+showing a weak Speed Index (0.23, 3.2s) despite acceptable FCP/LCP.
+App.jsx's pre-auth gate was chaining two network round trips
+sequentially before any real content could paint: GET /api/bootstrap,
+THEN (only once that resolved) GET /api/auth/mfa/pending. Restructured
+so the mfa-pending check fires immediately on mount instead of being
+gated behind bootstrap finishing - the two now race instead of chain, so
+the gate's worst-case wait is max(bootstrap, mfa-pending) instead of
+their sum. Also flagged to the user (not something fixable in this
+frontend-only pass): this app's Render free-tier backend spins down when
+idle and can take 30-90s to cold-start, which likely dominated the
+Lighthouse run far more than anything in the frontend code if it
+happened to hit a sleeping instance.
+
+Verification performed:
+  - `dotnet build` (isolated output dir): 0 errors, first try, same 3
+    pre-existing unrelated warnings as every prior round.
+  - `npm run lint` / `npm run build`: 0 errors, pre-existing Fast-Refresh
+    warnings only.
+  - Live tests against the deployed Render backend after push: GET
+    api/admin/users from a non-admin session -> still a clean 403 (not a
+    500), confirming the added Unprotect() call didn't introduce an
+    exception on the code path leading into GetPatUsersAsync.
+  - Could NOT live-verify that a REAL previously-"Unknown" row now shows
+    its actual resolved name - that requires an admin-authenticated
+    session (real GitHub OAuth login or an admin-owning PAT) which this
+    sandboxed environment doesn't have, the same standing limitation as
+    every admin-gated live-test this entire session. Recommend the user
+    reload Services > Users / Admin Access > MFA Console and confirm any
+    row with a genuinely still-valid token now shows its real GitHub
+    username instead of "Unknown."
+  - Could not re-run Lighthouse from this sandboxed environment to
+    confirm the Speed Index actually improved - recommend the user
+    re-run the same audit against a WARM backend (hit the site once
+    first to wake it, then audit) to get a reading that isolates the
+    frontend-side fix from Render's cold-start latency.
+
+Files changed: src/DeploymentAPI/Services/SettingsService.cs;
+deployment-ui/src/App.jsx.
+
+Status: Complete for the code-level-verifiable portion. The identity-
+resolution fix is a genuine, previously-undetected bug fix (not just a
+tightening or new feature) - recommend the user treat re-checking the
+Users/MFA Console tables as a priority verification step, since it had
+been silently masking every real PAT owner's name since Round 15.
