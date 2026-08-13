@@ -20,4 +20,12 @@ public class TokenPreviewResponseDto
     public string? AvatarUrl { get; set; }
 
     public List<AccountRepositoryDto> Repositories { get; set; } = new();
+
+    // Set by SettingsController.PreviewMyGitHubToken (a local lookup, not
+    // by GitHubApiService itself - this DTO's owner has no reason to know
+    // about MFA). Lets RequireGitHubSetup show the code-entry step
+    // immediately after preview, before ever attempting to save - the
+    // save itself (SaveMyGitHub) independently re-checks and enforces
+    // this regardless, so a client skipping preview can't bypass it.
+    public bool MfaRequired { get; set; }
 }

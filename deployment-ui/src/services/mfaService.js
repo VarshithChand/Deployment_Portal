@@ -1,0 +1,27 @@
+import mfaApi from "../api/mfaApi";
+
+// Self-service MFA for the currently connected session's own GitHub
+// identity (see MfaController) - separate from the login-time gate
+// (saveMyGitHubSettings, settingsService.js, gains an optional mfaCode/
+// recoveryCode when reconnecting an MFA-enabled login).
+export const getMfaStatus = async () => {
+    const response = await mfaApi.get("/status");
+    return response.data;
+};
+
+export const enrollMfa = async () => {
+    const response = await mfaApi.post("/enroll");
+    return response.data;
+};
+
+export const verifyMfaEnrollment = async (code) => {
+    const response = await mfaApi.post("/enroll/verify", { code });
+    return response.data;
+};
+
+// payload is { code } or { recoveryCode } - exactly one, matching
+// MfaCodeRequestDto on the backend.
+export const disableMfa = async (payload) => {
+    const response = await mfaApi.post("/disable", payload);
+    return response.data;
+};

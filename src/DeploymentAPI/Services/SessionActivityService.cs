@@ -37,6 +37,28 @@ public class SessionActivityService
 
     public void ClearFailedPinAttempts(string key) => _failedPinAttempts.TryRemove(key, out _);
 
+    // Same pattern as the PIN counter above, but keyed by the resolved
+    // GitHub LOGIN (see MfaGate), not a PortalIdentity session key - MFA
+    // belongs to the person, so wrong guesses against their account count
+    // against them regardless of which browser/session is doing the
+    // guessing. Unlike the PIN's "wipe everything on the 5th wrong guess,"
+    // a mistyped authenticator code isn't destructive here - a temporary
+    // cool-down (see LockOutMfa) fits a lost/fumbled 6-digit code better
+    // than nuking the account's saved credentials.
+    private readonly ConcurrentDictionary<string, int> _failedMfaAttempts = new();
+    private readonly ConcurrentDictionary<string, DateTime> _mfaLockoutUntil = new();
+
+    public int RecordFailedMfaAttempt(string login) => _failedMfaAttempts.AddOrUpdate(login, 1, (_, count) => count + 1);
+
+    public int GetFailedMfaAttemptCount(string login) => _failedMfaAttempts.TryGetValue(login, out var count) ? count : 0;
+
+    public void ClearFailedMfaAttempts(string login) => _failedMfaAttempts.TryRemove(login, out _);
+
+    public void LockOutMfa(string login, TimeSpan duration) => _mfaLockoutUntil[login] = DateTime.UtcNow.Add(duration);
+
+    public bool IsMfaLockedOut(string login) =>
+        _mfaLockoutUntil.TryGetValue(login, out var until) && until > DateTime.UtcNow;
+
     // Per-credential PIN unlock grants (see CredentialGate) - a browser
     // that's verified the screen-lock PIN for one provider (say, AWS) does
     // NOT automatically get GitHub/Azure/etc. too; each is tracked

@@ -1137,6 +1137,12 @@ public class SettingsService
         var statuses = await Task.WhenAll(
             entries.Select(p => ResolvePatOwnerStatusAsync(((JObject)p.Value!)["PersonalAccessToken"]!.ToString()!)));
 
+        // Only meaningful for a row that resolved to a real login - same
+        // "no confirmed identity, nothing to look up" reasoning as the
+        // "Unknown (...)" label itself.
+        var mfaEnabledFlags = await Task.WhenAll(
+            statuses.Select(s => string.IsNullOrWhiteSpace(s.Login) ? Task.FromResult(false) : IsMfaEnabledAsync(s.Login!)));
+
         return entries.Select((p, i) =>
         {
             var entry = (JObject)p.Value!;
@@ -1166,7 +1172,8 @@ public class SettingsService
                 Repository = repositoryValue ?? string.Empty,
                 RestrictedTabCount = restrictionCount,
                 IsBlocked = blocked?.Any(k => k.ToString() == p.Name) ?? false,
-                IsSignedOut = entry["SignedOut"]?.Value<bool>() ?? false
+                IsSignedOut = entry["SignedOut"]?.Value<bool>() ?? false,
+                IsMfaEnabled = mfaEnabledFlags[i]
             };
         }).ToList();
     }
@@ -1423,6 +1430,323 @@ public class SettingsService
         var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(pin))).ToLowerInvariant();
 
         return stored == hash;
+    }
+
+    //===========================================================
+    // TOTP MFA (Google Authenticator) — keyed by the resolved real GitHub
+    // login (see ResolvePatOwnerLoginAsync below), not the PortalIdentity
+    // session key, so it follows the person across browsers/devices the
+    // same way Round 14's cross-session credential migration does - both
+    // resolve identity through the exact same live GitHub call. This
+    // service only ever does pure enrollment/verification; rate-limiting
+    // and lockout orchestration live in the controller alongside
+    // SessionActivityService, matching VerifyMyPin's existing split
+    // rather than inventing a new pattern.
+    //===========================================================
+
+    private const int TotpDigits = 6;
+    private const int TotpStepSeconds = 30;
+
+    // Public wrapper around the private ResolvePatOwnerLoginAsync below -
+    // MfaGate needs to resolve a not-yet-saved token's real owner the
+    // exact same way SaveUserGitHubCredentialsAsync's own duplicate-
+    // session check already does, without duplicating that logic or
+    // widening the private method's own access.
+    public Task<string?> ResolveGitHubLoginAsync(string token) => ResolvePatOwnerLoginAsync(token);
+
+    // Resolves an ALREADY-STORED session's own saved token to its real
+    // GitHub login, live - used by the admin "Reset MFA" action
+    // (AdminUsersController), which needs to know whose Mfa[login] entry
+    // to clear for a given row in the Users table (MFA is keyed by login,
+    // not by this session key - see the TOTP MFA region above). Reads the
+    // raw stored token directly rather than going through
+    // GetUserGitHubCredentialsAsync, which deliberately masks it to null
+    // for a soft-signed-out session - exactly the account an admin is
+    // most likely resetting MFA for (locked out, can't re-prove their old
+    // code to reconnect), so this can't afford to also come up empty then.
+    public async Task<string?> ResolveCurrentLoginForKeyAsync(string key)
+    {
+        var root = await ReadRootAsync();
+        var entry = (root["UserGitHubCredentials"] as JObject)?[key] as JObject;
+        var token = Unprotect(entry?["PersonalAccessToken"]?.ToString());
+
+        return string.IsNullOrWhiteSpace(token) ? null : await ResolvePatOwnerLoginAsync(token);
+    }
+
+    public async Task<bool> IsMfaEnabledAsync(string login)
+    {
+        var root = await ReadRootAsync();
+        var entry = (root["Mfa"] as JObject)?[login] as JObject;
+
+        return entry?["Enabled"]?.Value<bool>() ?? false;
+    }
+
+    // Step 1 of enrollment - generates and stores a new secret with
+    // Enabled left false, so an abandoned enrollment (closed the tab
+    // before scanning the QR) never actually protects the account; only
+    // VerifyMfaEnrollmentAsync flips it on. Safely overwrites any earlier
+    // unverified pending secret for this login - starting over is fine as
+    // long as Enabled was never true.
+    public async Task<(string Secret, string OtpAuthUri)> EnrollMfaAsync(string login)
+    {
+        var secret = GenerateTotpSecret();
+        var now = DateTime.UtcNow;
+
+        var root = await ReadRootAsync();
+        var mfa = root["Mfa"] as JObject ?? new JObject();
+
+        mfa[login] = new JObject
+        {
+            ["SecretEncrypted"] = Protect(secret),
+            ["Enabled"] = false,
+            ["CreatedAtUtc"] = now,
+            ["UpdatedAtUtc"] = now,
+            ["LastVerifiedAtUtc"] = null,
+            ["RecoveryCodes"] = new JArray()
+        };
+
+        root["Mfa"] = mfa;
+        await WriteRootAsync(root);
+
+        _log.LogInfo("Settings", $"MFA enrollment started for '{login}'.");
+
+        return (secret, BuildOtpAuthUri(login, secret));
+    }
+
+    // Step 2 - the first real code from the authenticator app. Only this
+    // call ever turns Enabled on, and only this call generates recovery
+    // codes - once, here, never silently regenerated later. Returns null
+    // on a wrong code (nothing changes) so the controller can tell
+    // "enrollment not finished" apart from "enrollment finished, here are
+    // the one-time recovery codes."
+    public async Task<List<string>?> VerifyMfaEnrollmentAsync(string login, string code)
+    {
+        var root = await ReadRootAsync();
+        var entry = (root["Mfa"] as JObject)?[login] as JObject;
+        var secret = Unprotect(entry?["SecretEncrypted"]?.ToString());
+
+        if (secret == null || !VerifyTotp(secret, code))
+            return null;
+
+        var recoveryCodes = GenerateRecoveryCodes();
+        var now = DateTime.UtcNow;
+
+        entry!["Enabled"] = true;
+        entry["UpdatedAtUtc"] = now;
+        entry["LastVerifiedAtUtc"] = now;
+        entry["RecoveryCodes"] = new JArray(recoveryCodes.Select(c => new JObject
+        {
+            ["HashHex"] = HashRecoveryCode(c),
+            ["UsedAtUtc"] = null
+        }));
+
+        await WriteRootAsync(root);
+
+        _log.LogInfo("Settings", $"MFA enabled for '{login}'.");
+
+        return recoveryCodes;
+    }
+
+    // Self-service disable - the caller already proved a valid code (see
+    // VerifyMfaCodeAsync/VerifyMfaRecoveryCodeAsync) before this is ever
+    // reached, same "re-prove it before turning off a security feature"
+    // requirement as everything else in this file. A full removal, not
+    // just Enabled=false, so a stale secret/recovery codes can never
+    // linger for some future re-enrollment to accidentally trust.
+    public async Task DisableMfaAsync(string login)
+    {
+        var root = await ReadRootAsync();
+
+        if (root["Mfa"] is JObject mfa && mfa.Remove(login))
+        {
+            await WriteRootAsync(root);
+            _log.LogInfo("Settings", $"MFA disabled for '{login}'.");
+        }
+    }
+
+    // Admin-triggered equivalent of DisableMfaAsync (see
+    // AdminUsersController's reset-mfa action) - same full removal, just
+    // reached without the user's own code, since the entire point is
+    // recovering an account whose authenticator device is unavailable.
+    // The user must re-enroll from scratch afterward - nothing here
+    // quietly restores or reuses the old secret.
+    public Task ResetMfaForLoginAsync(string login) => DisableMfaAsync(login);
+
+    public async Task<bool> VerifyMfaCodeAsync(string login, string code)
+    {
+        var root = await ReadRootAsync();
+        var entry = (root["Mfa"] as JObject)?[login] as JObject;
+        var secret = Unprotect(entry?["SecretEncrypted"]?.ToString());
+
+        if (secret == null || !VerifyTotp(secret, code))
+            return false;
+
+        entry!["LastVerifiedAtUtc"] = DateTime.UtcNow;
+        await WriteRootAsync(root);
+
+        return true;
+    }
+
+    public async Task<bool> VerifyMfaRecoveryCodeAsync(string login, string code)
+    {
+        var root = await ReadRootAsync();
+        var entry = (root["Mfa"] as JObject)?[login] as JObject;
+        var codes = entry?["RecoveryCodes"] as JArray;
+
+        if (codes == null)
+            return false;
+
+        var hash = HashRecoveryCode(code);
+
+        var match = codes.FirstOrDefault(c =>
+            string.Equals(c["HashHex"]?.ToString(), hash, StringComparison.OrdinalIgnoreCase)
+            && c["UsedAtUtc"] == null);
+
+        if (match == null)
+            return false;
+
+        // Single-use - marked spent immediately, never valid again even
+        // if the exact same code is presented a second time.
+        match["UsedAtUtc"] = DateTime.UtcNow;
+        entry!["LastVerifiedAtUtc"] = DateTime.UtcNow;
+
+        await WriteRootAsync(root);
+
+        return true;
+    }
+
+    private static string GenerateTotpSecret() => Base32Encode(RandomNumberGenerator.GetBytes(20));
+
+    private static string BuildOtpAuthUri(string login, string secret)
+    {
+        const string issuer = "Deployment Portal";
+
+        var label = Uri.EscapeDataString($"{issuer}:{login}");
+        var encodedIssuer = Uri.EscapeDataString(issuer);
+
+        return $"otpauth://totp/{label}?secret={secret}&issuer={encodedIssuer}&algorithm=SHA1&digits={TotpDigits}&period={TotpStepSeconds}";
+    }
+
+    // RFC 6238 over HMAC-SHA1 (RFC 4226's HOTP, time-stepped) - the exact
+    // algorithm Google Authenticator (and every other standard TOTP app)
+    // implements, so there's no app-specific quirk to work around. +/-1
+    // step (30s window either side) tolerates ordinary clock drift
+    // between this server and whatever device generated the code, the
+    // same tolerance most TOTP implementations use.
+    private static bool VerifyTotp(string base32Secret, string code)
+    {
+        if (string.IsNullOrWhiteSpace(code) || code.Length != TotpDigits || !code.All(char.IsDigit))
+            return false;
+
+        var key = Base32Decode(base32Secret);
+        var currentStep = DateTimeOffset.UtcNow.ToUnixTimeSeconds() / TotpStepSeconds;
+
+        for (var offset = -1; offset <= 1; offset++)
+        {
+            if (ComputeTotp(key, currentStep + offset) == code)
+                return true;
+        }
+
+        return false;
+    }
+
+    private static string ComputeTotp(byte[] key, long step)
+    {
+        var stepBytes = BitConverter.GetBytes(step);
+
+        if (BitConverter.IsLittleEndian)
+            Array.Reverse(stepBytes);
+
+        using var hmac = new HMACSHA1(key);
+        var hash = hmac.ComputeHash(stepBytes);
+
+        var offset = hash[^1] & 0x0F;
+
+        var binaryCode = ((hash[offset] & 0x7F) << 24)
+            | ((hash[offset + 1] & 0xFF) << 16)
+            | ((hash[offset + 2] & 0xFF) << 8)
+            | (hash[offset + 3] & 0xFF);
+
+        var otp = binaryCode % (int)Math.Pow(10, TotpDigits);
+
+        return otp.ToString(new string('0', TotpDigits));
+    }
+
+    // Crockford-ish: excludes 0/O/1/I so a human reading these off a
+    // "download your recovery codes" screen can't confuse similar-looking
+    // characters when typing one back in later.
+    private static List<string> GenerateRecoveryCodes()
+    {
+        const string alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+
+        var codes = new List<string>();
+
+        for (var i = 0; i < 10; i++)
+        {
+            var bytes = RandomNumberGenerator.GetBytes(8);
+            var chars = bytes.Select(b => alphabet[b % alphabet.Length]).ToArray();
+
+            codes.Add($"{new string(chars, 0, 4)}-{new string(chars, 4, 4)}");
+        }
+
+        return codes;
+    }
+
+    // Same hash-only-at-rest treatment as API keys/the screen-lock PIN
+    // above - normalized (trimmed, uppercased) first so "8h7k-xp2q" and
+    // "8H7K-XP2Q" hash identically, since a human retyping one from a
+    // downloaded text file shouldn't have to match case exactly.
+    private static string HashRecoveryCode(string code) =>
+        Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(code.Trim().ToUpperInvariant()))).ToLowerInvariant();
+
+    private static readonly char[] Base32Alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567".ToCharArray();
+
+    private static string Base32Encode(byte[] data)
+    {
+        var sb = new StringBuilder((data.Length * 8 + 4) / 5);
+
+        int bitBuffer = 0, bitsInBuffer = 0;
+
+        foreach (var b in data)
+        {
+            bitBuffer = (bitBuffer << 8) | b;
+            bitsInBuffer += 8;
+
+            while (bitsInBuffer >= 5)
+            {
+                bitsInBuffer -= 5;
+                sb.Append(Base32Alphabet[(bitBuffer >> bitsInBuffer) & 0x1F]);
+            }
+        }
+
+        if (bitsInBuffer > 0)
+            sb.Append(Base32Alphabet[(bitBuffer << (5 - bitsInBuffer)) & 0x1F]);
+
+        return sb.ToString();
+    }
+
+    private static byte[] Base32Decode(string base32)
+    {
+        var bytes = new List<byte>();
+
+        int bitBuffer = 0, bitsInBuffer = 0;
+
+        foreach (var c in base32.TrimEnd('='))
+        {
+            var index = Array.IndexOf(Base32Alphabet, char.ToUpperInvariant(c));
+            if (index < 0) continue;
+
+            bitBuffer = (bitBuffer << 5) | index;
+            bitsInBuffer += 5;
+
+            if (bitsInBuffer >= 8)
+            {
+                bitsInBuffer -= 8;
+                bytes.Add((byte)((bitBuffer >> bitsInBuffer) & 0xFF));
+            }
+        }
+
+        return bytes.ToArray();
     }
 
     private static async Task<string?> ResolvePatOwnerLoginAsync(string token)

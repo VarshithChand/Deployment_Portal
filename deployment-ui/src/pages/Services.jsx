@@ -10,7 +10,7 @@ import SectionTabs from "../components/common/SectionTabs";
 import PatUserAccessModal from "../components/PatUserAccessModal";
 import ApplicationSupportSection from "../components/services/ApplicationSupportSection";
 
-import { getUsers, forceLogoutUser, blockUser, unblockUser, deleteUser, removeDuplicateUsers } from "../services/adminService";
+import { getUsers, forceLogoutUser, blockUser, unblockUser, deleteUser, removeDuplicateUsers, resetUserMfa } from "../services/adminService";
 import { getProjects } from "../services/pmscoreService";
 
 import {
@@ -226,6 +226,35 @@ export default function Services() {
 
             console.error(err);
             toast.show("Failed to unblock that user.", "error");
+
+        }
+
+    }
+
+    async function handleResetMfa(user) {
+
+        if (!(await confirm({
+            title: "Reset this user's MFA?",
+            message: `Reset MFA for '${user.patOwnerLogin}'? This removes their authenticator ` +
+                "setup and recovery codes entirely - they'll need to reconnect without a code, " +
+                "then re-enroll from Credentials if they still want MFA protecting their account.",
+            confirmLabel: "Reset MFA",
+            danger: true
+        }))) {
+            return;
+        }
+
+        try {
+
+            await resetUserMfa(user.key);
+            toast.show(`MFA reset for '${user.patOwnerLogin}'.`, "success");
+            loadUsers();
+
+        }
+        catch (err) {
+
+            console.error(err);
+            toast.show("Failed to reset that user's MFA.", "error");
 
         }
 
@@ -460,6 +489,7 @@ export default function Services() {
                                     <th>PAT Owner</th>
                                     <th>Repository</th>
                                     <th>Restricted</th>
+                                    <th>MFA</th>
                                     <th>Device</th>
                                     <th>Last Active</th>
                                     <th>Status</th>
@@ -488,6 +518,13 @@ export default function Services() {
                                                 <span className="badge badge-danger">{u.restrictedTabCount} restricted</span>
                                             ) : (
                                                 <span className="badge badge-success">Fully visible</span>
+                                            )}
+                                        </td>
+                                        <td>
+                                            {u.isMfaEnabled ? (
+                                                <span className="badge badge-success">Enabled</span>
+                                            ) : (
+                                                <span className="badge badge-secondary">Off</span>
                                             )}
                                         </td>
                                         <td>
@@ -548,6 +585,19 @@ export default function Services() {
                                                         title={u.key === MY_SESSION_KEY ? "You can't block your own session here" : undefined}
                                                     >
                                                         Block
+                                                    </button>
+
+                                                )}
+
+                                                {u.isMfaEnabled && (
+
+                                                    <button
+                                                        type="button"
+                                                        className="btn btn-secondary btn-sm"
+                                                        onClick={() => handleResetMfa(u)}
+                                                        title="Remove their MFA enrollment - use if they've lost their authenticator device"
+                                                    >
+                                                        Reset MFA
                                                     </button>
 
                                                 )}

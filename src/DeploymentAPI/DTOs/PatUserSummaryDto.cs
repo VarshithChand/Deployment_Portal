@@ -12,6 +12,13 @@ public class PatUserSummaryDto
 
     public string PatOwnerLogin { get; set; } = string.Empty;
 
+    // Only ever meaningful when PatOwnerLogin resolved to a real login
+    // (never for an "Unknown (...)" row - same reasoning as the dedupe
+    // feature's own StartsWith("Unknown") filter, there's no confirmed
+    // identity to look this up against). Backs the Users table's "Reset
+    // MFA" button and MFA badge.
+    public bool IsMfaEnabled { get; set; }
+
     public string Owner { get; set; } = string.Empty;
 
     public string Repository { get; set; } = string.Empty;

@@ -15,17 +15,27 @@ import Logo from "./common/Logo";
 // sharing one — this is where anyone who hasn't set theirs up yet is asked
 // for it, before they can reach anything else.
 //
-// One step: paste a token, it's validated (via /me/github/preview - nothing
-// saved yet at that point) and saved with no repository chosen. Picking
-// which repo to point at happens afterward, from the Dashboard's own
-// searchable picker (AllRepositoriesCard) - this dialog used to also make
-// you pick one here first, but that's a decision worth making from the
-// Dashboard itself, not a blocking prerequisite to ever reaching it.
+// One step (two if MFA is enabled for the token's owner): paste a token,
+// it's validated (via /me/github/preview - nothing saved yet at that
+// point) and saved with no repository chosen. Picking which repo to point
+// at happens afterward, from the Dashboard's own searchable picker
+// (AllRepositoriesCard) - this dialog used to also make you pick one here
+// first, but that's a decision worth making from the Dashboard itself, not
+// a blocking prerequisite to ever reaching it.
 //
 // Not gated on GitHub OAuth login: api/settings/me/github works for anyone,
 // logged in or not — PortalIdentity resolves an isolated anonymous session
 // for whoever hasn't logged in, so this pops up for literally every first
 // visit, no OAuth App setup required to get past it.
+//
+// MFA: whether the code-entry step appears is decided by preview's own
+// mfaRequired flag (a heads-up, not the real gate) - the actual
+// enforcement happens backend-side, on the SAME saveMyGitHubSettings call
+// this already makes (see MfaGate/SettingsController.SaveMyGitHub). A
+// wrong/expired code never saves anything - this session is left exactly
+// where it started, same as if nothing had been submitted at all.
+const MAX_MFA_ATTEMPTS = 5;
+
 export default function RequireGitHubSetup({ children }) {
 
     const toast = useToast();
@@ -46,7 +56,7 @@ export default function RequireGitHubSetup({ children }) {
     const configured = bootstrapError || githubTokenConfigured;
     const wasSignedOut = githubWasSignedOut;
 
-    // "token" -> "connected"
+    // "token" -> "mfa" (only when preview reports it's required) -> "connected"
     const [step, setStep] = useState("token");
 
     const [token, setToken] = useState("");
@@ -56,7 +66,17 @@ export default function RequireGitHubSetup({ children }) {
     const [connecting, setConnecting] = useState(false);
     const [connectedAs, setConnectedAs] = useState(null);
 
-    async function connectWithToken(username) {
+    const [pendingUsername, setPendingUsername] = useState(null);
+    const [mfaCode, setMfaCode] = useState("");
+    const [mfaError, setMfaError] = useState("");
+    const [mfaAttempts, setMfaAttempts] = useState(0);
+    const [useMfaRecovery, setUseMfaRecovery] = useState(false);
+
+    // Always rethrows on failure - callers (handleConnect for the no-MFA
+    // case, handleMfaSubmit for the MFA case) each need to react
+    // differently to an error here (a toast vs. inline MFA-specific
+    // messaging), so this doesn't guess which on their behalf.
+    async function connectWithToken(usernameHint, mfaFields = {}) {
 
         setConnecting(true);
 
@@ -65,7 +85,8 @@ export default function RequireGitHubSetup({ children }) {
             await saveMyGitHubSettings({
                 owner: "",
                 repository: "",
-                personalAccessToken: token.trim()
+                personalAccessToken: token.trim(),
+                ...mfaFields
             });
 
             // Separate request from the save above on purpose — see
@@ -76,16 +97,14 @@ export default function RequireGitHubSetup({ children }) {
             const resolvedUsername = await getMyGitHubUsername();
 
             toast.show("GitHub token connected.", "success");
-            setConnectedAs({ username: resolvedUsername || username });
+            setConnectedAs({ username: resolvedUsername || usernameHint });
             setStep("connected");
 
             setTimeout(() => window.location.reload(), 1600);
 
         }
-        catch (err) {
+        finally {
 
-            console.error(err);
-            toast.show(err.response?.data?.message || "Failed to save GitHub settings.", "error");
             setConnecting(false);
 
         }
@@ -116,6 +135,16 @@ export default function RequireGitHubSetup({ children }) {
                 return;
             }
 
+            if (result.mfaRequired) {
+                setPendingUsername(result.username);
+                setMfaCode("");
+                setMfaError("");
+                setMfaAttempts(0);
+                setUseMfaRecovery(false);
+                setStep("mfa");
+                return;
+            }
+
             await connectWithToken(result.username);
 
         }
@@ -128,6 +157,48 @@ export default function RequireGitHubSetup({ children }) {
         finally {
 
             setPreviewing(false);
+
+        }
+
+    }
+
+    async function handleMfaSubmit(e) {
+
+        e.preventDefault();
+
+        try {
+
+            await connectWithToken(
+                pendingUsername,
+                useMfaRecovery ? { recoveryCode: mfaCode } : { mfaCode }
+            );
+
+        }
+        catch (err) {
+
+            console.error(err);
+            setMfaCode("");
+
+            // MFA_LOCKED - the server's own rate limit, not this
+            // component's local counter, is what actually stopped this;
+            // deferring to it the same way PinLockScreen defers to the
+            // screen-lock PIN's own server-side `locked` flag rather than
+            // only trusting its own client-side count.
+            if (err.response?.data?.code === "MFA_LOCKED") {
+                setMfaError(err.response?.data?.message || "Too many wrong codes — try again in a few minutes.");
+                return;
+            }
+
+            const nextAttempts = mfaAttempts + 1;
+            setMfaAttempts(nextAttempts);
+
+            if (nextAttempts >= MAX_MFA_ATTEMPTS) {
+                setMfaError("Too many wrong codes — enter your token again to retry.");
+                setTimeout(() => setStep("token"), 1800);
+                return;
+            }
+
+            setMfaError(err.response?.data?.message || "Invalid verification code.");
 
         }
 
@@ -244,6 +315,72 @@ export default function RequireGitHubSetup({ children }) {
                                 </button>
 
                             </form>
+
+                            </>
+
+                        )}
+
+                        {step === "mfa" && (
+
+                            <>
+
+                            <h1 id="github-setup-title" className="setup-gate-title">
+                                Multi-Factor Authentication
+                            </h1>
+
+                            <p className="field-hint" style={{ textAlign: "center" }}>
+                                {pendingUsername ? <>@{pendingUsername} has</> : "This account has"} MFA enabled.
+                                Enter the {useMfaRecovery ? "recovery code" : "6-digit code from your authenticator app"} to continue.
+                            </p>
+
+                            <form onSubmit={handleMfaSubmit} className="setup-gate-form">
+
+                                <div className="form-group">
+                                    <label>{useMfaRecovery ? "Recovery code" : "6-digit code"}</label>
+                                    <input
+                                        type="text"
+                                        inputMode={useMfaRecovery ? "text" : "numeric"}
+                                        maxLength={useMfaRecovery ? 9 : 6}
+                                        className="form-control"
+                                        placeholder={useMfaRecovery ? "8H7K-XP2Q" : "123456"}
+                                        value={mfaCode}
+                                        onChange={(e) => setMfaCode(useMfaRecovery ? e.target.value : e.target.value.replace(/\D/g, ""))}
+                                        autoComplete="off"
+                                        autoFocus
+                                    />
+                                </div>
+
+                                {mfaError && (
+                                    <p className="field-hint field-hint-bad">{mfaError}</p>
+                                )}
+
+                                <button type="submit" className="btn btn-primary" disabled={connecting || !mfaCode}>
+                                    {connecting ? "Verifying..." : "Verify & Continue"}
+                                </button>
+
+                            </form>
+
+                            <div>
+                                <button
+                                    type="button"
+                                    className="token-help-link"
+                                    style={{ background: "none", border: "none", padding: 0, cursor: "pointer" }}
+                                    onClick={() => { setUseMfaRecovery((v) => !v); setMfaCode(""); setMfaError(""); }}
+                                >
+                                    {useMfaRecovery ? "Use an authenticator code instead" : "Use a recovery code instead"}
+                                </button>
+                            </div>
+
+                            <div>
+                                <button
+                                    type="button"
+                                    className="btn"
+                                    onClick={() => { setStep("token"); setMfaCode(""); setMfaError(""); }}
+                                    disabled={connecting}
+                                >
+                                    ← Back
+                                </button>
+                            </div>
 
                             </>
 

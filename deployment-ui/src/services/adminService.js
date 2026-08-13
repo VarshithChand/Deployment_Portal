@@ -18,6 +18,12 @@ export const unblockUser = async (key) => await api.post(`/users/${encodeURIComp
 // and restriction tied to this key. Irreversible.
 export const deleteUser = async (key) => await api.delete(`/users/${encodeURIComponent(key)}`);
 
+// Recovers an account whose authenticator device is lost - a full MFA
+// removal for that PAT's resolved GitHub login (not just this row's
+// session), same effect as the user disabling it themselves. They must
+// fully re-enroll afterward.
+export const resetUserMfa = async (key) => await api.post(`/users/${encodeURIComponent(key)}/reset-mfa`);
+
 // Merges rows that resolve to the same real GitHub account, keeping
 // whichever was active most recently - a one-time cleanup for rows that
 // predate the one-session-per-PAT check saving now enforces.

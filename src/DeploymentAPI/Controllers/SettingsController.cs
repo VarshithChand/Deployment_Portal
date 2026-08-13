@@ -140,6 +140,20 @@ public class SettingsController : ControllerBase
             return denied;
         }
 
+        // MFA enforcement - the actual gate (PreviewMyGitHubToken's
+        // MfaRequired flag is only a heads-up for the UI; this is what
+        // stops a token from ever being persisted without it). Keyed by
+        // the token's own resolved GitHub login, not this session's key -
+        // MFA belongs to the person, same reasoning as Round 14's
+        // cross-session credential migration. Nothing is saved below
+        // until this passes, so a wrong/missing code leaves this session
+        // exactly where it was - no partial state to clean up.
+        if (!string.IsNullOrWhiteSpace(request.PersonalAccessToken)
+            && await MfaGate.DenyUnlessVerifiedAsync(this, _settings, _activity, request.PersonalAccessToken.Trim(), request.MfaCode, request.RecoveryCode) is IActionResult mfaDenied)
+        {
+            return mfaDenied;
+        }
+
         var creds = await _settings.SaveUserGitHubCredentialsAsync(key, request);
 
         return Ok(new
@@ -186,6 +200,15 @@ public class SettingsController : ControllerBase
     public async Task<IActionResult> PreviewMyGitHubToken(TokenPreviewRequestDto request)
     {
         var result = await _github.PreviewTokenAsync(request.PersonalAccessToken);
+
+        // A local lookup only (no extra GitHub call) - lets the frontend
+        // show the MFA code-entry step right after preview, before it
+        // ever attempts to save. SaveMyGitHub below independently
+        // re-checks and enforces this regardless, so skipping preview
+        // entirely can't bypass it.
+        if (result.Success && !string.IsNullOrWhiteSpace(result.Username))
+            result.MfaRequired = await _settings.IsMfaEnabledAsync(result.Username);
+
         return Ok(result);
     }
 

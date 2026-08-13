@@ -115,6 +115,31 @@ public class AdminUsersController : ControllerBase
         return Ok();
     }
 
+    // Recovers an account whose authenticator device is lost/unavailable -
+    // a full MFA removal for that login (see
+    // SettingsService.ResetMfaForLoginAsync), same as the user disabling
+    // it themselves would do, just reached without their old code since
+    // that's the entire point. They must fully re-enroll afterward if
+    // they still want MFA protecting their account.
+    [HttpPost("{key}/reset-mfa")]
+    public async Task<IActionResult> ResetMfa(string key)
+    {
+        if (await AdminGate.DenyUnlessAdminAsync(this, _settings, "reset a PAT user's MFA", "services") is IActionResult denied)
+            return denied;
+
+        if (await ResolveRealKeyAsync(key) is not string realKey)
+            return NotFound(new { message = "That user's session no longer exists." });
+
+        var login = await _settings.ResolveCurrentLoginForKeyAsync(realKey);
+
+        if (login == null)
+            return NotFound(new { message = "Unable to resolve that session's GitHub identity right now." });
+
+        await _settings.ResetMfaForLoginAsync(login);
+
+        return Ok();
+    }
+
     // A real delete (see SettingsService.DeletePatUserAsync) - removes
     // this session's row entirely rather than just soft-signing it out.
     // Also forces an immediate sign-out for the same reason ForceLogout
