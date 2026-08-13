@@ -3617,3 +3617,67 @@ Files changed: src/DeploymentAPI/Controllers/AdminUsersController.cs.
 Status: Complete for the code-level and API-level-verifiable portion;
 the live-kick itself needs two real duplicate sessions to confirm
 end-to-end, flagged above rather than claimed as tested.
+
+ROUND 23 - PROVEN MFA LOGIN TAKES OVER AN ACTIVE DEVICE INSTEAD OF BLOCKING
+==================================================
+Date: 2026-08-13
+Trigger: user asked that entering an MFA code specifically should check
+whether the same PAT/account is already connected elsewhere, and if so,
+sign THAT session out and let the new (MFA-verified) one in, notifying
+the old browser - i.e. Round 20's original take-over-and-notify behavior,
+but only for the case where the connecting device just proved itself via
+a valid MFA code, not for a bare, unverified token.
+
+This refines rather than reverts Round 21: Round 21 made ANY reconnect
+block when the account was active elsewhere, MFA-enabled or not. The
+insight here is that a successfully-verified TOTP/recovery code is real
+evidence of legitimate ownership - stronger than simply being first to
+present a copy of the PAT string - so it deserves to win the conflict
+instead of being turned away by it.
+
+Implementation: SaveUserGitHubCredentialsAsync (SettingsService.cs)
+gained an allowTakeoverIfActive parameter (default false - every other
+caller's behavior is completely unchanged). When true, the
+still-active-elsewhere check from Round 21 is skipped entirely and this
+save proceeds straight to the take-over path (migrate data forward,
+delete the other row, ForceLogout it with the "device" reason) regardless
+of how recently that other session was seen - MFA proof means it doesn't
+need to wait for the old session to go idle first. AuthController.
+MfaVerify passes true, since reaching that line already required
+VerifyMfaCodeAsync/VerifyMfaRecoveryCodeAsync to return true. PatLogin's
+own early convenience check (added in Round 21 specifically to avoid
+making someone type an MFA code just to be told no) now only runs inside
+the no-MFA branch - an MFA-enabled account is no longer blocked before
+it even reaches the MFA step, since the real decision now depends on
+whether that step succeeds, not on what the bare token alone shows.
+
+Verification performed:
+  - `dotnet build` (isolated output dir): 0 errors, first try, same 3
+    pre-existing unrelated warnings as every prior round.
+  - No frontend changes - every response shape AuthController returns is
+    unchanged (PatLoginPage/MfaVerifyPage's existing Round 17/21 handling
+    covers this without modification).
+  - Live tests against the deployed Render backend after push (fresh
+    X-Session-Id, cleanup after):
+    - POST api/auth/pat-login with a fake/unresolvable token -> unchanged
+      clean {success:false}, confirms the no-MFA branch's early block
+      still runs correctly and the restructure didn't disturb it.
+    - POST api/auth/mfa/verify with no pending session -> unchanged clean
+      MFA_SESSION_EXPIRED, confirms the allowTakeoverIfActive plumbing
+      didn't disturb the existing pending-session-missing guard.
+  - Could NOT live-verify the actual take-over-on-proven-MFA path itself
+    (enroll MFA on a real account, connect device A, connect device B
+    with the same account while A is still active, complete B's MFA step,
+    confirm A gets signed out live with the device-conflict message and B
+    ends up connected) - identical standing real-GitHub-identity/real-MFA
+    limitation as every MFA and device-conflict round this session
+    (13/14/16/17/18/20/21/22). Recommend the user verify directly with a
+    real MFA-enabled PAT on two devices.
+
+Files changed: src/DeploymentAPI/Controllers/AuthController.cs,
+Services/SettingsService.cs.
+
+Status: Complete for the code-level and API-level-verifiable portion;
+the proven-MFA takeover itself needs a real MFA-enabled account tested
+from two real devices to confirm end-to-end, flagged above rather than
+claimed as tested.
