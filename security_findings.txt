@@ -3895,3 +3895,62 @@ AdminAccessView.jsx, services/adminService.js.
 Status: Complete for the code-level and API-level-verifiable portion;
 the full require-to-block-to-re-enroll flow needs a real PAT account to
 confirm end-to-end, flagged above rather than claimed as tested.
+
+ROUND 27 - REAL BUG: MFA NUDGE NEVER ACTIVATED UNTIL A REPO WAS ALSO CHOSEN
+==================================================
+Date: 2026-08-14
+Trigger: user reported that after flagging a user as "Required" in Admin
+Access (Round 26), and after that user reloaded their browser, the
+mandatory MFA prompt still never appeared for them. Ruled out a stale-
+tab/no-live-polling explanation first (confirmed via a clarifying
+question the reload DID happen and it still didn't show), which pointed
+at something in the bootstrap computation itself rather than a caching/
+timing issue.
+
+Root cause: BootstrapController's mfaNudgeShow was gated on
+githubCreds.IsConfigured, which requires Owner AND Repository to be set,
+not just a connected token (see UserGitHubCredentials.IsConfigured).
+Round 17's two-page PAT+MFA login flow deliberately saves a fresh
+connection with BOTH left blank - picking a repository happens
+afterward, from the Dashboard's own searchable picker, by design (see
+PatLoginPage/MfaVerifyPage's own comments on this). The practical effect:
+the entire nudge/mandatory/block system silently never activated for
+ANY user who'd connected a token but hadn't yet also picked a repo from
+the Dashboard - this predates Round 26's admin-required feature
+entirely. Round 18's original "you saved a cloud credential" trigger had
+the exact identical gap since the day it shipped; Round 26's report is
+simply the first time anyone happened to notice, since testing a
+same-session flag-then-reload cycle surfaced it directly.
+
+Fix: changed the gate to githubCreds.TokenConfigured (token only, no
+owner/repo requirement) - MFA protects the account/credential itself,
+which has nothing to do with whether a specific deployment repo has been
+chosen yet.
+
+Verification performed:
+  - `dotnet build` (isolated output dir): 0 errors, first try, same 3
+    pre-existing unrelated warnings as every prior round.
+  - Live test against the deployed Render backend after push: GET
+    api/bootstrap on a fresh session with nothing configured at all ->
+    unchanged mfaNudge:{show:false,...}, confirming the looser gate
+    still correctly reports "nothing to show" for a session with no
+    token connected (TokenConfigured is also false there, same as
+    IsConfigured would have been - this case was never the bug).
+  - Could NOT live-verify the actual fix (connect a real token via the
+    two-page login flow WITHOUT picking a repo, confirm the nudge now
+    appears where it silently didn't before) - same standing real-
+    GitHub-identity limitation as every MFA round this session. Given
+    the bug is a one-line, directly-reasoned gating condition (not
+    complex logic), and the fix was confirmed not to regress the
+    "nothing connected" case live, confidence is reasonably high without
+    that final live confirmation - still recommend the user verify with
+    a real fresh (no-repo-yet) connection.
+
+Files changed: src/DeploymentAPI/Controllers/BootstrapController.cs.
+
+Status: Complete for the code-level and API-level-verifiable portion;
+the actual "nudge now appears for a token-only, no-repo-yet session"
+behavior needs a real PAT to confirm end-to-end, flagged above rather
+than claimed as tested. This was a genuine pre-existing bug affecting
+Round 18's MFA nudge feature from the moment it shipped, not something
+introduced by this round's own changes.
