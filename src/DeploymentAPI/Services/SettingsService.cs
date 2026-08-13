@@ -1718,7 +1718,22 @@ public class SettingsService
         var codes = entry?["RecoveryCodes"] as JArray;
 
         if (codes == null)
+        {
+            // Distinct from "wrong code" - either this login has no MFA
+            // entry at all, or it does but nobody's ever generated a
+            // recovery code for it (self-enrollment doesn't create any
+            // anymore - see VerifyMfaEnrollmentAsync - only the admin's
+            // GenerateAdminRecoveryCodeAsync does). Logged (never the
+            // code itself) specifically so a "the admin JUST generated
+            // one and it still says invalid" report is actually
+            // debuggable via Activity Log instead of a dead end - the
+            // user-facing message stays the same generic "Invalid
+            // verification code" either way, so this doesn't leak
+            // whether an account has MFA/codes configured to whoever's
+            // attempting the login.
+            _log.LogInfo("Settings", $"Recovery code check for '{login}' failed - no RecoveryCodes exist for this login (entry {(entry == null ? "missing" : "present")}).");
             return false;
+        }
 
         var hash = HashRecoveryCode(code);
 
@@ -1727,7 +1742,17 @@ public class SettingsService
             && c["UsedAtUtc"] == null);
 
         if (match == null)
+        {
+            var unusedCount = codes.Count(c => c["UsedAtUtc"] == null);
+            var totalCount = codes.Count;
+
+            _log.LogInfo("Settings", $"Recovery code check for '{login}' failed - no match among {unusedCount} unused of {totalCount} stored code(s). " +
+                (unusedCount == 0 && totalCount > 0
+                    ? "Every issued code for this login has already been used once - ask the admin to generate a new one."
+                    : "The submitted code doesn't match any currently unused code on file for this exact login."));
+
             return false;
+        }
 
         // Single-use - marked spent immediately, never valid again even
         // if the exact same code is presented a second time.
@@ -1735,6 +1760,8 @@ public class SettingsService
         entry!["LastVerifiedAtUtc"] = DateTime.UtcNow;
 
         await WriteRootAsync(root);
+
+        _log.LogInfo("Settings", $"Recovery code accepted for '{login}'.");
 
         return true;
     }
