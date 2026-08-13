@@ -1206,8 +1206,17 @@ public class SettingsService
         // that only need a plain match/no-match) so a genuinely bad
         // credential and a merely-transient failure (GitHub rate limit, a
         // network blip) don't collapse into the same misleading label.
+        //
+        // Unprotect() here is not optional - the stored value is the
+        // Data-Protection-encrypted ciphertext (see Protect() in
+        // SaveUserGitHubCredentialsAsync), never the raw token. Passing
+        // that ciphertext straight to GitHub as a Bearer token used to
+        // make every single row 401 regardless of whether the real
+        // underlying PAT was still valid - every row read "Unknown
+        // (invalid or expired token)" even for a token that worked fine.
         var statuses = await Task.WhenAll(
-            entries.Select(p => ResolvePatOwnerStatusAsync(((JObject)p.Value!)["PersonalAccessToken"]!.ToString()!)));
+            entries.Select(p => ResolvePatOwnerStatusAsync(
+                Unprotect(((JObject)p.Value!)["PersonalAccessToken"]!.ToString()) ?? string.Empty)));
 
         // Only meaningful for a row that resolved to a real login - same
         // "no confirmed identity, nothing to look up" reasoning as the
