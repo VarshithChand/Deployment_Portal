@@ -76,7 +76,7 @@ function RepoRunStatus({ runs }) {
 // a pipeline running on a repo you're not looking at doesn't go unnoticed.
 export default function AllRepositoriesCard({ repository }) {
 
-    const { githubRepoConfigured } = useAuth();
+    const { githubRepoConfigured, githubPreviousOwner, githubPreviousRepository } = useAuth();
     const toast = useToast();
 
     const [repos, setRepos] = useState([]);
@@ -181,6 +181,23 @@ export default function AllRepositoriesCard({ repository }) {
     const currentFullName = repository?.full_name
         || (repository?.owner?.login && repository?.name ? `${repository.owner.login}/${repository.name}` : null);
 
+    // The repo this session pointed at right before the current one (see
+    // AuthContext/BootstrapController) - only worth showing when it's
+    // actually different from what's active now.
+    const previousFullName = githubPreviousOwner && githubPreviousRepository
+        ? `${githubPreviousOwner}/${githubPreviousRepository}`
+        : null;
+
+    function switchToPrevious() {
+
+        setTarget({
+            owner: githubPreviousOwner,
+            name: githubPreviousRepository,
+            fullName: previousFullName
+        });
+
+    }
+
     async function handleConfirmSwitch() {
 
         if (!target) {
@@ -232,6 +249,19 @@ export default function AllRepositoriesCard({ repository }) {
                     <p className="field-hint" style={{ margin: 0 }}>
                         Every repository this token's account can see. Click one to switch to it.
                     </p>
+
+                    {previousFullName && previousFullName !== currentFullName && (
+
+                        <p className="field-hint" style={{ margin: "6px 0 0" }}>
+                            Previously: <strong>{previousFullName}</strong>
+                            {" "}
+                            <button type="button" className="btn btn-link" style={{ padding: 0 }} onClick={switchToPrevious}>
+                                Switch back
+                            </button>
+                        </p>
+
+                    )}
+
                 </div>
 
                 {!loading && !error && (

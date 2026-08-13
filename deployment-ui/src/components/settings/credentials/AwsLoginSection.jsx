@@ -1,9 +1,11 @@
 import { useEffect, useState } from "react";
 
 import ClearableInput from "../../common/ClearableInput";
+import ComboBox from "../../common/ComboBox";
 import AwsSsoSignIn from "./AwsSsoSignIn";
 import useToast from "../../../hooks/useToast";
 import { getMyAwsSettings, saveMyAwsSettings, clearMyAwsCredentials } from "../../../services/settingsService";
+import AWS_REGIONS from "../../../data/awsRegions";
 
 const EMPTY_FORM = { accessKeyId: "", secretAccessKey: "", region: "", mfaSerialNumber: "", mfaCode: "" };
 
@@ -59,13 +61,11 @@ function AwsAccessKeyForm({ form, setForm, status, saving, missingSerialForCode,
 
             <div className="form-group">
                 <label>Region</label>
-                <ClearableInput
-                    placeholder={status?.region ? `Leave blank to keep "${status.region}"` : "us-east-1"}
+                <ComboBox
+                    options={AWS_REGIONS}
                     value={form.region}
-                    onChange={(e) => setForm({ ...form, region: e.target.value })}
-                    onClear={() => setForm({ ...form, region: "" })}
-                    autoComplete="off"
-                    name="aws-region"
+                    onChange={(region) => setForm({ ...form, region })}
+                    placeholder={status?.region ? `Leave blank to keep "${status.region}"` : "us-east-1"}
                 />
             </div>
 

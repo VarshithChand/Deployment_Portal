@@ -26,7 +26,7 @@ public class SonarController : ControllerBase
     [HttpGet("overview")]
     public async Task<IActionResult> Overview()
     {
-        if (await AdminGate.DenyUnlessAdminAsync(this, _settings, "view code quality data") is IActionResult denied)
+        if (await AdminGate.DenyUnlessAdminAsync(this, _settings, "view code quality data", "codeQuality") is IActionResult denied)
             return denied;
 
         return Ok(await _sonar.GetOverviewAsync());

@@ -208,7 +208,9 @@ public class SettingsService
         return new UserGitHubCredentials(
             entry?["Owner"]?.ToString() ?? string.Empty,
             entry?["Repository"]?.ToString() ?? string.Empty,
-            signedOut ? null : Unprotect(entry?["PersonalAccessToken"]?.ToString()));
+            signedOut ? null : Unprotect(entry?["PersonalAccessToken"]?.ToString()),
+            entry?["PreviousOwner"]?.ToString(),
+            entry?["PreviousRepository"]?.ToString());
     }
 
     // The raw SignedOut flag, unmasked by GetUserGitHubCredentialsAsync's
@@ -282,8 +284,26 @@ public class SettingsService
         // the token outright with a plain 401 that looks identical to an
         // actually-wrong token, which is a frustrating thing to have to
         // debug from the outside.
-        entry["Owner"] = update.Owner?.Trim() ?? string.Empty;
-        entry["Repository"] = update.Repository?.Trim() ?? string.Empty;
+        var newOwner = update.Owner?.Trim() ?? string.Empty;
+        var newRepository = update.Repository?.Trim() ?? string.Empty;
+
+        // Stash whatever was active right before this switch (Dashboard's
+        // "Previously used" quick-switch reads this) - only when something
+        // real was already configured and it's actually changing, so first-
+        // time setup and a same-repo token refresh never fabricate a bogus
+        // "previous" repo.
+        var previousOwner = entry["Owner"]?.ToString();
+        var previousRepository = entry["Repository"]?.ToString();
+
+        if (!string.IsNullOrWhiteSpace(previousOwner) && !string.IsNullOrWhiteSpace(previousRepository)
+            && (previousOwner != newOwner || previousRepository != newRepository))
+        {
+            entry["PreviousOwner"] = previousOwner;
+            entry["PreviousRepository"] = previousRepository;
+        }
+
+        entry["Owner"] = newOwner;
+        entry["Repository"] = newRepository;
 
         string? evictedDuplicateLogin = null;
 
@@ -935,7 +955,7 @@ public class SettingsService
     // Add/Remove/Clear from callers entirely.
     public static readonly IReadOnlySet<string> GrantablePageKeys = new HashSet<string>
     {
-        "deploy", "approvals", "pullRequests", "storage", "environments", "docker", "services"
+        "deploy", "approvals", "pullRequests", "storage", "environments", "docker", "services", "codeQuality"
     };
 
     public async Task<Dictionary<string, List<string>>> GetPageAdminGrantsAsync()

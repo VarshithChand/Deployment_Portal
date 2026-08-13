@@ -63,6 +63,13 @@ public class AiController : ControllerBase
     [HttpPost("chat")]
     public async Task<IActionResult> Chat([FromBody] AiChatRequestDto request)
     {
+        // Admin-only, no page-scoped delegation (unlike Code Quality/Docker/
+        // etc.) - deliberate choice, not the default AdminGate pattern with
+        // a pageKey. Deployment Copilot used to be open to every session;
+        // this is a real lockdown, not closing a pre-existing gap.
+        if (await AdminGate.DenyUnlessAdminAsync(this, _settings, "use the AI Assistant") is IActionResult denied)
+            return denied;
+
         if (request.Messages == null || request.Messages.Count == 0)
             return BadRequest(new { message = "messages is required." });
 

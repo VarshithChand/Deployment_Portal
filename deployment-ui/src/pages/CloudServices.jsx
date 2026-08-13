@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 
 import AWS_SERVICES, { AWS_CATEGORIES } from "../data/awsServiceCatalog";
+import AWS_REGIONS from "../data/awsRegions";
 import { getMyAwsResources } from "../services/settingsService";
 import { getLiveStatusForService } from "../utils/cloudServiceLiveStatus";
 import usePolling from "../hooks/usePolling";
@@ -8,6 +9,7 @@ import usePagination from "../hooks/usePagination";
 import useNavigation from "../hooks/useNavigation";
 import PageLayout from "../components/layout/PageLayout";
 import SearchBox from "../components/common/SearchBox";
+import ComboBox from "../components/common/ComboBox";
 import Pagination from "../components/common/Pagination";
 import CloudServiceCard from "../components/cloudServices/CloudServiceCard";
 import CloudServiceDetailPage from "../components/cloudServices/CloudServiceDetailPage";
@@ -104,10 +106,16 @@ export default function CloudServices() {
     const [inventory, setInventory] = useState(null);
     const [inventoryLoading, setInventoryLoading] = useState(true);
 
-    async function loadInventory() {
+    // null = "use whatever region is saved with the AWS credential" (the
+    // backend's own default, see CloudStatusService) - only becomes a real
+    // value once the region picker below is touched, so nothing changes
+    // for anyone who never uses it.
+    const [selectedRegion, setSelectedRegion] = useState(null);
+
+    async function loadInventory(region) {
 
         try {
-            setInventory(await getMyAwsResources());
+            setInventory(await getMyAwsResources(region ?? selectedRegion));
         }
         catch (err) {
             console.error(err);
@@ -122,6 +130,14 @@ export default function CloudServices() {
     // Dashboard's own AWS Services card shares, so polling here doesn't
     // add extra AWS calls beyond whichever card asks first.
     usePolling(loadInventory, 45000);
+
+    function handleRegionChange(region) {
+
+        setSelectedRegion(region || null);
+        setInventoryLoading(true);
+        loadInventory(region || null);
+
+    }
 
     // Pushes a new history entry (real Back/Forward support) with
     // whichever of service/cluster/ecsService/repo the caller passes -
@@ -280,6 +296,23 @@ export default function CloudServices() {
             <div className="card">
 
                 <h2 className="card-title">Services You're Using</h2>
+
+                {inventory?.configured && (
+
+                    <div className="form-group cloud-provider-select-group">
+
+                        <label>Region</label>
+
+                        <ComboBox
+                            options={AWS_REGIONS}
+                            value={selectedRegion || inventory.region || ""}
+                            onChange={handleRegionChange}
+                            placeholder={inventory.region || "us-east-1"}
+                        />
+
+                    </div>
+
+                )}
 
                 {inventoryLoading ? (
 

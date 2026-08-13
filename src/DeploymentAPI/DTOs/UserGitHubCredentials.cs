@@ -2,7 +2,9 @@ namespace DeploymentAPI.DTOs;
 
 // One portal user's own GitHub repo + Personal Access Token — every user
 // configures their own instead of the whole portal sharing a single one.
-public record UserGitHubCredentials(string Owner, string Repository, string? PersonalAccessToken)
+public record UserGitHubCredentials(
+    string Owner, string Repository, string? PersonalAccessToken,
+    string? PreviousOwner = null, string? PreviousRepository = null)
 {
     public bool TokenConfigured => !string.IsNullOrWhiteSpace(PersonalAccessToken);
 

@@ -72,21 +72,26 @@ export const clearMyAwsCredentials = async () => {
 // across the whole account these credentials can see, not just the one
 // cluster/service an Environment happens to be wired to (that narrower
 // view is getEnvironmentCloudStatus, in environmentsService.js).
-export const getMyAwsResources = async () => {
-    const response = await settingsApi.get("/me/aws/resources");
+//
+// `region` is an optional per-request override (see CloudStatusService on
+// the backend, which already falls back to the saved credential's own
+// region whenever this is omitted) — lets Cloud Services / this card look
+// at a different region without re-saving the AWS credential itself.
+export const getMyAwsResources = async (region) => {
+    const response = await settingsApi.get("/me/aws/resources", { params: region ? { region } : undefined });
     return response.data;
 };
 
 // Cloud Services page's per-service detail click-through — richer than
 // getMyAwsResources above (running vs. stopped instance/task counts),
 // so each is its own call rather than folded into the account-wide scan.
-export const getMyAwsEc2Detail = async () => {
-    const response = await settingsApi.get("/me/aws/ec2-detail");
+export const getMyAwsEc2Detail = async (region) => {
+    const response = await settingsApi.get("/me/aws/ec2-detail", { params: region ? { region } : undefined });
     return response.data;
 };
 
-export const getMyAwsEcsDetail = async () => {
-    const response = await settingsApi.get("/me/aws/ecs-detail");
+export const getMyAwsEcsDetail = async (region) => {
+    const response = await settingsApi.get("/me/aws/ecs-detail", { params: region ? { region } : undefined });
     return response.data;
 };
 

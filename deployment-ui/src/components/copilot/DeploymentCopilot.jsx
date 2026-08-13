@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { getSettings } from "../../services/settingsService";
 import { sendCopilotMessage } from "../../services/aiService";
 import useNavigation from "../../hooks/useNavigation";
+import useAuth from "../../hooks/useAuth";
 import CopilotMarkdown from "./CopilotMarkdown";
 
 const DEFAULT_SUGGESTIONS = [
@@ -67,6 +68,7 @@ function readPageContext(tab) {
 export default function DeploymentCopilot() {
 
     const { tab } = useNavigation();
+    const { isAdminSession } = useAuth();
 
     const [open, setOpen] = useState(false);
     const [configured, setConfigured] = useState(null);
@@ -162,6 +164,14 @@ export default function DeploymentCopilot() {
     function handleSubmit(e) {
         e.preventDefault();
         handleSend();
+    }
+
+    // Admin-only, no delegation (see AiController.Chat) - the floating
+    // widget simply doesn't render for a non-admin session, same
+    // self-guarding pattern PageAdminAccessButton already uses, rather
+    // than rendering and then failing on the first message sent.
+    if (!isAdminSession) {
+        return null;
     }
 
     return (

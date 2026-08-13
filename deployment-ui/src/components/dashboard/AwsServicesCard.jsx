@@ -1,9 +1,11 @@
 import { useState } from "react";
 
 import { getMyAwsResources } from "../../services/settingsService";
+import AWS_REGIONS from "../../data/awsRegions";
 import useAuth from "../../hooks/useAuth";
 import useNavigation from "../../hooks/useNavigation";
 import usePolling from "../../hooks/usePolling";
+import ComboBox from "../common/ComboBox";
 
 const POLL_MS = 30000;
 const MAX_ITEMS_SHOWN = 4;
@@ -111,7 +113,12 @@ export default function AwsServicesCard() {
     const [inventory, setInventory] = useState(null);
     const [loading, setLoading] = useState(true);
 
-    async function loadInventory() {
+    // null = "use whatever region is saved with the AWS credential" - the
+    // backend's own default. Only becomes a real value once the region
+    // picker below is touched.
+    const [selectedRegion, setSelectedRegion] = useState(null);
+
+    async function loadInventory(region) {
 
         // Same reasoning as every other Dashboard card — this mounts even
         // behind RequireGitHubSetup's popup, so without this guard it
@@ -121,13 +128,21 @@ export default function AwsServicesCard() {
             return;
         }
 
-        const data = await getMyAwsResources();
+        const data = await getMyAwsResources(region ?? selectedRegion);
         setInventory(data);
         setLoading(false);
 
     }
 
     usePolling(loadInventory, POLL_MS);
+
+    function handleRegionChange(region) {
+
+        setSelectedRegion(region || null);
+        setLoading(true);
+        loadInventory(region || null);
+
+    }
 
     if (!githubRepoConfigured) {
         return null;
@@ -173,6 +188,23 @@ export default function AwsServicesCard() {
             <h2 className="card-title">
                 AWS Services
             </h2>
+
+            {inventory?.configured && (
+
+                <div className="form-group" style={{ maxWidth: "280px" }}>
+
+                    <label>Region</label>
+
+                    <ComboBox
+                        options={AWS_REGIONS}
+                        value={selectedRegion || inventory.region || ""}
+                        onChange={handleRegionChange}
+                        placeholder={inventory.region || "us-east-1"}
+                    />
+
+                </div>
+
+            )}
 
             {loading ? (
 

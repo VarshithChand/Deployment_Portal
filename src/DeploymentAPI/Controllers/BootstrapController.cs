@@ -122,7 +122,9 @@ public class BootstrapController : ControllerBase
                 Repository = githubCreds.Repository,
                 TokenConfigured = githubCreds.TokenConfigured,
                 IsConfigured = githubCreds.IsConfigured,
-                WasSignedOut = wasSignedOut
+                WasSignedOut = wasSignedOut,
+                PreviousOwner = githubCreds.PreviousOwner,
+                PreviousRepository = githubCreds.PreviousRepository
             },
             Aws = new BootstrapAwsDto
             {

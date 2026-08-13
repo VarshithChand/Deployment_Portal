@@ -52,6 +52,14 @@ public class BootstrapGitHubDto
     public bool IsConfigured { get; set; }
 
     public bool WasSignedOut { get; set; }
+
+    // The repo/owner that was active right before the current one -
+    // Dashboard's AllRepositoriesCard uses this for a "Previously used -
+    // switch back" shortcut. Null until this session has switched repos at
+    // least once (see SettingsService.SaveUserGitHubCredentialsAsync).
+    public string? PreviousOwner { get; set; }
+
+    public string? PreviousRepository { get; set; }
 }
 
 // Same fields SettingsController.GetMyAws already returns.

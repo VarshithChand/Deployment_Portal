@@ -80,6 +80,12 @@ export default function AuthProvider({ children }) {
     const [githubRepository, setGithubRepository] = useState("");
     const [githubWasSignedOut, setGithubWasSignedOut] = useState(false);
 
+    // The repo/owner this session pointed at right before the current one -
+    // null until at least one switch has happened. Backs the Dashboard's
+    // "Previously used - switch back" shortcut (see AllRepositoriesCard).
+    const [githubPreviousOwner, setGithubPreviousOwner] = useState(null);
+    const [githubPreviousRepository, setGithubPreviousRepository] = useState(null);
+
     const [tokenOwner, setTokenOwner] = useState(null);
 
     // Whether this session has a screen-lock PIN set — read by
@@ -162,6 +168,8 @@ export default function AuthProvider({ children }) {
             setGithubOwner(data.gitHub.owner || "");
             setGithubRepository(data.gitHub.repository || "");
             setGithubWasSignedOut(!!data.gitHub.wasSignedOut);
+            setGithubPreviousOwner(data.gitHub.previousOwner || null);
+            setGithubPreviousRepository(data.gitHub.previousRepository || null);
 
             setAwsIdentityLabel(data.aws.identityLabel || null);
             setPinConfigured(!!data.pin.configured);
@@ -225,6 +233,7 @@ export default function AuthProvider({ children }) {
             refresh: loadBootstrap, refreshOauthStatus: loadBootstrap,
             oauthConfigured, githubTokenConfigured, githubRepoConfigured,
             githubOwner, githubRepository, githubWasSignedOut,
+            githubPreviousOwner, githubPreviousRepository,
             tokenOwner, canApproveReleases: !!tokenOwner?.canApprove,
             isAdminSession, isSuperAdminSession, oauthStatusChecked, bootstrapError,
             awsIdentityLabel, pinConfigured

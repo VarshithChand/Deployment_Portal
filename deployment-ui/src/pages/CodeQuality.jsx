@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { getSonarOverview } from "../services/sonarService";
 import LoadingSpinner from "../components/LoadingSpinner";
 import PageLayout from "../components/layout/PageLayout";
+import PageAdminAccessButton from "../components/common/PageAdminAccessButton";
 
 // A-E, mirrored from Sonar's own rating scale — its own dashboard uses the
 // same colors (A green through E red), so this stays recognizable to
@@ -80,7 +81,7 @@ export default function CodeQuality() {
 
     return (
 
-        <PageLayout title="Code Quality">
+        <PageLayout title="Code Quality" actions={<PageAdminAccessButton pageKey="codeQuality" pageLabel="Code Quality" />}>
 
             {error && (
                 <div className="error-message">{error}</div>
