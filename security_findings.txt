@@ -2978,3 +2978,186 @@ wrong-code / lockout / recovery-code / refresh-mid-MFA / "Back to
 Login" / logout / multiple-open-tabs paths - none of these can be
 exercised end-to-end without a real GitHub PAT, which is unavailable in
 this sandboxed session.
+
+ROUND 18 - SUPER-ADMIN "ADMIN ACCESS" PAGE + MANDATORY-MFA ENFORCEMENT
+==================================================
+Date: 2026-08-13
+Trigger: user asked for "an sub page in settings for mfa and admin allow
+list that is not for the user only for the admin VarshithChand." A
+clarifying question (self-service MFA overview-for-admin vs. moving
+self-service MFA itself behind the admin gate) got a detailed follow-up
+answer describing a much larger policy: MFA nudged by default for every
+new PAT user, freely skippable until a cloud credential is saved, then
+mandatory with a 2-skip budget before the whole app locks, and recovery
+codes issued only by the admin - never shown to the user.
+
+Investigation surfaced that "Admin Allowlist" (who gets the Admin role)
+was sitting as an open tab inside Settings > Credentials
+(CredentialsView.jsx's "admin" mode) - visible and FILLABLE by any
+visitor, including someone with no PAT connected at all; only the
+backend save call (the general AdminGate.DenyUnlessAdminAsync) stopped a
+non-admin from actually submitting it. Went through EnterPlanMode given
+the size (new enforcement policy, a data-ownership change for recovery
+codes, a real capability tightening) - plan approved before any code
+changed.
+
+Scoping decisions made explicit in the plan and carried through: "cloud/
+platform details" was scoped to AWS/Azure/GCP credentials only (not
+Docker/Sonar/OAuth/AI, which are shared portal-wide admin settings a
+brand-new PAT user would never touch, and not Security > API Keys, a
+separate self-service scripting feature); the skip budget only starts
+counting once MFA is actually mandatory (dismissing before any cloud
+credential exists is free/uncounted); the mandatory/skip state is scoped
+to the browser SESSION (PortalIdentity key), matching how AWS/Azure/GCP
+credentials themselves are already stored, while MFA enrollment itself
+stays keyed by the resolved GitHub login exactly as Round 16 built it -
+two deliberately different-keyed things, not unified.
+
+New super-admin-only Settings sub-page ("Admin Access", view key
+"admin-access"): reuses the EXACT gate Database Management already
+established (AdminGate.DenyUnlessSuperAdminAsync backend,
+SUPER_ADMIN_ONLY_VIEWS/isSuperAdminSession frontend) rather than
+inventing a second one. Generalized DenyUnlessSuperAdminAsync's denial
+message (previously hardcoded to say "Database management is
+restricted...") since it now backs three different actions. Contains:
+  - Admin Allowlist, moved verbatim out of CredentialsView's "admin"
+    mode. SaveAdmins (POST admins) and the "admins" case of Clear
+    (DELETE {section}) both now require DenyUnlessSuperAdminAsync
+    instead of the general admin gate - a real capability change,
+    called out explicitly to the user in the plan: today the allowlist
+    only ever contained VarshithChand (confirmed via the live bootstrap
+    response), so nobody is locked out by this today, but a second
+    general admin added later would no longer be able to touch it.
+  - An MFA console reusing the same getPatUsers()/resetUserMfa() calls
+    Services.jsx's Users table already has (Services.jsx itself is
+    UNTOUCHED - reset-mfa there stays general-admin-gated, a deliberate
+    choice not to move or re-gate an existing working capability), plus
+    a new, narrower, super-admin-only capability: "Generate Recovery
+    Code" (new AdminUsersController POST {key}/mfa/recovery-code) -
+    issues ONE single-use code for a user who's locked out, without a
+    full reset, shown once to the admin to relay out-of-band.
+
+Recovery-code ownership flip (the user's explicit "the user can't see
+the recovery code, only admin can give the reset code" requirement):
+VerifyMfaEnrollmentAsync no longer generates or returns any recovery
+codes at self-enrollment (RecoveryCodes stays the empty array
+EnrollMfaAsync already initialized) - return type dropped from
+List<string>? to bool since there's nothing left to hand back.
+MfaController's enroll/verify response no longer includes recoveryCodes.
+MfaSection.jsx's entire "Save your recovery codes"/download-codes screen
+is deleted outright - there is no longer any self-service path to see
+one. The ONLY way a recovery code now comes into existence is the new
+super-admin GenerateAdminRecoveryCodeAsync(login) - returns null if MFA
+isn't even enabled yet (nothing to reset into), otherwise generates one
+code via a helper refactored out of the old GenerateRecoveryCodes() (now
+GenerateRecoveryCode(), singular), appends its hash to that login's
+existing RecoveryCodes array, and returns the raw code once. Verification
+(VerifyMfaRecoveryCodeAsync) needed no changes at all - a hash is a hash
+regardless of who generated it, so a user still redeems an admin-issued
+code exactly the way self-issued ones always worked.
+
+Mandatory-MFA nudge/block (the newest mechanism in this app - nothing
+like it existed before this round): a new durable per-session counter
+(SettingsService.GetMfaNudgeSkipCountAsync/IncrementMfaNudgeSkipCountAsync,
+a new MfaNudgeSkips dict in the SAME portal_settings JSONB blob
+everything else here lives in - deliberately NOT one of
+SessionActivityService's in-memory dictionaries, since this is a real
+enforcement control that has to survive a backend restart, unlike the
+PIN/MFA login lockouts which don't need to). BootstrapController now
+computes a whole MfaNudge block every call, reusing data it already
+fetches (tokenOwner.Login, resolved a few lines earlier for TokenOwner,
+answers "whose MFA status do I check" with no extra GitHub API call;
+Azure/GCP credential fetches added alongside the AWS one already there)
+- Show (connected + not yet MFA'd), Mandatory (Show + has a cloud
+credential), SkipsUsed, Blocked (Mandatory + SkipsUsed >= 2). New
+POST me/mfa/skip-nudge (no special gate - a session can only ever
+increment its own counter) backs the "Skip" button.
+
+Frontend: new MfaEnforcementGate.jsx, mounted in App.jsx alongside
+PeriodicSignOutMonitor/GlobalLogoutMonitor (inside the authenticated
+shell only, after Round 17's PAT/MFA-login gate already passed) - renders
+nothing, a small dismissible bottom banner, or (when Blocked) a full,
+non-dismissible page in place of the entire app shell, same "renders
+instead of children" precedent PinLockScreen already established for the
+screen-lock PIN. The blocked state and the banner's "Set Up Now" both
+embed MfaSection directly rather than redirecting anywhere, so enrollment
+can finish without leaving the gate. Caught and fixed during this round's
+own frontend build check: a first pass imported MfaSection normally,
+which pulled it (and its qrcode dependency) into the MAIN bundle for
+every single visitor since MfaEnforcementGate itself is mounted eagerly -
+undid Round 8's "keep the initial bundle lean" work for a feature most
+page loads never render. Fixed by lazy-loading MfaSection
+(React.lazy + Suspense) inside MfaEnforcementGate instead - confirmed via
+a before/after build size comparison (262.9kB baseline -> 293.9kB with
+the naive import -> 265.9kB after lazy-loading, MfaSection landing in its
+own 28.5kB on-demand chunk instead).
+
+Verification performed:
+  - `dotnet build` (isolated output dir): 0 errors, first try, same 3
+    pre-existing unrelated warnings as every prior round.
+  - `npm run lint` / `npm run build`: 0 errors, pre-existing Fast-Refresh
+    warnings only. Bundle-size regression caught and fixed (see above) -
+    not just claimed clean without checking.
+  - Live tests against the deployed Render backend after push (fresh
+    X-Session-Id, DELETE me/all cleanup after):
+    - POST me/mfa/skip-nudge, twice in a row on a fresh session ->
+      {skipsUsed:1} then {skipsUsed:2}, confirms durable (not in-memory)
+      persistence.
+    - GET api/bootstrap on that same session (no GitHub token
+      configured) -> mfaNudge:{show:false, mandatory:false, skipsUsed:2,
+      blocked:false} - correctly not shown for a session with nothing
+      connected yet, while still reporting the accumulated skip count.
+    - POST/DELETE api/settings/admins from a caller with zero admin
+      rights -> both 403. POST returned the new specific message
+      ("restricted to a single administrator account... change the
+      admin allowlist"); DELETE returned the general "Admin login
+      required to change settings" instead, because Clear's existing
+      general-admin check runs BEFORE the new admins-specific
+      super-admin check and correctly short-circuits first for a caller
+      with no admin rights at all - a caller who WAS a general admin
+      (but not VarshithChand) would pass that first check and hit the
+      specific super-admin denial on the second one. Both paths correctly
+      deny; only the wording differs depending on the caller's privilege
+      level. Not a bug, verified by reading the code path rather than
+      just accepting the differing message text at face value.
+    - POST api/admin/users/{key}/mfa/recovery-code from a non-super-admin
+      -> clean 403 with the new specific message, confirmed before ever
+      reaching key resolution.
+  - Could NOT live-verify: the actual mandatory-lock happy path (save a
+    real AWS/Azure/GCP credential on a session with a real connected PAT,
+    confirm the nudge appears and escalates to Mandatory, skip twice,
+    confirm the full-screen block appears and actually prevents
+    interacting with the rest of the app, enroll, confirm it lifts); the
+    super-admin-generated recovery code actually being redeemable via the
+    normal MFA verify flow; or GenerateAdminRecoveryCodeAsync's 400 path
+    against a real MFA-disabled user. Every one of these needs a REAL,
+    resolvable GitHub identity with MFA genuinely enabled to exercise -
+    identical standing limitation to every MFA-related round this session
+    (13/14/16/17). Not claimed as tested. Also did not visually confirm
+    the new Admin Access page or the nudge banner/block screen render
+    correctly in a real browser - `npm run build`'s clean output confirms
+    the JSX/imports/conditional logic is structurally sound, not that the
+    pixels look right.
+
+Files changed: src/DeploymentAPI/Helpers/AdminGate.cs,
+Controllers/{AdminUsersController,BootstrapController,MfaController,
+SettingsController}.cs, DTOs/BootstrapResponseDto.cs,
+Services/SettingsService.cs; deployment-ui/src/App.jsx,
+components/MfaEnforcementGate.jsx (new),
+components/settings/AdminAccessView.jsx (new),
+components/settings/{CredentialsView,SettingsHubView}.jsx,
+components/settings/credentials/MfaSection.jsx,
+constants/settingsViews.js, context/AuthContext.jsx, pages/Settings.jsx,
+services/{adminService,settingsService}.js, styles/global.css.
+
+Status: Complete for the code-level and API-level-verifiable portion,
+including a real bug (main-bundle bloat) caught and fixed during this
+round's own verification rather than after the fact. Strongly recommend
+the user personally walk through, once `npx wrangler deploy` ships the
+frontend: connecting a fresh PAT with no MFA, saving an AWS/Azure/GCP
+credential and confirming the nudge escalates to mandatory, skipping
+twice and confirming the full-screen block actually appears and blocks
+interaction, enrolling and confirming it lifts, and - as VarshithChand -
+visiting the new Admin Access page to confirm the MFA console and
+Generate Recovery Code flow both work end-to-end against a real locked-
+out account.
