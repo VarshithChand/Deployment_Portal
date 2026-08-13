@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 import useAuth from "../../hooks/useAuth";
 import useNavigation from "../../hooks/useNavigation";
@@ -10,7 +10,6 @@ import TopBarPublicBadge from "./TopBarPublicBadge";
 import HeaderSearch from "./HeaderSearch";
 import { getRateLimit } from "../../services/githubService";
 import { getPullRequestCount } from "../../services/pullRequestsService";
-import { getMyGitHubSettings } from "../../services/settingsService";
 import { setPortalLocked } from "../../utils/portalLock";
 
 // A plain three-bar glyph, same stroke style as Sidebar's ChevronIcon —
@@ -46,31 +45,18 @@ export default function TopBar() {
 
     const {
         user, loading, login, logout, oauthConfigured, tokenOwner,
-        canApproveReleases, isAdminSession, awsIdentityLabel, pinConfigured
+        canApproveReleases, isAdminSession, awsIdentityLabel, pinConfigured,
+        githubOwner, githubRepository
     } = useAuth();
     const { setTab, mobileNavOpen, setMobileNavOpen } = useNavigation();
 
     const [rateLimit, setRateLimit] = useState(null);
     const [prCount, setPrCount] = useState(0);
-    const [repoName, setRepoName] = useState("");
 
-    // Re-fetches when the logged-in user changes — each caller (a real
-    // login, or an anonymous per-browser session — see PortalIdentity) has
-    // their own configured repo now, so this can't be a one-time fetch on
-    // mount the way it was back when the whole portal shared a single repo.
-    useEffect(() => {
-
-        getMyGitHubSettings()
-            .then((settings) => {
-                setRepoName(
-                    settings.gitHubOwner && settings.gitHubRepository
-                        ? `${settings.gitHubOwner}/${settings.gitHubRepository}`
-                        : ""
-                );
-            })
-            .catch((err) => console.error(err));
-
-    }, [user]);
+    // Straight off the same bootstrap fetch AuthContext already makes on
+    // mount - this used to be TopBar's own separate GET
+    // /api/settings/me/github, re-fetched every time `user` changed.
+    const repoName = githubOwner && githubRepository ? `${githubOwner}/${githubRepository}` : "";
 
     async function loadRateLimit() {
 

@@ -1,12 +1,12 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 import {
-    getMyGitHubSettings,
     saveMyGitHubSettings,
     getMyGitHubUsername,
     previewGitHubToken
 } from "../services/settingsService";
 import parseRepoUrl from "../utils/parseRepoUrl";
+import useAuth from "../hooks/useAuth";
 import useToast from "../hooks/useToast";
 import usePagination from "../hooks/usePagination";
 import ClearableInput from "./common/ClearableInput";
@@ -52,14 +52,18 @@ export default function RequireGitHubSetup({ children }) {
 
     const toast = useToast();
 
-    const [checking, setChecking] = useState(true);
-    const [configured, setConfigured] = useState(true);
+    // Both come straight off the same bootstrap fetch AuthContext already
+    // makes on mount - this component used to run its own separate
+    // GET /api/settings/me/github to answer the exact same question.
+    // checking stays true until that fetch resolves either way; configured
+    // fails OPEN on a genuine fetch failure (bootstrapError) rather than on
+    // "still checking", so a transient network blip can't lock someone out
+    // of the whole app - same behavior the old local try/catch implemented.
+    const { oauthStatusChecked, bootstrapError, githubRepoConfigured, githubWasSignedOut } = useAuth();
 
-    // True when this popup is showing because an admin used the Services
-    // page's Sign Out button (see SettingsService.SoftSignOutPatUserAsync),
-    // not because nothing was ever configured - lets the "token" step show
-    // a specific explanation instead of the generic first-visit copy.
-    const [wasSignedOut, setWasSignedOut] = useState(false);
+    const checking = !oauthStatusChecked;
+    const configured = bootstrapError || githubRepoConfigured;
+    const wasSignedOut = githubWasSignedOut;
 
     // "token" -> "pick-repo" -> "connected"
     const [step, setStep] = useState("token");
@@ -77,33 +81,6 @@ export default function RequireGitHubSetup({ children }) {
 
     const [connecting, setConnecting] = useState(false);
     const [connectedAs, setConnectedAs] = useState(null);
-
-    useEffect(() => {
-
-        let cancelled = false;
-
-        getMyGitHubSettings()
-            .then((settings) => {
-
-                if (cancelled) return;
-
-                setConfigured(!!settings.isConfigured);
-                setWasSignedOut(!!settings.wasSignedOut);
-
-            })
-            .catch((err) => {
-                console.error(err);
-                if (!cancelled) setConfigured(true); // fail open — don't lock someone out over a network blip
-            })
-            .finally(() => {
-                if (!cancelled) setChecking(false);
-            });
-
-        return () => {
-            cancelled = true;
-        };
-
-    }, []);
 
     async function handlePreviewToken(e) {
 

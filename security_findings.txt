@@ -1751,3 +1751,74 @@ Remaining/related items not addressed in this pass:
   - This audit's negative results are current as of this pass; they are
     not a substitute for re-auditing after future credential-handling
     changes to any of the areas listed above.
+
+==================================================
+ROUND 6 - CONSOLIDATE STARTUP REQUESTS INTO ONE BOOTSTRAP CALL (performance,
+not a security finding)
+==================================================
+Date: 2026-08-13
+
+Not a vulnerability - logged here only for a complete change history, same
+as Round 3's request-batching fix.
+
+Source-verified inventory of every request fired before the user interacts
+with anything found 21 distinct endpoint call-sites (23 HTTP requests,
+since GET /api/settings/me/github was independently fetched three times -
+once each from AuthContext, RequireGitHubSetup, and TopBar, none aware the
+others already had it). Of these, 13 endpoint types (15 requests) are
+genuine app-shell/session machinery (auth, settings, github/aws/pin
+status, token owner) that would fire identically regardless of which tab
+were the landing page; the rest are either Dashboard-page-specific content
+that merely loads immediately because Dashboard is the default tab
+(repository/branches/artifacts/workflows, account-repositories, AWS
+resource inventory, environments), or independent polling mechanisms
+(rate limit, session epoch, app version, PR count, activity feed) that
+were deliberately left untouched - session-epoch in particular backs a
+force-logout security mechanism, and collapsing a security-relevant poll
+into a one-time startup call would weaken it, not just save a request.
+
+Fix: added GET /api/bootstrap (BootstrapController.cs), composing the
+exact same underlying SettingsService/CloudStatusService/GitHubApiService
+calls the individual endpoints already used - no duplicated business
+logic, no new data-exposure surface (every field is exactly what its
+standalone endpoint already returned, verified via live side-by-side curl
+comparison). AuthContext.jsx now makes one consolidated fetch on mount
+instead of separately calling GET /api/auth/me, GET /api/settings, GET
+/api/settings/me/github, GET /api/settings/me/aws, and GET
+/api/settings/me/pin (plus conditionally GET /api/github/token-owner);
+RequireGitHubSetup.jsx and TopBar.jsx now read their github
+owner/repository/configured/wasSignedOut state from that same context
+instead of each independently re-fetching /api/settings/me/github,
+eliminating the triple-fetch entirely. `refresh`/`refreshOauthStatus` were
+kept as two distinct function names on the context (many Settings
+sub-components call one, the other, or both after saving a credential) but
+both now trigger the same single bootstrap re-fetch. The original
+fail-open behavior (a network error shouldn't lock someone out behind the
+GitHub setup gate) was preserved via an explicit `bootstrapError` flag,
+distinct from "checked and genuinely not configured".
+
+Deliberately NOT folded into bootstrap: GET /api/settings/sidebar
+(NavigationContext's own fetch, mounted a provider-level above
+AuthContext; already a single, cheap, non-duplicated request - folding it
+in would mean restructuring that provider nesting for a call that isn't
+actually a problem) and every periodic/polling endpoint listed above.
+
+Verified via `dotnet build` (0 errors), `npm run lint` (0 errors, only
+pre-existing unrelated warnings), `npm run build` (succeeded), and a live
+side-by-side comparison: built to an isolated output directory, ran the
+real app, and curled GET /api/bootstrap alongside GET /api/settings, GET
+/api/settings/me/github, GET /api/settings/me/aws, GET
+/api/settings/me/pin, and GET /api/auth/me individually - confirmed every
+field in bootstrap's nested sections exactly matches its standalone
+endpoint's response shape.
+
+Before: up to 8 distinct one-shot endpoint types (10 requests counting the
+github triplicate) fired independently on every app load, racing each
+other with no shared state.
+After: 1 request (GET /api/bootstrap) for all of it. Sidebar access (1
+request) and the 5 independent polling mechanisms are unchanged. Dashboard
+-page-specific requests (8, only when Dashboard is actually the landing
+tab) are unchanged.
+
+Status: Complete - not a vulnerability finding, a startup-performance
+change requested and completed.

@@ -1,8 +1,7 @@
 import { createContext, useCallback, useEffect, useState } from "react";
 
-import { getMe, logout as logoutRequest } from "../services/authService";
-import { getSettings, getMyGitHubSettings, getMyAwsSettings, getMyPinStatus } from "../services/settingsService";
-import { getTokenOwner } from "../services/githubService";
+import { getBootstrap } from "../services/bootstrapService";
+import { logout as logoutRequest } from "../services/authService";
 import { API_BASE } from "../api/apiBase";
 import useToast from "../hooks/useToast";
 
@@ -72,6 +71,15 @@ export default function AuthProvider({ children }) {
     // had even pasted a token in.
     const [githubRepoConfigured, setGithubRepoConfigured] = useState(false);
 
+    // owner/repository (for TopBar's repo-name badge) and wasSignedOut
+    // (for RequireGitHubSetup's specific-explanation banner) - both used
+    // to be fetched independently by those two components via their own
+    // separate GET /api/settings/me/github calls; now read straight off
+    // this same bootstrap response.
+    const [githubOwner, setGithubOwner] = useState("");
+    const [githubRepository, setGithubRepository] = useState("");
+    const [githubWasSignedOut, setGithubWasSignedOut] = useState(false);
+
     const [tokenOwner, setTokenOwner] = useState(null);
 
     // Whether this session has a screen-lock PIN set — read by
@@ -103,78 +111,68 @@ export default function AuthProvider({ children }) {
     // what this says.
     const [isSuperAdminSession, setIsSuperAdminSession] = useState(false);
 
-    // False until refreshOauthStatus's first call resolves. isAdminSession
-    // starts false too, but that's indistinguishable from "checked, and
-    // this session isn't admin" — a route guard reacting to isAdminSession
+    // False until the first bootstrap call resolves. isAdminSession starts
+    // false too, but that's indistinguishable from "checked, and this
+    // session isn't admin" — a route guard reacting to isAdminSession
     // alone bounces a real admin away on every hard reload, since it fires
     // before this first check has had a chance to complete. Guards must
     // wait for this to be true before treating isAdminSession as final.
     const [oauthStatusChecked, setOauthStatusChecked] = useState(false);
 
-    const refresh = useCallback(async () => {
+    // True only when the bootstrap request itself failed (network error,
+    // 5xx, etc.) - distinct from "checked, and nothing is configured".
+    // RequireGitHubSetup fails OPEN on this (shows the app rather than the
+    // setup gate) so a transient network blip can't lock someone out of
+    // the whole portal - same fail-open behavior its own try/catch used to
+    // implement locally before it started reading this from context.
+    const [bootstrapError, setBootstrapError] = useState(false);
 
-        setLoading(true);
-        const me = await getMe();
-        setUser(me);
-        setLoading(false);
-
-    }, []);
-
-    // Covers both GitHub OAuth login and the Personal Access Token this
-    // caller (a real login, or an anonymous per-browser session — see
-    // PortalIdentity) has configured for their own repo — pages that gate
-    // an action behind "is a PAT configured" (e.g. triggering a deployment)
-    // read that here too.
-    const refreshOauthStatus = useCallback(async () => {
+    // One consolidated GET /api/bootstrap call backs everything below —
+    // see BootstrapController for the full list of what this used to be
+    // (GET /api/auth/me, /api/settings, three redundant copies of
+    // /api/settings/me/github, /api/settings/me/aws, /api/settings/me/pin,
+    // and conditionally /api/github/token-owner). `refresh` and
+    // `refreshOauthStatus` both existed as separately-triggered functions
+    // before this - kept as two names (many Settings sub-components call
+    // one, the other, or both after saving a credential) but both now just
+    // re-run this same full fetch, since there's no longer a reason for a
+    // "just the login" refresh distinct from a "just the settings" one.
+    const loadBootstrap = useCallback(async () => {
 
         try {
 
-            const [settings, myGitHub, myAws, myPin] = await Promise.all([
-                getSettings(),
-                getMyGitHubSettings(),
-                getMyAwsSettings(),
-                getMyPinStatus()
-            ]);
+            const response = await getBootstrap();
+            const data = response.data;
 
-            setAwsIdentityLabel(myAws.identityLabel || null);
-            setPinConfigured(!!myPin.configured);
+            setBootstrapError(false);
+            setUser(data.auth.authenticated ? { login: data.auth.login, role: data.auth.role } : null);
 
             setOauthConfigured(
-                !!settings.gitHubOAuthClientId && !!settings.gitHubOAuthClientSecretConfigured
+                !!data.settings.gitHubOAuthClientId && !!data.settings.gitHubOAuthClientSecretConfigured
             );
+            setIsAdminSession(!!data.settings.isAdminSession);
+            setIsSuperAdminSession(!!data.settings.isSuperAdminSession);
 
-            setIsAdminSession(!!settings.isAdminSession);
-            setIsSuperAdminSession(!!settings.isSuperAdminSession);
+            setGithubTokenConfigured(!!data.github.tokenConfigured);
+            setGithubRepoConfigured(!!data.github.isConfigured);
+            setGithubOwner(data.github.owner || "");
+            setGithubRepository(data.github.repository || "");
+            setGithubWasSignedOut(!!data.github.wasSignedOut);
 
-            const hasToken = !!myGitHub.gitHubTokenConfigured;
-            setGithubTokenConfigured(hasToken);
-            setGithubRepoConfigured(!!myGitHub.isConfigured);
-
-            if (hasToken) {
-
-                // Resolves who the token belongs to and whether that account
-                // has admin access to the repo — the same permission GitHub
-                // itself checks to let someone approve a protected-environment
-                // deployment. Pages like Approvals use this to hide themselves
-                // entirely rather than just showing a "no access" message.
-                const owner = await getTokenOwner();
-                setTokenOwner(owner.data);
-
-            }
-            else {
-
-                setTokenOwner(null);
-
-            }
+            setAwsIdentityLabel(data.aws.identityLabel || null);
+            setPinConfigured(!!data.pin.configured);
+            setTokenOwner(data.tokenOwner || null);
 
         }
         catch (err) {
 
             console.error(err);
+            setBootstrapError(true);
 
         }
         finally {
 
+            setLoading(false);
             setOauthStatusChecked(true);
 
         }
@@ -198,8 +196,7 @@ export default function AuthProvider({ children }) {
             clearQueryParam(params, "loggedOut");
         }
 
-        refresh();
-        refreshOauthStatus();
+        loadBootstrap();
 
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
@@ -219,7 +216,15 @@ export default function AuthProvider({ children }) {
 
     return (
 
-        <AuthContext.Provider value={{ user, loading, login, logout, refresh, oauthConfigured, githubTokenConfigured, githubRepoConfigured, tokenOwner, canApproveReleases: !!tokenOwner?.canApprove, isAdminSession, isSuperAdminSession, oauthStatusChecked, refreshOauthStatus, awsIdentityLabel, pinConfigured }}>
+        <AuthContext.Provider value={{
+            user, loading, login, logout,
+            refresh: loadBootstrap, refreshOauthStatus: loadBootstrap,
+            oauthConfigured, githubTokenConfigured, githubRepoConfigured,
+            githubOwner, githubRepository, githubWasSignedOut,
+            tokenOwner, canApproveReleases: !!tokenOwner?.canApprove,
+            isAdminSession, isSuperAdminSession, oauthStatusChecked, bootstrapError,
+            awsIdentityLabel, pinConfigured
+        }}>
 
             {children}
 
