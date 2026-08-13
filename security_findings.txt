@@ -2427,3 +2427,93 @@ GcpLoginSection}.jsx.
 Status: Complete. This closes the specific gap Round 11's unlock-all
 change opened (frontend optimism outliving a backend revoke) without
 touching the revoke behavior itself, which was correct all along.
+
+ROUND 13 - FIX: BOOTSTRAP CRASH FOR TOKEN-ONLY SESSIONS + "PICK A REPO"
+MESSAGING ON GITHUB-SCOPED PAGES
+==================================================
+Date: 2026-08-13
+Trigger: user asked that after connecting just a token, the Dashboard
+show its repo/AWS cards immediately, and that navigating into a GitHub
+page (Deploy, etc.) without a repo picked yet show a clear "pick a repo"
+message instead of silently doing nothing.
+
+Investigating the second half of that ask (via an Explore agent auditing
+Approvals/PullRequests/Storage/Analytics/Timeline/History/TemplateTester)
+surfaced a much more serious, previously-undiagnosed bug that likely
+explains several of this session's earlier confusing reports (broken
+bootstrap, fields stuck at default values, the "phantom PIN" symptom
+investigated in Round 12 before landing on its own real desync bug):
+
+GitHubApiService.GetTokenOwnerAsync() only checked `_auth.HasToken`
+before firing TWO outbound GitHub calls - `/user` (fine, needs only a
+token) and `/repos/{Owner}/{Repository}` (unconditional, even with both
+blank). Before the onboarding simplification (an earlier round), a
+configured token always implied a chosen repo too, so this coupling was
+always safe. Since then, "token configured, no repo yet" is a normal,
+expected, long-lived session state - and `/repos//` 404s against GitHub's
+real API. HttpClientHelper.GetAsync throws on any non-success status,
+nothing catches it in GetTokenOwnerAsync or its only caller
+(BootstrapController, called via `githubCreds.TokenConfigured ? await
+_github.GetTokenOwnerAsync() : null` - fires exactly whenever this state
+exists), so GET /api/bootstrap itself failed outright for any such
+session. Every other bootstrap-derived field (pinConfigured, isAdminSession,
+etc.) stays at its React-default value whenever this happens, which is
+almost certainly what was really going on during the Round 12
+investigation, not (or not only) the frontend unlock-Set desync fixed
+there - both were real bugs, compounding each other.
+
+Fix: GetTokenOwnerAsync now checks for blank Owner/Repository before the
+second call and returns `{ Configured: true, Login, AvatarUrl, CanApprove:
+false }` (resolved from the already-successful /user call) instead of
+attempting the repo lookup - correct, since there's nothing to check
+"admin permission" against without a chosen repo anyway.
+
+Second fix (the user's actual explicit ask): new shared
+RequireRepoSelected component (deployment-ui/src/components/), wrapped
+around the 7 GitHub-repo-scoped pages - Deploy, Approvals, PullRequests,
+Storage, Analytics, Timeline, History. Shows "Pick a repository first"
+with a one-click "Go to Dashboard" button whenever githubTokenConfigured
+is true but githubRepoConfigured is false; renders its children
+unchanged otherwise (including the "no token at all" case, left to
+RequireGitHubSetup's own overlay). Environments and TemplateTester were
+deliberately left out - neither is actually scoped to a specific repo.
+
+Approvals.jsx/PullRequests.jsx needed extra care beyond just wrapping:
+both already had their own canApproveReleases-driven redirect-to-
+dashboard effect and loading-spinner gate, which - now that CanApprove
+correctly resolves to `false` instead of the request never resolving at
+all - would otherwise fire in the "no repo yet" case too and either
+redirect away before the new message could ever show, or spin forever.
+Both conditions now also require githubRepoConfigured, so they only
+apply once a repo is actually picked and still comes back without
+approval rights - the "pick a repo" case is fully handled by
+RequireRepoSelected instead, nested inside their existing
+"token configured" branch.
+
+Verification performed:
+  - `dotnet build` (isolated output dir): 0 errors, 3 pre-existing
+    unrelated warnings.
+  - `npm run lint` / `npm run build`: 0 errors, pre-existing Fast-Refresh
+    warnings only.
+  - Live test against the deployed Render backend: saving a token-only
+    session (blank owner/repository) with a valid-shaped but fake token
+    still fails at GitHub's /user call (401, invalid credentials) as
+    expected - a fake token can never fully exercise the fixed code path,
+    which only runs after /user already succeeds. Confirmed this same
+    401 occurs identically for a session with BOTH a token AND a repo set
+    (the pre-existing, never-broken flow) using the same fake token -
+    proving the failure is the fake credential itself, not a regression
+    from this fix. Full end-to-end confirmation of the blank-repo path
+    needs a real GitHub PAT, which isn't available in this session -
+    recommend a live browser test with a real token to confirm bootstrap
+    now succeeds and TopBar/Dashboard resolve correctly for a token-only
+    session.
+
+Files changed: src/DeploymentAPI/Services/GitHubApiService.cs;
+deployment-ui/src/components/RequireRepoSelected.jsx (new), pages/
+{Deploy,Approvals,PullRequests,Storage,Analytics,Timeline,History}.jsx.
+
+Status: Complete for the code-level-verifiable portion. The
+GetTokenOwnerAsync fix is the higher-confidence, higher-impact half of
+this round - it likely resolves multiple previously-unexplained symptoms
+at once, not just the one it was found while investigating.
