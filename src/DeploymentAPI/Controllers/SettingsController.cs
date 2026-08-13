@@ -117,6 +117,22 @@ public class SettingsController : ControllerBase
             return BadRequest(new { message = "Owner and repository must be valid GitHub names (letters, numbers, hyphens, underscores, periods only)." });
 
         var key = PortalIdentity.GetOrCreateKey(HttpContext);
+
+        // Only gated while a working connection already exists - this same
+        // endpoint is also what RequireGitHubSetup's first-time/reconnect-
+        // after-sign-out flow calls, and that flow has no PIN-entry UI of
+        // its own. A session with nothing configured yet has nothing worth
+        // protecting here; once IsConfigured is true, replacing it (someone
+        // repointing your pipeline at a different repo/token) is exactly
+        // what this gate exists for.
+        var existing = await _settings.GetUserGitHubCredentialsAsync(key);
+
+        if (existing.IsConfigured
+            && await CredentialGate.DenyUnlessUnlockedAsync(this, _settings, _activity, "github") is IActionResult denied)
+        {
+            return denied;
+        }
+
         var creds = await _settings.SaveUserGitHubCredentialsAsync(key, request);
 
         return Ok(new
@@ -131,8 +147,13 @@ public class SettingsController : ControllerBase
     [HttpDelete("me/github")]
     public async Task<IActionResult> ClearMyGitHubToken()
     {
+        if (await CredentialGate.DenyUnlessUnlockedAsync(this, _settings, _activity, "github") is IActionResult denied)
+            return denied;
+
         var key = PortalIdentity.GetOrCreateKey(HttpContext);
         await _settings.ClearUserGitHubTokenAsync(key);
+        _activity.RevokeCredentialUnlock(key, "github");
+
         return Ok();
     }
 
@@ -237,6 +258,9 @@ public class SettingsController : ControllerBase
     [HttpPost("me/aws")]
     public async Task<IActionResult> SaveMyAws(AwsCredentialsUpdateDto request)
     {
+        if (await CredentialGate.DenyUnlessUnlockedAsync(this, _settings, _activity, "aws") is IActionResult denied)
+            return denied;
+
         var key = PortalIdentity.GetOrCreateKey(HttpContext);
 
         // A blank field keeps whatever's already saved (see
@@ -279,8 +303,13 @@ public class SettingsController : ControllerBase
     [HttpDelete("me/aws")]
     public async Task<IActionResult> ClearMyAws()
     {
+        if (await CredentialGate.DenyUnlessUnlockedAsync(this, _settings, _activity, "aws") is IActionResult denied)
+            return denied;
+
         var key = PortalIdentity.GetOrCreateKey(HttpContext);
         await _settings.ClearUserAwsCredentialsAsync(key);
+        _activity.RevokeCredentialUnlock(key, "aws");
+
         return Ok();
     }
 
@@ -302,6 +331,9 @@ public class SettingsController : ControllerBase
     [HttpPost("me/azure")]
     public async Task<IActionResult> SaveMyAzure(AzureCredentialsUpdateDto request)
     {
+        if (await CredentialGate.DenyUnlessUnlockedAsync(this, _settings, _activity, "azure") is IActionResult denied)
+            return denied;
+
         var key = PortalIdentity.GetOrCreateKey(HttpContext);
 
         // A blank field keeps whatever's already saved - see SaveMyAws above.
@@ -322,8 +354,13 @@ public class SettingsController : ControllerBase
     [HttpDelete("me/azure")]
     public async Task<IActionResult> ClearMyAzure()
     {
+        if (await CredentialGate.DenyUnlessUnlockedAsync(this, _settings, _activity, "azure") is IActionResult denied)
+            return denied;
+
         var key = PortalIdentity.GetOrCreateKey(HttpContext);
         await _settings.ClearUserAzureCredentialsAsync(key);
+        _activity.RevokeCredentialUnlock(key, "azure");
+
         return Ok();
     }
 
@@ -366,6 +403,9 @@ public class SettingsController : ControllerBase
     [HttpPost("me/gcp")]
     public async Task<IActionResult> SaveMyGcp(GcpCredentialsUpdateDto request)
     {
+        if (await CredentialGate.DenyUnlessUnlockedAsync(this, _settings, _activity, "gcp") is IActionResult denied)
+            return denied;
+
         var key = PortalIdentity.GetOrCreateKey(HttpContext);
 
         // A blank field keeps whatever's already saved - see SaveMyAws above.
@@ -385,8 +425,13 @@ public class SettingsController : ControllerBase
     [HttpDelete("me/gcp")]
     public async Task<IActionResult> ClearMyGcp()
     {
+        if (await CredentialGate.DenyUnlessUnlockedAsync(this, _settings, _activity, "gcp") is IActionResult denied)
+            return denied;
+
         var key = PortalIdentity.GetOrCreateKey(HttpContext);
         await _settings.ClearUserGcpCredentialsAsync(key);
+        _activity.RevokeCredentialUnlock(key, "gcp");
+
         return Ok();
     }
 
@@ -468,6 +513,52 @@ public class SettingsController : ControllerBase
         return Ok(new { Valid = false, Locked = false });
     }
 
+    // Per-credential unlock (see CredentialGate/SessionActivityService) -
+    // verifying the SAME screen-lock PIN here grants a short-lived, in-
+    // memory pass to manage exactly one provider's credential, not the
+    // whole portal. Reuses VerifyMyPin's exact rate-limit/wipe-on-5-fails
+    // machinery so there's a single security boundary for "guess the PIN,"
+    // not a second weaker one a scripted attacker could target instead.
+    [HttpPost("me/credentials/{provider}/unlock")]
+    public async Task<IActionResult> UnlockMyCredential(string provider, SecurityPinUpdateDto request)
+    {
+        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+
+        // No screen-lock PIN configured at all - credential management
+        // works exactly as it did before this feature existed, with no
+        // prompt in front of it. See CredentialGate.DenyUnlessUnlockedAsync,
+        // which applies the same bypass on the enforcement side.
+        if (!await _settings.HasPinAsync(key))
+            return Ok(new { Valid = true, Locked = false });
+
+        if (_activity.GetFailedPinAttemptCount(key) >= MaxPinAttempts)
+            return Ok(new { Valid = false, Locked = true });
+
+        var valid = await _settings.VerifyPinAsync(key, request.Pin ?? string.Empty);
+
+        if (valid)
+        {
+            _activity.ClearFailedPinAttempts(key);
+            _activity.GrantCredentialUnlock(key, provider, TimeSpan.FromMinutes(5));
+            return Ok(new { Valid = true, Locked = false });
+        }
+
+        var attempts = _activity.RecordFailedPinAttempt(key);
+
+        if (attempts >= MaxPinAttempts)
+        {
+            // Same outcome as VerifyMyPin hitting the same limit - a
+            // scripted attacker hammering this endpoint directly ends up
+            // exactly where one hammering the portal-wide unlock would.
+            await _settings.ClearMyCredentialsAsync(key);
+            _activity.ClearFailedPinAttempts(key);
+
+            return Ok(new { Valid = false, Locked = true });
+        }
+
+        return Ok(new { Valid = false, Locked = false });
+    }
+
     // "Clear All Data" for a non-admin - resets only the caller's own
     // credentials (GitHub, AWS, Azure, GCP). No AdminGate here, same
     // reasoning as every /me/* endpoint above: nobody needs admin rights
@@ -496,6 +587,9 @@ public class SettingsController : ControllerBase
         if (await AdminGate.DenyUnlessAdminAsync(this, _settings, "change settings") is IActionResult denied)
             return denied;
 
+        if (await CredentialGate.DenyUnlessUnlockedAsync(this, _settings, _activity, "docker") is IActionResult locked)
+            return locked;
+
         return Ok(await _settings.SaveDockerAsync(request));
     }
 
@@ -505,6 +599,9 @@ public class SettingsController : ControllerBase
         if (await AdminGate.DenyUnlessAdminAsync(this, _settings, "change settings") is IActionResult denied)
             return denied;
 
+        if (await CredentialGate.DenyUnlessUnlockedAsync(this, _settings, _activity, "github-oauth") is IActionResult locked)
+            return locked;
+
         return Ok(await _settings.SaveGitHubOAuthAsync(request));
     }
 
@@ -513,6 +610,9 @@ public class SettingsController : ControllerBase
     {
         if (await AdminGate.DenyUnlessAdminAsync(this, _settings, "change settings") is IActionResult denied)
             return denied;
+
+        if (await CredentialGate.DenyUnlessUnlockedAsync(this, _settings, _activity, "sonar") is IActionResult locked)
+            return locked;
 
         return Ok(await _settings.SaveSonarAsync(request));
     }
@@ -525,6 +625,9 @@ public class SettingsController : ControllerBase
     {
         if (await AdminGate.DenyUnlessAdminAsync(this, _settings, "change settings") is IActionResult denied)
             return denied;
+
+        if (await CredentialGate.DenyUnlessUnlockedAsync(this, _settings, _activity, "ai") is IActionResult locked)
+            return locked;
 
         return Ok(await _settings.SaveAiAssistantAsync(request));
     }
@@ -685,11 +788,23 @@ public class SettingsController : ControllerBase
         return Ok(await _settings.RevokePageAdminAsync(pageKey, login));
     }
 
+    // Sections individually gated below - "docker"/"github-oauth"/"sonar"/
+    // "ai" are the per-provider credentials this feature covers (see
+    // CredentialGate). "admins" is never gated (it's not a credential, it's
+    // access control) and neither is "all" - that's an admin's bulk portal
+    // reset across every shared section at once, the same category of
+    // escape hatch as ClearMyAll, not a targeted single-credential action.
+    private static readonly HashSet<string> CredentialGatedSections = new() { "docker", "github-oauth", "sonar", "ai" };
+
     [HttpDelete("{section}")]
     public async Task<IActionResult> Clear(string section)
     {
         if (await AdminGate.DenyUnlessAdminAsync(this, _settings, "change settings") is IActionResult denied)
             return denied;
+
+        if (CredentialGatedSections.Contains(section)
+            && await CredentialGate.DenyUnlessUnlockedAsync(this, _settings, _activity, section) is IActionResult locked)
+            return locked;
 
         try
         {
@@ -699,7 +814,12 @@ public class SettingsController : ControllerBase
                 return Ok(await _settings.ClearAllAsync(key));
             }
 
-            return Ok(await _settings.ClearAsync(section));
+            var result = await _settings.ClearAsync(section);
+
+            if (CredentialGatedSections.Contains(section))
+                _activity.RevokeCredentialUnlock(PortalIdentity.GetOrCreateKey(HttpContext), section);
+
+            return Ok(result);
         }
         catch (ArgumentException)
         {

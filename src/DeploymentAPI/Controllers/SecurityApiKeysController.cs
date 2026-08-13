@@ -14,10 +14,12 @@ namespace DeploymentAPI.Controllers;
 public class SecurityApiKeysController : ControllerBase
 {
     private readonly SettingsService _settings;
+    private readonly SessionActivityService _activity;
 
-    public SecurityApiKeysController(SettingsService settings)
+    public SecurityApiKeysController(SettingsService settings, SessionActivityService activity)
     {
         _settings = settings;
+        _activity = activity;
     }
 
     // Everyone's keys, every owner — the Services > Security admin panel.
@@ -91,6 +93,9 @@ public class SecurityApiKeysController : ControllerBase
     [HttpPost("mine")]
     public async Task<IActionResult> CreateMine(CreateApiKeyRequest request)
     {
+        if (await CredentialGate.DenyUnlessUnlockedAsync(this, _settings, _activity, "apikey") is IActionResult locked)
+            return locked;
+
         var callerKey = PortalIdentity.GetOrCreateKey(HttpContext);
         return Ok(await CreateForOwnerAsync(request, callerKey));
     }
@@ -98,6 +103,9 @@ public class SecurityApiKeysController : ControllerBase
     [HttpDelete("mine/{id}")]
     public async Task<IActionResult> RevokeMine(int id)
     {
+        if (await CredentialGate.DenyUnlessUnlockedAsync(this, _settings, _activity, "apikey") is IActionResult locked)
+            return locked;
+
         var callerKey = PortalIdentity.GetOrCreateKey(HttpContext);
         var owns = (await _settings.GetApiKeysAsync()).Any(k => k.Id == id && k.OwnerKey == callerKey);
 

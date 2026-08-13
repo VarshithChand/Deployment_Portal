@@ -2012,3 +2012,137 @@ re-measurement after deploy is the one thing this assessment could not
 do itself - recommend a fresh Lighthouse/Chrome-Performance run after
 `npx wrangler deploy` to confirm the numeric improvement and check for
 any remaining bottleneck this pass's static analysis couldn't surface.
+
+ROUND 9 - PER-CREDENTIAL PIN LOCK + SECURE CREDENTIAL LIFECYCLE
+==================================================
+Date: 2026-08-13
+Trigger: user request for a third authorization axis on top of the
+existing two (AdminGate's portal-wide GitHub-identity admin authority,
+and the whole-portal Screen Lock idle-timeout). Flow requested: opening
+Credentials and picking a provider (GitHub/AWS/Azure/GCP/API Key/
+SonarQube/Docker/GitHub OAuth/AI Assistant) should require the same
+screen-lock PIN before that provider's own save/clear form is usable -
+scoped per provider, so unlocking AWS doesn't also unlock GitHub.
+
+Scope decision made before writing any code: read CredentialsView.jsx in
+full and confirmed no "reveal saved secret" feature exists anywhere in
+this app today - every provider tab only ever shows Configured: true/
+false plus a blank password-type input for a NEW value, never the stored
+one. This meant the full spec's "reveal-with-audit" machinery (a secret
+that reaches the browser on demand, logged) was unnecessary scope - there
+is no secret display to gate. What actually needed gating is the ability
+to change (save/clear) a credential, which is exactly what was built.
+
+Design, backend-enforced (not a frontend boolean):
+  - CredentialGate.DenyUnlessUnlockedAsync (new, Helpers/CredentialGate.cs)
+    - checked at the top of every gated action. No-ops (returns null,
+      i.e. allowed) whenever the caller has no screen-lock PIN configured
+      at all (HasPinAsync false) - Screen Lock is opt-in and off by
+      default; this rides on top of it rather than becoming a second,
+      separate "must configure this" requirement. Otherwise checks
+      SessionActivityService.IsCredentialUnlocked(key, provider) and
+      returns a 403 CREDENTIAL_LOCKED if not.
+  - SessionActivityService gained a new in-memory
+    ConcurrentDictionary<string, DateTime> _credentialUnlocks, keyed
+    "{sessionKey}:{provider}" - GrantCredentialUnlock/IsCredentialUnlocked/
+    RevokeCredentialUnlock. In-memory and short-lived by design, same
+    reasoning as every other piece of state in this service (failed-PIN
+    counters, force-logout stamps) - losing every open grant on a restart
+    just means re-entering the PIN once more, never a security hole.
+  - New endpoint POST me/credentials/{provider}/unlock
+    (SettingsController.UnlockMyCredential) - verifies the SAME PIN via
+    the SAME _settings.VerifyPinAsync, reusing VerifyMyPin's exact
+    MaxPinAttempts=5 / wipe-on-5-fails behavior (calls
+    ClearMyCredentialsAsync, same as the portal-wide unlock) so there is
+    one security boundary for "guess the PIN," not a second, independently
+    rate-limited one an attacker could target instead. On success, grants
+    a 5-minute unlock for that one provider only.
+  - Gated actions (CredentialGate check added, in this order): SaveMyGitHub
+    (conditionally, see below), ClearMyGitHubToken, SaveMyAws, ClearMyAws,
+    SaveMyAzure, ClearMyAzure, SaveMyGcp, ClearMyGcp, SaveDocker,
+    SaveGitHubOAuth, SaveSonar, SaveAi, the generic Clear(section) action
+    for exactly docker/github-oauth/sonar/ai (not admins), and
+    SecurityApiKeysController's CreateMine/RevokeMine for the caller's own
+    API keys. Every Clear action also calls RevokeCredentialUnlock
+    immediately after clearing.
+
+Deliberately NOT gated (both are escape hatches, not credential edits):
+  - DELETE me/all (ClearMyAll) - the "Forgot your PIN?" self-clear
+    PinLockScreen.jsx already calls with no PIN entered. Gating this would
+    create a circular "need the PIN to prove you forgot the PIN" deadlock.
+  - DELETE {section=all} (ClearAllAsync) - an admin's bulk reset of every
+    shared section at once, not a per-provider action; treated as the
+    admin-side equivalent of the same escape-hatch category rather than
+    something that needs all-or-nothing gating logic invented for it.
+  - The admins section/allowlist - access control, not a credential.
+
+Onboarding-vs-management conflict found and resolved: POST me/github
+(SaveMyGitHub) is called both by RequireGitHubSetup.jsx's blocking
+onboarding/reconnect dialog (which has no PIN-entry UI at all) and by the
+Credentials page's own GitHub tab. Unconditionally gating it would have
+made first-time GitHub setup impossible whenever a screen-lock PIN is
+already set. Resolved by fetching the existing credential first and only
+requiring an unlock when existing.IsConfigured is already true - a fresh
+connection is ungated, same as before this feature existed; reconnecting
+an already-configured one is gated. The frontend mirrors this exact
+condition (CredentialsView only wraps the GitHub tab in CredentialPinGate
+when githubTokenConfigured is true).
+
+Frontend: new CredentialPinGate.jsx (components/settings/credentials/),
+modeled directly on the existing PinLockScreen.jsx pattern (same 5-
+attempt counter, same performSelfClear() on lockout, same wrong-PIN
+copy) but scoped to one provider via the new unlockMyCredential(provider,
+pin) call (settingsService.js) instead of the portal-wide verifyMyPin.
+Renders children immediately, with no prompt at all, whenever
+useAuth().pinConfigured is false - matches the backend's own bypass.
+Wired into CredentialsView.jsx around every gated provider's existing
+section (aws/azure/gcp/apikey/docker/github-oauth(oauth)/sonar(sonarqube)/
+ai, plus the conditional github case above); screenlock and admin modes
+are left unwrapped. Unlock state is lifted to CredentialsView's own
+`unlockedProviders` Set (not local to the gate) so switching tabs and
+back doesn't re-prompt for a provider already unlocked this visit - it
+still resets on reload, same as the backend's own short-lived grant.
+
+Clear/reconfigure lifecycle (matches the user's own stated requirement -
+verified by reading the code path, not executed against production data):
+saving AWS -> Clear AWS calls ClearMyAws, which now runs the credential
+gate FIRST (so a locked session can't clear something it can't unlock,
+either), then _settings.ClearUserAwsCredentialsAsync (permanent - removes
+the stored record entirely, no soft-delete/tombstone), then
+RevokeCredentialUnlock so any standing unlock grant for "aws" dies with
+the credential it authorized changes to. A subsequent unlock call for
+"aws" still succeeds (correct PIN still works), but there is nothing left
+for it to authorize until a new credential is saved - the PIN was never
+the credential's encryption key and never could "recover" it.
+
+Explicitly acknowledged (this was the user's own point, not something
+this pass tried to work around): no "reveal the actual secret value"
+feature was added, on purpose. If one existed, any value that reaches the
+browser to be displayed is inspectable in DevTools by the person
+controlling that browser - no frontend technique changes that. Since
+CredentialsView never displayed secrets before this feature and doesn't
+now, this constraint didn't have to be designed around.
+
+Verification performed:
+  - `dotnet build` (to an isolated output directory, since a local dev
+    instance already had the default bin/ output locked): 0 errors, 2
+    pre-existing unrelated warnings only.
+  - `npm run lint` / `npm run build`: 0 errors, pre-existing unrelated
+    Fast-Refresh warnings only.
+  - Live smoke test after deploy: POST /api/settings/me/credentials/aws/
+    unlock with no PIN configured returns {valid:true,locked:false}
+    (no-op path); saving/clearing AWS credentials before and after setting
+    a screen-lock PIN behaves as designed - ungated with no PIN, 403
+    CREDENTIAL_LOCKED without a fresh unlock once a PIN is set, allowed
+    immediately after a correct-PIN unlock.
+
+Files changed: src/DeploymentAPI/Helpers/CredentialGate.cs (new);
+Services/SessionActivityService.cs; Controllers/SettingsController.cs;
+Controllers/SecurityApiKeysController.cs; deployment-ui/src/services/
+settingsService.js; components/settings/credentials/CredentialPinGate.jsx
+(new); components/settings/CredentialsView.jsx.
+
+Status: Complete. Reused all existing PIN/rate-limit infrastructure
+rather than introducing a parallel one; no reveal-secret feature added
+since none existed to protect; ClearMyAll and the admin allowlist remain
+the two deliberate, permanent exceptions to the gate.

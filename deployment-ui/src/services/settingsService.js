@@ -144,6 +144,17 @@ export const verifyMyPin = async (pin) => {
     return response.data;
 };
 
+// Per-credential unlock (see CredentialPinGate) — verifying the SAME
+// screen-lock PIN here grants a short-lived pass to manage exactly one
+// provider's credential (github/aws/azure/gcp/apikey/sonar/docker/
+// github-oauth/ai), not the whole portal. { valid, locked } — a `valid:
+// true` response with no PIN configured at all is the normal, expected
+// no-op case (see UnlockMyCredential on the backend).
+export const unlockMyCredential = async (provider, pin) => {
+    const response = await settingsApi.post(`/me/credentials/${provider}/unlock`, { pin });
+    return response.data;
+};
+
 export const saveDockerSettings = async (payload) => {
     const response = await settingsApi.post("/docker", payload);
     return response.data;

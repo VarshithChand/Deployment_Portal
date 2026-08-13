@@ -37,6 +37,35 @@ public class SessionActivityService
 
     public void ClearFailedPinAttempts(string key) => _failedPinAttempts.TryRemove(key, out _);
 
+    // Per-credential PIN unlock grants (see CredentialGate) - a browser
+    // that's verified the screen-lock PIN for one provider (say, AWS) does
+    // NOT automatically get GitHub/Azure/etc. too; each is tracked
+    // separately, keyed by "{session key}:{provider}". In-memory and
+    // short-lived by design, same reasoning as everything else in this
+    // file - losing every open grant on a restart just means re-entering
+    // the PIN once more, never a security hole, and a real persisted grant
+    // table would be a much bigger (and unnecessary) piece of state for
+    // something this app already treats as "gone on restart" everywhere
+    // else (force-logout, failed-attempt counters, frontend build
+    // reporting).
+    private readonly ConcurrentDictionary<string, DateTime> _credentialUnlocks = new();
+
+    private static string CredentialUnlockKey(string sessionKey, string provider) => $"{sessionKey}:{provider}";
+
+    public void GrantCredentialUnlock(string sessionKey, string provider, TimeSpan duration) =>
+        _credentialUnlocks[CredentialUnlockKey(sessionKey, provider)] = DateTime.UtcNow.Add(duration);
+
+    public bool IsCredentialUnlocked(string sessionKey, string provider) =>
+        _credentialUnlocks.TryGetValue(CredentialUnlockKey(sessionKey, provider), out var expiresAt)
+        && expiresAt > DateTime.UtcNow;
+
+    // Called whenever the credential itself changes (saved or cleared) -
+    // an unlock grant is authorization to manage THIS credential, not a
+    // standing pass that should silently keep applying to whatever value
+    // happens to be there after the next edit.
+    public void RevokeCredentialUnlock(string sessionKey, string provider) =>
+        _credentialUnlocks.TryRemove(CredentialUnlockKey(sessionKey, provider), out _);
+
     // Which frontend build a given session's browser is actually running -
     // reported once per app load (see AppVersionController's
     // frontend-heartbeat endpoint / deployment-ui's utils/buildInfo.js).

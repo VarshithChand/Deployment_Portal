@@ -7,6 +7,7 @@ import AzureLoginSection from "./credentials/AzureLoginSection";
 import GcpLoginSection from "./credentials/GcpLoginSection";
 import ApiKeySection from "./credentials/ApiKeySection";
 import SecurityPinSection from "./credentials/SecurityPinSection";
+import CredentialPinGate from "./credentials/CredentialPinGate";
 
 const MODES = [
     { key: "github", label: "GitHub" },
@@ -111,6 +112,17 @@ export default function CredentialsView({
 
     const [mode, setMode] = useState("github");
 
+    // Which providers this browser session has already unlocked via
+    // CredentialPinGate this visit - lifted up here (rather than local to
+    // each gate) so switching tabs and back doesn't re-prompt for one
+    // already unlocked. Resets on reload, same as the backend's own grant
+    // (see SessionActivityService.GrantCredentialUnlock) - never persisted.
+    const [unlockedProviders, setUnlockedProviders] = useState(() => new Set());
+
+    function markUnlocked(provider) {
+        setUnlockedProviders((prev) => new Set(prev).add(provider));
+    }
+
     return (
 
         <>
@@ -148,36 +160,88 @@ export default function CredentialsView({
 
             {mode === "github" && (
 
-                <GitHubAccessSection
-                    githubTokenConfigured={githubTokenConfigured}
-                    loadingAccountRepos={loadingAccountRepos}
-                    accountRepos={accountRepos}
-                    githubRepoUrl={githubRepoUrl}
-                    setGithubRepoUrl={setGithubRepoUrl}
-                    repoPreviewLoading={repoPreviewLoading}
-                    repoPreview={repoPreview}
-                    userRepoResults={userRepoResults}
-                    isRateLimited={isRateLimited}
-                    githubToken={githubToken}
-                    setGithubToken={setGithubToken}
-                    handleSaveGitHub={handleSaveGitHub}
-                    savingGitHub={savingGitHub}
-                    handleClear={handleClear}
-                />
+                // Only gated once a token is already saved - RequireGitHubSetup's
+                // own onboarding/reconnect flow calls this same save action with
+                // no PIN-entry UI in front of it, so gating an as-yet-unconfigured
+                // GitHub connection here would make first-time setup impossible.
+                // Matches the backend's own conditional check in SaveMyGitHub.
+                githubTokenConfigured ? (
+
+                    <CredentialPinGate
+                        provider="github"
+                        unlocked={unlockedProviders.has("github")}
+                        onUnlocked={() => markUnlocked("github")}
+                    >
+                        <GitHubAccessSection
+                            githubTokenConfigured={githubTokenConfigured}
+                            loadingAccountRepos={loadingAccountRepos}
+                            accountRepos={accountRepos}
+                            githubRepoUrl={githubRepoUrl}
+                            setGithubRepoUrl={setGithubRepoUrl}
+                            repoPreviewLoading={repoPreviewLoading}
+                            repoPreview={repoPreview}
+                            userRepoResults={userRepoResults}
+                            isRateLimited={isRateLimited}
+                            githubToken={githubToken}
+                            setGithubToken={setGithubToken}
+                            handleSaveGitHub={handleSaveGitHub}
+                            savingGitHub={savingGitHub}
+                            handleClear={handleClear}
+                        />
+                    </CredentialPinGate>
+
+                ) : (
+
+                    <GitHubAccessSection
+                        githubTokenConfigured={githubTokenConfigured}
+                        loadingAccountRepos={loadingAccountRepos}
+                        accountRepos={accountRepos}
+                        githubRepoUrl={githubRepoUrl}
+                        setGithubRepoUrl={setGithubRepoUrl}
+                        repoPreviewLoading={repoPreviewLoading}
+                        repoPreview={repoPreview}
+                        userRepoResults={userRepoResults}
+                        isRateLimited={isRateLimited}
+                        githubToken={githubToken}
+                        setGithubToken={setGithubToken}
+                        handleSaveGitHub={handleSaveGitHub}
+                        savingGitHub={savingGitHub}
+                        handleClear={handleClear}
+                    />
+
+                )
 
             )}
 
-            {mode === "aws" && <AwsLoginSection />}
+            {mode === "aws" && (
+                <CredentialPinGate provider="aws" unlocked={unlockedProviders.has("aws")} onUnlocked={() => markUnlocked("aws")}>
+                    <AwsLoginSection />
+                </CredentialPinGate>
+            )}
 
-            {mode === "azure" && <AzureLoginSection />}
+            {mode === "azure" && (
+                <CredentialPinGate provider="azure" unlocked={unlockedProviders.has("azure")} onUnlocked={() => markUnlocked("azure")}>
+                    <AzureLoginSection />
+                </CredentialPinGate>
+            )}
 
-            {mode === "gcp" && <GcpLoginSection />}
+            {mode === "gcp" && (
+                <CredentialPinGate provider="gcp" unlocked={unlockedProviders.has("gcp")} onUnlocked={() => markUnlocked("gcp")}>
+                    <GcpLoginSection />
+                </CredentialPinGate>
+            )}
 
-            {mode === "apikey" && <ApiKeySection />}
+            {mode === "apikey" && (
+                <CredentialPinGate provider="apikey" unlocked={unlockedProviders.has("apikey")} onUnlocked={() => markUnlocked("apikey")}>
+                    <ApiKeySection />
+                </CredentialPinGate>
+            )}
 
             {mode === "screenlock" && <SecurityPinSection />}
 
             {mode === "docker" && (
+
+            <CredentialPinGate provider="docker" unlocked={unlockedProviders.has("docker")} onUnlocked={() => markUnlocked("docker")}>
 
             <div className="settings-subsection">
 
@@ -242,9 +306,13 @@ export default function CredentialsView({
 
             </div>
 
+            </CredentialPinGate>
+
             )}
 
             {mode === "oauth" && (
+
+            <CredentialPinGate provider="github-oauth" unlocked={unlockedProviders.has("github-oauth")} onUnlocked={() => markUnlocked("github-oauth")}>
 
             <div className="settings-subsection">
 
@@ -298,9 +366,13 @@ export default function CredentialsView({
 
             </div>
 
+            </CredentialPinGate>
+
             )}
 
             {mode === "sonarqube" && (
+
+            <CredentialPinGate provider="sonar" unlocked={unlockedProviders.has("sonar")} onUnlocked={() => markUnlocked("sonar")}>
 
             <div className="settings-subsection">
 
@@ -380,6 +452,8 @@ export default function CredentialsView({
 
             </div>
 
+            </CredentialPinGate>
+
             )}
 
             {mode === "admin" && (
@@ -421,6 +495,8 @@ export default function CredentialsView({
             )}
 
             {mode === "ai" && (
+
+            <CredentialPinGate provider="ai" unlocked={unlockedProviders.has("ai")} onUnlocked={() => markUnlocked("ai")}>
 
             <div className="settings-subsection">
 
@@ -528,6 +604,8 @@ export default function CredentialsView({
             </div>
 
             </div>
+
+            </CredentialPinGate>
 
             )}
 
