@@ -3231,3 +3231,117 @@ CredentialsView}.jsx.
 Status: Complete. Recommend the user re-check the Admin Access page
 (after `npx wrangler deploy`) to confirm the previously-hidden
 connected account now appears in the MFA console.
+
+ROUND 19 - NON-DESTRUCTIVE SIGN-OUT + ACTIVITY-AWARE IDLE TIMEOUT
+==================================================
+Date: 2026-08-13
+Trigger: user's own screenshot of Settings' hub, asking for three related
+changes: (1) replace the "Clear All Data" Danger Zone button with a
+non-destructive Sign Out - the existing per-credential "Clear" buttons
+already cover anyone who genuinely wants to remove a saved token; (2) the
+existing 10-minute "Still there?" popup shouldn't appear while someone is
+actively switching pages; (3) after 30 minutes with no page switches at
+all, sign the session out automatically and land it on the login screen -
+again, without clearing anything, "like the cloud credentials [travel]
+with the PAT" (a reference to how AWS/Azure/GCP credentials already stay
+tied to a PAT owner rather than being wiped, per Round 14).
+
+Investigation found the exact non-destructive mechanism already existed,
+just admin-only: AdminUsersController's "Sign Out" action calls
+SettingsService.SoftSignOutPatUserAsync(key) - flips a SignedOut flag
+that makes GetUserGitHubCredentialsAsync report no token (so
+githubTokenConfigured reads false and Round 17's login gate shows
+PatLoginPage again) while leaving the real stored token, and every AWS/
+Azure/GCP credential tied to it, completely untouched. Re-entering the
+same token instantly undoes it. This is precisely what a self-service
+"Sign Out" needed - the only piece missing was a route that applies it to
+the CALLER's own key instead of an admin-supplied one.
+
+Fix 1 (self-service sign-out): new POST api/settings/me/github/signout
+(SettingsController) - no AdminGate (acts only on the caller's own key),
+no CredentialGate PIN check either (deliberately, unlike the existing
+DELETE me/github hard-clear - signing out is the safe, reversible action,
+not the one that should need a PIN gate in front of it). New frontend
+utils/performSignOut.js combines this with the existing OAuth-cookie
+logout (logoutRequest, a harmless no-op for a PAT-only session, same
+pattern performLogout.js already used) so an OAuth-authenticated admin
+session is also properly logged out, not just the PAT side - then does a
+full-page reload to the origin, letting App.jsx's existing bootstrap gate
+naturally show PatLoginPage. AuthContext gained a "idle" case in
+describeLoggedOutReason for the toast shown after an automatic sign-out.
+
+Fix 2 (Danger Zone): SettingsHubView.jsx now branches its bottom card on
+isAdmin - an admin keeps the existing "Clear All Data" bulk reset for
+shared portal settings (Docker/OAuth/Sonar) exactly as before, a
+deliberately distinct, still-legitimate admin power tool this round
+doesn't touch. A non-admin instead sees a plain "Sign Out" card
+(Settings.jsx's new handleSignOut, confirmed via the existing useConfirm
+pattern, then performSignOut()) - explicitly pointing to each
+credential's own "Clear" button on the Credentials page as the answer for
+anyone who really does want to remove a saved token, per the user's own
+framing ("if user they have an option to clear the token just remove it").
+
+Fix 3 (activity-aware idle timeout): PeriodicSignOutMonitor previously
+scheduled its 10-minute "Still there?" prompt on a fixed timer from
+mount/last-Stay-click, firing regardless of whether the person had been
+actively working the whole time (its own old comment said as much: "not
+an idle timeout... a mandatory periodic check-in"). Redesigned around
+useNavigation's `tab` value as the one activity signal already available
+on every page in this app without adding a new mouse/keyboard listener -
+both a 10-minute warning timer and a new independent 30-minute hard
+sign-out timer now reset together on every tab change (and on clicking
+"Stay", which counts as the same kind of activity). The old 20-second
+forced-countdown-to-action inside the warning dialog is gone entirely -
+the warning is now purely informational and dismissible; the 30-minute
+timer is what actually acts, running independently whether or not the
+warning was ever answered. The no-PIN fallback (both the dialog's "Sign
+Out Now" button and the 30-minute auto-trigger) changed from
+performSelfClear() (a full destructive wipe of every saved credential) to
+the same non-destructive performSignOut() Fix 1/2 use - consistent with
+the user's core complaint that idle time alone shouldn't cost someone
+their saved credentials. The PIN-set branch (lock the screen, touch
+nothing) was already non-destructive and is unchanged.
+
+Deliberately NOT touched: PinLockScreen.jsx/CredentialPinGate.jsx's own
+use of performSelfClear() for FIVE WRONG PIN ATTEMPTS - a different,
+still-destructive-by-design security control (a wrong PIN five times is
+actual evidence of a problem, unlike simply being idle) that the user
+didn't ask about and this round leaves exactly as it was.
+
+Verification performed:
+  - `dotnet build` (isolated output dir): 0 errors, first try, same 3
+    pre-existing unrelated warnings as every prior round.
+  - `npm run lint` / `npm run build`: 0 errors, pre-existing Fast-Refresh
+    warnings only, main bundle size unchanged from the prior round's
+    baseline.
+  - Live tests against the deployed Render backend after push (fresh
+    X-Session-Id, DELETE me/all cleanup after):
+    - POST me/github/signout with nothing connected at all -> clean 200
+      no-op, confirmed idempotent by calling it twice.
+    - Regression: POST api/auth/pat-login with a fake token still returns
+      the expected clean failure, confirming the new route didn't disturb
+      anything in the existing PAT-login path it sits next to.
+  - Could NOT live-verify: the actual 10-minute warning / 30-minute
+    auto-sign-out timing itself (these are wall-clock UI timers - nothing
+    to curl), or that a real connected session's token/AWS/Azure/GCP
+    credentials genuinely survive a sign-out end-to-end in a browser.
+    Confirmed via code reading (SoftSignOutPatUserAsync's own logic is
+    unchanged and was already exercised by Round 15/18's admin-facing
+    callers) rather than a fresh live walkthrough. Recommend the user
+    confirm in a real browser: switching tabs resets the 10-minute
+    warning (it shouldn't appear while actively navigating), a genuinely
+    idle tab left for 30 minutes signs out on its own and lands on PAT
+    login with the same token still working to reconnect, and the
+    Settings Danger Zone's new Sign Out button behaves the same way.
+
+Files changed: src/DeploymentAPI/Controllers/SettingsController.cs;
+deployment-ui/src/components/PeriodicSignOutMonitor.jsx,
+components/settings/SettingsHubView.jsx, context/AuthContext.jsx,
+pages/Settings.jsx, services/settingsService.js,
+utils/performSignOut.js (new).
+
+Status: Complete for the code-level and API-level-verifiable portion;
+the wall-clock timing and full browser walkthrough are flagged above for
+the user to confirm live, consistent with every prior round's honesty
+about what a sandboxed session without a real browser can and can't
+verify.
