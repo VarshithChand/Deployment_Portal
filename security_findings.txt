@@ -2146,3 +2146,117 @@ Status: Complete. Reused all existing PIN/rate-limit infrastructure
 rather than introducing a parallel one; no reveal-secret feature added
 since none existed to protect; ClearMyAll and the admin allowlist remain
 the two deliberate, permanent exceptions to the gate.
+
+ROUND 10 - DASHBOARD REPO HISTORY, SEARCHABLE AWS REGION PICKER,
+CODE QUALITY DELEGATION, AI ASSISTANT LOCKDOWN
+==================================================
+Date: 2026-08-13
+Trigger: four separate asks, clarified via AskUserQuestion before any
+code was written (see plan file valiant-coalescing-haven.md): (1) a
+Dashboard repo picker - turned out to already exist (AllRepositoriesCard
+is a full searchable picker); the real gap was remembering the repo
+switched away from, (2) a searchable AWS region dropdown for the
+credential-save form, Cloud Services, and the Dashboard's AWS Services
+card, (3) page-scoped admin delegation for Code Quality (SonarQube),
+matching the pattern already used by Services/Deploy/Docker/etc., (4) an
+"AI Assistant admin allowlist" - confirmed with the user this meant
+restricting Deployment Copilot's chat to admins only, no delegation, a
+real behavior change (it was previously open to every session).
+
+Fix 1 (previous-repo tracking): SaveUserGitHubCredentialsAsync
+(SettingsService.cs) now stashes the outgoing Owner/Repository as
+PreviousOwner/PreviousRepository on the same stored entry before
+overwriting them, but only when something real was already configured
+and it's actually changing - first-time setup and a same-repo token
+refresh never fabricate a bogus "previous" repo. Threaded through
+UserGitHubCredentials, BootstrapGitHubDto/BootstrapController, and
+GetMyGitHub for consistency. AllRepositoriesCard.jsx shows "Previously:
+owner/repo - Switch back" next to its existing repo-count/activity
+badges whenever that differs from the current repo, reusing the exact
+same target/ConfirmDialog/handleConfirmSwitch machinery its own grid
+cards already use - no new save/switch logic. Verified live: saved repo
+A, switched to repo B, confirmed GET me/github reports
+previousOwner/previousRepository = repo A.
+
+Fix 2 (AWS region): added deployment-ui/src/data/awsRegions.js (~30
+regions, {value,label} shaped for the existing ComboBox component -
+reused, not rebuilt). AwsLoginSection's region field changed from a
+free-text ClearableInput (silently accepted typos like "us-eest-1" until
+a later AWS call failed) to ComboBox. Separately, confirmed the backend
+already accepted a `region` query-string override on GET me/aws/
+resources|ec2-detail|ecs-detail (CloudStatusService already falls back to
+the saved credential's region when it's omitted) - only the frontend
+wasn't sending it. Added the param to settingsService.js's three getters,
+and a region ComboBox to both CloudServices.jsx and AwsServicesCard.jsx
+that triggers an immediate refetch (not just the next poll tick) on
+change; CloudServiceDetailPage inherits the override for free since it
+already consumes CloudServices' own `inventory` as a prop. No backend
+changes needed for the override itself - confirmed via
+CloudStatusService's `result.Region = effectiveRegion` already reflecting
+whichever region was actually queried. Verified live: saved AWS creds
+region=us-east-1, confirmed an unqualified fetch returns "us-east-1" and
+`?region=eu-west-1` returns "eu-west-1".
+
+Fix 3 (Code Quality delegation): added "codeQuality" to
+SettingsService.GrantablePageKeys and passed it as the pageKey argument
+to SonarController.Overview's existing AdminGate.DenyUnlessAdminAsync
+call (previously full-admin-only with no delegation option, unlike every
+other admin-gated page). Added <PageAdminAccessButton pageKey="codeQuality"
+pageLabel="Code Quality" /> to CodeQuality.jsx's PageLayout actions slot,
+identical to Services.jsx's own usage. No sidebar change - Code Quality
+stays in Sidebar.jsx's ADMIN_ONLY_TABS same as Services already does; a
+page-scoped grantee reaches it via the ?tab= URL directly, the same
+existing characteristic Services already has.
+
+Fix 4 (AI Assistant lockdown - a genuine new restriction, not a gap
+close): AiController.Chat had no AdminGate call at all before this -
+"any portal visitor with a session can use the assistant" was the
+original, deliberate design. Added
+AdminGate.DenyUnlessAdminAsync(this, _settings, "use the AI Assistant")
+with NO pageKey argument, so no delegation path exists - matches what the
+user explicitly chose over the delegable option. Deployment
+Copilot.jsx now reads useAuth().isAdminSession and returns null before
+rendering anything for a non-admin, so the floating widget simply
+doesn't appear rather than appearing and failing on the first message.
+ApplicationSupportCopilot (a separate assistant instance embedded in the
+already admin-only Services page) was deliberately left untouched - out
+of scope, and already effectively gated by living inside that page.
+Verified live: POST api/ai/chat and GET api/sonar/overview both now
+return 403 ACCESS_DENIED for a real non-admin session (previously the AI
+one succeeded).
+
+Pre-existing behavior observed, not introduced by this round: GET
+/api/bootstrap throws UPSTREAM_REQUEST_FAILED if TokenConfigured is true
+but the stored PAT isn't a real GitHub token (its GetTokenOwnerAsync call
+has no try/catch around the upstream failure) - surfaced only because a
+syntactically-plausible fake token was used for the previous-repo test
+above; GET me/github (no external call) was used to verify that fix
+instead. Not touched - unrelated to this round's scope, and a real PAT
+never hits this path.
+
+Verification performed:
+  - `dotnet build` (isolated output dir, same reasoning as prior rounds):
+    0 errors, only the 2 pre-existing unrelated warnings.
+  - `npm run lint` / `npm run build`: 0 errors, pre-existing Fast-Refresh
+    warnings only.
+  - Live tests against the deployed Render backend, isolated test
+    sessions only (no cookie reuse across real user data), cleaned up via
+    DELETE me/all after each: previous-repo tracking, AWS region
+    override, AI Assistant 403-for-non-admin, Code Quality 403-for-
+    non-admin - all confirmed matching the intended behavior, detailed
+    above.
+
+Files changed: src/DeploymentAPI/Services/SettingsService.cs, Controllers/
+{AiController,BootstrapController,SettingsController,SonarController}.cs,
+DTOs/{BootstrapResponseDto,UserGitHubCredentials}.cs; deployment-ui/src/
+data/awsRegions.js (new), context/AuthContext.jsx, components/copilot/
+DeploymentCopilot.jsx, components/dashboard/{AllRepositoriesCard,
+AwsServicesCard}.jsx, components/settings/credentials/AwsLoginSection.jsx,
+pages/{CloudServices,CodeQuality}.jsx, services/settingsService.js.
+
+Status: Complete. All four asks scoped down to the smallest change that
+reused existing infrastructure (ComboBox, PageAdminAccessButton,
+AdminGate's pageKey parameter, the backend's pre-existing region-override
+plumbing) rather than new mechanisms; the AI Assistant lockdown was
+explicitly confirmed with the user as a real behavior change before
+implementing it.
