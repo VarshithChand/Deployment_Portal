@@ -22,6 +22,7 @@ import {
 } from "../services/settingsService";
 import { getAccountRepositories } from "../services/githubService";
 import { getLogs } from "../services/logsService";
+import performSignOut from "../utils/performSignOut";
 import { SIDEBAR_TABS } from "../constants/sidebarAccess";
 import { VIEWS, VIEW_TITLES, ADMIN_ONLY_VIEWS, SUPER_ADMIN_ONLY_VIEWS } from "../constants/settingsViews";
 import isValidGitHubUsername from "../utils/githubUsername";
@@ -118,6 +119,7 @@ export default function Settings() {
     const [savingAdmins, setSavingAdmins] = useState(false);
     const [savingSonar, setSavingSonar] = useState(false);
     const [clearingAll, setClearingAll] = useState(false);
+    const [signingOut, setSigningOut] = useState(false);
 
     const [githubRepoUrl, setGithubRepoUrl] = useState("");
     const [githubToken, setGithubToken] = useState("");
@@ -967,6 +969,31 @@ export default function Settings() {
 
     }
 
+    // Non-admin Danger Zone action - a real sign-out (see
+    // SoftSignOutPatUserAsync/performSignOut.js), not a wipe. Nothing
+    // saved is cleared - the same token, and every AWS/Azure/GCP
+    // credential tied to this session, are still there the moment it's
+    // entered again. An admin still sees the destructive "Clear All Data"
+    // path above instead (SettingsHubView branches on isAdmin) - that's a
+    // deliberate bulk-reset tool for shared portal settings, not something
+    // this round touches.
+    async function handleSignOut() {
+
+        if (!(await confirm({
+            title: "Sign out?",
+            message: "You'll be signed out and returned to the login screen. Nothing you've " +
+                "saved is cleared - your GitHub token and any AWS/Azure/GCP credentials are " +
+                "still there the next time you sign back in.",
+            confirmLabel: "Sign Out"
+        }))) {
+            return;
+        }
+
+        setSigningOut(true);
+        await performSignOut();
+
+    }
+
     const {
         page: logsPage,
         setPage: setLogsPage,
@@ -1004,6 +1031,8 @@ export default function Settings() {
                     setView={setView}
                     handleClearAll={handleClearAll}
                     clearingAll={clearingAll}
+                    handleSignOut={handleSignOut}
+                    signingOut={signingOut}
                 />
 
             )}

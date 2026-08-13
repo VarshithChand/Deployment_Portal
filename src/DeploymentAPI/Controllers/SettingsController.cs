@@ -178,6 +178,24 @@ public class SettingsController : ControllerBase
         return Ok();
     }
 
+    // Self-service equivalent of AdminUsersController's "Sign Out" action -
+    // same SoftSignOutPatUserAsync, just applied to the CALLER's own key
+    // instead of an admin-chosen one. Deliberately not gated behind
+    // CredentialGate's PIN check the way ClearMyGitHubToken above is -
+    // signing yourself out is the safe, reversible action (nothing is
+    // deleted; typing the same token back in immediately undoes it), not
+    // the one that needs a PIN in front of it. Used by Settings' Danger
+    // Zone (replacing a destructive full wipe for non-admins) and by
+    // PeriodicSignOutMonitor's 30-minute true-idle timeout.
+    [HttpPost("me/github/signout")]
+    public async Task<IActionResult> SignOutMyGitHub()
+    {
+        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        await _settings.SoftSignOutPatUserAsync(key);
+
+        return Ok();
+    }
+
     // Read-only confirmation of whose token this actually is - GitHubAuthService
     // is loaded fresh per request (see the middleware in Program.cs), so
     // calling this right after SaveMyGitHub (a separate request) picks up

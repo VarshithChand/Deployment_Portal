@@ -33,6 +33,8 @@ function describeLoggedOutReason(loggedOut) {
             return "You were signed out by the portal admin.";
         case "cleared":
             return "You were signed out and your saved credentials were cleared.";
+        case "idle":
+            return "You were signed out after 30 minutes of inactivity. Your saved credentials are still there — just sign back in.";
         default:
             return "You were signed out.";
     }

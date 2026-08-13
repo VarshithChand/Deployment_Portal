@@ -1,7 +1,11 @@
 // Pulled out of Settings.jsx's "hub" view - part of the same
 // cognitive-complexity cleanup as CredentialsView/SidebarAccessView/
 // ActivityLogView.
-export default function SettingsHubView({ isAdmin, isSuperAdmin, setView, handleClearAll, clearingAll }) {
+export default function SettingsHubView({
+    isAdmin, isSuperAdmin, setView,
+    handleClearAll, clearingAll,
+    handleSignOut, signingOut
+}) {
 
     return (
 
@@ -124,34 +128,60 @@ export default function SettingsHubView({ isAdmin, isSuperAdmin, setView, handle
 
         </div>
 
-        <div className="card card-danger-zone">
+        {isAdmin ? (
 
-            <h2 className="card-title">
-                Danger Zone
-            </h2>
+            <div className="card card-danger-zone">
 
-            <p className="empty-state" style={{ padding: "0 0 15px", textAlign: "left" }}>
-                {isAdmin
-                    ? "Wipes everything on the Credentials page at once — your repository URL, " +
-                      "GitHub token, AWS/Azure/GCP credentials, Docker credentials, OAuth " +
-                      "settings, and Sonar settings — instead of clearing one section at a time. " +
-                      "The admin allowlist is kept as-is."
-                    : "Clears your own repository URL, GitHub token, and AWS/Azure/GCP " +
-                      "credentials — instead of clearing one section at a time. Portal-wide " +
-                      "settings (Docker, OAuth, Sonar) are admin-only and untouched by this."}
-                {" "}You'll land back on the "connect your repository" screen afterward.
-            </p>
+                <h2 className="card-title">
+                    Danger Zone
+                </h2>
 
-            <button
-                type="button"
-                className="btn btn-danger"
-                onClick={handleClearAll}
-                disabled={clearingAll}
-            >
-                {clearingAll ? "Clearing..." : "Clear All Data"}
-            </button>
+                <p className="empty-state" style={{ padding: "0 0 15px", textAlign: "left" }}>
+                    Wipes everything on the Credentials page at once — your repository URL,
+                    GitHub token, AWS/Azure/GCP credentials, Docker credentials, OAuth
+                    settings, and Sonar settings — instead of clearing one section at a time.
+                    The admin allowlist is kept as-is.
+                    {" "}You'll land back on the "connect your repository" screen afterward.
+                </p>
 
-        </div>
+                <button
+                    type="button"
+                    className="btn btn-danger"
+                    onClick={handleClearAll}
+                    disabled={clearingAll}
+                >
+                    {clearingAll ? "Clearing..." : "Clear All Data"}
+                </button>
+
+            </div>
+
+        ) : (
+
+            <div className="card">
+
+                <h2 className="card-title">
+                    Sign Out
+                </h2>
+
+                <p className="empty-state" style={{ padding: "0 0 15px", textAlign: "left" }}>
+                    Signs you out and returns you to the login screen — nothing is cleared. Your
+                    GitHub token and any AWS/Azure/GCP credentials are still there the next time
+                    you sign back in with the same token. To actually remove a saved credential
+                    instead, use its own "Clear" button on the Credentials page.
+                </p>
+
+                <button
+                    type="button"
+                    className="btn btn-secondary"
+                    onClick={handleSignOut}
+                    disabled={signingOut}
+                >
+                    {signingOut ? "Signing out..." : "Sign Out"}
+                </button>
+
+            </div>
+
+        )}
 
         </>
 

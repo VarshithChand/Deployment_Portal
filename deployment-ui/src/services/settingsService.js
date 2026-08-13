@@ -22,6 +22,15 @@ export const clearMyGitHubToken = async () => {
     return response.data;
 };
 
+// Soft sign-out (see SoftSignOutPatUserAsync) - the token/repo/AWS/Azure/
+// GCP credentials are left exactly as they are, only marked "not
+// connected." Typing the same token back in undoes it. Distinct from
+// clearMySettings()/clearSettings("all") below, which actually delete data.
+export const signOutMyGitHub = async () => {
+    const response = await settingsApi.post("/me/github/signout");
+    return response.data;
+};
+
 // "Skip" on MfaEnforcementGate's nudge - see BootstrapController's
 // MfaNudge block for how the returned count feeds back into whether the
 // nudge escalates to a full-screen block.

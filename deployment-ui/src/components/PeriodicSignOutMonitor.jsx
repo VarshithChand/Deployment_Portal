@@ -1,34 +1,42 @@
 import { useEffect, useRef, useState } from "react";
 
 import useAuth from "../hooks/useAuth";
-import performSelfClear from "../utils/performSelfClear";
+import useNavigation from "../hooks/useNavigation";
+import performSignOut from "../utils/performSignOut";
 import { isPortalLocked, setPortalLocked, clearPortalLocked } from "../utils/portalLock";
 import PinLockScreen from "./PinLockScreen";
 
-const PROMPT_INTERVAL_MS = 10 * 60 * 1000;
-const WARNING_SECONDS = 20;
+const WARNING_AFTER_MS = 10 * 60 * 1000;
+const LOGOUT_AFTER_MS = 30 * 60 * 1000;
 
-// Every 10 minutes, on a fixed schedule regardless of activity, asks
-// "stay or sign out" - not an idle timeout (clicking around doesn't
-// reset it), a mandatory periodic check-in. Runs for any session with
-// something worth protecting: an OAuth login (`user`) or a PAT-only
-// Public View session that's connected a repo (`githubTokenConfigured`).
+// Real idle detection, not a fixed schedule - both timers below reset on
+// every tab switch (the one activity signal every page in this app
+// already reports through useNavigation, without wiring up a separate
+// mouse/keyboard listener nobody else here uses). Someone actively
+// clicking around the portal never sees the "Still there?" nudge; it only
+// shows up after 10 minutes with no page switch, and if genuinely nobody's
+// there for a full 30 minutes, this signs them out on its own rather than
+// waiting on a response that isn't coming.
 //
-// What happens when it's not answered (or "Sign Out" is chosen)
-// branches on whether a screen-lock PIN is set (see SecurityPinSection):
+// What happens depends on whether a screen-lock PIN is set (see
+// SecurityPinSection):
 // - PIN set: locks the screen (PinLockScreen) - a "fake logout" that
-//   blocks interaction but touches nothing. Credentials stay saved;
-//   the right PIN just resumes the same 10-minute cycle.
-// - No PIN: the original behavior, unchanged - performSelfClear wipes
-//   every credential this browser has saved (GitHub, AWS, Azure, GCP),
-//   same scope as Settings' own "Clear All Data".
+//   blocks interaction but touches nothing. Credentials stay saved; the
+//   right PIN just resumes the same idle cycle.
+// - No PIN: a real but NON-destructive sign-out (performSignOut) - the
+//   token and any AWS/Azure/GCP credentials tied to it are left exactly
+//   as they are, only marked "not connected," same as the manual Sign
+//   Out button in Settings' Danger Zone. This used to wipe every saved
+//   credential outright (performSelfClear) - replaced because 30 minutes
+//   of idle time in an open tab isn't evidence anything was actually
+//   compromised, just that nobody's looking at the screen right now.
 export default function PeriodicSignOutMonitor() {
 
     const { user, githubTokenConfigured, pinConfigured } = useAuth();
+    const { tab } = useNavigation();
     const active = !!user || githubTokenConfigured;
 
     const [warning, setWarning] = useState(false);
-    const [secondsLeft, setSecondsLeft] = useState(WARNING_SECONDS);
 
     // Read from localStorage (see utils/portalLock), not just started as
     // false - a lock engaged before a hard refresh (Ctrl+Shift+R) or a
@@ -37,16 +45,24 @@ export default function PeriodicSignOutMonitor() {
     // other piece of component state.
     const [locked, setLocked] = useState(isPortalLocked);
 
-    const timerRef = useRef(null);
+    const warnTimerRef = useRef(null);
+    const logoutTimerRef = useRef(null);
 
-    function schedulePrompt() {
+    function clearTimers() {
+        if (warnTimerRef.current) clearTimeout(warnTimerRef.current);
+        if (logoutTimerRef.current) clearTimeout(logoutTimerRef.current);
+    }
 
-        if (timerRef.current) clearTimeout(timerRef.current);
+    // Both timers restart from zero together - there's no separate
+    // "you had 20 seconds to answer" countdown anymore. The warning is
+    // purely informational; the 30-minute clock is what actually acts,
+    // and it keeps running whether or not the warning was ever dismissed.
+    function scheduleTimers() {
 
-        timerRef.current = setTimeout(() => {
-            setSecondsLeft(WARNING_SECONDS);
-            setWarning(true);
-        }, PROMPT_INTERVAL_MS);
+        clearTimers();
+
+        warnTimerRef.current = setTimeout(() => setWarning(true), WARNING_AFTER_MS);
+        logoutTimerRef.current = setTimeout(() => performSignOut("idle"), LOGOUT_AFTER_MS);
 
     }
 
@@ -60,64 +76,41 @@ export default function PeriodicSignOutMonitor() {
             // fresh reload - see oauthStatusChecked elsewhere) and an
             // engaged lock shouldn't silently lift just because this fired
             // during that resolving window. It only ever lifts via a
-            // correct PIN (handleUnlocked) or a full data wipe
-            // (performSelfClear, which also clears the persisted flag).
-            if (timerRef.current) clearTimeout(timerRef.current);
+            // correct PIN (handleUnlocked) or a self-sign-out clearing it.
+            clearTimers();
             setWarning(false);
             return;
 
         }
 
-        schedulePrompt();
+        // A tab switch is itself proof someone's there - clears any
+        // warning already showing and restarts both clocks from now.
+        setWarning(false);
+        scheduleTimers();
 
-        return () => {
-            if (timerRef.current) clearTimeout(timerRef.current);
-        };
+        return clearTimers;
 
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [active]);
+    }, [tab, active]);
 
-    // Countdown while the prompt is up — pure state ticking, the actual
-    // lock-or-clear is a separate effect reacting to it hitting zero.
-    useEffect(() => {
+    function handleStay() {
 
-        if (!warning) return;
+        setWarning(false);
+        scheduleTimers();
 
-        const interval = setInterval(() => {
-            setSecondsLeft((seconds) => Math.max(seconds - 1, 0));
-        }, 1000);
+    }
 
-        return () => clearInterval(interval);
-
-    }, [warning]);
-
-    function endCheckIn() {
+    async function handleSignOutNow() {
 
         setWarning(false);
 
         if (pinConfigured) {
             setPortalLocked();
             setLocked(true);
-        }
-        else {
-            performSelfClear();
+            return;
         }
 
-    }
-
-    useEffect(() => {
-
-        if (warning && secondsLeft === 0) {
-            endCheckIn();
-        }
-
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [warning, secondsLeft]);
-
-    function handleStay() {
-
-        setWarning(false);
-        schedulePrompt();
+        await performSignOut();
 
     }
 
@@ -125,12 +118,12 @@ export default function PeriodicSignOutMonitor() {
 
         clearPortalLocked();
         setLocked(false);
-        schedulePrompt();
+        scheduleTimers();
 
     }
 
-    // Checked before `active` - an engaged lock (manual or via the 10-
-    // minute prompt) stays up regardless of whether a session still looks
+    // Checked before `active` - an engaged lock (manual or via the idle
+    // timer) stays up regardless of whether a session still looks
     // "active" at this exact instant, which is also what makes it survive
     // the brief window right after a hard refresh where active hasn't
     // resolved to true yet.
@@ -156,17 +149,15 @@ export default function PeriodicSignOutMonitor() {
                     {pinConfigured ? (
 
                         <>
-                            Do you want to stay signed in? If you don't respond within{" "}
-                            <strong>{secondsLeft}s</strong> the screen will lock — you'll need your
-                            PIN to continue, but nothing gets cleared.
+                            You've been idle for a while. Lock the screen now, or keep working and
+                            we'll only ask again after another 10 quiet minutes.
                         </>
 
                     ) : (
 
                         <>
-                            Do you want to stay signed in? For your security, if you don't respond within{" "}
-                            <strong>{secondsLeft}s</strong> you'll be signed out and your saved credentials
-                            will be cleared.
+                            You've been idle for a while. If nothing changes for another 20 minutes,
+                            you'll be signed out automatically — nothing you've saved will be cleared.
                         </>
 
                     )}
@@ -178,8 +169,8 @@ export default function PeriodicSignOutMonitor() {
                         Stay
                     </button>
 
-                    <button type="button" className="btn btn-danger" onClick={endCheckIn}>
-                        {pinConfigured ? "Lock Now" : "Sign Out"}
+                    <button type="button" className="btn btn-danger" onClick={handleSignOutNow}>
+                        {pinConfigured ? "Lock Now" : "Sign Out Now"}
                     </button>
 
                 </div>
