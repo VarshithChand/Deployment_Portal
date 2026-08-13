@@ -2827,3 +2827,154 @@ creates data on the shared production backend, specifically so it stays
 identifiable and cleanable afterward - the one test loop that skipped
 this is now unrecoverable orphaned data in a real user-facing admin
 table.
+
+ROUND 17 - TWO FULL-PAGE PAT + MFA LOGIN (REPLACING THE POPUP FLOW)
+==================================================
+Date: 2026-08-13
+Trigger: user's own detailed "DEPLOYMENT PORTAL — TWO-STEP PAT + MFA
+LOGIN" spec, explicitly replacing Round 16's popup/modal-based MFA step
+(inside RequireGitHubSetup's dialog-backdrop overlay) with two dedicated,
+full-bleed pages - no popups, no modals, no alert()/prompt() - Page 1
+"PAT Login" (token field only, deliberately no username/email/password)
+and Page 2 "MFA Verification" (6-digit code only, no QR - QR stays
+exclusive to Settings enrollment). Required using the app's existing
+?tab=-based navigation, explicitly NOT react-router. The user's own
+closing note made the design intent explicit: "the first page has only
+the PAT field. The backend derives the GitHub identity from the
+validated PAT, then decides whether the second page is required."
+
+What this reconciles with Round 16: that round deliberately avoided any
+backend-persisted "pending MFA" state, holding the token only in React
+memory across the token->mfa step transition specifically so there was
+no intermediate, potentially-bypassable session to defend. This round's
+spec explicitly requires the opposite for one specific case - a browser
+refresh on the MFA page must NOT lose the user's place ("if the pending
+challenge is still valid, remain on the MFA page"). Resolved by adding a
+real but deliberately narrow pending-PAT store: in-memory only (a new
+ConcurrentDictionary in SessionActivityService, not the durable
+portal_settings JSONB blob - gone on a backend restart is fine, same
+"ephemeral state" reasoning already applied to every other dictionary in
+that file), 10-minute TTL, keyed by PortalIdentity session key, and the
+token itself is never held as plaintext even in memory - encrypted via
+two new one-line SettingsService wrappers (ProtectValue/UnprotectValue)
+around the same Data-Protection-backed Protect/Unprotect every other
+stored secret in this app already uses. Nothing is written to the
+durable credential store until a valid code (or recovery code) is
+actually presented - a wrong/expired code, or never returning at all,
+leaves no real credential behind, preserving Round 16's core safety
+property despite the new intermediate state existing at all now.
+
+New endpoints, all under api/auth (AuthController, which already had
+Settings/SessionActivityService injected; gained GitHubApiService for
+the token-preview call - PreviewTokenAsync, the SAME method me/github/
+preview already uses, not a new way of validating a token):
+  - POST pat-login: validates the token against GitHub, resolves the
+    real login. Invalid -> exact spec copy "Unable to authenticate with
+    this GitHub token." MFA not enabled for that login -> saves the
+    credential immediately (same SaveUserGitHubCredentialsAsync call the
+    old direct-connect path already made) and returns mfaRequired:false.
+    MFA enabled -> nothing saved; only the encrypted pending entry is
+    stored, mfaRequired:true.
+  - GET mfa/pending: {pending:true|false} - what MfaVerifyPage checks on
+    mount AND again on every tab-visibility change (covers a refresh, a
+    background tab outliving its TTL, or another tab having already
+    finished/cancelled the same session) before ever showing the code
+    form, rather than trusting its own memory of the token step having
+    just succeeded.
+  - POST mfa/verify: looks up the pending entry; missing/expired -> exact
+    spec copy "Your verification session has expired. Please sign in
+    again." with code MFA_SESSION_EXPIRED. Locked out (same 5-attempt/
+    15-minute pattern as Round 16's MfaGate, reusing the existing
+    SessionActivityService methods unchanged) -> MFA_LOCKED. Wrong code
+    -> exact spec copy "Invalid verification code. Please try again.",
+    pending entry deliberately left alone so a retry within the TTL still
+    works. Correct code -> THIS is the only place a credential is ever
+    actually created from this flow - decrypts the pending token, saves
+    it for real, clears the pending entry and the failed-attempt counter.
+  - POST mfa/cancel: explicitly invalidates the pending entry - wired to
+    "Back to Login" specifically because the spec calls out that button
+    must not just navigate away and leave the pending session live.
+
+Frontend: RequireGitHubSetup.jsx (Round 16's overlay dialog) is deleted
+outright - its job is fully superseded by two new top-level pages,
+PatLoginPage.jsx and MfaVerifyPage.jsx, each a bare, centered card (new
+.auth-page/.auth-page-card CSS reusing .dialog's exact surface/border/
+shadow tokens, but without the overlay/backdrop/fixed-position semantics
+since these are real pages, not popups on top of other content - the
+existing body::before/body::after aurora gradient already paints behind
+everything, so no separate background rule was needed). App.jsx's gate
+moved from wrapping just the app body to the very top of the component,
+above TopBar/Sidebar/PeriodicSignOutMonitor/GlobalLogoutMonitor/
+AppUpdateMonitor/DeploymentCopilot - none of that chrome mounts at all
+until a real credential exists, matching the mockups' "bare page, zero
+chrome" requirement exactly. This is a deliberate, scoped reversal of
+Round 8's "app shell mounts immediately, don't block on bootstrap" LCP
+work, for this one pre-auth moment only - an already-connected returning
+visitor is completely unaffected, since bootstrap still resolves
+githubTokenConfigured before anything renders either way; only a
+first-time/not-yet-connected visitor's initial paint is now gated behind
+that one round trip. Which of the two pages to show on load is itself
+resolved by a real GET mfa/pending call (App.jsx's authStage state:
+"checking" -> "pat" or "mfa") rather than defaulting to the PAT page and
+assuming - the same server-truth principle MfaVerifyPage's own mount
+check applies, just applied one level higher so a refresh that lands
+mid-MFA opens directly on the MFA page instead of bouncing through PAT
+login first.
+
+Explicitly out of scope, carried over unfixed from Round 16 and
+re-flagged rather than silently ignored: GitHubAccessSection.jsx's own
+Settings > Credentials > GitHub "switch repository" reconnect flow still
+has no MFA code-entry UI of its own - reconnecting a DIFFERENT
+MFA-enabled token from Settings still just 403s there with a generic
+toast today. This round only replaces the FIRST-CONNECTION login flow,
+per the user's own framing ("the authentication flow").
+
+Verification performed:
+  - `dotnet build` (isolated output dir): 0 errors, first try, same 3
+    pre-existing unrelated warnings as every prior round.
+  - `npm run lint` / `npm run build`: 0 errors. Lint warnings are the
+    same pre-existing Fast-Refresh-only-exports ones already present
+    before this round (Sidebar.jsx, the four Context files) - nothing
+    new from PatLoginPage.jsx, MfaVerifyPage.jsx, or authLoginService.js.
+  - Live tests against the deployed Render backend after push (fresh
+    X-Session-Id, DELETE me/all cleanup after):
+    - POST pat-login, fake/invalid token -> clean {success:false,
+      message:"Unable to authenticate with this GitHub token."}, no
+      crash, confirmed nothing persisted.
+    - POST pat-login, empty token -> clean {success:false} without ever
+      reaching GitHub, no crash.
+    - GET mfa/pending, nothing pending -> {pending:false}.
+    - POST mfa/verify, no pending session -> clean {success:false,
+      code:"MFA_SESSION_EXPIRED", message:"Your verification session has
+      expired. Please sign in again."}, not a crash.
+    - POST mfa/cancel with nothing pending -> 200, confirmed idempotent.
+  - Could NOT live-verify the actual MFA-required happy path (pat-login
+    against an MFA-enabled real account -> pending:true -> refresh stays
+    on the MFA page -> correct code -> credential saved -> Dashboard) or
+    the wrong-code/lockout/recovery-code paths - identical hard
+    limitation to every prior MFA-related round (13/14/16): every one of
+    these ultimately needs GitHub's own /user API to resolve a REAL
+    identity from a REAL PAT, which this sandboxed session does not have
+    access to. Not claimed as tested. Also did not spin up a local
+    Vite dev server to visually confirm "no TopBar/Sidebar visible" on
+    the new pages in a real browser - `npm run build`'s clean rollup
+    output confirms the JSX/imports/conditional-render logic is
+    structurally sound (no dangling reference to the deleted
+    RequireGitHubSetup, no broken import), but does not substitute for
+    actually looking at rendered pixels. Recommended below.
+
+Files changed: src/DeploymentAPI/Services/{SessionActivityService,
+SettingsService}.cs, Controllers/AuthController.cs,
+DTOs/PatLoginRequestDto.cs (new); deployment-ui/src/App.jsx,
+components/RequireGitHubSetup.jsx (deleted), pages/PatLoginPage.jsx
+(new), pages/MfaVerifyPage.jsx (new), services/authLoginService.js
+(new), styles/global.css.
+
+Status: Complete for the code-level and API-level-verifiable portion.
+Strongly recommend the user personally walk through, once
+`npx wrangler deploy` ships the frontend: the full real-PAT
+enroll -> login -> MFA-required -> correct-code -> Dashboard path, plus
+wrong-code / lockout / recovery-code / refresh-mid-MFA / "Back to
+Login" / logout / multiple-open-tabs paths - none of these can be
+exercised end-to-end without a real GitHub PAT, which is unavailable in
+this sandboxed session.
