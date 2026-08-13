@@ -608,6 +608,21 @@ public class SettingsController : ControllerBase
         return Ok(await _settings.ClearMyCredentialsAsync(key));
     }
 
+    // "Skip" on MfaEnforcementGate's nudge (see BootstrapController's
+    // MfaNudge block) - no AdminGate, same as every other /me/* endpoint,
+    // since a session can only ever increment its own counter. Harmless to
+    // call even before the nudge is mandatory (the count just sits unused
+    // until hasCloudCredential flips true) - keeps the increment logic in
+    // one place instead of the frontend guessing when it "really" counts.
+    [HttpPost("me/mfa/skip-nudge")]
+    public async Task<IActionResult> SkipMfaNudge()
+    {
+        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var count = await _settings.IncrementMfaNudgeSkipCountAsync(key);
+
+        return Ok(new { skipsUsed = count });
+    }
+
     // Changing shared, portal-wide credentials or the admin allowlist is
     // restricted to admins — without this, any anonymous visitor could
     // point the Docker registry at their own account, point the OAuth app
@@ -693,10 +708,14 @@ public class SettingsController : ControllerBase
         return Ok(await _ai.TestConnectionAsync(creds.ApiKey!, creds.Model));
     }
 
+    // Deliberately super-admin-only (not the general AdminGate.
+    // DenyUnlessAdminAsync every other section here uses) - who gets the
+    // Admin role at all is a step up from "changing settings," the same
+    // reasoning Database Management already applies to itself.
     [HttpPost("admins")]
     public async Task<IActionResult> SaveAdmins(AdminUsernamesUpdateDto request)
     {
-        if (await AdminGate.DenyUnlessAdminAsync(this, _settings, "change settings") is IActionResult denied)
+        if (await AdminGate.DenyUnlessSuperAdminAsync(this, "change the admin allowlist") is IActionResult denied)
             return denied;
 
         return Ok(await _settings.SaveAdminUsernamesAsync(request));
@@ -837,6 +856,14 @@ public class SettingsController : ControllerBase
     {
         if (await AdminGate.DenyUnlessAdminAsync(this, _settings, "change settings") is IActionResult denied)
             return denied;
+
+        // Same super-admin-only step-up as SaveAdmins above - clearing the
+        // allowlist is just as sensitive as editing it (an empty allowlist
+        // drops the whole portal into bootstrap mode - see AdminGate), so
+        // it can't be reached by a general admin either.
+        if (section == "admins"
+            && await AdminGate.DenyUnlessSuperAdminAsync(this, "change the admin allowlist") is IActionResult superDenied)
+            return superDenied;
 
         if (CredentialGatedSections.Contains(section)
             && await CredentialGate.DenyUnlessUnlockedAsync(this, _settings, _activity, section) is IActionResult locked)

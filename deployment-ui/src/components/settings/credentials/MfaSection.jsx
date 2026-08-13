@@ -14,7 +14,12 @@ import { getMfaStatus, enrollMfa, verifyMfaEnrollment, disableMfa } from "../../
 // scoped like every other Credentials tab here only in the sense that
 // you have to already be connected to reach this page at all - the
 // protection itself follows the login, not the browser.
-export default function MfaSection() {
+// onEnrolled (optional): called right after a successful enroll/verify -
+// used by MfaEnforcementGate to refresh AuthContext's own mfaNudge* flags
+// (server-computed, only updated via a fresh bootstrap call), since this
+// component's own `refresh()` above only re-checks ITS OWN status, not the
+// app-wide nudge/block state that lives in AuthContext.
+export default function MfaSection({ onEnrolled }) {
 
     const toast = useToast();
 
@@ -26,8 +31,6 @@ export default function MfaSection() {
     const [qrDataUrl, setQrDataUrl] = useState("");
     const [code, setCode] = useState("");
     const [verifying, setVerifying] = useState(false);
-
-    const [recoveryCodes, setRecoveryCodes] = useState(null);
 
     const [showDisable, setShowDisable] = useState(false);
     const [disableCode, setDisableCode] = useState("");
@@ -97,9 +100,8 @@ export default function MfaSection() {
 
         try {
 
-            const result = await verifyMfaEnrollment(code);
+            await verifyMfaEnrollment(code);
 
-            setRecoveryCodes(result.recoveryCodes || []);
             setEnrolling(false);
             setEnrollData(null);
             setQrDataUrl("");
@@ -107,6 +109,7 @@ export default function MfaSection() {
 
             toast.show("MFA enabled.", "success");
             refresh();
+            onEnrolled?.();
 
         }
         catch (err) {
@@ -121,24 +124,6 @@ export default function MfaSection() {
             setVerifying(false);
 
         }
-
-    }
-
-    function downloadRecoveryCodes() {
-
-        const blob = new Blob(
-            [`Deployment Portal — MFA recovery codes\nEach code works once.\n\n${(recoveryCodes || []).join("\n")}\n`],
-            { type: "text/plain" }
-        );
-
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-
-        a.href = url;
-        a.download = "deployment-portal-recovery-codes.txt";
-        a.click();
-
-        URL.revokeObjectURL(url);
 
     }
 
@@ -173,50 +158,6 @@ export default function MfaSection() {
             setDisabling(false);
 
         }
-
-    }
-
-    // Shown once, right after enrollment finishes - never retrievable
-    // again from here on, same "copy it now" treatment ApiKeySection
-    // gives a freshly created API key.
-    if (recoveryCodes) {
-
-        return (
-
-            <div className="settings-subsection">
-
-                <h3 className="settings-subhead">Save your recovery codes</h3>
-
-                <p className="field-hint" style={{ marginTop: 0 }}>
-                    Each code works once, if you ever lose access to your authenticator app.
-                    These are shown only this one time.
-                </p>
-
-                <div className="repo-preview" style={{ marginBottom: 16, borderColor: "var(--heading-accent)" }}>
-
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "6px 16px" }}>
-                        {recoveryCodes.map((rc) => (
-                            <code key={rc} className="commit-sha">{rc}</code>
-                        ))}
-                    </div>
-
-                </div>
-
-                <div className="button-row">
-
-                    <button type="button" className="btn btn-secondary" onClick={downloadRecoveryCodes}>
-                        Download Recovery Codes
-                    </button>
-
-                    <button type="button" className="btn btn-primary" onClick={() => setRecoveryCodes(null)}>
-                        I've Saved Them
-                    </button>
-
-                </div>
-
-            </div>
-
-        );
 
     }
 
@@ -293,8 +234,8 @@ export default function MfaSection() {
 
             <p className="empty-state" style={{ padding: "0 0 15px", textAlign: "left" }}>
                 {status?.enabled
-                    ? "Reconnecting your GitHub token (from any browser) will ask for a code from your authenticator app."
-                    : "Use Google Authenticator (or any standard TOTP app) to protect your Deployment Portal account. Once enabled, reconnecting your GitHub token from any browser will ask for a code."}
+                    ? "Reconnecting your GitHub token (from any browser) will ask for a code from your authenticator app. If you ever lose access to it, contact your portal admin for a one-time reset code — this portal doesn't hand out self-managed recovery codes."
+                    : "Use Google Authenticator (or any standard TOTP app) to protect your Deployment Portal account. Once enabled, reconnecting your GitHub token from any browser will ask for a code. If you ever lose your device, your portal admin can issue you a one-time reset code."}
             </p>
 
             {loading ? (
@@ -330,6 +271,9 @@ export default function MfaSection() {
                                 autoComplete="off"
                                 name="mfa-disable-recovery"
                             />
+                            <p className="field-hint" style={{ marginBottom: 0 }}>
+                                Only your portal admin can issue one of these.
+                            </p>
                         </div>
 
                         <div className="button-row">

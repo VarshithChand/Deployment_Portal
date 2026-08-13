@@ -24,6 +24,15 @@ export const deleteUser = async (key) => await api.delete(`/users/${encodeURICom
 // fully re-enroll afterward.
 export const resetUserMfa = async (key) => await api.post(`/users/${encodeURIComponent(key)}/reset-mfa`);
 
+// Issues a single-use recovery code for a user locked out of their
+// authenticator device, without fully resetting their enrollment - the
+// caller relays the returned code (response.data.code) to that person
+// out-of-band. Super-admin-only server-side (AdminGate.
+// DenyUnlessSuperAdminAsync) - a step up from the general-admin-gated
+// reset above. 400s if that user hasn't enabled MFA at all yet.
+export const generateMfaRecoveryCode = async (key) =>
+    await api.post(`/users/${encodeURIComponent(key)}/mfa/recovery-code`);
+
 // Merges rows that resolve to the same real GitHub account, keeping
 // whichever was active most recently - a one-time cleanup for rows that
 // predate the one-session-per-PAT check saving now enforces.

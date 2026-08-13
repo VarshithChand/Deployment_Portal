@@ -21,7 +21,6 @@ const MODES = [
     { key: "sonarqube", label: "SonarQube" },
     { key: "docker", label: "Docker" },
     { key: "oauth", label: "GitHub OAuth" },
-    { key: "admin", label: "Admin Allowlist" },
     { key: "ai", label: "AI Assistant" }
 ];
 
@@ -103,10 +102,6 @@ export default function CredentialsView({
     setSonarToken,
     handleSaveSonar,
     savingSonar,
-    adminUsernamesText,
-    setAdminUsernamesText,
-    handleSaveAdmins,
-    savingAdmins,
     aiModel,
     setAiModel,
     aiApiKey,
@@ -176,8 +171,7 @@ export default function CredentialsView({
                 GitHub, AWS, and Azure below are yours alone — kept for your own browser
                 session, isolated from every other user of this portal. GCP is stored the
                 same way, for future use, and your API Key is scoped the same way too.
-                SonarQube, Docker, OAuth, and the admin allowlist are shared by the whole
-                portal instead.
+                SonarQube, Docker, and OAuth are shared by the whole portal instead.
             </p>
 
             <div className="button-row" style={{ marginBottom: "20px" }}>
@@ -494,44 +488,6 @@ export default function CredentialsView({
             </div>
 
             </CredentialPinGate>
-
-            )}
-
-            {mode === "admin" && (
-
-            <div className="settings-subsection">
-
-            <h3 className="settings-subhead">Admin Allowlist</h3>
-
-            <p className="empty-state" style={{ padding: "0 0 15px", textAlign: "left" }}>
-                GitHub usernames that get the Admin role on login. Everyone else who logs in gets Viewer.
-            </p>
-
-            <div className="form-group">
-                <label>GitHub Usernames (comma-separated)</label>
-                <ClearableInput
-                    placeholder="octocat, hubot"
-                    value={adminUsernamesText}
-                    onChange={(e) => setAdminUsernamesText(e.target.value)}
-                    onClear={() => setAdminUsernamesText("")}
-                    autoComplete="off"
-                    name="admin-usernames"
-                />
-            </div>
-
-            <div className="button-row">
-
-                <button type="button" className="btn btn-primary" onClick={handleSaveAdmins} disabled={savingAdmins}>
-                    {savingAdmins ? "Saving..." : "Save Admin Allowlist"}
-                </button>
-
-                <button type="button" className="btn btn-danger" onClick={() => handleClear("admins", "admin allowlist")}>
-                    Clear
-                </button>
-
-            </div>
-
-            </div>
 
             )}
 

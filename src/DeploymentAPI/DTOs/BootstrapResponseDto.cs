@@ -25,6 +25,26 @@ public class BootstrapResponseDto
     // "don't call GitHub for nothing" guard GetMyGithub's caller
     // (AuthContext) used to apply itself before calling /token-owner.
     public TokenOwnerDto? TokenOwner { get; set; }
+
+    public BootstrapMfaNudgeDto MfaNudge { get; set; } = new();
+}
+
+// Drives MfaEnforcementGate.jsx - whether to show a dismissible "set up
+// MFA" nudge, whether that nudge is mandatory (this session has saved an
+// AWS/Azure/GCP credential), and whether it's escalated into a full-screen
+// block (mandatory + the 2-skip budget is spent). Computed server-side
+// every bootstrap call - the frontend never decides any of this on its
+// own, same "backend is the sole authority" principle Round 16/17's MFA
+// login gate already established.
+public class BootstrapMfaNudgeDto
+{
+    public bool Show { get; set; }
+
+    public bool Mandatory { get; set; }
+
+    public int SkipsUsed { get; set; }
+
+    public bool Blocked { get; set; }
 }
 
 // Same shape AuthController.Me already returns ({login, role}), plus the

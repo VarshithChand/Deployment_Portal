@@ -22,6 +22,14 @@ export const clearMyGitHubToken = async () => {
     return response.data;
 };
 
+// "Skip" on MfaEnforcementGate's nudge - see BootstrapController's
+// MfaNudge block for how the returned count feeds back into whether the
+// nudge escalates to a full-screen block.
+export const skipMfaNudge = async () => {
+    const response = await settingsApi.post("/me/mfa/skip-nudge");
+    return response.data;
+};
+
 // Read-only confirmation of whose token is actually configured — a real
 // GitHub API call, so this is only fetched when actually shown (right
 // after connecting), not on every page load the way getMyGitHubSettings is.

@@ -76,15 +76,23 @@ public class BootstrapController : ControllerBase
         // they start (no risk of a race populating it twice).
         var githubCredsTask = _settings.GetUserGitHubCredentialsAsync(key);
         var awsCredsTask = _settings.GetUserAwsCredentialsAsync(key);
+        var azureCredsTask = _settings.GetUserAzureCredentialsAsync(key);
+        var gcpCredsTask = _settings.GetUserGcpCredentialsAsync(key);
         var pinConfiguredTask = _settings.HasPinAsync(key);
         var wasSignedOutTask = _settings.IsPatUserSignedOutAsync(key);
+        var mfaNudgeSkipsTask = _settings.GetMfaNudgeSkipCountAsync(key);
 
-        await Task.WhenAll(githubCredsTask, awsCredsTask, pinConfiguredTask, wasSignedOutTask);
+        await Task.WhenAll(
+            githubCredsTask, awsCredsTask, azureCredsTask, gcpCredsTask,
+            pinConfiguredTask, wasSignedOutTask, mfaNudgeSkipsTask);
 
         var githubCreds = githubCredsTask.Result;
         var awsCreds = awsCredsTask.Result;
+        var azureCreds = azureCredsTask.Result;
+        var gcpCreds = gcpCredsTask.Result;
         var pinConfigured = pinConfiguredTask.Result;
         var wasSignedOut = wasSignedOutTask.Result;
+        var mfaNudgeSkips = mfaNudgeSkipsTask.Result;
 
         // Both of these are real outbound calls (AWS STS, GitHub's own
         // API) and independent of each other - only run when their own
@@ -104,6 +112,15 @@ public class BootstrapController : ControllerBase
 
         var identityLabel = identityLabelTask.Result;
         var tokenOwner = tokenOwnerTask.Result;
+
+        // tokenOwner.Login (just resolved above) is already the live,
+        // confirmed GitHub identity behind this session's token - reusing
+        // it here means checking MFA status costs no extra GitHub call.
+        var mfaEnabled = tokenOwner != null && await _settings.IsMfaEnabledAsync(tokenOwner.Login);
+        var hasCloudCredential = awsCreds.IsConfigured || azureCreds.IsConfigured || gcpCreds.IsConfigured;
+
+        var mfaNudgeShow = githubCreds.IsConfigured && !mfaEnabled;
+        var mfaNudgeMandatory = mfaNudgeShow && hasCloudCredential;
 
         var authenticated = User.Identity?.IsAuthenticated == true;
 
@@ -140,7 +157,14 @@ public class BootstrapController : ControllerBase
                 IdentityLabel = identityLabel
             },
             Pin = new BootstrapPinDto { Configured = pinConfigured },
-            TokenOwner = tokenOwner
+            TokenOwner = tokenOwner,
+            MfaNudge = new BootstrapMfaNudgeDto
+            {
+                Show = mfaNudgeShow,
+                Mandatory = mfaNudgeMandatory,
+                SkipsUsed = mfaNudgeSkips,
+                Blocked = mfaNudgeMandatory && mfaNudgeSkips >= 2
+            }
         });
     }
 }

@@ -95,9 +95,9 @@ public class MfaController : ControllerBase
         if (_activity.IsMfaLockedOut(login!))
             return StatusCode(403, new { success = false, code = "MFA_LOCKED", message = "Too many wrong codes - try again in a few minutes." });
 
-        var recoveryCodes = await _settings.VerifyMfaEnrollmentAsync(login!, request.Code ?? string.Empty);
+        var verified = await _settings.VerifyMfaEnrollmentAsync(login!, request.Code ?? string.Empty);
 
-        if (recoveryCodes == null)
+        if (!verified)
         {
             var attempts = _activity.RecordFailedMfaAttempt(login!);
 
@@ -109,7 +109,10 @@ public class MfaController : ControllerBase
 
         _activity.ClearFailedMfaAttempts(login!);
 
-        return Ok(new { success = true, mfaEnabled = true, recoveryCodes });
+        // No recoveryCodes in this response anymore - a user is never
+        // shown one (see VerifyMfaEnrollmentAsync); only a super-admin can
+        // issue one later, on demand, if this person ever gets locked out.
+        return Ok(new { success = true, mfaEnabled = true });
     }
 
     // Requires a currently-valid code (TOTP or a recovery code) before

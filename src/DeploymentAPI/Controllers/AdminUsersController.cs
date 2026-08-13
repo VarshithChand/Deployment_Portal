@@ -140,6 +140,36 @@ public class AdminUsersController : ControllerBase
         return Ok();
     }
 
+    // Issues a single-use recovery code for a user who's locked out (lost
+    // their authenticator device) but doesn't need a full MFA reset - the
+    // super-admin relays this code to them out-of-band (phone/chat), and
+    // they use it exactly like any recovery code (see
+    // VerifyMfaRecoveryCodeAsync). Deliberately narrower than reset-mfa
+    // above (general-admin-gated, still available) - this one is
+    // super-admin-only, since generating a working credential on someone
+    // else's behalf is a step up from removing their existing enrollment.
+    [HttpPost("{key}/mfa/recovery-code")]
+    public async Task<IActionResult> GenerateMfaRecoveryCode(string key)
+    {
+        if (await AdminGate.DenyUnlessSuperAdminAsync(this, "generate an MFA recovery code") is IActionResult denied)
+            return denied;
+
+        if (await ResolveRealKeyAsync(key) is not string realKey)
+            return NotFound(new { message = "That user's session no longer exists." });
+
+        var login = await _settings.ResolveCurrentLoginForKeyAsync(realKey);
+
+        if (login == null)
+            return NotFound(new { message = "Unable to resolve that session's GitHub identity right now." });
+
+        var code = await _settings.GenerateAdminRecoveryCodeAsync(login);
+
+        if (code == null)
+            return BadRequest(new { message = "This user hasn't enabled MFA yet." });
+
+        return Ok(new { code });
+    }
+
     // A real delete (see SettingsService.DeletePatUserAsync) - removes
     // this session's row entirely rather than just soft-signing it out.
     // Also forces an immediate sign-out for the same reason ForceLogout

@@ -94,6 +94,16 @@ export default function AuthProvider({ children }) {
     // PIN, the original behavior, unchanged).
     const [pinConfigured, setPinConfigured] = useState(false);
 
+    // Drives MfaEnforcementGate - whether to show a dismissible "set up
+    // MFA" nudge, whether it's mandatory (this session has an AWS/Azure/
+    // GCP credential saved), and whether the 2-skip budget is already
+    // spent (full-screen block). All computed server-side every bootstrap
+    // call (see BootstrapController's MfaNudge block) - never decided here.
+    const [mfaNudgeShow, setMfaNudgeShow] = useState(false);
+    const [mfaNudgeMandatory, setMfaNudgeMandatory] = useState(false);
+    const [mfaNudgeBlocked, setMfaNudgeBlocked] = useState(false);
+    const [mfaNudgeSkipsUsed, setMfaNudgeSkipsUsed] = useState(0);
+
     // Which AWS identity (IAM username, or account/role for an SSO
     // session) this browser's saved credentials resolve to — shown as a
     // TopBar badge, the AWS equivalent of the GitHub repo-name badge.
@@ -175,6 +185,11 @@ export default function AuthProvider({ children }) {
             setPinConfigured(!!data.pin.configured);
             setTokenOwner(data.tokenOwner || null);
 
+            setMfaNudgeShow(!!data.mfaNudge?.show);
+            setMfaNudgeMandatory(!!data.mfaNudge?.mandatory);
+            setMfaNudgeBlocked(!!data.mfaNudge?.blocked);
+            setMfaNudgeSkipsUsed(data.mfaNudge?.skipsUsed || 0);
+
         }
         catch (err) {
 
@@ -236,7 +251,8 @@ export default function AuthProvider({ children }) {
             githubPreviousOwner, githubPreviousRepository,
             tokenOwner, canApproveReleases: !!tokenOwner?.canApprove,
             isAdminSession, isSuperAdminSession, oauthStatusChecked, bootstrapError,
-            awsIdentityLabel, pinConfigured
+            awsIdentityLabel, pinConfigured,
+            mfaNudgeShow, mfaNudgeMandatory, mfaNudgeBlocked, mfaNudgeSkipsUsed
         }}>
 
             {children}

@@ -109,6 +109,19 @@ export default function SettingsHubView({ isAdmin, isSuperAdmin, setView, handle
 
             )}
 
+            {isSuperAdmin && (
+
+                <button type="button" className="settings-hub-tile" onClick={() => setView("admin-access")}>
+                    <h2>Admin Access</h2>
+                    <p>
+                        Who gets the Admin role, plus an MFA console for every PAT user — reset
+                        someone's enrollment or issue a one-time recovery code. Restricted to a
+                        single administrator account.
+                    </p>
+                </button>
+
+            )}
+
         </div>
 
         <div className="card card-danger-zone">

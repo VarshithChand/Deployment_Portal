@@ -32,6 +32,7 @@ import AccessLevels from "../components/settings/AccessLevels";
 import BranchManager from "../components/settings/BranchManager";
 import SettingsHubView from "../components/settings/SettingsHubView";
 import CredentialsView from "../components/settings/CredentialsView";
+import AdminAccessView from "../components/settings/AdminAccessView";
 import SidebarAccessView from "../components/settings/SidebarAccessView";
 import ActivityLogView from "../components/settings/ActivityLogView";
 import SmokeTestsView from "../components/settings/SmokeTestsView";
@@ -1051,10 +1052,6 @@ export default function Settings() {
                     setSonarToken={setSonarToken}
                     handleSaveSonar={handleSaveSonar}
                     savingSonar={savingSonar}
-                    adminUsernamesText={adminUsernamesText}
-                    setAdminUsernamesText={setAdminUsernamesText}
-                    handleSaveAdmins={handleSaveAdmins}
-                    savingAdmins={savingAdmins}
                     aiModel={aiModel}
                     setAiModel={setAiModel}
                     aiApiKey={aiApiKey}
@@ -1131,6 +1128,21 @@ export default function Settings() {
             {view === "database" && isSuperAdminSession && (
 
                 <DatabaseView />
+
+            )}
+
+            {view === "admin-access" && isSuperAdminSession && (
+
+                <AdminAccessView
+                    adminUsernamesText={adminUsernamesText}
+                    setAdminUsernamesText={setAdminUsernamesText}
+                    handleSaveAdmins={handleSaveAdmins}
+                    savingAdmins={savingAdmins}
+                    handleClear={handleClear}
+                    patUsers={patUsers}
+                    patUsersLoading={patUsersLoading}
+                    refreshPatUsers={refreshPatUsers}
+                />
 
             )}
 

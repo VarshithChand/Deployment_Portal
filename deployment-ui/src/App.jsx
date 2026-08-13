@@ -9,6 +9,7 @@ import PatLoginPage from "./pages/PatLoginPage";
 import MfaVerifyPage from "./pages/MfaVerifyPage";
 import PeriodicSignOutMonitor from "./components/PeriodicSignOutMonitor";
 import GlobalLogoutMonitor from "./components/GlobalLogoutMonitor";
+import MfaEnforcementGate from "./components/MfaEnforcementGate";
 import AppUpdateMonitor from "./components/AppUpdateMonitor";
 import DeploymentCopilot from "./components/copilot/DeploymentCopilot";
 import LoadingSpinner from "./components/LoadingSpinner";
@@ -163,6 +164,7 @@ function App(){
 
             <PeriodicSignOutMonitor />
             <GlobalLogoutMonitor />
+            <MfaEnforcementGate />
             <AppUpdateMonitor />
             <DeploymentCopilot />
 

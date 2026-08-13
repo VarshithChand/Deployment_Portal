@@ -1524,37 +1524,70 @@ public class SettingsService
     }
 
     // Step 2 - the first real code from the authenticator app. Only this
-    // call ever turns Enabled on, and only this call generates recovery
-    // codes - once, here, never silently regenerated later. Returns null
-    // on a wrong code (nothing changes) so the controller can tell
-    // "enrollment not finished" apart from "enrollment finished, here are
-    // the one-time recovery codes."
-    public async Task<List<string>?> VerifyMfaEnrollmentAsync(string login, string code)
+    // call ever turns Enabled on. Deliberately does NOT generate any
+    // recovery codes (RecoveryCodes stays the empty array EnrollMfaAsync
+    // already set) - per this round's policy, a user is never shown a
+    // recovery code at all; only GenerateAdminRecoveryCodeAsync below
+    // (super-admin-only, issued on demand when someone's actually locked
+    // out) ever adds one. Returns false on a wrong code (nothing changes)
+    // so the controller can tell "enrollment not finished" apart from
+    // "enrollment finished."
+    public async Task<bool> VerifyMfaEnrollmentAsync(string login, string code)
     {
         var root = await ReadRootAsync();
         var entry = (root["Mfa"] as JObject)?[login] as JObject;
         var secret = Unprotect(entry?["SecretEncrypted"]?.ToString());
 
         if (secret == null || !VerifyTotp(secret, code))
-            return null;
+            return false;
 
-        var recoveryCodes = GenerateRecoveryCodes();
         var now = DateTime.UtcNow;
 
         entry!["Enabled"] = true;
         entry["UpdatedAtUtc"] = now;
         entry["LastVerifiedAtUtc"] = now;
-        entry["RecoveryCodes"] = new JArray(recoveryCodes.Select(c => new JObject
-        {
-            ["HashHex"] = HashRecoveryCode(c),
-            ["UsedAtUtc"] = null
-        }));
 
         await WriteRootAsync(root);
 
         _log.LogInfo("Settings", $"MFA enabled for '{login}'.");
 
-        return recoveryCodes;
+        return true;
+    }
+
+    // Super-admin-only escape hatch (see AdminUsersController's
+    // mfa/recovery-code action) - the ONLY way a recovery code ever gets
+    // created now that self-enrollment no longer generates any (see
+    // VerifyMfaEnrollmentAsync above). Returns null when MFA isn't even
+    // enabled for this login - there's no enrollment to reset INTO, the
+    // user has to self-enroll first via the QR flow same as anyone else.
+    // Appends to whatever codes already exist rather than replacing them,
+    // so an earlier still-unused admin-issued code doesn't get silently
+    // invalidated by issuing a new one.
+    public async Task<string?> GenerateAdminRecoveryCodeAsync(string login)
+    {
+        var root = await ReadRootAsync();
+        var entry = (root["Mfa"] as JObject)?[login] as JObject;
+
+        if (entry?["Enabled"]?.Value<bool>() != true)
+            return null;
+
+        var code = GenerateRecoveryCode();
+        var codes = entry["RecoveryCodes"] as JArray ?? new JArray();
+
+        codes.Add(new JObject
+        {
+            ["HashHex"] = HashRecoveryCode(code),
+            ["UsedAtUtc"] = null
+        });
+
+        entry["RecoveryCodes"] = codes;
+        entry["UpdatedAtUtc"] = DateTime.UtcNow;
+
+        await WriteRootAsync(root);
+
+        _log.LogInfo("Settings", $"Admin-issued MFA recovery code generated for '{login}'.");
+
+        return code;
     }
 
     // Self-service disable - the caller already proved a valid code (see
@@ -1625,6 +1658,36 @@ public class SettingsService
         return true;
     }
 
+    // How many times THIS SESSION has dismissed the mandatory-MFA nudge
+    // (see BootstrapController's MfaNudge block) - keyed by PortalIdentity
+    // session key, not login, since it's paired with the AWS/Azure/GCP
+    // credential check that decides whether the nudge is even mandatory,
+    // and those are session-keyed too (see GetUserAwsCredentialsAsync
+    // etc.). Persisted in the same JSONB blob as everything else here
+    // (not SessionActivityService's in-memory dictionaries) because this
+    // is a real enforcement control, not throwaway UI state - it has to
+    // survive a backend restart the same way the PIN/MFA lockouts
+    // conceptually should, even though those specific ones don't today.
+    public async Task<int> GetMfaNudgeSkipCountAsync(string key)
+    {
+        var root = await ReadRootAsync();
+        return (root["MfaNudgeSkips"] as JObject)?[key]?.Value<int>() ?? 0;
+    }
+
+    public async Task<int> IncrementMfaNudgeSkipCountAsync(string key)
+    {
+        var root = await ReadRootAsync();
+        var skips = root["MfaNudgeSkips"] as JObject ?? new JObject();
+
+        var next = (skips[key]?.Value<int>() ?? 0) + 1;
+        skips[key] = next;
+
+        root["MfaNudgeSkips"] = skips;
+        await WriteRootAsync(root);
+
+        return next;
+    }
+
     private static string GenerateTotpSecret() => Base32Encode(RandomNumberGenerator.GetBytes(20));
 
     private static string BuildOtpAuthUri(string login, string secret)
@@ -1682,24 +1745,17 @@ public class SettingsService
         return otp.ToString(new string('0', TotpDigits));
     }
 
-    // Crockford-ish: excludes 0/O/1/I so a human reading these off a
-    // "download your recovery codes" screen can't confuse similar-looking
-    // characters when typing one back in later.
-    private static List<string> GenerateRecoveryCodes()
+    // Crockford-ish: excludes 0/O/1/I so a human reading one of these off
+    // to someone over the phone/chat can't confuse similar-looking
+    // characters when they type it back in.
+    private static string GenerateRecoveryCode()
     {
         const string alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 
-        var codes = new List<string>();
+        var bytes = RandomNumberGenerator.GetBytes(8);
+        var chars = bytes.Select(b => alphabet[b % alphabet.Length]).ToArray();
 
-        for (var i = 0; i < 10; i++)
-        {
-            var bytes = RandomNumberGenerator.GetBytes(8);
-            var chars = bytes.Select(b => alphabet[b % alphabet.Length]).ToArray();
-
-            codes.Add($"{new string(chars, 0, 4)}-{new string(chars, 4, 4)}");
-        }
-
-        return codes;
+        return $"{new string(chars, 0, 4)}-{new string(chars, 4, 4)}";
     }
 
     // Same hash-only-at-rest treatment as API keys/the screen-lock PIN

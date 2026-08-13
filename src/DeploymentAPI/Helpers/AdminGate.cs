@@ -156,9 +156,10 @@ public static class AdminGate
     }
 
     // Same CSRF guard as DenyUnlessAdminAsync (see HasSessionHeader) plus the
-    // single-identity check above — used for every Database Management
-    // endpoint instead of the regular DenyUnlessAdminAsync, since being on
-    // the general admin allowlist is explicitly NOT enough here.
+    // single-identity check above — used for Database Management, the
+    // Admin Allowlist, and MFA recovery-code issuance instead of the
+    // regular DenyUnlessAdminAsync, since being on the general admin
+    // allowlist is explicitly NOT enough for any of these.
     public static async Task<IActionResult?> DenyUnlessSuperAdminAsync(ControllerBase controller, string action)
     {
         if (!HasSessionHeader(controller))
@@ -169,7 +170,7 @@ public static class AdminGate
 
         return controller.StatusCode(403, new
         {
-            message = $"Database management is restricted to a single administrator account. You are not authorized to {action}."
+            message = $"This action is restricted to a single administrator account. You are not authorized to {action}."
         });
     }
 }
