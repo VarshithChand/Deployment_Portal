@@ -2260,3 +2260,100 @@ AdminGate's pageKey parameter, the backend's pre-existing region-override
 plumbing) rather than new mechanisms; the AI Assistant lockdown was
 explicitly confirmed with the user as a real behavior change before
 implementing it.
+
+ROUND 11 - ONBOARDING SIMPLIFICATION + UNLOCK-ALL CREDENTIAL PIN
+==================================================
+Date: 2026-08-13
+Trigger: two direct follow-up requests. (1) User pointed at a screenshot
+of RequireGitHubSetup's "pick a repository" step and said not to require
+picking one there at all - "if i want i will pick form the dashboard."
+(2) User asked that entering the per-credential screen-lock PIN once
+(Round 9's feature) unlock every provider's Credentials tab at once,
+rather than re-prompting on every tab switch.
+
+Change 1 (onboarding): RequireGitHubSetup.jsx no longer has a "pick-repo"
+step - pasting a token is validated (still previewed via
+/me/github/preview for a clear rejection message) then saved immediately
+with owner/repository left blank, and the dialog closes. All of the
+removed repo-picker UI/state (repo grid, search, manual-URL entry,
+pagination) is gone from this component entirely - AllRepositoriesCard on
+the Dashboard is now the only repo picker, exactly matching the user's
+own framing.
+
+This required three supporting changes, not just deleting UI:
+  - Backend: SettingsController.SaveMyGitHub validated Owner/Repository
+    with GitHubNameValidator.IsValid, which rejects blank strings -
+    relaxed to only validate non-blank values, so "token, no repo yet" is
+    accepted (a genuinely malformed non-blank value is still rejected,
+    unchanged).
+  - RequireGitHubSetup's own "am I done, close the dialog" check switched
+    from githubRepoConfigured (token AND repo) to githubTokenConfigured
+    (token alone) - otherwise saving a token with no repo would save
+    successfully but leave the dialog open forever, since IsConfigured
+    still requires both.
+  - AllRepositoriesCard's render/fetch gates switched from
+    githubRepoConfigured to githubTokenConfigured too, for the same
+    reason - it needs to be usable (and visible) as soon as a token
+    exists, not only once a repo has already been chosen, since it's now
+    the thing that lets you choose one.
+  - AwsServicesCard.jsx and EnvironmentsCard.jsx also had their polling
+    gates switched from githubRepoConfigured to githubTokenConfigured.
+    Neither card's own data actually depends on which GitHub repo is
+    selected (AWS account resources / portal-level environment targets,
+    both independent of repo choice) - their gate was always just a
+    proxy for "onboarding is done," which used to be equivalent to
+    "repo is configured" before this change and no longer is. Left
+    ActivityBell.jsx and useGithubResources.js's own gates UNCHANGED -
+    those genuinely need a specific repo (recent commits/workflow
+    runs/branches/artifacts ARE repo-scoped data), so they correctly
+    keep gating on githubRepoConfigured, not the token alone.
+
+Change 2 (unlock-all PIN): CredentialGate gained a
+public AllProviders list (the 9 gated provider keys). SettingsController.
+UnlockMyCredential now loops over that list and grants every one of them
+via SessionActivityService.GrantCredentialUnlock on one successful PIN
+verification, instead of granting only whichever provider's route
+parameter the request happened to carry. CredentialsView.jsx's
+markAllUnlocked (was markUnlocked(provider)) now fills its
+unlockedProviders Set with every provider key at once on any gate's
+onUnlocked callback, so switching tabs after unlocking any one provider
+no longer re-prompts for the others. Per-credential revocation on Clear
+is UNCHANGED - clearing one credential still only revokes that one
+provider's grant (RevokeCredentialUnlock is still called per-provider),
+so clearing AWS re-locks AWS without touching an already-unlocked GitHub/
+Azure/etc. grant. The underlying security boundary (the screen-lock PIN
+itself, with the same 5-attempt wipe) is unchanged - this only removed a
+redundant per-provider re-prompt of the SAME PIN, not a distinct
+authorization check.
+
+Verification performed:
+  - `dotnet build` (isolated output dir): 0 errors, 3 pre-existing
+    unrelated warnings only.
+  - `npm run lint` / `npm run build`: 0 errors, pre-existing Fast-Refresh
+    warnings only - confirmed no leftover unused imports after removing
+    RequireGitHubSetup's repo-picker UI (parseRepoUrl, usePagination,
+    SearchBox all fully removed, not just unreferenced).
+  - Live tests against the deployed Render backend, isolated test
+    sessions only, cleaned up via DELETE me/all after each:
+    - POST me/github with blank owner/repository + a token now returns
+      200 with tokenConfigured=true/isConfigured=false (previously 400
+      VALIDATION_ERROR).
+    - Set a PIN, confirmed AWS save 403s locked, confirmed Azure save
+      ALSO 403s locked (nothing unlocked yet) - unlocked only via the AWS
+      route, then confirmed Azure save succeeds immediately with no
+      separate Azure unlock call, proving one PIN entry now covers every
+      provider.
+
+Files changed: deployment-ui/src/components/RequireGitHubSetup.jsx,
+components/dashboard/{AllRepositoriesCard,AwsServicesCard,
+EnvironmentsCard}.jsx, components/settings/CredentialsView.jsx,
+components/settings/credentials/CredentialPinGate.jsx, pages/Dashboard.jsx
+(comment only); src/DeploymentAPI/Controllers/SettingsController.cs,
+Helpers/CredentialGate.cs.
+
+Status: Complete. Both changes were direct, explicit user corrections to
+prior rounds' behavior (Round 9's per-provider unlock scoping, and the
+onboarding flow's repo-selection step) rather than new features -
+implemented as the smallest change satisfying the new instruction while
+leaving the underlying security boundary (the PIN itself, its rate
+limiting, permanent-delete-on-Clear semantics) untouched.
