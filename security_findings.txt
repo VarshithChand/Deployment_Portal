@@ -3764,3 +3764,134 @@ resolution fix is a genuine, previously-undetected bug fix (not just a
 tightening or new feature) - recommend the user treat re-checking the
 Users/MFA Console tables as a priority verification step, since it had
 been silently masking every real PAT owner's name since Round 15.
+
+ROUND 25 - DIAGNOSTIC LOGGING FOR RECOVERY-CODE VERIFICATION FAILURES
+==================================================
+Date: 2026-08-14
+Trigger: user reported an admin-generated recovery code failing at login
+with the generic "Invalid verification code" message and no way to tell
+why - traced the hashing/normalization end-to-end (GenerateAdminRecoveryCodeAsync
+and VerifyMfaRecoveryCodeAsync both call the same HashRecoveryCode, and
+both the admin-side ResolveCurrentLoginForKeyAsync and the login-side
+PreviewTokenAsync resolve identity from the same GitHub /user "login"
+field) and found no bug in the logic itself - the most likely real-world
+explanations are a code generated for a different session/identity than
+the one attempting login, or a code that was already redeemed once
+(single-use by design).
+
+VerifyMfaRecoveryCodeAsync was collapsing three genuinely different
+failure modes into one boolean with no way for anyone (user, admin, or
+this assessor working blind) to tell which applied: no RecoveryCodes
+exist for that login at all, a submitted code that doesn't match any
+currently-unused stored code, or (a specific case of the previous) every
+issued code already used. Added Activity Log entries distinguishing
+these - login, and an unused/total count on a mismatch, never the code
+or its hash - so an admin can now compare "Admin-issued MFA recovery
+code generated for '@X'" against "Recovery code check for '@Y' failed"
+log lines to catch an identity mismatch directly. The user-facing error
+message is completely unchanged either way, so this adds no new
+information to anyone attempting an actual login - purely an admin-
+visible debugging aid.
+
+Verification performed:
+  - `dotnet build` (isolated output dir): 0 errors, first try, same 3
+    pre-existing unrelated warnings as every prior round.
+  - Live test against the deployed Render backend after push: POST
+    api/auth/mfa/verify with no pending session -> unchanged
+    MFA_SESSION_EXPIRED response, confirming the added logging didn't
+    disturb the existing guard clauses ahead of where it runs.
+  - Could not trigger the new log lines themselves live (requires a real
+    MFA-enabled account with an actual recovery code to test against) -
+    same standing limitation as every MFA round this session. Asked the
+    user to report back what Activity Log shows on their next attempt so
+    the actual root cause (rather than the two most likely candidates)
+    can be confirmed.
+
+Files changed: src/DeploymentAPI/Services/SettingsService.cs.
+
+Status: Complete as a diagnostic aid; the underlying "why did this
+specific code fail" question is still open pending the user's own
+Activity Log check.
+
+ROUND 26 - ADMIN CAN REQUIRE MFA FOR A SPECIFIC USER, NOT JUST VIA CLOUD CREDENTIALS
+==================================================
+Date: 2026-08-14
+Trigger: user asked for an admin option to "enable MFA" for a specific
+user, with the explicit clarification that the user should then get a
+message telling them to set that MFA up themselves - i.e. not the admin
+enrolling on their behalf (cryptographically impossible without handing
+them the TOTP secret directly, which would break Round 18's "user never
+sees a recovery code/secret they didn't generate themselves" model
+anyway), but the admin being able to flag an account as REQUIRED,
+reusing the existing mandatory-nudge/full-screen-block machinery Round
+18 already built for the "this session has a cloud credential saved"
+trigger.
+
+Implementation: new AdminRequired boolean on the Mfa[login] JSON entry
+(SettingsService.cs), settable via SetMfaRequiredAsync/read via
+IsMfaRequiredByAdminAsync - creates a bare, not-yet-enrolled entry
+(Enabled:false, empty RecoveryCodes) if the login has no Mfa entry at
+all yet, since a requirement has to exist independent of enrollment.
+BootstrapController's MfaNudge.Mandatory computation now ORs this flag
+in alongside the existing hasCloudCredential check - MfaEnforcementGate
+itself needed zero changes, since it already treats "mandatory" as a
+single opaque signal regardless of why.
+
+Two existing methods would have silently dropped this flag if left
+alone, both fixed as part of this round:
+  - EnrollMfaAsync used to unconditionally overwrite the whole Mfa[login]
+    JObject when a user starts enrolling - now reads and carries forward
+    whatever AdminRequired was already set to first, since a user
+    starting enrollment shouldn't accidentally clear an admin's
+    requirement on themselves.
+  - DisableMfaAsync (shared by self-service disable AND admin's
+    reset-mfa) used to fully mfa.Remove(login) - which would have let
+    someone escape a super-admin's requirement just by disabling or
+    being reset. Now checks AdminRequired first: if set, replaces the
+    entry with the same bare "not enrolled, still required" shape
+    SetMfaRequiredAsync's own creation path uses, instead of removing it
+    outright - the next bootstrap call picks the requirement straight
+    back up as mandatory, so a reset account gets re-nudged into
+    re-enrolling rather than quietly falling out of the requirement.
+
+New super-admin-only POST api/admin/users/{key}/mfa/require and
+/mfa/unrequire endpoints (AdminUsersController), same gate tier as
+generating a recovery code. Admin Access > MFA Console gained a
+"Require MFA"/"Remove Requirement" toggle per not-yet-enrolled row (not
+shown once IsMfaEnabled is true - the toggle is only meaningful pre-
+enrollment) plus a "Required" badge, and PatUserSummaryDto/GetPatUsersAsync
+gained IsMfaRequired following the exact same per-row resolution pattern
+IsMfaEnabled already used.
+
+Verification performed:
+  - `dotnet build` (isolated output dir): 0 errors, first try, same 3
+    pre-existing unrelated warnings as every prior round.
+  - `npm run lint` / `npm run build`: 0 errors, pre-existing Fast-Refresh
+    warnings only.
+  - Live tests against the deployed Render backend after push (fresh
+    X-Session-Id, cleanup after):
+    - POST/POST api/admin/users/{key}/mfa/require and /unrequire from a
+      non-admin session -> both clean 403 with the expected specific
+      message, confirming the new super-admin gate is actually enforced.
+    - GET api/bootstrap on a fresh session -> mfaNudge block unchanged
+      shape/values ({show:false,mandatory:false,...}), confirming the
+      new mfaRequiredByAdmin OR-condition didn't disturb the existing
+      hasCloudCredential-only path for a session with neither flag set.
+  - Could NOT live-verify the actual require -> nudge -> block ->
+    re-enroll round trip, or that EnrollMfaAsync/DisableMfaAsync's
+    AdminRequired-preservation logic behaves correctly end-to-end against
+    a real account - identical standing real-GitHub-identity limitation
+    as every MFA round this session. Recommend the user test directly:
+    flag a real not-yet-enrolled PAT user as required, confirm they see
+    the mandatory nudge (not just the free-skip one) on next load, and
+    confirm resetting or disabling their MFA afterward still leaves them
+    flagged as required rather than quietly freeing them.
+
+Files changed: src/DeploymentAPI/Controllers/{AdminUsersController,
+BootstrapController}.cs, DTOs/PatUserSummaryDto.cs,
+Services/SettingsService.cs; deployment-ui/src/components/settings/
+AdminAccessView.jsx, services/adminService.js.
+
+Status: Complete for the code-level and API-level-verifiable portion;
+the full require-to-block-to-re-enroll flow needs a real PAT account to
+confirm end-to-end, flagged above rather than claimed as tested.
