@@ -128,23 +128,24 @@ public class AuthController : ControllerBase
 
         var key = PortalIdentity.GetOrCreateKey(HttpContext);
 
-        // Checked before even asking for an MFA code - no point making
-        // someone type one just to be told no. SaveUserGitHubCredentialsAsync
-        // re-checks this itself right before actually saving anything
-        // (both the no-MFA branch just below and MfaVerify's own save),
-        // since that's the real, race-safe enforcement point - this is
-        // purely a UX shortcut for the common case.
-        if (await _settings.IsLoginActiveOnAnotherSessionAsync(preview.Username, key))
-        {
-            return Ok(new
-            {
-                success = false,
-                message = "This GitHub account is already signed in on another device. Sign out there first, then try again."
-            });
-        }
-
         if (!await _settings.IsMfaEnabledAsync(preview.Username))
         {
+            // No MFA on this account - a bare token is the only proof
+            // this request has, so it's checked and blocked here (before
+            // even attempting the save) if the account is genuinely
+            // active elsewhere. SaveUserGitHubCredentialsAsync re-checks
+            // this itself right before actually writing anything, since
+            // that's the real, race-safe enforcement point - this is
+            // purely a UX shortcut for the common case.
+            if (await _settings.IsLoginActiveOnAnotherSessionAsync(preview.Username, key))
+            {
+                return Ok(new
+                {
+                    success = false,
+                    message = "This GitHub account is already signed in on another device. Sign out there first, then try again."
+                });
+            }
+
             var result = await _settings.SaveUserGitHubCredentialsAsync(key, new GitHubSettingsUpdateDto
             {
                 Owner = string.Empty,
@@ -157,6 +158,13 @@ public class AuthController : ControllerBase
 
             return Ok(new { success = true, authenticated = true, mfaRequired = false });
         }
+
+        // MFA is enabled - deliberately NOT blocked here even if another
+        // device is currently active. A bare token isn't proof of
+        // anything on its own; the real check happens at MfaVerify, once
+        // a valid code actually proves who's connecting. Only then does
+        // an active device elsewhere get taken over (see
+        // SaveUserGitHubCredentialsAsync's allowTakeoverIfActive).
 
         _activity.SetPendingPatSession(key, _settings.ProtectValue(token), preview.Username, PendingPatTtl);
 
@@ -232,18 +240,19 @@ public class AuthController : ControllerBase
         _activity.ClearFailedMfaAttempts(login);
         _activity.ClearPendingPatSession(key);
 
-        // Re-checked here too (PatLogin's own early check already covered
-        // the common case) - the 10-minute pending-session TTL is plenty
-        // of time for a different device to have connected as this same
-        // account in between, and this is the actual write, so it's the
-        // point that has to stay correct regardless of what the earlier
-        // check saw.
+        // allowTakeoverIfActive: true - reaching this line required a valid
+        // TOTP/recovery code, real proof this connection is the legitimate
+        // account owner rather than just someone holding a copy of the PAT
+        // string. With that proof in hand, an active device on another
+        // browser loses and gets notified, exactly like PIN/Round 20's
+        // reconnect-eviction already does for an abandoned one - it's no
+        // longer blocked the way an unverified (no-MFA) reconnect still is.
         var result = await _settings.SaveUserGitHubCredentialsAsync(key, new GitHubSettingsUpdateDto
         {
             Owner = string.Empty,
             Repository = string.Empty,
             PersonalAccessToken = _settings.UnprotectValue(encryptedToken)
-        });
+        }, allowTakeoverIfActive: true);
 
         if (!result.Success)
             return Ok(new { success = false, code = "ALREADY_CONNECTED_ELSEWHERE", message = result.ConflictMessage });

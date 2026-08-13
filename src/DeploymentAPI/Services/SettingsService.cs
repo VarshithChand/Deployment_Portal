@@ -348,7 +348,19 @@ public class SettingsService
         return lastSeen.HasValue && DateTime.UtcNow - lastSeen.Value < ActiveDeviceWindow;
     }
 
-    public async Task<SaveGitHubCredentialsResult> SaveUserGitHubCredentialsAsync(string login, GitHubSettingsUpdateDto update)
+    // allowTakeoverIfActive: false (default) is Round 21's behavior - a
+    // bare token is the only proof this call has, so an OTHER device that's
+    // genuinely active right now wins and this save is refused outright.
+    // true is for a caller that already has STRONGER proof than the token
+    // alone - AuthController.MfaVerify passes true because reaching this
+    // point required a valid TOTP/recovery code, which is real evidence
+    // this connection is the legitimate account owner, not just whoever
+    // has a copy of the PAT string. With that proof in hand, the active
+    // device loses instead of the new one - migrated/evicted/notified
+    // exactly like an abandoned session already was, just without waiting
+    // for it to go quiet first.
+    public async Task<SaveGitHubCredentialsResult> SaveUserGitHubCredentialsAsync(
+        string login, GitHubSettingsUpdateDto update, bool allowTakeoverIfActive = false)
     {
         var root = await ReadRootAsync();
 
@@ -357,11 +369,12 @@ public class SettingsService
 
         // Resolved BEFORE any mutation below, and rejected outright (no
         // write at all) if that identity is currently active on some
-        // OTHER device - one PAT, one device at a time, enforced by
-        // refusing the second login rather than silently kicking the
-        // first one out. A session that's gone quiet for a couple of
-        // minutes (ActiveDeviceWindow) is treated as abandoned instead -
-        // still safe to take over automatically, same as before.
+        // OTHER device AND this caller has no stronger proof than the bare
+        // token - one PAT, one device at a time, enforced by refusing the
+        // second login rather than silently kicking the first one out. A
+        // session that's gone quiet for a couple of minutes
+        // (ActiveDeviceWindow), or a caller with proven MFA in hand, skips
+        // this block entirely and takes over instead.
         string? evictedDuplicateLogin = null;
 
         if (!string.IsNullOrWhiteSpace(update.PersonalAccessToken))
@@ -376,22 +389,24 @@ public class SettingsService
 
                 if (other != null)
                 {
-                    var lastSeen = _activity.GetLastSeen(other.Key);
-                    var stillActive = lastSeen.HasValue && DateTime.UtcNow - lastSeen.Value < ActiveDeviceWindow;
-
-                    if (stillActive)
+                    if (!allowTakeoverIfActive)
                     {
-                        return new SaveGitHubCredentialsResult(false,
-                            "This GitHub account is already signed in on another device. Sign out there first, then try again.",
-                            null);
+                        var lastSeen = _activity.GetLastSeen(other.Key);
+                        var stillActive = lastSeen.HasValue && DateTime.UtcNow - lastSeen.Value < ActiveDeviceWindow;
+
+                        if (stillActive)
+                        {
+                            return new SaveGitHubCredentialsResult(false,
+                                "This GitHub account is already signed in on another device. Sign out there first, then try again.",
+                                null);
+                        }
                     }
 
-                    // Abandoned, not active - safe to take over: migrate
-                    // useful data forward, then remove the stale row (see
-                    // DeletePatUserAsync). ForceLogout is still worth
-                    // calling in case a background tab somewhere is
-                    // technically still open but just hasn't polled
-                    // recently - harmless no-op if it really is gone.
+                    // Either abandoned, or this caller already proved
+                    // itself via MFA - safe to take over: migrate useful
+                    // data forward, then remove the other row (see
+                    // DeletePatUserAsync) and notify it live via the same
+                    // force-logout GlobalLogoutMonitor already reacts to.
                     await MigrateSessionDataAsync(other.Key, login);
                     await DeletePatUserAsync(other.Key);
                     _activity.ForceLogout(other.Key, "device");
