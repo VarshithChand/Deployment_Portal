@@ -2357,3 +2357,73 @@ onboarding flow's repo-selection step) rather than new features -
 implemented as the smallest change satisfying the new instruction while
 leaving the underlying security boundary (the PIN itself, its rate
 limiting, permanent-delete-on-Clear semantics) untouched.
+
+ROUND 12 - FIX: STALE UNLOCK STATE AFTER CLEAR (PHANTOM PIN ERRORS)
+==================================================
+Date: 2026-08-13
+Trigger: user reported the Credentials > GitHub tab rendering its normal
+save/clear form (no PIN prompt visible) but the actual Clear Token action
+failing with "Enter your screen-lock PIN to manage this credential" -
+despite (from the user's perspective) no PIN being set.
+
+Root cause found by tracing Round 11's own "unlock all" change against
+Round 9's per-provider revoke-on-Clear behavior, which were never
+reconciled: markAllUnlocked (Round 11) fills CredentialsView's
+unlockedProviders Set with every provider on one successful PIN entry,
+but SettingsController's Clear actions (ClearMyGitHubToken, ClearMyAws/
+Azure/Gcp, the generic Clear(section) for docker/github-oauth/sonar/ai)
+each still call RevokeCredentialUnlock for ONLY the one provider just
+cleared - correct, unchanged backend behavior. Nothing on the frontend
+ever removed a provider from unlockedProviders to match. Sequence that
+reproduces it: unlock any provider (grants all 9) -> clear GitHub's
+token (backend revokes "github" specifically) -> the GitHub tab still
+shows unlocked === true locally, so CredentialPinGate renders the raw
+form with no prompt -> the next Save/Clear attempt on GitHub hits the
+already-revoked grant and 403s with CREDENTIAL_LOCKED, reading to the
+user as a PIN requirement that "comes from nowhere" since no prompt was
+ever shown.
+
+Fix: CredentialsView.jsx gained removeUnlocked(provider), and every
+clear path now calls it after attempting a clear, mirroring the
+backend's per-provider revoke exactly:
+  - handleClearAndRelock (new) wraps the shared handleClear prop from
+    Settings.jsx (covers github/docker/github-oauth/sonar/ai) - awaits
+    it, then removes that section's key from unlockedProviders.
+  - AwsLoginSection.jsx, AzureLoginSection.jsx, GcpLoginSection.jsx each
+    gained an onCleared prop, called at the end of their own local
+    handleClear on success; CredentialsView passes
+    onCleared={() => removeUnlocked("aws"|"azure"|"gcp")} into each.
+  - ApiKeySection intentionally untouched - revoking an API key was
+    already established (Round 9) as not calling RevokeCredentialUnlock
+    at all, since it's a list of independent keys, not a single-value
+    credential lifecycle: no desync possible there.
+  - "admins" (the allowlist Clear button) intentionally left on the
+    plain handleClear, not the wrapped version - it was never a
+    CredentialGate-covered section, nothing to revoke.
+  - handleClear/each local handleClear already swallow their own
+    errors/cancellation internally with no signal back to the caller,
+    so removeUnlocked always runs after the attempt regardless of
+    outcome - a cancelled or failed clear costs at most one avoidable
+    re-prompt next time, never a stale "still unlocked" belief, which
+    was the actual bug being fixed.
+
+Immediate unblock given to the user (no code change, applies right
+away): reload the page - unlockedProviders resets to empty on mount
+either way (Round 9's original design, unaffected by this bug), so a
+fresh reload already forces a correct re-prompt matching the backend's
+real state even before this fix's deploy went out.
+
+Verification performed:
+  - `npm run lint` / `npm run build`: 0 errors, pre-existing Fast-Refresh
+    warnings only.
+  - No backend changes in this round - the fix is entirely in how the
+    frontend tracks its own optimistic unlock state; backend revoke
+    behavior (verified live in Round 11) was already correct.
+
+Files changed: deployment-ui/src/components/settings/CredentialsView.jsx,
+components/settings/credentials/{AwsLoginSection,AzureLoginSection,
+GcpLoginSection}.jsx.
+
+Status: Complete. This closes the specific gap Round 11's unlock-all
+change opened (frontend optimism outliving a backend revoke) without
+touching the revoke behavior itself, which was correct all along.
