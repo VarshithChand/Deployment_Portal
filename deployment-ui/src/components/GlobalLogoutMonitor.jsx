@@ -13,8 +13,12 @@ const POLL_MS = 15000;
 //   - forceLogoutEpoch: portal-wide, bumped whenever someone triggers a
 //     deployment (see SettingsService.BumpForceLogoutEpochAsync).
 //   - mySessionForceLogoutEpoch: scoped to just this caller's own session,
-//     set when an admin uses the Services page's Users tab to sign this
-//     specific PAT user out - see SessionActivityService.
+//     set either when an admin uses the Services page's Users tab to sign
+//     this specific PAT user out, OR when the same GitHub account's PAT
+//     gets reconnected from a different device (see SessionActivityService.
+//     ForceLogout's reason param, set from SettingsService's one-session-
+//     per-account eviction) - mySessionForceLogoutReason distinguishes
+//     the two so this tab shows an accurate explanation either way.
 //   - a 403 on the poll itself: the block-check middleware in Program.cs
 //     rejects every request from a blocked session (see
 //     SettingsService.BlockPatUserAsync), including this one - that
@@ -55,7 +59,7 @@ export default function GlobalLogoutMonitor() {
         }
 
         if (data.mySessionForceLogoutEpoch !== baseline.mySessionForceLogoutEpoch) {
-            performLogout("admin");
+            performLogout(data.mySessionForceLogoutReason || "admin");
         }
 
     }

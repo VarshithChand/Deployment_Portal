@@ -12,7 +12,14 @@ namespace DeploymentAPI.Services;
 public class SessionActivityService
 {
     private readonly ConcurrentDictionary<string, DateTime> _lastSeen = new();
-    private readonly ConcurrentDictionary<string, DateTime> _forceLogoutAfter = new();
+    // Reason travels alongside the timestamp now - originally this only
+    // ever meant "an admin force-signed this session out" (GlobalLogoutMonitor
+    // hardcoded that copy), but SettingsService's own duplicate-device
+    // eviction (see SaveUserGitHubCredentialsAsync) needed a distinct
+    // "signed in from another device" explanation for the exact same
+    // mechanism, rather than telling someone an admin did this when nobody
+    // did.
+    private readonly ConcurrentDictionary<string, (DateTime Timestamp, string Reason)> _forceLogoutAfter = new();
     private readonly ConcurrentDictionary<string, string> _lastUserAgent = new();
     private readonly ConcurrentDictionary<string, string> _lastIpAddress = new();
 
@@ -160,10 +167,17 @@ public class SessionActivityService
     // Stamped "now" - GlobalLogoutMonitor treats any change to this value
     // (polled per-session via GET /api/auth/session-epoch) as "sign out,"
     // the same way it already reacts to the portal-wide epoch changing.
-    public void ForceLogout(string key) => _forceLogoutAfter[key] = DateTime.UtcNow;
+    // reason defaults to "admin" - every pre-existing caller (AdminUsersController's
+    // explicit Force Logout and Delete actions) genuinely is an admin
+    // acting on this session, so neither needed to change.
+    public void ForceLogout(string key, string reason = "admin") =>
+        _forceLogoutAfter[key] = (DateTime.UtcNow, reason);
 
     public DateTime? GetForceLogoutAfter(string key) =>
-        _forceLogoutAfter.TryGetValue(key, out var stamp) ? stamp : null;
+        _forceLogoutAfter.TryGetValue(key, out var entry) ? entry.Timestamp : null;
+
+    public string? GetForceLogoutReason(string key) =>
+        _forceLogoutAfter.TryGetValue(key, out var entry) ? entry.Reason : null;
 
     public void RecordFrontendBuild(string key, string commit, string? version, string environment) =>
         _frontendBuilds[key] = new FrontendBuildInfo(commit, version, environment, DateTime.UtcNow);

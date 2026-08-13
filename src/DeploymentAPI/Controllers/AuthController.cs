@@ -254,7 +254,8 @@ public class AuthController : ControllerBase
         return Ok(new
         {
             forceLogoutEpoch = epoch,
-            mySessionForceLogoutEpoch = mine?.ToString("o")
+            mySessionForceLogoutEpoch = mine?.ToString("o"),
+            mySessionForceLogoutReason = mine != null ? _activity.GetForceLogoutReason(key) : null
         });
     }
 

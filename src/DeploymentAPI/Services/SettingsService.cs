@@ -19,6 +19,13 @@ public class SettingsService
     private readonly string? _connectionString;
     private readonly ActivityLogService _log;
 
+    // Singleton, safe to inject into this AddScoped service (a shorter-
+    // lived service depending on a longer-lived one is fine; the reverse
+    // isn't). Only used to force-sign-out a device this method is about to
+    // evict (see SaveUserGitHubCredentialsAsync's one-session-per-account
+    // check below) - everywhere else in this file already didn't need it.
+    private readonly SessionActivityService _activity;
+
     // Encrypts every secret field at rest (GitHub PATs, AWS/Azure secret
     // keys, Docker password, Sonar/Gemini API tokens) - see
     // Protect/Unprotect below and security_findings.txt Finding 006. Keyed
@@ -50,8 +57,10 @@ public class SettingsService
     // to a second real read.
     private JObject? _cachedRoot;
 
-    public SettingsService(IHostEnvironment env, ActivityLogService log, IDataProtectionProvider dataProtectionProvider)
+    public SettingsService(IHostEnvironment env, ActivityLogService log, IDataProtectionProvider dataProtectionProvider, SessionActivityService activity)
     {
+        _activity = activity;
+
         // SETTINGS_FILE_PATH lets a deployment point this at a mounted
         // persistent volume instead of the app's own content root. DATABASE_URL
         // (Render's standard Postgres connection string convention) takes
@@ -374,6 +383,17 @@ public class SettingsService
                 {
                     await MigrateSessionDataAsync(other.Key, login);
                     await DeletePatUserAsync(other.Key);
+
+                    // The evicted device's own open tab (if any) is still
+                    // running against data that's now gone server-side -
+                    // this is what actually kicks it out live, via the
+                    // exact same session-epoch poll GlobalLogoutMonitor
+                    // already uses for an admin's force-logout, just with
+                    // a "device" reason instead of "admin" so that tab
+                    // shows an accurate explanation rather than blaming an
+                    // admin for something nobody did.
+                    _activity.ForceLogout(other.Key, "device");
+
                     evictedDuplicateLogin = resolvedLogin;
                 }
 

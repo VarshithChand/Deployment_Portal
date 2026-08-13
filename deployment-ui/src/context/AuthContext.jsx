@@ -35,6 +35,8 @@ function describeLoggedOutReason(loggedOut) {
             return "You were signed out and your saved credentials were cleared.";
         case "idle":
             return "You were signed out after 30 minutes of inactivity. Your saved credentials are still there — just sign back in.";
+        case "device":
+            return "You were signed out because this GitHub account was just connected from another device. Only one device can be signed in with the same account at a time.";
         default:
             return "You were signed out.";
     }
