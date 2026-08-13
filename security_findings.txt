@@ -3459,3 +3459,109 @@ Status: Complete for the code-level and API-level-verifiable portion;
 the actual live cross-device kick needs a real GitHub PAT tested from two
 real devices to confirm end-to-end, flagged above rather than claimed as
 tested.
+
+ROUND 21 - REFUSE A DUPLICATE-DEVICE LOGIN INSTEAD OF EVICTING THE OLDER ONE
+==================================================
+Date: 2026-08-13
+Trigger: user's own screenshot of Services > Users showing two rows both
+unresolvable ("Unknown (invalid or expired token)") for what looked like
+the same account from the same device type - asked why the backend
+didn't already prevent this, then, after a clarifying question about
+whether unresolvable duplicates should be safe to auto-merge on
+repository-text alone (user chose "leave it manual" - too risky, could
+merge two unrelated people), a follow-up: "i need not be delete by my
+self don't allow to login from the pat" - i.e. don't make the admin
+clean up duplicates after the fact; refuse the SECOND device's login
+outright while the account is genuinely active on the first one, rather
+than letting it in and silently evicting/kicking the other one (Round
+20's behavior).
+
+This flips who "wins" a duplicate-device connection attempt: Round 20 let
+the NEW device in and force-signed the OLD one out live; this round
+instead REJECTS the new login attempt while the old device is still
+genuinely active, leaving the already-connected device completely
+undisturbed. An abandoned old session (nobody's touched it in a while)
+is still safe to take over automatically exactly as before - the change
+only applies to a session that's actually in active use right now.
+
+Implementation: SaveUserGitHubCredentialsAsync (SettingsService.cs) now
+resolves the connecting token's identity and checks activity recency
+BEFORE mutating anything. New ActiveDeviceWindow constant (2 minutes -
+comfortably longer than GlobalLogoutMonitor's 15s session-epoch poll so
+ordinary poll jitter is never mistaken for abandonment, short enough that
+retrying your own old session after a few idle minutes isn't blocked)
+compared against SessionActivityService.GetLastSeen(otherKey). Still
+actively seen within that window -> the method returns a new
+SaveGitHubCredentialsResult(Success:false, ConflictMessage:"...",
+Credentials:null) and writes nothing at all - the connecting session's
+own existing entry (if any) is left completely untouched too. Quiet
+longer than that -> unchanged Round 20 behavior (migrate useful data
+forward, delete the stale row, force-logout that key in case a
+background tab is still technically open).
+
+New public IsLoginActiveOnAnotherSessionAsync lets AuthController.PatLogin
+check this BEFORE even asking for an MFA code (better UX - no point
+making someone type a code just to be told no), while
+SaveUserGitHubCredentialsAsync itself re-checks it again right before the
+actual write in every path (PatLogin's own no-MFA branch, and MfaVerify's
+save) - the pending-MFA session's 10-minute TTL is long enough for a
+second device to have connected in the gap, so the authoritative check
+has to live at the write, not just the earlier convenience check.
+SettingsController.SaveMyGitHub (the existing Settings > Credentials
+reconnect flow) now returns 409 Conflict with code
+ALREADY_CONNECTED_ELSEWHERE when this happens - picked up for free by the
+existing `err.response?.data?.message` toast pattern already used
+throughout the frontend, no new frontend code needed there.
+AuthController's two JSON-body endpoints (pat-login, mfa/verify) keep
+their existing "always 200, success flag in the body" shape instead,
+matching Round 17's own established convention for that flow -
+MfaVerifyPage.jsx gained a case for the new ALREADY_CONNECTED_ELSEWHERE
+code that bounces back to the login page (same as an expired session)
+rather than leaving someone stuck re-entering an MFA code that was never
+the actual problem.
+
+Verification performed:
+  - `dotnet build` (isolated output dir): 0 errors, first try, same 3
+    pre-existing unrelated warnings as every prior round.
+  - `npm run lint` / `npm run build`: 0 errors, pre-existing Fast-Refresh
+    warnings only.
+  - Live tests against the deployed Render backend after push (fresh
+    X-Session-Id per check, cleanup after):
+    - POST api/auth/pat-login with a fake/unresolvable token -> unchanged
+      clean {success:false} - confirms the new active-elsewhere check
+      correctly no-ops when identity resolution itself fails (same as
+      Round 20's own equivalent regression check).
+    - POST api/settings/me/github with a fake/unresolvable token -> saved
+      normally (200, confirmed via a follow-up GET), same as before -
+      confirms an unresolvable token still can't trigger the new
+      conflict path (nothing to compare it against) and the ordinary
+      save path is unaffected. One transient 502 was hit on the first
+      attempt right after the redeploy landed (Render cold-start/instance
+      restart, not a code path this change touches) - an immediate retry
+      of the exact same request succeeded cleanly, confirmed not
+      reproducible.
+  - Could NOT live-verify the actual conflict path itself (connect a real
+    PAT on device A, immediately try the SAME real PAT on device B while
+    A is still active, confirm B is refused with the new message and A is
+    completely undisturbed; then let A go idle past 2 minutes and confirm
+    B can now connect and takes over as before) - identical standing
+    limitation to Round 20 and every identity-resolution-dependent round
+    this session: ResolvePatOwnerLoginAsync needs a real, live-resolvable
+    GitHub token, unavailable here. Recommend the user verify directly
+    with a real PAT on two devices/browsers.
+  - Minor: one fake test row ("octocat/hello-world" fake token) from this
+    round's own live retry check was not individually cleaned up (a
+    different X-Session-Id than the one DELETE me/all was run against,
+    same category of gap Round 15's retrospective already flagged) -
+    harmless synthetic test data, safe to ignore or delete from Services
+    > Users if noticed.
+
+Files changed: src/DeploymentAPI/Controllers/{AuthController,
+SettingsController}.cs, Services/SettingsService.cs,
+DTOs/SaveGitHubCredentialsResult.cs (new);
+deployment-ui/src/pages/MfaVerifyPage.jsx.
+
+Status: Complete for the code-level and API-level-verifiable portion;
+the actual two-device conflict/takeover behavior needs a real GitHub PAT
+tested from two real devices to confirm end-to-end, flagged above rather
+than claimed as tested.
