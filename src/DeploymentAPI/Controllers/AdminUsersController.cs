@@ -204,9 +204,12 @@ public class AdminUsersController : ControllerBase
     // sessions each stuck around as their own permanent-looking entry) -
     // that check only stops NEW duplicates at save time, it doesn't
     // retroactively merge ones already sitting here. Per real GitHub
-    // identity, keeps whichever key was active most recently and deletes
-    // the rest via DeletePatUserAsync; unresolvable tokens ("Unknown...")
-    // are left alone since there's no real identity to group them by.
+    // identity, keeps whichever key was active most recently, deletes the
+    // rest via DeletePatUserAsync, AND force-signs each one out live (same
+    // mechanism/reason as the reconnect-time eviction) so a removed
+    // duplicate's own open tab, if any, doesn't keep running against data
+    // that's already gone. Unresolvable tokens ("Unknown...") are left
+    // alone since there's no real identity to group them by.
     [HttpPost("dedupe")]
     public async Task<IActionResult> RemoveDuplicates()
     {
@@ -233,6 +236,15 @@ public class AdminUsersController : ControllerBase
             foreach (var duplicate in group.Where(u => u.Key != keep.Key))
             {
                 await _settings.DeletePatUserAsync(duplicate.Key);
+
+                // Same live-kick this row's data getting deleted would
+                // also get from a fresh reconnect (see SettingsService.
+                // SaveUserGitHubCredentialsAsync) - without this, a
+                // removed duplicate whose browser tab is still open just
+                // keeps running against data that's already gone until
+                // something fails or it happens to reload.
+                _activity.ForceLogout(duplicate.Key, "device");
+
                 removedCount++;
             }
         }
