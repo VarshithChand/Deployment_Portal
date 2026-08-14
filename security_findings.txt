@@ -4238,3 +4238,95 @@ above) or an open, flagged recommendation (rate limiting) rather than a
 silent gap. The one item that couldn't be live-verified end-to-end (the
 actual 403 on a real blocked session) is explicitly called out above,
 not claimed as tested.
+
+ROUND 31 - PAT/SECRET EXPOSURE VERIFICATION SWEEP (NO NEW ISSUES FOUND)
+==================================================
+Date: 2026-08-14
+Trigger: user posted a second, much more detailed structured checklist
+(inspected the live app in Chrome DevTools, saw the PAT in the
+pat-login request payload as expected) asking for an exhaustive sweep
+of every place a PAT/GitHub token/AWS-Azure-GCP credential/Docker
+password/Sonar token/AI key could be stored, returned, logged,
+serialized, or exposed - across every listed endpoint, the JWT, browser
+storage, and console/server logs - plus re-confirmation that the
+PENDING_MFA state can't reach protected APIs and that session
+replacement uses account identity rather than comparing plaintext
+tokens. This round found no new issues - it verifies both long-standing
+architecture and Round 30's fix from the previous entry.
+
+Method: a dedicated research pass (not guessing) across every .cs
+controller/service in src/DeploymentAPI and every .js/.jsx file in
+deployment-ui/src, classifying every hit of PersonalAccessToken/
+AccessKeyId/SecretAccessKey/ClientSecret/token/secret as either safe
+(credential input, internal Protect()/Unprotect() storage, outbound
+Authorization header to GitHub/AWS) or dangerous (reaches a browser
+response body, JWT claim, localStorage/sessionStorage, or a log
+statement).
+
+Findings:
+  - One informational (not a vulnerability) item: MfaController.cs's
+    Enroll() action returns the freshly-generated TOTP shared secret in
+    its response body (`{secret, otpauthUri, ...}`), and MfaSection.jsx
+    renders it as the manual-entry fallback when the QR code can't be
+    scanned. This is the user's own, brand-new secret, shown exactly
+    once during self-enrollment before they save it into their own
+    authenticator app - the same pattern Google/Microsoft/GitHub's own
+    2FA setup screens use. No later endpoint (mfa/status, mfa/pending)
+    ever re-exposes it, and it's never logged.
+  - No PAT, AWS/Azure/GCP credential, Docker password, Sonar token, or
+    AI key was found in any response body, JWT claim, localStorage/
+    sessionStorage write, or log statement across ~55-60 locations
+    reviewed. AuthService.IssueJwt's claims are only login+role.
+    PatLoginPage.jsx keeps the entered PAT in a local useState that's
+    discarded after submit - never touches AuthContext/global state/
+    storage. CredentialsView.jsx's secret inputs are write-only
+    (Configured badges only on read, never pre-populated).
+  - Re-confirmed the PENDING_MFA architecture already satisfies the
+    checklist's items 4-7 by construction, not by a checkable-but-
+    bypassable rule: AuthController.PatLogin only writes an in-memory
+    encrypted pending entry (SessionActivityService.SetPendingPatSession)
+    when MFA is required - it never calls
+    SettingsService.SaveUserGitHubCredentialsAsync (the only thing that
+    makes a token real/usable) until mfa/verify succeeds. Confirmed via
+    grep that SetPendingPatSession/GetPendingPatSession are read/written
+    ONLY inside AuthController - no other controller can act on an
+    unverified pending token, so a pending session has no live GitHub
+    token to make any protected API succeed with in the first place.
+  - Re-confirmed session replacement (checklist item 10) identifies
+    duplicates by resolved GitHub login, never by comparing plaintext
+    tokens (see SaveUserGitHubCredentialsAsync's `u.PatOwnerLogin ==
+    resolvedLogin` check) - already covered in Round 30's entry, re-
+    verified here against the specific wording of this checklist.
+  - Also discovered (pre-existing, not something this session added): a
+    second, independent hard-block middleware already exists in
+    Program.cs (SettingsService.BlockPatUserAsync / the Services page's
+    admin "Block" button), running before UseAuthentication with zero
+    allowlist exceptions - confirmed it composes correctly with Round
+    30's newer MFA-block middleware (different trigger, different
+    scope, correct relative ordering, no interference).
+
+Verification performed:
+  - Full-codebase grep-and-classify sweep (background research pass),
+    manually spot-verified: read AuthService.IssueJwt directly (claims:
+    login, role only); read GetMyGitHub/mfa-pending/GetMyAws response
+    construction directly (masked fields only); grepped for every
+    SetPendingPatSession/GetPendingPatSession call site (AuthController
+    only); read the pre-existing BlockPatUserAsync middleware in
+    Program.cs directly to confirm ordering/compatibility with Round
+    30's new middleware.
+  - No code changes were made this round - it was a verification-only
+    pass. Nothing new to build, lint, or deploy.
+  - Same standing limitation as every MFA round: the actual PAT-login
+    -> MFA-pending -> ?tab=dashboard bypass-attempt -> expect 401/403
+    live browser walkthrough needs a real GitHub PAT/account, which
+    isn't available in this sandboxed session. Recommend the user
+    perform that specific walkthrough directly, since it's the one
+    claim in this report not independently exercised end-to-end.
+
+Files changed: none (security_findings.txt only).
+
+Status: Complete. No new vulnerabilities found; the one item worth
+noting (TOTP enrollment secret in its own enroll response) is standard,
+necessary UX for self-service 2FA setup, not a defect, and is
+explicitly documented here rather than silently passed over per the
+checklist's own "search for secret" instruction.
