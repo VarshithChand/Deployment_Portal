@@ -297,23 +297,29 @@ public class SettingsService
     private async Task MigrateSessionDataAsync(string fromKey, string toKey)
     {
         var root = await ReadRootAsync();
-        var changed = false;
 
-        void MigrateField(string sectionName)
+        // Returns whether it actually migrated something, rather than
+        // mutating a captured outer bool - the closure-over-a-mutable-
+        // local version worked correctly at runtime, but its data flow
+        // wasn't something static analysis (SonarQube: "this condition
+        // does not always evaluate to False") could follow through the
+        // local function boundary. Same behavior either way - `|=` (not
+        // short-circuiting `||`) still calls every field unconditionally.
+        bool MigrateField(string sectionName)
         {
-            if (root[sectionName] is not JObject section) return;
-            if (!section.TryGetValue(fromKey, out var value)) return;
-            if (section.ContainsKey(toKey)) return;
+            if (root[sectionName] is not JObject section) return false;
+            if (!section.TryGetValue(fromKey, out var value)) return false;
+            if (section.ContainsKey(toKey)) return false;
 
             section[toKey] = value.DeepClone();
-            changed = true;
+            return true;
         }
 
-        MigrateField("UserAwsCredentials");
-        MigrateField("UserAzureCredentials");
-        MigrateField("UserGcpCredentials");
-        MigrateField("SecurityPins");
-        MigrateField("SidebarAccess");
+        var changed = MigrateField("UserAwsCredentials");
+        changed |= MigrateField("UserAzureCredentials");
+        changed |= MigrateField("UserGcpCredentials");
+        changed |= MigrateField("SecurityPins");
+        changed |= MigrateField("SidebarAccess");
 
         if (changed)
         {

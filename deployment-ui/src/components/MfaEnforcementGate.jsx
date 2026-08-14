@@ -118,14 +118,17 @@ export default function MfaEnforcementGate() {
 
         {enrollOpen && (
 
-            <div className="dialog-backdrop" role="presentation" onClick={() => setEnrollOpen(false)}>
+            <div
+                className="dialog-backdrop"
+                role="presentation"
+                onClick={(e) => { if (e.target === e.currentTarget) setEnrollOpen(false); }}
+            >
 
                 <div
                     className="dialog"
                     role="dialog"
                     aria-modal="true"
                     aria-labelledby="mfa-nudge-enroll-title"
-                    onClick={(e) => e.stopPropagation()}
                 >
 
                     <h2 id="mfa-nudge-enroll-title" style={{ marginTop: 0 }}>Set Up MFA</h2>
