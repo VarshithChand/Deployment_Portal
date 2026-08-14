@@ -61,6 +61,22 @@ function writeSecurityHeadersPlugin() {
         '  X-Content-Type-Options: nosniff',
         '  Referrer-Policy: strict-origin-when-cross-origin',
         '  Permissions-Policy: geolocation=(), camera=(), microphone=()',
+        // HSTS: safe to add unconditionally - this origin is Cloudflare
+        // Workers, always served over HTTPS already, so this only ever
+        // stops a future plain-HTTP downgrade, never breaks anything that
+        // works today. No `preload` - that's a one-way commitment (every
+        // subdomain must support HTTPS forever) this repo can't make on
+        // the user's behalf.
+        '  Strict-Transport-Security: max-age=31536000; includeSubDomains',
+        // COOP/CORP: safe here specifically because GitHub OAuth login is
+        // a full-page redirect (see AuthContext.jsx's login(): a plain
+        // window.location.href, never window.open) - same-origin COOP
+        // would break a popup-based OAuth flow's window.opener
+        // communication, but there isn't one to break. CORP same-origin
+        // is fine since nothing outside this origin is expected to embed
+        // this site's own images/scripts.
+        '  Cross-Origin-Opener-Policy: same-origin',
+        '  Cross-Origin-Resource-Policy: same-origin',
         '  Cache-Control: no-cache',
         '',
         '/assets/*',
