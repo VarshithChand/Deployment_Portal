@@ -22,7 +22,7 @@ public class DatabaseManagementService
 {
     private readonly string? _connectionString;
 
-    private static readonly Regex IdentifierRegex = new(@"^[a-zA-Z_][a-zA-Z0-9_]{0,62}$", RegexOptions.Compiled);
+    private static readonly Regex IdentifierRegex = new(@"^[a-zA-Z_][a-zA-Z0-9_]{0,62}$", RegexOptions.Compiled, TimeSpan.FromSeconds(1));
 
     private static readonly HashSet<string> AllowedColumnTypes = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -842,8 +842,8 @@ public class DatabaseManagementService
         var trimmed = expr.Trim();
 
         if (SafeDefaultExpressions.Contains(trimmed)) return true;
-        if (Regex.IsMatch(trimmed, @"^-?\d+(\.\d+)?$")) return true;
-        if (Regex.IsMatch(trimmed, @"^'[^']*'$")) return true;
+        if (Regex.IsMatch(trimmed, @"^-?\d+(\.\d+)?$", RegexOptions.None, TimeSpan.FromSeconds(1))) return true;
+        if (Regex.IsMatch(trimmed, @"^'[^']*'$", RegexOptions.None, TimeSpan.FromSeconds(1))) return true;
 
         return false;
     }

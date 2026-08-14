@@ -43,7 +43,12 @@ public class ApplicationBuildInfoService
 
         try
         {
-            var startInfo = new ProcessStartInfo("git", "rev-parse HEAD")
+            var gitPath = ResolveExecutablePath("git");
+
+            if (gitPath == null)
+                return "unknown";
+
+            var startInfo = new ProcessStartInfo(gitPath, "rev-parse HEAD")
             {
                 RedirectStandardOutput = true,
                 UseShellExecute = false,
@@ -69,4 +74,40 @@ public class ApplicationBuildInfoService
     }
 
     private static string Shorten(string sha) => sha.Length > 7 ? sha[..7] : sha;
+
+    // Resolves a bare command name to an absolute path ourselves, rather
+    // than handing ProcessStartInfo a bare "git" and letting the OS search
+    // PATH for it (SonarCloud csharpsquid:S4036 - PATH is technically an
+    // injectable search path). This only ever runs as the local-dev/CI
+    // fallback anyway - the real production path (Render) never reaches
+    // here, since RENDER_GIT_COMMIT above short-circuits first - but
+    // pinning to a concrete, verified-to-exist file is strictly safer than
+    // an implicit lookup regardless.
+    private static string? ResolveExecutablePath(string name)
+    {
+        var pathVar = System.Environment.GetEnvironmentVariable("PATH");
+
+        if (string.IsNullOrEmpty(pathVar))
+            return null;
+
+        var candidateNames = OperatingSystem.IsWindows()
+            ? new[] { name + ".exe", name + ".cmd", name + ".bat" }
+            : new[] { name };
+
+        foreach (var dir in pathVar.Split(Path.PathSeparator))
+        {
+            if (string.IsNullOrWhiteSpace(dir))
+                continue;
+
+            foreach (var candidateName in candidateNames)
+            {
+                var candidatePath = Path.Combine(dir, candidateName);
+
+                if (File.Exists(candidatePath))
+                    return candidatePath;
+            }
+        }
+
+        return null;
+    }
 }

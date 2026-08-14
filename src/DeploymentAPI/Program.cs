@@ -375,11 +375,17 @@ app.Use(async (context, next) =>
     // The real, browser-enforced CSP for this app's actual HTML document
     // lives with the frontend (deployment-ui/vite.config.js writes a
     // Cloudflare _headers file at build time) - DeploymentAPI never serves
-    // index.html. This one covers Swagger's own HTML UI below (still
-    // needs 'unsafe-inline' - Swashbuckle's bundled UI relies on inline
-    // script/style) and is harmless-but-low-value on plain JSON responses.
-    context.Response.Headers["Content-Security-Policy"] =
-        "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'";
+    // index.html itself, EXCEPT for Swagger's own bundled HTML UI below,
+    // which still needs 'unsafe-inline' (Swashbuckle relies on inline
+    // script/style). Every other route here only ever returns JSON, so
+    // scoping the permissive policy to just /swagger - and using a
+    // maximally restrictive one everywhere else - is strictly more
+    // correct than applying Swagger's exception portal-wide, with no
+    // functional downside (a JSON body never executes a CSP directive
+    // regardless of how permissive it is).
+    context.Response.Headers["Content-Security-Policy"] = context.Request.Path.StartsWithSegments("/swagger")
+        ? "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'"
+        : "default-src 'none'; frame-ancestors 'none'";
     context.Response.Headers["Permissions-Policy"] = "geolocation=(), camera=(), microphone=()";
 
     await next();

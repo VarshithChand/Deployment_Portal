@@ -1,6 +1,6 @@
-import { execSync } from 'node:child_process'
-import { writeFileSync } from 'node:fs'
-import { dirname, resolve } from 'node:path'
+import { execFileSync } from 'node:child_process'
+import { existsSync, writeFileSync } from 'node:fs'
+import { delimiter, dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
@@ -73,13 +73,40 @@ function writeSecurityHeadersPlugin() {
   }
 }
 
+// Resolves a bare command name to an absolute path ourselves, rather than
+// handing execFileSync "git" and letting the OS search PATH for it
+// (SonarCloud javascript:S4036 - PATH is technically an injectable search
+// path). This only ever runs at local/CI build time, never in a request
+// path, but pinning to a concrete, verified-to-exist file is strictly
+// safer than an implicit lookup regardless.
+function resolveExecutablePath(name) {
+  const pathVar = process.env.PATH || process.env.Path || ''
+  const candidateNames = process.platform === 'win32'
+    ? [`${name}.exe`, `${name}.cmd`, `${name}.bat`]
+    : [name]
+
+  for (const dir of pathVar.split(delimiter)) {
+    if (!dir) continue
+
+    for (const candidateName of candidateNames) {
+      const candidatePath = join(dir, candidateName)
+      if (existsSync(candidatePath)) return candidatePath
+    }
+  }
+
+  return null
+}
+
 // Real git state captured at build time, never invented - backs Services
 // -> Application Support's frontend version reporting (see
 // src/utils/buildInfo.js). Falls back to "unknown" rather than throwing if
 // this ever runs outside a git checkout.
 function getGitCommit() {
   try {
-    return execSync('git rev-parse --short HEAD').toString().trim()
+    const gitPath = resolveExecutablePath('git')
+    if (!gitPath) return 'unknown'
+
+    return execFileSync(gitPath, ['rev-parse', '--short', 'HEAD']).toString().trim()
   }
   catch {
     return 'unknown'
