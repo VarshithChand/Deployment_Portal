@@ -17,11 +17,8 @@ namespace DeploymentAPI.Helpers;
 // against, so MFA follows the person, not the browser.
 public static class MfaGate
 {
-    private const int MaxAttempts = 5;
-    private static readonly TimeSpan LockoutDuration = TimeSpan.FromMinutes(15);
-
     public static async Task<IActionResult?> DenyUnlessVerifiedAsync(
-        ControllerBase controller, SettingsService settings, SessionActivityService activity,
+        ControllerBase controller, SettingsService settings, NotificationService notifications,
         string token, string? mfaCode, string? recoveryCode)
     {
         var login = await settings.ResolveGitHubLoginAsync(token);
@@ -34,12 +31,15 @@ public static class MfaGate
         if (string.IsNullOrWhiteSpace(login) || !await settings.IsMfaEnabledAsync(login))
             return null;
 
-        if (activity.IsMfaLockedOut(login))
+        var lockout = await MfaLockoutPolicy.CheckAsync(settings, login);
+
+        if (lockout.Locked)
         {
             return controller.StatusCode(403, new
             {
                 code = "MFA_LOCKED",
-                message = "Too many wrong codes - try again in a few minutes."
+                message = "Too many wrong codes - try again later.",
+                lockedUntilUtc = lockout.LockedUntilUtc
             });
         }
 
@@ -61,14 +61,21 @@ public static class MfaGate
 
         if (valid)
         {
-            activity.ClearFailedMfaAttempts(login);
+            await MfaLockoutPolicy.RecordSuccessAsync(settings, login);
             return null;
         }
 
-        var attempts = activity.RecordFailedMfaAttempt(login);
+        var lockedUntil = await MfaLockoutPolicy.RecordFailureAsync(settings, notifications, login);
 
-        if (attempts >= MaxAttempts)
-            activity.LockOutMfa(login, LockoutDuration);
+        if (lockedUntil.HasValue)
+        {
+            return controller.StatusCode(403, new
+            {
+                code = "MFA_LOCKED",
+                message = "Too many wrong codes - try again later.",
+                lockedUntilUtc = lockedUntil
+            });
+        }
 
         return controller.StatusCode(403, new
         {

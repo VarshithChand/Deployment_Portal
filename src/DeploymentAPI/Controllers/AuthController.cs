@@ -13,8 +13,6 @@ namespace DeploymentAPI.Controllers;
 [Route("api/auth")]
 public class AuthController : ControllerBase
 {
-    private const int MaxMfaAttempts = 5;
-    private static readonly TimeSpan MfaLockoutDuration = TimeSpan.FromMinutes(15);
     private static readonly TimeSpan PendingPatTtl = TimeSpan.FromMinutes(10);
 
     private readonly AuthService _auth;
@@ -22,19 +20,22 @@ public class AuthController : ControllerBase
     private readonly SettingsService _settings;
     private readonly SessionActivityService _activity;
     private readonly GitHubApiService _github;
+    private readonly NotificationService _notifications;
 
     public AuthController(
         AuthService auth,
         IOptionsMonitor<GitHubOAuthSettings> oauthOptions,
         SettingsService settings,
         SessionActivityService activity,
-        GitHubApiService github)
+        GitHubApiService github,
+        NotificationService notifications)
     {
         _auth = auth;
         _oauthOptions = oauthOptions;
         _settings = settings;
         _activity = activity;
         _github = github;
+        _notifications = notifications;
     }
 
     // Local dev serves frontend and backend from the same origin (via the
@@ -208,13 +209,16 @@ public class AuthController : ControllerBase
 
         var (encryptedToken, login) = pending.Value;
 
-        if (_activity.IsMfaLockedOut(login))
+        var lockout = await MfaLockoutPolicy.CheckAsync(_settings, login);
+
+        if (lockout.Locked)
         {
             return Ok(new
             {
                 success = false,
                 code = "MFA_LOCKED",
-                message = "Too many wrong codes - try again in a few minutes."
+                message = "Too many wrong codes - try again later.",
+                lockedUntilUtc = lockout.LockedUntilUtc
             });
         }
 
@@ -224,10 +228,18 @@ public class AuthController : ControllerBase
 
         if (!valid)
         {
-            var attempts = _activity.RecordFailedMfaAttempt(login);
+            var lockedUntil = await MfaLockoutPolicy.RecordFailureAsync(_settings, _notifications, login);
 
-            if (attempts >= MaxMfaAttempts)
-                _activity.LockOutMfa(login, MfaLockoutDuration);
+            if (lockedUntil.HasValue)
+            {
+                return Ok(new
+                {
+                    success = false,
+                    code = "MFA_LOCKED",
+                    message = "Too many wrong codes - try again later.",
+                    lockedUntilUtc = lockedUntil
+                });
+            }
 
             return Ok(new
             {
@@ -237,7 +249,7 @@ public class AuthController : ControllerBase
             });
         }
 
-        _activity.ClearFailedMfaAttempts(login);
+        await MfaLockoutPolicy.RecordSuccessAsync(_settings, login);
         _activity.ClearPendingPatSession(key);
 
         // allowTakeoverIfActive: true - reaching this line required a valid

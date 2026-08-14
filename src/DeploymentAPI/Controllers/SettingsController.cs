@@ -25,8 +25,9 @@ public class SettingsController : ControllerBase
     private readonly GitHubAuthService _githubAuth;
     private readonly IAiAssistantService _ai;
     private readonly SessionActivityService _activity;
+    private readonly NotificationService _notifications;
 
-    public SettingsController(SettingsService settings, GitHubApiService github, CloudStatusService cloud, GitHubAuthService githubAuth, IAiAssistantService ai, SessionActivityService activity)
+    public SettingsController(SettingsService settings, GitHubApiService github, CloudStatusService cloud, GitHubAuthService githubAuth, IAiAssistantService ai, SessionActivityService activity, NotificationService notifications)
     {
         _settings = settings;
         _github = github;
@@ -34,6 +35,7 @@ public class SettingsController : ControllerBase
         _githubAuth = githubAuth;
         _ai = ai;
         _activity = activity;
+        _notifications = notifications;
     }
 
     [HttpGet]
@@ -149,7 +151,7 @@ public class SettingsController : ControllerBase
         // until this passes, so a wrong/missing code leaves this session
         // exactly where it was - no partial state to clean up.
         if (!string.IsNullOrWhiteSpace(request.PersonalAccessToken)
-            && await MfaGate.DenyUnlessVerifiedAsync(this, _settings, _activity, request.PersonalAccessToken.Trim(), request.MfaCode, request.RecoveryCode) is IActionResult mfaDenied)
+            && await MfaGate.DenyUnlessVerifiedAsync(this, _settings, _notifications, request.PersonalAccessToken.Trim(), request.MfaCode, request.RecoveryCode) is IActionResult mfaDenied)
         {
             return mfaDenied;
         }

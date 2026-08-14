@@ -25,3 +25,17 @@ export const disableMfa = async (payload) => {
     const response = await mfaApi.post("/disable", payload);
     return response.data;
 };
+
+// Where MfaLockoutPolicy sends the "too many wrong codes" notice (see
+// NotificationService.SendMfaLockoutEmailAsync) - self-service, only
+// meaningful once MFA is enabled (the backend rejects setting one
+// otherwise).
+export const getMfaNotificationEmail = async () => {
+    const response = await mfaApi.get("/notification-email");
+    return response.data;
+};
+
+export const setMfaNotificationEmail = async (email) => {
+    const response = await mfaApi.post("/notification-email", { email });
+    return response.data;
+};

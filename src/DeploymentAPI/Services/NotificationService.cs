@@ -138,4 +138,43 @@ public class NotificationService
 
         await client.SendMailAsync(mail);
     }
+
+    // Unlike every other notification in this file, this one goes to a
+    // SPECIFIC end user (see MfaLockoutPolicy.RecordFailureAsync), not the
+    // fixed ops address in _settings.Email.To - the whole point is
+    // telling the actual account owner their account just got locked, not
+    // telling whoever configured the portal's deploy notifications. Still
+    // gated on the same portal-wide SMTP config (a blank SmtpHost is a
+    // silent no-op, same "unconfigured channel = disabled" rule the rest
+    // of this file follows) and catches its own exceptions - a failed
+    // send must never be what fails the actual lockout that triggered it.
+    public async Task SendMfaLockoutEmailAsync(string toEmail, string login, int tier, DateTime lockedUntilUtc)
+    {
+        if (string.IsNullOrWhiteSpace(_settings.Email.SmtpHost))
+            return;
+
+        try
+        {
+            using var client = new SmtpClient(_settings.Email.SmtpHost, _settings.Email.SmtpPort)
+            {
+                Credentials = new NetworkCredential(_settings.Email.Username, _settings.Email.Password),
+                EnableSsl = true
+            };
+
+            var body =
+                $"Your Deployment Portal account (@{login}) has had too many incorrect multi-factor " +
+                $"authentication attempts and is temporarily locked (attempt tier {tier}), until " +
+                $"{lockedUntilUtc:u} UTC.\n\n" +
+                "If this was you, just wait and try again once the lockout ends. If it wasn't you, " +
+                "check your account and contact your portal admin.";
+
+            using var mail = new MailMessage(_settings.Email.From, toEmail, "Deployment Portal - MFA lockout notice", body);
+
+            await client.SendMailAsync(mail);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to send MFA lockout notification email for '{Login}'", login);
+        }
+    }
 }

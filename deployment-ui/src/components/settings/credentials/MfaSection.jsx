@@ -3,7 +3,11 @@ import { toDataURL } from "qrcode";
 
 import ClearableInput from "../../common/ClearableInput";
 import useToast from "../../../hooks/useToast";
-import { getMfaStatus, enrollMfa, verifyMfaEnrollment, disableMfa } from "../../../services/mfaService";
+import useLockoutCountdown from "../../../hooks/useLockoutCountdown";
+import {
+    getMfaStatus, enrollMfa, verifyMfaEnrollment, disableMfa,
+    getMfaNotificationEmail, setMfaNotificationEmail
+} from "../../../services/mfaService";
 
 // Multi-factor auth (TOTP, Google-Authenticator-compatible) tied to the
 // current session's own GitHub identity, not this browser - the same
@@ -37,6 +41,16 @@ export default function MfaSection({ onEnrolled }) {
     const [disableRecoveryCode, setDisableRecoveryCode] = useState("");
     const [disabling, setDisabling] = useState(false);
 
+    // Shared by both the verify-enrollment and disable forms below - both
+    // hit the same per-login lockout server-side (see MfaLockoutPolicy),
+    // so only one of them is ever meaningfully "active" at a time anyway.
+    const [lockedUntilUtc, setLockedUntilUtc] = useState(null);
+    const { isLocked, formatted: lockoutFormatted } = useLockoutCountdown(lockedUntilUtc);
+
+    const [notificationEmail, setNotificationEmailState] = useState("");
+    const [notificationEmailInput, setNotificationEmailInput] = useState("");
+    const [savingEmail, setSavingEmail] = useState(false);
+
     function refresh() {
 
         setLoading(true);
@@ -49,6 +63,53 @@ export default function MfaSection({ onEnrolled }) {
     }
 
     useEffect(refresh, []);
+
+    // Only meaningful once MFA is enabled - SetMfaNotificationEmailAsync
+    // is itself a no-op otherwise, so there's nothing to fetch before then.
+    useEffect(() => {
+
+        if (!status?.enabled) return;
+
+        getMfaNotificationEmail()
+            .then((result) => {
+                setNotificationEmailState(result.email || "");
+                setNotificationEmailInput(result.email || "");
+            })
+            .catch((err) => console.error(err));
+
+    }, [status?.enabled]);
+
+    function extractLockout(err) {
+        if (err.response?.data?.code === "MFA_LOCKED") {
+            setLockedUntilUtc(err.response.data.lockedUntilUtc);
+            return true;
+        }
+        return false;
+    }
+
+    async function handleSaveNotificationEmail() {
+
+        try {
+
+            setSavingEmail(true);
+            const result = await setMfaNotificationEmail(notificationEmailInput.trim());
+            setNotificationEmailState(result.email);
+            toast.show("Notification email saved.", "success");
+
+        }
+        catch (err) {
+
+            console.error(err);
+            toast.show(err.response?.data?.message || "Failed to save that email.", "error");
+
+        }
+        finally {
+
+            setSavingEmail(false);
+
+        }
+
+    }
 
     useEffect(() => {
 
@@ -106,6 +167,7 @@ export default function MfaSection({ onEnrolled }) {
             setEnrollData(null);
             setQrDataUrl("");
             setCode("");
+            setLockedUntilUtc(null);
 
             toast.show("MFA enabled.", "success");
             refresh();
@@ -116,7 +178,10 @@ export default function MfaSection({ onEnrolled }) {
 
             console.error(err);
             setCode("");
-            toast.show(err.response?.data?.message || "Invalid verification code.", "error");
+
+            if (!extractLockout(err)) {
+                toast.show(err.response?.data?.message || "Invalid verification code.", "error");
+            }
 
         }
         finally {
@@ -142,6 +207,7 @@ export default function MfaSection({ onEnrolled }) {
             setShowDisable(false);
             setDisableCode("");
             setDisableRecoveryCode("");
+            setLockedUntilUtc(null);
             refresh();
 
         }
@@ -150,7 +216,10 @@ export default function MfaSection({ onEnrolled }) {
             console.error(err);
             setDisableCode("");
             setDisableRecoveryCode("");
-            toast.show(err.response?.data?.message || "Invalid verification code.", "error");
+
+            if (!extractLockout(err)) {
+                toast.show(err.response?.data?.message || "Invalid verification code.", "error");
+            }
 
         }
         finally {
@@ -197,13 +266,20 @@ export default function MfaSection({ onEnrolled }) {
                             onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
                             autoComplete="off"
                             autoFocus
+                            disabled={isLocked}
                         />
                     </div>
 
+                    {isLocked && (
+                        <p className="field-hint field-hint-bad" role="alert">
+                            Too many wrong codes. Try again in <strong>{lockoutFormatted}</strong>.
+                        </p>
+                    )}
+
                     <div className="button-row">
 
-                        <button type="submit" className="btn btn-primary" disabled={verifying || code.length !== 6}>
-                            {verifying ? "Verifying..." : "Verify & Enable"}
+                        <button type="submit" className="btn btn-primary" disabled={verifying || code.length !== 6 || isLocked}>
+                            {isLocked ? `Locked (${lockoutFormatted})` : verifying ? "Verifying..." : "Verify & Enable"}
                         </button>
 
                         <button type="button" className="btn" onClick={cancelEnroll} disabled={verifying}>
@@ -276,14 +352,20 @@ export default function MfaSection({ onEnrolled }) {
                             </p>
                         </div>
 
+                        {isLocked && (
+                            <p className="field-hint field-hint-bad" role="alert">
+                                Too many wrong codes. Try again in <strong>{lockoutFormatted}</strong>.
+                            </p>
+                        )}
+
                         <div className="button-row">
 
                             <button
                                 type="submit"
                                 className="btn btn-danger"
-                                disabled={disabling || (!disableCode && !disableRecoveryCode)}
+                                disabled={disabling || (!disableCode && !disableRecoveryCode) || isLocked}
                             >
-                                {disabling ? "Disabling..." : "Confirm Disable MFA"}
+                                {isLocked ? `Locked (${lockoutFormatted})` : disabling ? "Disabling..." : "Confirm Disable MFA"}
                             </button>
 
                             <button type="button" className="btn" onClick={() => setShowDisable(false)} disabled={disabling}>
@@ -296,9 +378,49 @@ export default function MfaSection({ onEnrolled }) {
 
                 ) : (
 
+                    <>
+
                     <button type="button" className="btn btn-danger" onClick={() => setShowDisable(true)}>
                         Disable MFA
                     </button>
+
+                    <div className="form-group" style={{ marginTop: 20 }}>
+
+                        <label>Lockout notification email</label>
+
+                        <p className="field-hint" style={{ marginTop: 0 }}>
+                            If this account gets locked out after too many wrong codes, we'll email this
+                            address so you (or your admin) know right away.
+                        </p>
+
+                        <div className="button-row">
+
+                            <div style={{ flex: 1 }}>
+                                <ClearableInput
+                                    type="email"
+                                    placeholder="you@example.com"
+                                    value={notificationEmailInput}
+                                    onChange={(e) => setNotificationEmailInput(e.target.value)}
+                                    onClear={() => setNotificationEmailInput("")}
+                                    autoComplete="email"
+                                    name="mfa-notification-email"
+                                />
+                            </div>
+
+                            <button
+                                type="button"
+                                className="btn btn-secondary"
+                                onClick={handleSaveNotificationEmail}
+                                disabled={savingEmail || notificationEmailInput.trim() === notificationEmail}
+                            >
+                                {savingEmail ? "Saving..." : "Save"}
+                            </button>
+
+                        </div>
+
+                    </div>
+
+                    </>
 
                 )
 

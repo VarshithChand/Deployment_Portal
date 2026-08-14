@@ -1,4 +1,6 @@
+using System.Text.RegularExpressions;
 using DeploymentAPI.DTOs;
+using DeploymentAPI.Helpers;
 using DeploymentAPI.Services;
 using Microsoft.AspNetCore.Mvc;
 
@@ -19,18 +21,21 @@ namespace DeploymentAPI.Controllers;
 [Route("api/mfa")]
 public class MfaController : ControllerBase
 {
-    private const int MaxAttempts = 5;
-    private static readonly TimeSpan LockoutDuration = TimeSpan.FromMinutes(15);
+    // Loose but deliberately permissive - this only guards against
+    // obviously-malformed input, not full RFC 5322 validation (the real
+    // proof this address works is whether mail actually arrives, which no
+    // regex can confirm).
+    private static readonly Regex EmailRegex = new(@"^[^@\s]+@[^@\s]+\.[^@\s]+$", RegexOptions.Compiled, TimeSpan.FromSeconds(1));
 
     private readonly SettingsService _settings;
     private readonly GitHubAuthService _githubAuth;
-    private readonly SessionActivityService _activity;
+    private readonly NotificationService _notifications;
 
-    public MfaController(SettingsService settings, GitHubAuthService githubAuth, SessionActivityService activity)
+    public MfaController(SettingsService settings, GitHubAuthService githubAuth, NotificationService notifications)
     {
         _settings = settings;
         _githubAuth = githubAuth;
-        _activity = activity;
+        _notifications = notifications;
     }
 
     private async Task<(string? Login, IActionResult? Denied)> RequireLoginAsync()
@@ -92,22 +97,24 @@ public class MfaController : ControllerBase
         var (login, denied) = await RequireLoginAsync();
         if (denied != null) return denied;
 
-        if (_activity.IsMfaLockedOut(login!))
-            return StatusCode(403, new { success = false, code = "MFA_LOCKED", message = "Too many wrong codes - try again in a few minutes." });
+        var lockout = await MfaLockoutPolicy.CheckAsync(_settings, login!);
+
+        if (lockout.Locked)
+            return StatusCode(403, new { success = false, code = "MFA_LOCKED", message = "Too many wrong codes - try again later.", lockedUntilUtc = lockout.LockedUntilUtc });
 
         var verified = await _settings.VerifyMfaEnrollmentAsync(login!, request.Code ?? string.Empty);
 
         if (!verified)
         {
-            var attempts = _activity.RecordFailedMfaAttempt(login!);
+            var lockedUntil = await MfaLockoutPolicy.RecordFailureAsync(_settings, _notifications, login!);
 
-            if (attempts >= MaxAttempts)
-                _activity.LockOutMfa(login!, LockoutDuration);
+            if (lockedUntil.HasValue)
+                return StatusCode(403, new { success = false, code = "MFA_LOCKED", message = "Too many wrong codes - try again later.", lockedUntilUtc = lockedUntil });
 
             return StatusCode(403, new { success = false, code = "INVALID_MFA_CODE", message = "Invalid verification code." });
         }
 
-        _activity.ClearFailedMfaAttempts(login!);
+        await MfaLockoutPolicy.RecordSuccessAsync(_settings, login!);
 
         // No recoveryCodes in this response anymore - a user is never
         // shown one (see VerifyMfaEnrollmentAsync); only a super-admin can
@@ -127,8 +134,10 @@ public class MfaController : ControllerBase
         if (!await _settings.IsMfaEnabledAsync(login!))
             return Ok(new { success = true });
 
-        if (_activity.IsMfaLockedOut(login!))
-            return StatusCode(403, new { success = false, code = "MFA_LOCKED", message = "Too many wrong codes - try again in a few minutes." });
+        var lockout = await MfaLockoutPolicy.CheckAsync(_settings, login!);
+
+        if (lockout.Locked)
+            return StatusCode(403, new { success = false, code = "MFA_LOCKED", message = "Too many wrong codes - try again later.", lockedUntilUtc = lockout.LockedUntilUtc });
 
         var valid = !string.IsNullOrWhiteSpace(request.RecoveryCode)
             ? await _settings.VerifyMfaRecoveryCodeAsync(login!, request.RecoveryCode)
@@ -136,17 +145,50 @@ public class MfaController : ControllerBase
 
         if (!valid)
         {
-            var attempts = _activity.RecordFailedMfaAttempt(login!);
+            var lockedUntil = await MfaLockoutPolicy.RecordFailureAsync(_settings, _notifications, login!);
 
-            if (attempts >= MaxAttempts)
-                _activity.LockOutMfa(login!, LockoutDuration);
+            if (lockedUntil.HasValue)
+                return StatusCode(403, new { success = false, code = "MFA_LOCKED", message = "Too many wrong codes - try again later.", lockedUntilUtc = lockedUntil });
 
             return StatusCode(403, new { success = false, code = "INVALID_MFA_CODE", message = "Invalid verification code." });
         }
 
-        _activity.ClearFailedMfaAttempts(login!);
+        await MfaLockoutPolicy.RecordSuccessAsync(_settings, login!);
         await _settings.DisableMfaAsync(login!);
 
         return Ok(new { success = true });
+    }
+
+    // Self-service - where MfaLockoutPolicy sends the "too many wrong
+    // codes" notice (see NotificationService.SendMfaLockoutEmailAsync).
+    // Only meaningful once MFA is actually enabled (SetMfaNotificationEmailAsync
+    // is itself a no-op otherwise) - the frontend only shows this field in
+    // that state too.
+    [HttpGet("notification-email")]
+    public async Task<IActionResult> GetNotificationEmail()
+    {
+        var (login, denied) = await RequireLoginAsync();
+        if (denied != null) return denied;
+
+        return Ok(new { email = await _settings.GetMfaNotificationEmailAsync(login!) });
+    }
+
+    [HttpPost("notification-email")]
+    public async Task<IActionResult> SetNotificationEmail(MfaNotificationEmailRequestDto request)
+    {
+        var (login, denied) = await RequireLoginAsync();
+        if (denied != null) return denied;
+
+        var email = request.Email?.Trim() ?? string.Empty;
+
+        if (!EmailRegex.IsMatch(email))
+            return BadRequest(new { message = "Enter a valid email address." });
+
+        if (!await _settings.IsMfaEnabledAsync(login!))
+            return BadRequest(new { message = "Enable MFA first - there's nothing to notify you about otherwise." });
+
+        await _settings.SetMfaNotificationEmailAsync(login!, email);
+
+        return Ok(new { success = true, email });
     }
 }

@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { getMfaPendingStatus, verifyLoginMfa, cancelLoginMfa } from "../services/authLoginService";
 import Logo from "../components/common/Logo";
 import useTheme from "../hooks/useTheme";
+import useLockoutCountdown from "../hooks/useLockoutCountdown";
 import { SunIcon, MoonIcon } from "../components/layout/SidebarIcons";
 
 // Page 2 of the two-page login flow. No QR code here — enrollment (and
@@ -26,6 +27,9 @@ export default function MfaVerifyPage({ onBack }) {
     const [useRecovery, setUseRecovery] = useState(false);
     const [submitting, setSubmitting] = useState(false);
     const [error, setError] = useState("");
+    const [lockedUntilUtc, setLockedUntilUtc] = useState(null);
+
+    const { isLocked, formatted: lockoutFormatted } = useLockoutCountdown(lockedUntilUtc);
 
     const otpRefs = useRef([]);
 
@@ -143,7 +147,7 @@ export default function MfaVerifyPage({ onBack }) {
 
         e.preventDefault();
 
-        if (!isCodeComplete) return;
+        if (!isCodeComplete || isLocked) return;
 
         setSubmitting(true);
         setError("");
@@ -172,12 +176,24 @@ export default function MfaVerifyPage({ onBack }) {
                     return;
                 }
 
+                if (result.code === "MFA_LOCKED") {
+                    setLockedUntilUtc(result.lockedUntilUtc);
+                    setError(result.message || "Too many wrong codes - try again later.");
+                    setSubmitting(false);
+                    return;
+                }
+
                 setError(result.message || "Invalid verification code. Please try again.");
                 setSubmitting(false);
                 otpRefs.current[0]?.focus();
                 return;
 
             }
+
+            // A fresh success clears any lockout this login may have been
+            // building toward (see MfaLockoutPolicy.RecordSuccessAsync on
+            // the backend) - nothing left to count down here either.
+            setLockedUntilUtc(null);
 
             // Real credential now saved server-side — reload so bootstrap
             // picks it up and the normal app shell takes over.
@@ -260,6 +276,7 @@ export default function MfaVerifyPage({ onBack }) {
                                 onChange={(e) => setCode(e.target.value)}
                                 autoComplete="off"
                                 autoFocus
+                                disabled={isLocked}
                             />
 
                         ) : (
@@ -280,6 +297,7 @@ export default function MfaVerifyPage({ onBack }) {
                                         onPaste={(e) => handleOtpPaste(i, e)}
                                         autoComplete="off"
                                         autoFocus={i === 0}
+                                        disabled={isLocked}
                                     />
                                 ))}
                             </div>
@@ -288,12 +306,16 @@ export default function MfaVerifyPage({ onBack }) {
 
                     </div>
 
-                    {error && (
+                    {isLocked ? (
+                        <p className="field-hint field-hint-bad" role="alert">
+                            Too many wrong codes. Try again in <strong>{lockoutFormatted}</strong>.
+                        </p>
+                    ) : error && (
                         <p className="field-hint field-hint-bad" role="alert">{error}</p>
                     )}
 
-                    <button type="submit" className="btn btn-primary" disabled={submitting || !isCodeComplete}>
-                        {submitting ? "Verifying..." : "Verify"}
+                    <button type="submit" className="btn btn-primary" disabled={submitting || !isCodeComplete || isLocked}>
+                        {isLocked ? `Locked (${lockoutFormatted})` : submitting ? "Verifying..." : "Verify"}
                     </button>
 
                 </form>

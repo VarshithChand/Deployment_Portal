@@ -1850,7 +1850,9 @@ public class SettingsService
 
         var root = await ReadRootAsync();
         var mfa = root["Mfa"] as JObject ?? new JObject();
-        var wasAdminRequired = (mfa[login] as JObject)?["AdminRequired"]?.Value<bool>() ?? false;
+        var previous = mfa[login] as JObject;
+        var wasAdminRequired = previous?["AdminRequired"]?.Value<bool>() ?? false;
+        var previousNotificationEmail = previous?["NotificationEmail"]?.ToString();
 
         mfa[login] = new JObject
         {
@@ -1860,7 +1862,11 @@ public class SettingsService
             ["UpdatedAtUtc"] = now,
             ["LastVerifiedAtUtc"] = null,
             ["RecoveryCodes"] = new JArray(),
-            ["AdminRequired"] = wasAdminRequired
+            ["AdminRequired"] = wasAdminRequired,
+            // Preserved the same reason AdminRequired is - a re-enroll
+            // (e.g. after Disable) shouldn't silently make someone
+            // re-enter an email they already registered.
+            ["NotificationEmail"] = previousNotificationEmail
         };
 
         root["Mfa"] = mfa;
@@ -1967,7 +1973,11 @@ public class SettingsService
                 ["Enabled"] = false,
                 ["CreatedAtUtc"] = DateTime.UtcNow,
                 ["RecoveryCodes"] = new JArray(),
-                ["AdminRequired"] = true
+                ["AdminRequired"] = true,
+                // Preserved here too - this branch already keeps a live
+                // entry around (not a full removal), so there's no reason
+                // to also make them re-enter their notification email.
+                ["NotificationEmail"] = existing["NotificationEmail"]?.ToString()
             };
         }
         else
@@ -1986,6 +1996,76 @@ public class SettingsService
     // The user must re-enroll from scratch afterward - nothing here
     // quietly restores or reuses the old secret.
     public Task ResetMfaForLoginAsync(string login) => DisableMfaAsync(login);
+
+    // Escalating MFA-lockout state (see Helpers/MfaLockoutPolicy.cs) -
+    // durable and per-login, in its own top-level dict rather than folded
+    // into Mfa[login] itself: this is an abuse-tracking concern, not an
+    // enrollment/credential one, the same separation MfaNudgeSkips already
+    // draws for the (different) nudge-skip counter.
+    public async Task<MfaLockoutStateDto> GetMfaLockoutStateAsync(string login)
+    {
+        var root = await ReadRootAsync();
+        var entry = (root["MfaLockouts"] as JObject)?[login] as JObject;
+
+        if (entry == null)
+            return new MfaLockoutStateDto();
+
+        return new MfaLockoutStateDto
+        {
+            Tier = entry["Tier"]?.Value<int>() ?? 0,
+            AttemptsInTier = entry["AttemptsInTier"]?.Value<int>() ?? 0,
+            LockedUntilUtc = entry["LockedUntilUtc"]?.Value<DateTime?>()
+        };
+    }
+
+    public async Task SaveMfaLockoutStateAsync(string login, MfaLockoutStateDto state)
+    {
+        var root = await ReadRootAsync();
+        var lockouts = root["MfaLockouts"] as JObject ?? new JObject();
+
+        lockouts[login] = JObject.FromObject(state);
+        root["MfaLockouts"] = lockouts;
+
+        await WriteRootAsync(root);
+    }
+
+    // Self-service, opt-in - where MfaLockoutPolicy sends the "too many
+    // wrong codes" notice (see NotificationService.SendMfaLockoutEmailAsync).
+    // Deliberately part of Mfa[login] rather than its own dict: this is
+    // "part of this login's MFA settings" the same way AdminRequired
+    // already is, not a separate concept. Not preserved across a full
+    // DisableMfaAsync removal (unlike AdminRequired) - a full disable is
+    // meant to leave nothing MFA-related lingering, and there's no
+    // possible future lockout to notify about until they re-enroll and
+    // set it again.
+    public async Task<string?> GetMfaNotificationEmailAsync(string login)
+    {
+        var root = await ReadRootAsync();
+        var entry = (root["Mfa"] as JObject)?[login] as JObject;
+
+        return entry?["NotificationEmail"]?.ToString();
+    }
+
+    public async Task SetMfaNotificationEmailAsync(string login, string email)
+    {
+        var root = await ReadRootAsync();
+        var mfa = root["Mfa"] as JObject;
+        var entry = mfa?[login] as JObject;
+
+        // Only meaningful once MFA is actually enabled for this login -
+        // there's no possible lockout to notify about otherwise, and
+        // EnrollMfaAsync would just overwrite this on the next enrollment
+        // anyway.
+        if (entry == null)
+            return;
+
+        entry["NotificationEmail"] = email;
+        entry["UpdatedAtUtc"] = DateTime.UtcNow;
+
+        await WriteRootAsync(root);
+
+        _log.LogInfo("Settings", $"MFA lockout notification email updated for '{login}'.");
+    }
 
     public async Task<bool> VerifyMfaCodeAsync(string login, string code)
     {

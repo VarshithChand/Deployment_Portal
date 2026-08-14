@@ -11,3 +11,8 @@ public class MfaCodeRequestDto
 
     public string? RecoveryCode { get; set; }
 }
+
+public class MfaNotificationEmailRequestDto
+{
+    public string? Email { get; set; }
+}
