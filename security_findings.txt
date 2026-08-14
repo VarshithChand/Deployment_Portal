@@ -4640,3 +4640,80 @@ found genuinely safe for this codebase specifically, but left
 unapplied at the user's explicit choice given the untestable-from-here
 older-browser compatibility risk - documented as a deliberate decision,
 not an oversight.
+
+ROUND 35 - NEW FEATURE: AUTOMATIC PAGE/ROUTE DISCOVERY IN SECURITY TESTING LAB
+==================================================
+Date: 2026-08-14
+Trigger: user asked for a way to see every page/sub-page of the
+application inside Security Testing Lab, with new pages automatically
+detected as they're added, so every page's performance/security/
+"loopholes" could be checked and user-data exposure verified across
+the whole app - without manually typing each URL into Authorized
+Targets one at a time.
+
+Two genuinely-automatic (not hand-maintained-list) discovery sources,
+both feeding the SAME existing target-allowlist/scan/history engine -
+no new scanning logic, no new gate, just new bulk-discovery UI on top
+of Round 33/34's existing feature:
+  - Application Pages: sourced directly from Sidebar.jsx's FLAT_TABS
+    and constants/settingsViews.js's VIEWS - the exact arrays this
+    portal's own Sidebar and Settings hub already render their
+    navigation from. A newly added tab or Settings sub-page appears
+    here automatically the next time this file builds, since it's
+    literally importing the same array, not a second copy of it.
+  - Backend API Endpoints: reflected live from ASP.NET Core's own
+    IActionDescriptorCollectionProvider (SecurityTestingController.
+    GetDiscoveredRoutes, super-admin gated like every other action on
+    this controller) - genuinely automatic in the strongest sense: a
+    newly added controller/action appears here the moment the backend
+    restarts with the new code, since this reads the framework's own
+    live routing table, not a maintained list at all.
+
+Honest limitation surfaced directly in the UI, not hidden: this
+frontend is a single-page app, so every "page" in Application Pages is
+served by the identical static shell with identical portal-wide
+security headers - scanning several of them will produce identical
+Security Header findings by design (that's not a bug in the scan, it's
+an accurate reflection of how a SPA's headers actually work - they're
+set once, portal-wide, not per-route). The real per-page differentiation
+this tool can measure lives on the backend side (Backend API Endpoints),
+where each route genuinely is a distinct server response. Backend
+routes needing a real {parameter} (most POST/PUT/DELETE/PATCH actions,
+and any GET with an {id}/{key} segment) are listed for visibility but
+have no "Add" button - a scan is always a plain GET, and there's no
+single correct value to substitute into a route template generically.
+Most backend routes correctly require the caller's own session or admin
+auth, so an unauthenticated scan seeing 401/403 is the expected, CORRECT
+security posture being confirmed, not a scan failure - called out
+explicitly in the UI so this doesn't get misread later.
+
+Also fixed a related bug surfaced by this feature's own "Add All" bulk
+action: SettingsService.AddSecurityTestingTargetAsync had no dedupe
+check - re-adding an already-authorized URL created a second, duplicate
+target entry every time. With "Add All" now making it trivial to
+re-trigger this (clicking it twice, or the list overlapping across
+Application Pages/Backend Endpoints), fixed to be idempotent by exact
+URL match, returning the existing entry instead of creating a duplicate.
+
+Verification performed:
+  - `dotnet build` (isolated output dir): 0 errors, same 2 pre-existing
+    unrelated warnings as every prior round.
+  - `npm run lint` / `npm run build`: clean, no new warnings.
+  - Could NOT live-verify the discovered-routes endpoint's actual output
+    or the bulk-add flows (needs the real super-admin identity to reach
+    the gate at all) - same standing limitation as every Security
+    Testing Lab round. The reflection code itself (IActionDescriptorCollectionProvider)
+    is standard, well-documented ASP.NET Core API, used read-only with
+    no caller input reaching it - reviewed directly rather than
+    guessed at.
+
+Files changed: src/DeploymentAPI/Controllers/SecurityTestingController.cs,
+DTOs/SecurityTestingDtos.cs, Services/SettingsService.cs;
+deployment-ui/src/components/settings/SecurityTestingView.jsx,
+services/securityTestingService.js.
+Commit: c4c2e86.
+
+Status: Complete and pushed, code-level verified. Needs the user's own
+super-admin session to confirm the discovered-routes list and bulk-add
+flows behave as designed once both halves are deployed - flagged above,
+not claimed as tested.
