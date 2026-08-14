@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { patLogin } from "../services/authLoginService";
 import Logo from "../components/common/Logo";
 import useTheme from "../hooks/useTheme";
+import useToast from "../hooks/useToast";
 import { SunIcon, MoonIcon } from "../components/layout/SidebarIcons";
 
 // A key glyph, not a padlock - this field holds a token, not a password;
@@ -30,10 +31,27 @@ function KeyIcon() {
 export default function PatLoginPage({ wasSignedOut, onMfaRequired }) {
 
     const { theme, toggleTheme } = useTheme();
+    const toast = useToast();
 
     const [token, setToken] = useState("");
     const [submitting, setSubmitting] = useState(false);
     const [error, setError] = useState("");
+
+    // A real, one-time toast (auto-dismisses, doesn't sit fixed over the
+    // card) rather than a permanent banner - the previous version was a
+    // position:fixed div bottom-center on the page, which on a short
+    // viewport landed right on top of the Continue button below, blocking
+    // it visually and for clicks. Same "why am I back here" explanation,
+    // just via this app's normal toast system instead of inventing a
+    // second one.
+    useEffect(() => {
+
+        if (wasSignedOut) {
+            toast.show("Your session was signed out by the portal admin. Reconnect a token below to continue.");
+        }
+
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [wasSignedOut]);
 
     async function handleSubmit(e) {
 
@@ -103,13 +121,6 @@ export default function PatLoginPage({ wasSignedOut, onMfaRequired }) {
                 <p className="field-hint" style={{ textAlign: "center" }}>
                     Sign in with your GitHub Personal Access Token to continue.
                 </p>
-
-                {wasSignedOut && (
-                    <div className="signed-out-banner">
-                        Your session was signed out by the portal admin. Reconnect a token below to
-                        continue.
-                    </div>
-                )}
 
                 <form onSubmit={handleSubmit} className="setup-gate-form">
 

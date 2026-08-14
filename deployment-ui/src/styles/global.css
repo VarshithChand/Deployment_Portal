@@ -3080,43 +3080,11 @@ textarea{
    half of a tall screen), above the dialog backdrop's own z-index so it
    isn't dimmed by the overlay. Quiet rather than alarming - the
    reconnect form in the dialog above it is the actual call to action. */
-.signed-out-banner{
-
-    position:fixed;
-
-    left:50%;
-
-    bottom:24px;
-
-    transform:translateX(-50%);
-
-    z-index:1050;
-
-    max-width:min(90vw, 480px);
-
-    padding:12px 20px;
-
-    border-radius:10px;
-
-    background:var(--card-bg);
-
-    border:1px solid var(--border);
-
-    box-shadow:0 8px 24px rgba(0,0,0,.25);
-
-    color:var(--text-muted);
-
-    font-size:13px;
-
-    text-align:center;
-
-    animation:overlay-in .25s ease both;
-
-}
-
 /* MfaEnforcementGate's dismissible nudge - same fixed-bottom-banner
-   positioning as .signed-out-banner above, just wider (room for the
-   inline action buttons) and interactive rather than purely informational. */
+   positioning PatLoginPage's old signed-out notice used before it moved
+   to a real toast (position:fixed bottom-center collided with the
+   Continue button on short viewports) - kept here since this banner
+   lives inside the full app shell, not stacked over a small login card. */
 .mfa-nudge-banner{
     position:fixed;
     left:50%;
