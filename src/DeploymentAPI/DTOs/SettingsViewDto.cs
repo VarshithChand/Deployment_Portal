@@ -49,4 +49,15 @@ public class SettingsViewDto
     // Frontend-side, this only controls whether the Database tile/nav entry
     // is shown; the backend enforces the real restriction on every endpoint.
     public bool IsSuperAdminSession { get; set; }
+
+    // Which admin-only pages (see SettingsService.GrantablePageKeys) the
+    // CURRENT caller has been individually granted scoped access to via
+    // Settings > page-level "Page Access" (see PageAdminGrants) - distinct
+    // from full admin authority. The frontend uses this to decide whether
+    // to still show/allow a normally admin-only tab (Sidebar.jsx's
+    // ADMIN_ONLY_TABS) for someone who isn't a full admin but does have a
+    // scoped grant for that one page - the backend's own AdminGate checks
+    // already recognized these grants; this is what lets a grantee
+    // actually reach the page in the first place.
+    public List<string> GrantedPages { get; set; } = new();
 }

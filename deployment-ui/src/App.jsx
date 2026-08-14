@@ -52,7 +52,7 @@ const ADMIN_ONLY_TABS = new Set(["codeQuality", "services"]);
 function App(){
 
     const { tab, setTab, sidebarAccess } = useNavigation();
-    const { isAdminSession, oauthStatusChecked, bootstrapError, githubTokenConfigured, githubWasSignedOut } = useAuth();
+    const { isAdminSession, grantedPages, oauthStatusChecked, bootstrapError, githubTokenConfigured, githubWasSignedOut } = useAuth();
     const toast = useToast();
 
     useCardTilt();
@@ -120,8 +120,13 @@ function App(){
         // isAdminSession starts false and only becomes reliable once
         // oauthStatusChecked flips true (see AuthContext) - enforcing this
         // before then would bounce a real admin on every hard reload of an
-        // admin-only tab, since the check hasn't resolved yet.
-        if (ADMIN_ONLY_TABS.has(tab) && oauthStatusChecked && !isAdminSession) {
+        // admin-only tab, since the check hasn't resolved yet. Also lets
+        // through anyone individually granted scoped access to just this
+        // one page (see Settings' "Page Access" / grantedPages) - without
+        // that check, a page-scoped (not full-admin) grantee got bounced
+        // back to Dashboard before ever reaching the page the backend's
+        // own AdminGate check had already agreed they could use.
+        if (ADMIN_ONLY_TABS.has(tab) && oauthStatusChecked && !isAdminSession && !grantedPages.includes(tab)) {
 
             toast.show("This section is admin-only.", "error");
             setTab("dashboard");
@@ -129,7 +134,7 @@ function App(){
         }
 
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [tab, sidebarAccess, isAdminSession, oauthStatusChecked]);
+    }, [tab, sidebarAccess, isAdminSession, grantedPages, oauthStatusChecked]);
 
     // Gated BEFORE any app chrome renders — TopBar/Sidebar must not appear
     // at all until a real credential exists (see the mockups: bare pages,

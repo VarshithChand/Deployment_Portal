@@ -104,7 +104,7 @@ const GROUP_STORAGE_KEY = "sidebar-groups-collapsed";
 export default function Sidebar() {
 
     const { tab, setTab, mobileNavOpen, setMobileNavOpen, sidebarAccess } = useNavigation();
-    const { canApproveReleases, isAdminSession } = useAuth();
+    const { canApproveReleases, isAdminSession, grantedPages } = useAuth();
     const { theme, toggleTheme } = useTheme();
     const toast = useToast();
 
@@ -131,7 +131,7 @@ export default function Sidebar() {
 
     function itemVisible(t) {
         return (!GATED_TABS.has(t.key) || canApproveReleases)
-            && (!ADMIN_ONLY_TABS.has(t.key) || isAdminSession)
+            && (!ADMIN_ONLY_TABS.has(t.key) || isAdminSession || grantedPages.includes(t.key))
             && sidebarAccess[t.key] !== "hidden";
     }
 

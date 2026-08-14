@@ -131,6 +131,17 @@ export default function AuthProvider({ children }) {
     // what this says.
     const [isSuperAdminSession, setIsSuperAdminSession] = useState(false);
 
+    // Admin-only TABS (not individual admin-gated actions within an
+    // otherwise-open page - those already work today) this session's own
+    // resolved login has been individually granted via Settings > that
+    // page's "Page Access" button (see PageAdminGrants), without full
+    // admin authority. Sidebar/App.jsx's ADMIN_ONLY_TABS guard checks this
+    // alongside isAdminSession - without it, a page-scoped grant was
+    // correctly recognized by the backend's own AdminGate check but
+    // unreachable, since the frontend bounced the grantee away before any
+    // API call requiring it was ever made.
+    const [grantedPages, setGrantedPages] = useState([]);
+
     // False until the first bootstrap call resolves. isAdminSession starts
     // false too, but that's indistinguishable from "checked, and this
     // session isn't admin" — a route guard reacting to isAdminSession
@@ -172,6 +183,7 @@ export default function AuthProvider({ children }) {
             );
             setIsAdminSession(!!data.settings.isAdminSession);
             setIsSuperAdminSession(!!data.settings.isSuperAdminSession);
+            setGrantedPages(data.settings.grantedPages || []);
 
             // "GitHub" camelCases to "gitHub" (capital H) - .NET's
             // JsonNamingPolicy.CamelCase only lowercases the leading
@@ -254,7 +266,7 @@ export default function AuthProvider({ children }) {
             githubOwner, githubRepository, githubWasSignedOut,
             githubPreviousOwner, githubPreviousRepository,
             tokenOwner, canApproveReleases: !!tokenOwner?.canApprove,
-            isAdminSession, isSuperAdminSession, oauthStatusChecked, bootstrapError,
+            isAdminSession, isSuperAdminSession, grantedPages, oauthStatusChecked, bootstrapError,
             awsIdentityLabel, pinConfigured,
             mfaNudgeShow, mfaNudgeMandatory, mfaNudgeBlocked, mfaNudgeSkipsUsed
         }}>

@@ -1124,6 +1124,27 @@ public class SettingsService
         return logins.Any(u => string.Equals(u, login, StringComparison.OrdinalIgnoreCase));
     }
 
+    // The reverse lookup of IsGrantedPageAdminAsync - every page THIS login
+    // has scoped admin access to, not just whether one specific page does.
+    // Used by BootstrapController to tell the frontend which admin-only
+    // tabs (see Sidebar.jsx's ADMIN_ONLY_TABS) a page-scoped (not full-
+    // admin) grantee should still be allowed to reach - without this, the
+    // backend's own pageKey-aware AdminGate checks were correct but
+    // unreachable, since the frontend had no way to know a grant existed
+    // and bounced the grantee away before any API call was ever made.
+    public async Task<List<string>> GetGrantedPagesForLoginAsync(string? login)
+    {
+        if (string.IsNullOrWhiteSpace(login))
+            return new List<string>();
+
+        var all = await GetPageAdminGrantsAsync();
+
+        return all
+            .Where(kv => kv.Value.Any(u => string.Equals(u, login, StringComparison.OrdinalIgnoreCase)))
+            .Select(kv => kv.Key)
+            .ToList();
+    }
+
     public async Task<List<string>> GrantPageAdminAsync(string pageKey, string login)
     {
         if (!GrantablePageKeys.Contains(pageKey))

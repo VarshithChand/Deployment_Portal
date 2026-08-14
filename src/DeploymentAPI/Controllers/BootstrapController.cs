@@ -63,6 +63,14 @@ public class BootstrapController : ControllerBase
         settingsView.IsAdminSession = isAdmin;
         settingsView.IsSuperAdminSession = await AdminGate.IsSuperAdminAsync(this);
 
+        // Page-scoped grants (see PageAdminGrants) - resolved via the same
+        // caller-login logic AdminGate itself uses (OAuth claim first, then
+        // this session's configured PAT owner), so this always matches
+        // exactly what the backend's own pageKey-aware gate checks decide,
+        // never a second, potentially-drifting resolution.
+        var callerLogin = await AdminGate.ResolveCallerLoginAsync(this);
+        settingsView.GrantedPages = await _settings.GetGrantedPagesForLoginAsync(callerLogin);
+
         // Same reconnaissance-value reasoning as SettingsController.Get -
         // only an admin (or bootstrap mode) gets the real allowlist.
         if (!isAdmin)

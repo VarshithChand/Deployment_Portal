@@ -49,6 +49,12 @@ public class SettingsController : ControllerBase
         view.IsAdminSession = isAdmin;
         view.IsSuperAdminSession = await AdminGate.IsSuperAdminAsync(this);
 
+        // Same resolution BootstrapController.Get() uses for its own copy
+        // of this field - kept in sync so whichever endpoint a given
+        // frontend call happens to hit, the answer is identical.
+        var callerLogin = await AdminGate.ResolveCallerLoginAsync(this);
+        view.GrantedPages = await _settings.GetGrantedPagesForLoginAsync(callerLogin);
+
         // The admin allowlist is only needed by an admin editing it, or
         // during bootstrap when it's empty anyway — showing the real
         // usernames to an anonymous/non-admin visitor once configured is
