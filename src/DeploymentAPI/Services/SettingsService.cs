@@ -1228,10 +1228,27 @@ public class SettingsService
             .ToList();
     }
 
+    // Idempotent by URL (case-sensitive exact match) - the frontend's bulk
+    // "Add All" actions (Application Pages / Backend API Endpoints) call
+    // this once per discovered page/route, and re-running that after some
+    // are already authorized shouldn't pile up duplicate entries toward
+    // MaxSecurityTestingTargets for the same URL.
     public async Task<SecurityTestingTargetDto> AddSecurityTestingTargetAsync(string url)
     {
         var root = await ReadRootAsync();
         var targets = root["SecurityTestingTargets"] as JArray ?? new JArray();
+
+        var existing = targets.OfType<JObject>().FirstOrDefault(t => t["Url"]?.ToString() == url);
+
+        if (existing != null)
+        {
+            return new SecurityTestingTargetDto
+            {
+                Id = existing["Id"]?.ToString() ?? string.Empty,
+                Url = url,
+                AddedAtUtc = existing["AddedAtUtc"]?.Value<DateTime>() ?? DateTime.UtcNow
+            };
+        }
 
         var entry = new SecurityTestingTargetDto
         {

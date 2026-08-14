@@ -174,6 +174,19 @@ public class SecurityTargetInformationDto
 // scans/{id}), same "list view is cheap, detail view is a second call"
 // shape every other list+detail pair in this app already uses (PAT users/
 // admin recovery, artifacts/artifact detail, etc.).
+// One registered backend API route, reflected out of ASP.NET Core's own
+// routing metadata (see SecurityTestingController.GetDiscoveredRoutes) -
+// genuinely automatic: a newly added controller/action shows up here the
+// next time the app starts, with nothing to hand-maintain in sync.
+public class DiscoveredRouteDto
+{
+    public string Controller { get; set; } = string.Empty;
+
+    public string Method { get; set; } = "GET";
+
+    public string Path { get; set; } = string.Empty;
+}
+
 public class SecurityScanHistoryEntryDto
 {
     public string Id { get; set; } = string.Empty;

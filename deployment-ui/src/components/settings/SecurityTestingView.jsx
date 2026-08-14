@@ -1,8 +1,11 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import {
-    getTargets, addTarget, removeTarget, runScan, getScans, getScan, deleteScan
+    getTargets, addTarget, removeTarget, runScan, getScans, getScan, deleteScan, getDiscoveredRoutes
 } from "../../services/securityTestingService";
+import { API_BASE } from "../../api/apiBase";
+import { FLAT_TABS } from "../layout/Sidebar";
+import { VIEWS, VIEW_TITLES } from "../../constants/settingsViews";
 import usePagination from "../../hooks/usePagination";
 import useToast from "../../hooks/useToast";
 import useConfirm from "../../hooks/useConfirm";
@@ -11,6 +14,8 @@ import Pagination from "../common/Pagination";
 
 const TARGETS_PAGE_SIZE = 5;
 const SCANS_PAGE_SIZE = 10;
+const PAGES_PAGE_SIZE = 10;
+const ROUTES_PAGE_SIZE = 10;
 
 const SEVERITY_ORDER = ["CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"];
 
@@ -73,8 +78,46 @@ export default function SecurityTestingView() {
     const [loadingScanId, setLoadingScanId] = useState(null);
     const [deletingScanId, setDeletingScanId] = useState(null);
 
+    const [backendRoutes, setBackendRoutes] = useState([]);
+    const [backendRoutesLoading, setBackendRoutesLoading] = useState(true);
+    const [addingBulk, setAddingBulk] = useState(false);
+
     const targetsPagination = usePagination(targets, TARGETS_PAGE_SIZE);
     const scansPagination = usePagination(scans, SCANS_PAGE_SIZE);
+
+    // Every page/sub-page this portal's own Sidebar and Settings hub
+    // already know about - imported directly from the same arrays those
+    // components render their own navigation from (Sidebar.jsx's
+    // FLAT_TABS, constants/settingsViews.js's VIEWS), not a separately
+    // typed-out list. A new tab or Settings sub-page added there appears
+    // here automatically, with nothing to keep in sync by hand.
+    const frontendPages = useMemo(() => {
+
+        const origin = window.location.origin;
+        const pages = FLAT_TABS.map((t) => ({ label: t.label, url: `${origin}/?tab=${t.key}` }));
+
+        for (const view of VIEWS) {
+            if (view === "hub") continue;
+            pages.push({ label: `Settings > ${VIEW_TITLES[view] || view}`, url: `${origin}/?tab=settings&view=${view}` });
+        }
+
+        return pages;
+
+    }, []);
+
+    // GET, no {parameter} placeholder - the only discovered routes that
+    // map onto a single, literal, scannable URL the way this tool's
+    // GET-only scan already works. A route needing a real {id}/{key} (or
+    // any non-GET action) still shows in the table below for visibility,
+    // just without an "Add" button - there's no single correct value to
+    // fill the placeholder with generically.
+    function isScannableRoute(route) {
+        return route.method === "GET" && !route.path.includes("{");
+    }
+
+    function routeUrl(route) {
+        return `${API_BASE || window.location.origin}${route.path}`;
+    }
 
     async function refreshTargets() {
 
@@ -104,13 +147,61 @@ export default function SecurityTestingView() {
 
     }
 
+    async function refreshBackendRoutes() {
+
+        try {
+            setBackendRoutes(await getDiscoveredRoutes());
+        }
+        catch (err) {
+            console.error(err);
+        }
+        finally {
+            setBackendRoutesLoading(false);
+        }
+
+    }
+
     useEffect(() => {
 
         refreshTargets();
         refreshScans();
+        refreshBackendRoutes();
 
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
+
+    // Shared by "Add All" on both the Application Pages and Backend API
+    // Endpoints tables - addTarget is idempotent by URL server-side
+    // (AddSecurityTestingTargetAsync), so re-running this after some URLs
+    // are already authorized just leaves those as they were rather than
+    // creating duplicates.
+    async function handleAddAll(urls, label) {
+
+        setAddingBulk(true);
+
+        let added = 0;
+
+        for (const url of urls) {
+
+            try {
+                await addTarget(url);
+                added++;
+            }
+            catch (err) {
+                console.error(err);
+            }
+
+        }
+
+        toast.show(`Added ${added} of ${urls.length} ${label} as authorized targets.`, "success");
+        await refreshTargets();
+
+        setAddingBulk(false);
+
+    }
+
+    const pagesPagination = usePagination(frontendPages, PAGES_PAGE_SIZE);
+    const routesPagination = usePagination(backendRoutes, ROUTES_PAGE_SIZE);
 
     const isAuthorizedTarget = targets.some((t) => t.url === scanUrl.trim());
 
@@ -408,6 +499,172 @@ export default function SecurityTestingView() {
                     startIndex={targetsPagination.startIndex}
                     endIndex={targetsPagination.endIndex}
                     onPageChange={targetsPagination.setPage}
+                />
+
+                </>
+
+            )}
+
+        </div>
+
+        <div className="card">
+
+            <h2 className="card-title">Application Pages</h2>
+
+            <p className="empty-state" style={{ padding: "0 0 15px", textAlign: "left" }}>
+                Every tab and Settings sub-page this portal itself knows about — pulled from the
+                same navigation list Sidebar renders from, so a newly added page appears here
+                automatically. This is a single-page app: every page below is served by the same
+                static shell with the same security headers, so scanning several of them verifies
+                those portal-wide headers apply everywhere, not page-specific content.
+            </p>
+
+            <div className="button-row" style={{ marginBottom: 15 }}>
+                <button
+                    type="button"
+                    className="btn btn-secondary"
+                    onClick={() => handleAddAll(frontendPages.map((p) => p.url), "application pages")}
+                    disabled={addingBulk}
+                >
+                    {addingBulk ? "Adding..." : `Add All as Targets (${frontendPages.length})`}
+                </button>
+            </div>
+
+            <div className="table-scroll">
+
+                <table className="table">
+
+                    <thead>
+                        <tr>
+                            <th>Page</th>
+                            <th>URL</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+
+                    <tbody>
+
+                        {pagesPagination.pageItems.map((page) => (
+
+                            <tr key={page.url}>
+                                <td>{page.label}</td>
+                                <td>{page.url}</td>
+                                <td>
+                                    <button
+                                        type="button"
+                                        className="btn btn-secondary btn-sm"
+                                        onClick={() => handleAddAll([page.url], "application page")}
+                                        disabled={addingBulk || targets.some((t) => t.url === page.url)}
+                                    >
+                                        {targets.some((t) => t.url === page.url) ? "Authorized" : "Add"}
+                                    </button>
+                                </td>
+                            </tr>
+
+                        ))}
+
+                    </tbody>
+
+                </table>
+
+            </div>
+
+            <Pagination
+                page={pagesPagination.page}
+                pageCount={pagesPagination.pageCount}
+                totalCount={pagesPagination.totalCount}
+                startIndex={pagesPagination.startIndex}
+                endIndex={pagesPagination.endIndex}
+                onPageChange={pagesPagination.setPage}
+            />
+
+        </div>
+
+        <div className="card">
+
+            <h2 className="card-title">Backend API Endpoints</h2>
+
+            <p className="empty-state" style={{ padding: "0 0 15px", textAlign: "left" }}>
+                Every route registered on the backend right now, reflected from its own routing
+                table — a newly added controller/action appears here the next time the backend
+                restarts, nothing to maintain by hand. Only GET routes with no path parameter can be
+                added as a scan target (a scan is always a plain GET, the same way this whole tool
+                works elsewhere); the rest are listed for visibility only. Most of these correctly
+                require your own session or admin auth — seeing them reject an unauthenticated scan
+                (401/403) is the expected, correct result, not a failure.
+            </p>
+
+            {backendRoutesLoading ? (
+
+                <p className="field-hint">Loading...</p>
+
+            ) : (
+
+                <>
+
+                <div className="button-row" style={{ marginBottom: 15 }}>
+                    <button
+                        type="button"
+                        className="btn btn-secondary"
+                        onClick={() => handleAddAll(backendRoutes.filter(isScannableRoute).map(routeUrl), "backend endpoints")}
+                        disabled={addingBulk}
+                    >
+                        {addingBulk ? "Adding..." : `Add All Scannable as Targets (${backendRoutes.filter(isScannableRoute).length})`}
+                    </button>
+                </div>
+
+                <div className="table-scroll">
+
+                    <table className="table">
+
+                        <thead>
+                            <tr>
+                                <th>Controller</th>
+                                <th>Method</th>
+                                <th>Path</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+
+                        <tbody>
+
+                            {routesPagination.pageItems.map((route, index) => (
+
+                                <tr key={`${route.method}-${route.path}-${index}`}>
+                                    <td>{route.controller}</td>
+                                    <td>{route.method}</td>
+                                    <td>{route.path}</td>
+                                    <td>
+                                        {isScannableRoute(route) ? (
+                                            <button
+                                                type="button"
+                                                className="btn btn-secondary btn-sm"
+                                                onClick={() => handleAddAll([routeUrl(route)], "backend endpoint")}
+                                                disabled={addingBulk || targets.some((t) => t.url === routeUrl(route))}
+                                            >
+                                                {targets.some((t) => t.url === routeUrl(route)) ? "Authorized" : "Add"}
+                                            </button>
+                                        ) : (
+                                            <span className="field-hint">—</span>
+                                        )}
+                                    </td>
+                                </tr>
+
+                            ))}
+
+                        </tbody>
+
+                    </table>
+
+                </div>
+
+                <Pagination
+                    page={routesPagination.page}
+                    pageCount={routesPagination.pageCount}
+                    totalCount={routesPagination.totalCount}
+                    startIndex={routesPagination.startIndex}
+                    endIndex={routesPagination.endIndex}
+                    onPageChange={routesPagination.setPage}
                 />
 
                 </>

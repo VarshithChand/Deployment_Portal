@@ -2,6 +2,9 @@ using DeploymentAPI.DTOs;
 using DeploymentAPI.Helpers;
 using DeploymentAPI.Services;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.ActionConstraints;
+using Microsoft.AspNetCore.Mvc.Controllers;
+using Microsoft.AspNetCore.Mvc.Infrastructure;
 
 namespace DeploymentAPI.Controllers;
 
@@ -138,6 +141,41 @@ public class SecurityTestingController : ControllerBase
                   $"{result.Summary.Medium} medium / {result.Summary.Low} low / {result.Summary.Info} info.");
 
         return Ok(result);
+    }
+
+    // "When we add any new page, that should be automatically detected" -
+    // for the BACKEND half of that, this reflects the real, live routing
+    // table ASP.NET Core itself built at startup, rather than a hand-
+    // maintained list that could silently drift out of date. A newly
+    // added controller/action shows up here automatically the next time
+    // the app starts - nothing here needs to be updated when the app
+    // grows. (The frontend half - the portal's own tabs/Settings sub-
+    // pages - can't be reflected this way, since the backend has no
+    // visibility into the React app's client-side routing; the frontend
+    // derives its own list from Sidebar.jsx's FLAT_TABS/settingsViews.js's
+    // VIEWS instead, the same single source of truth its own navigation
+    // already renders from.)
+    [HttpGet("discovered-routes")]
+    public async Task<IActionResult> GetDiscoveredRoutes([FromServices] IActionDescriptorCollectionProvider provider)
+    {
+        if (await AdminGate.DenyUnlessSuperAdminAsync(this, "view discovered application routes") is IActionResult denied)
+            return denied;
+
+        var routes = provider.ActionDescriptors.Items
+            .OfType<ControllerActionDescriptor>()
+            .Where(a => !string.IsNullOrWhiteSpace(a.AttributeRouteInfo?.Template))
+            .Select(a => new DiscoveredRouteDto
+            {
+                Controller = a.ControllerName,
+                Method = a.ActionConstraints?.OfType<HttpMethodActionConstraint>()
+                    .FirstOrDefault()?.HttpMethods.FirstOrDefault() ?? "GET",
+                Path = "/" + a.AttributeRouteInfo!.Template!.TrimStart('/')
+            })
+            .DistinctBy(r => (r.Method, r.Path))
+            .OrderBy(r => r.Controller).ThenBy(r => r.Path)
+            .ToList();
+
+        return Ok(routes);
     }
 
     [HttpGet("scans")]

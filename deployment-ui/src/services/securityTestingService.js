@@ -12,6 +12,8 @@ export const removeTarget = async (id) => (await api.delete(`/targets/${encodeUR
 export const runScan = async (url, activeMode, activeModeConfirmed) =>
     (await api.post("/scan", { url, activeMode, activeModeConfirmed })).data;
 
+export const getDiscoveredRoutes = async () => (await api.get("/discovered-routes")).data;
+
 export const getScans = async () => (await api.get("/scans")).data;
 
 export const getScan = async (id) => (await api.get(`/scans/${encodeURIComponent(id)}`)).data;
