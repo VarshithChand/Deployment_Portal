@@ -125,6 +125,19 @@ export default function SettingsHubView({
 
             )}
 
+            {isSuperAdmin && (
+
+                <button type="button" className="settings-hub-tile" onClick={() => setView("security-testing")}>
+                    <h2>Security Testing Lab</h2>
+                    <p>
+                        Run authorized passive/active security scans against URLs on your own
+                        allowlist — headers, TLS, information disclosure, and more. Restricted to
+                        a single administrator account.
+                    </p>
+                </button>
+
+            )}
+
         </div>
 
         {/* Every role sees the same non-destructive Sign Out here now -

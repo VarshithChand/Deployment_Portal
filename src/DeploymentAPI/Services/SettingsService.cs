@@ -1201,6 +1201,168 @@ public class SettingsService
         return await GetExternalHealthEndpointsAsync();
     }
 
+    // Settings > Security Testing Lab's authorized-target allowlist -
+    // server-side enforcement of "only scan what you've explicitly said
+    // you're allowed to test" (see SecurityTestingController.Scan's
+    // IsSecurityTestingTargetAuthorizedAsync check), not just a frontend
+    // list. Same JSONB-blob-in-root-object pattern as ExternalHealth above.
+    private const int MaxSecurityTestingTargets = 200;
+
+    public async Task<List<SecurityTestingTargetDto>> GetSecurityTestingTargetsAsync()
+    {
+        var root = await ReadRootAsync();
+        var targets = root["SecurityTestingTargets"] as JArray;
+
+        if (targets == null)
+            return new List<SecurityTestingTargetDto>();
+
+        return targets
+            .OfType<JObject>()
+            .Select(t => new SecurityTestingTargetDto
+            {
+                Id = t["Id"]?.ToString() ?? string.Empty,
+                Url = t["Url"]?.ToString() ?? string.Empty,
+                AddedAtUtc = t["AddedAtUtc"]?.Value<DateTime>() ?? DateTime.MinValue
+            })
+            .OrderByDescending(t => t.AddedAtUtc)
+            .ToList();
+    }
+
+    public async Task<SecurityTestingTargetDto> AddSecurityTestingTargetAsync(string url)
+    {
+        var root = await ReadRootAsync();
+        var targets = root["SecurityTestingTargets"] as JArray ?? new JArray();
+
+        var entry = new SecurityTestingTargetDto
+        {
+            Id = Guid.NewGuid().ToString("N"),
+            Url = url,
+            AddedAtUtc = DateTime.UtcNow
+        };
+
+        targets.Add(JObject.FromObject(entry));
+
+        while (targets.Count > MaxSecurityTestingTargets)
+            targets.RemoveAt(0);
+
+        root["SecurityTestingTargets"] = targets;
+        await WriteRootAsync(root);
+
+        _log.LogInfo("SecurityTesting", $"Authorized target added: {url}");
+
+        return entry;
+    }
+
+    public async Task RemoveSecurityTestingTargetAsync(string id)
+    {
+        var root = await ReadRootAsync();
+        var targets = root["SecurityTestingTargets"] as JArray;
+
+        var match = targets?.OfType<JObject>().FirstOrDefault(t => t["Id"]?.ToString() == id);
+
+        if (match == null)
+            return;
+
+        var url = match["Url"]?.ToString() ?? string.Empty;
+        targets!.Remove(match);
+
+        root["SecurityTestingTargets"] = targets;
+        await WriteRootAsync(root);
+
+        _log.LogInfo("SecurityTesting", $"Authorized target removed: {url}");
+    }
+
+    // Exact-origin match (scheme + host + port) - a target authorized as
+    // "https://example.com" does NOT implicitly authorize
+    // "https://example.com:8443" or "http://example.com", since either
+    // could be a genuinely different, unauthorized service. Case-
+    // insensitive on the host only (DNS names aren't case-sensitive);
+    // scheme/port comparison is exact.
+    public async Task<bool> IsSecurityTestingTargetAuthorizedAsync(Uri target)
+    {
+        var targets = await GetSecurityTestingTargetsAsync();
+
+        return targets.Any(t =>
+            Uri.TryCreate(t.Url, UriKind.Absolute, out var authorized)
+            && string.Equals(authorized.Scheme, target.Scheme, StringComparison.OrdinalIgnoreCase)
+            && string.Equals(authorized.Host, target.Host, StringComparison.OrdinalIgnoreCase)
+            && authorized.Port == target.Port);
+    }
+
+    // Scan history - capped like every other unbounded admin-facing list
+    // in this app (ActivityLogService's 200-entry cap is the in-memory
+    // equivalent; this one's durable, so it's capped the same way on
+    // write instead of relying on process lifetime). Never holds a raw
+    // response body or header dump - see SecurityScanResultDto's own
+    // comment for why there's nothing here to redact retroactively.
+    private const int MaxSecurityTestingScans = 100;
+
+    public async Task<List<SecurityScanHistoryEntryDto>> GetSecurityTestingScansAsync()
+    {
+        var root = await ReadRootAsync();
+        var scans = root["SecurityTestingScans"] as JArray;
+
+        if (scans == null)
+            return new List<SecurityScanHistoryEntryDto>();
+
+        return scans
+            .OfType<JObject>()
+            .Select(s => s.ToObject<SecurityScanResultDto>())
+            .Where(s => s != null)
+            .Select(s => new SecurityScanHistoryEntryDto
+            {
+                Id = s!.Id,
+                Target = s.Target,
+                StartedAtUtc = s.StartedAtUtc,
+                DurationMs = s.DurationMs,
+                ActiveMode = s.ActiveMode,
+                SecurityScore = s.SecurityScore,
+                Summary = s.Summary,
+                Error = s.Error
+            })
+            .OrderByDescending(s => s.StartedAtUtc)
+            .ToList();
+    }
+
+    public async Task<SecurityScanResultDto?> GetSecurityTestingScanAsync(string id)
+    {
+        var root = await ReadRootAsync();
+        var scans = root["SecurityTestingScans"] as JArray;
+
+        return scans?.OfType<JObject>()
+            .FirstOrDefault(s => s["Id"]?.ToString() == id)
+            ?.ToObject<SecurityScanResultDto>();
+    }
+
+    public async Task SaveSecurityTestingScanAsync(SecurityScanResultDto scan)
+    {
+        var root = await ReadRootAsync();
+        var scans = root["SecurityTestingScans"] as JArray ?? new JArray();
+
+        scans.Add(JObject.FromObject(scan));
+
+        while (scans.Count > MaxSecurityTestingScans)
+            scans.RemoveAt(0);
+
+        root["SecurityTestingScans"] = scans;
+        await WriteRootAsync(root);
+    }
+
+    public async Task DeleteSecurityTestingScanAsync(string id)
+    {
+        var root = await ReadRootAsync();
+        var scans = root["SecurityTestingScans"] as JArray;
+
+        var match = scans?.OfType<JObject>().FirstOrDefault(s => s["Id"]?.ToString() == id);
+
+        if (match == null)
+            return;
+
+        scans!.Remove(match);
+        root["SecurityTestingScans"] = scans;
+        await WriteRootAsync(root);
+    }
+
     // The list an admin picks from in Settings > Sidebar Access — every
     // browser/device that has ever configured a Personal Access Token here,
     // regardless of which repo. Only PAT users are listed (not every

@@ -40,6 +40,7 @@ import ExternalApisView from "../components/settings/ExternalApisView";
 import AppearanceView from "../components/settings/AppearanceView";
 import EnvironmentsAdminView from "../components/settings/EnvironmentsAdminView";
 import DatabaseView from "../components/settings/DatabaseView";
+import SecurityTestingView from "../components/settings/SecurityTestingView";
 import useToast from "../hooks/useToast";
 import useConfirm from "../hooks/useConfirm";
 import useAuth from "../hooks/useAuth";
@@ -1098,6 +1099,12 @@ export default function Settings() {
                     patUsersLoading={patUsersLoading}
                     refreshPatUsers={refreshPatUsers}
                 />
+
+            )}
+
+            {view === "security-testing" && isSuperAdminSession && (
+
+                <SecurityTestingView />
 
             )}
 

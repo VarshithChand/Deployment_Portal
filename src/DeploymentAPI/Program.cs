@@ -128,6 +128,18 @@ builder.Services.AddHttpClient("ExternalHealthCheck")
         AllowAutoRedirect = false
     });
 
+// Used only by SecurityTestingScanService - same AllowAutoRedirect=false
+// reasoning as ExternalHealthCheck above, except this caller DOES follow
+// redirects, manually, re-running SsrfGuard on every hop's target first
+// (see FetchWithRedirectValidationAsync) - the framework must never do
+// that automatically, or a validated hop could jump straight to an
+// unvalidated one.
+builder.Services.AddHttpClient("SecurityTestingScan")
+    .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
+    {
+        AllowAutoRedirect = false
+    });
+
 builder.Services.AddMemoryCache();
 
 //
@@ -173,6 +185,7 @@ builder.Services.AddScoped<AuthService>();
 builder.Services.AddScoped<SonarApiService>();
 builder.Services.AddScoped<SmokeTestService>();
 builder.Services.AddScoped<ExternalHealthCheckService>();
+builder.Services.AddScoped<SecurityTestingScanService>();
 builder.Services.AddScoped<ErrorAnalysisService>();
 builder.Services.AddScoped<PipelineExplanationService>();
 // Stateless (holds a static shared HttpClient for the Azure REST calls,

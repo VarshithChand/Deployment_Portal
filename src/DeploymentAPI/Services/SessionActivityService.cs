@@ -184,6 +184,44 @@ public class SessionActivityService
 
     public FrontendBuildInfo? GetFrontendBuild(string key) =>
         _frontendBuilds.TryGetValue(key, out var info) ? info : null;
+
+    // Settings > Security Testing Lab's own scan-rate limiter - a coarse,
+    // GLOBAL (not per-session) counter, deliberately: this whole feature
+    // is restricted to one identity (VarshithChand, see
+    // AdminGate.DenyUnlessSuperAdminAsync), so there's only ever one
+    // legitimate caller and no need for the per-key bookkeeping every
+    // other counter in this file uses. Guards against an accidental
+    // hammer-the-target-by-mistake click-spam, not a multi-attacker abuse
+    // scenario - a portal-level backstop on top of (not a replacement
+    // for) the target's own rate limiting.
+    private readonly object _scanRateLock = new();
+    private readonly List<DateTime> _recentScanTimestamps = new();
+    private DateTime? _lastScanStartedAtUtc;
+
+    private static readonly TimeSpan ScanCooldown = TimeSpan.FromSeconds(5);
+    private static readonly TimeSpan ScanRateWindow = TimeSpan.FromHours(1);
+    private const int MaxScansPerWindow = 30;
+
+    public (bool Allowed, string? Reason) TryRegisterScanAttempt()
+    {
+        lock (_scanRateLock)
+        {
+            var now = DateTime.UtcNow;
+
+            if (_lastScanStartedAtUtc.HasValue && now - _lastScanStartedAtUtc.Value < ScanCooldown)
+                return (false, "Please wait a few seconds between scans.");
+
+            _recentScanTimestamps.RemoveAll(t => now - t > ScanRateWindow);
+
+            if (_recentScanTimestamps.Count >= MaxScansPerWindow)
+                return (false, $"Scan limit reached ({MaxScansPerWindow} per hour) - try again later.");
+
+            _recentScanTimestamps.Add(now);
+            _lastScanStartedAtUtc = now;
+
+            return (true, null);
+        }
+    }
 }
 
 public record FrontendBuildInfo(string Commit, string? Version, string Environment, DateTime ReportedAtUtc);
