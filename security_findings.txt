@@ -4818,3 +4818,87 @@ Status: Complete and pushed, code-level and gate-level verified live.
 The actual multi-tier escalation sequence and email delivery need the
 user's own real-identity testing (and confirmed SMTP config) to verify
 end-to-end - flagged above, not claimed as tested.
+
+ROUND 37 - REAL BUG: PAGE-SCOPED ADMIN GRANTS WERE CORRECTLY ENFORCED BUT
+UNREACHABLE
+==================================================
+Date: 2026-08-14
+Trigger: user reported that a PAT user granted page-scoped admin access
+to Code Quality via Settings' "Page Access" button (shown in a
+screenshot: @vvarshithchand listed under "Currently granted") still
+couldn't actually use the page once they logged in as that user.
+Narrowed down via a clarifying question to specifically: the grant
+shows up as active, but the granted person still gets denied.
+
+Root cause: this was NOT a backend gating bug - every relevant action
+(SonarController's overview endpoint, every AdminUsersController action
+backing Services' Users/Audit Log tabs) already correctly passed its
+pageKey ("codeQuality"/"services") to AdminGate.DenyUnlessAdminAsync,
+which does correctly recognize a page-scoped grant via
+IsGrantedPageAdminAsync. The actual bug was entirely on the frontend:
+Sidebar.jsx hides "codeQuality"/"services" from the nav for anyone
+whose isAdminSession is false, and App.jsx separately redirects away
+from either tab if reached directly (a bookmark, a typed URL) under
+the exact same isAdminSession-only condition. Neither of these checks
+had any way to know a page-scoped grant existed, because that
+information was never sent to the frontend at all anywhere in the
+bootstrap/settings response - so a correctly, successfully granted
+user was bounced back to Dashboard before their access could ever
+matter, with no error message pointing at the real cause (the toast
+they'd see, "This section is admin-only," reads exactly like they
+were never granted anything, which is what made this look like a
+grant/revoke bug rather than a visibility bug).
+
+Fix:
+  - SettingsService.GetGrantedPagesForLoginAsync(login) (new) - reverse
+    lookup of the existing IsGrantedPageAdminAsync (which only checks
+    one page at a time) - returns every page a given login currently
+    has a scoped grant for.
+  - SettingsViewDto.GrantedPages (new field) - populated identically by
+    BOTH BootstrapController.Get() and SettingsController.Get() (the
+    two endpoints that already independently compute IsAdminSession/
+    IsSuperAdminSession for the same DTO), using the exact same
+    AdminGate.ResolveCallerLoginAsync login resolution AdminGate's own
+    gate check uses internally - can't disagree with what the real
+    backend gate decides, and can't give a different answer depending
+    on which of the two endpoints the frontend happens to have called
+    most recently.
+  - AuthContext.jsx exposes the new grantedPages array from the
+    bootstrap response (defaults to [] if absent/still loading).
+  - Sidebar.jsx's itemVisible and App.jsx's ADMIN_ONLY_TABS redirect
+    guard both now also allow a tab when grantedPages.includes(tab) is
+    true, not just when isAdminSession is true - the same two-place
+    check this session has now fixed several times for a similar
+    "backend correct, frontend never told" class of bug (Round 30's
+    MFA-block enforcement was the same class of gap in the opposite
+    direction - backend never enforced what the frontend showed).
+
+Verification performed:
+  - `dotnet build` (isolated output dir): 0 errors, same 2 pre-existing
+    unrelated warnings as every prior round.
+  - `npm run lint` / `npm run build`: clean, no new warnings.
+  - Confirmed via direct code read (not guessed) that every action
+    backing Code Quality and Services already passes the correct
+    pageKey to AdminGate - this really was purely a frontend visibility
+    gap, not a second backend bug hiding alongside it.
+  - Could NOT live-verify the actual before/after behavior (log in as
+    the page-scoped-granted user, confirm the Code Quality tab is now
+    visible and usable) - needs a second real GitHub identity distinct
+    from the super-admin one, which isn't available in this sandboxed
+    session. The fix is narrow and directly traceable to the confirmed
+    root cause (one new field, two consumers of it) - recommend the
+    user confirm directly once both halves are deployed, using the
+    same @vvarshithchand grant already shown in their screenshot.
+
+Files changed: src/DeploymentAPI/{Controllers/{BootstrapController,
+SettingsController},DTOs/SettingsViewDto,Services/SettingsService}.cs;
+deployment-ui/src/{App.jsx,components/layout/Sidebar.jsx,
+context/AuthContext.jsx}.
+Commit: 0a8e0b8.
+
+Status: Complete and pushed, code-level verified (confirmed backend
+gating was already correct everywhere it needed to be, confirmed the
+new field is populated consistently by both endpoints that read it).
+The actual granted-user experience needs the user's own second-identity
+test to confirm end-to-end, flagged above rather than claimed as
+tested.
