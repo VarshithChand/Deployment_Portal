@@ -4411,3 +4411,132 @@ Status: Complete for the code-level and build-verifiable portion; the
 live two-device repro needs the user's own confirmation once they have
 a fresh, non-exposed token to test with, flagged above rather than
 claimed as tested.
+
+ROUND 33 - NEW FEATURE: SETTINGS > SECURITY TESTING LAB (VarshithChand-ONLY)
+==================================================
+Date: 2026-08-14
+Trigger: user requested a new Settings sub-page, restricted to the single
+super-admin identity, for running authorized security assessments
+against URLs they own or are explicitly permitted to test - "when i
+paste an url it should try to get the data from the url." Given the
+obvious risk of a feature like this becoming an unrestricted server-side
+open proxy, the user was asked to (and did) provide a very detailed
+30-section specification up front, and the whole feature went through
+this session's plan-mode workflow before any code was written (see the
+approved plan for the full design rationale).
+
+This is a NEW FEATURE, not a bug fix - noted here (rather than filed as
+a "finding") because it's a security-relevant capability added to the
+portal, and its own safety properties are exactly the kind of thing this
+log exists to track.
+
+What was built:
+  - Helpers/SsrfGuard.cs - extracted the private/loopback/link-local/
+    cloud-metadata-address denylist out of ExternalHealthCheckService's
+    original private copy into a shared helper, so this feature and the
+    pre-existing External APIs health-check feature can never drift
+    apart on what counts as a disallowed target.
+  - Helpers/SecretRedactor.cs - regex-based redaction (AWS keys, GitHub
+    tokens, JWTs, private keys, generic credential-looking assignments)
+    applied to every piece of captured response text BEFORE it's placed
+    into a finding, persisted to scan history, or logged - a match
+    produces a "potential secret detected" finding, never the actual
+    value, anywhere.
+  - Services/SecurityTestingScanService.cs - the scan engine. GET-only
+    everywhere (no method is ever accepted from the caller); manually
+    follows redirects up to 5 hops with SsrfGuard re-validated on EVERY
+    hop's target host (not just the original one - this is what stops a
+    public-looking URL from retargeting a request at a private/metadata
+    address via redirect); 10s per-hop timeout; response body read via a
+    bounded stream that stops at 1MB rather than buffering an unbounded
+    response. Builds findings across 8 categories (security headers,
+    HTTPS/HSTS, information disclosure, cookie attributes, CORS, secret
+    detection, API endpoint discovery via regex over the fetched body,
+    robots.txt/security.txt presence) plus a 0-100 security score.
+    Active mode (opt-in) adds GET-only reachability/auth-posture probes
+    against endpoints the SAME scan already discovered referenced in the
+    target's own page content - never a different host, never anything
+    beyond a plain GET, never POST/PUT/PATCH/DELETE anywhere in this
+    file.
+  - SettingsService.cs - durable, server-enforced target allowlist
+    (IsSecurityTestingTargetAuthorizedAsync does an exact scheme+host+port
+    match - the frontend's own "must pick an authorized target" UI is
+    just a convenience, this is the real gate) and scan history (capped
+    at 100, same durable-JSONB-blob pattern as every other admin list in
+    this app). Neither ever stores a raw response body or raw header
+    dump - only the already-redacted findings and informational summary
+    fields.
+  - SessionActivityService.cs - a small global (not per-session) scan
+    rate limiter: 5s cooldown between scans, 30/hour cap. Coarse by
+    design - this whole feature only ever has one legitimate caller.
+  - Controllers/SecurityTestingController.cs - every action (targets
+    CRUD, scan, scan history CRUD) starts with
+    AdminGate.DenyUnlessSuperAdminAsync, the same gate restricting
+    Database Management and Admin Access to this one identity. The scan
+    action's order is: super-admin check -> URL scheme validation
+    (rejects javascript:/data:/file:/etc. outright) -> allowlist check ->
+    rate-limit check -> scan.
+  - Frontend: new Settings > Security Testing Lab page
+    (SecurityTestingView.jsx), gated the same way as Database/Admin
+    Access (SUPER_ADMIN_ONLY_VIEWS + isSuperAdminSession), with an
+    always-visible authorized-use warning banner, an Authorized Targets
+    list (add/remove, paginated), an Analyze Target form (URL input,
+    opt-in Active Testing toggle that requires an explicit "I confirm
+    I'm authorized" checkbox before it's usable), Target Information +
+    Security Score + severity-colored Findings display, and a paginated
+    Scan History with View/Delete. Both new lists use usePagination/
+    Pagination.jsx per this project's standing pagination convention.
+
+Verification performed:
+  - `dotnet build` (isolated output dir): 0 errors, first try, same 2
+    pre-existing unrelated warnings as every prior round.
+  - `npm run lint` / `npm run build`: clean, no new warnings from any of
+    the new/changed files.
+  - Live checks against the deployed Render backend after push:
+    * GET api/admin/security-testing/targets with no super-admin auth
+      -> 403.
+    * POST .../scan with no super-admin auth -> 403 (ACCESS_DENIED, the
+      standard AdminGate denial shape).
+    * POST .../targets with a javascript: URL and no super-admin auth ->
+      403 (confirms the super-admin gate runs before URL validation, the
+      correct order - an unauthorized caller never learns whether their
+      input would otherwise have been accepted).
+  - Could NOT deploy the frontend from this session (npx wrangler deploy
+    requires CLOUDFLARE_API_TOKEN, not available in this sandboxed
+    environment - this has always been a manual step the user runs
+    themselves, per this project's established deploy workflow). The
+    backend is live; the user needs to run `npx wrangler deploy` from
+    deployment-ui/ to publish the new Settings page itself.
+  - Could NOT live-verify the actual super-admin happy path (add a real
+    authorized target, run a real scan, see real findings/score), the
+    SSRF-blocking behavior against 127.0.0.1/169.254.169.254/a private-
+    IP-resolving hostname, the allowlist-rejection message for an
+    authorized-caller-but-unauthorized-target, or the rate-limit cooldown
+    message - all of these need the real VarshithChand GitHub identity
+    to reach past the super-admin gate at all, which isn't available in
+    this sandboxed session. Verified via code review instead: the SSRF
+    guard is the exact, unmodified logic already proven correct in
+    ExternalHealthCheckService (just newly shared, not newly written),
+    and the redirect-revalidation/allowlist/rate-limit logic is narrow
+    and directly reasoned. Recommend the user walk through the full
+    happy path once both halves are deployed, and specifically try the
+    negative cases (a 127.0.0.1 target, a target not on the allowlist,
+    two scans within 5 seconds of each other) to confirm the guardrails
+    behave as designed before relying on this tool for real assessments.
+
+Files changed: src/DeploymentAPI/{Controllers/SecurityTestingController,
+DTOs/SecurityTestingDtos, Helpers/SecretRedactor, Helpers/SsrfGuard,
+Services/SecurityTestingScanService}.cs (new); Program.cs,
+Services/{ExternalHealthCheckService,SessionActivityService,SettingsService}.cs
+(modified); deployment-ui/src/{api/securityTestingApi,
+components/settings/SecurityTestingView,
+services/securityTestingService}.js (new);
+components/settings/SettingsHubView.jsx, constants/settingsViews.js,
+pages/Settings.jsx (modified).
+Commit: f8f1ff4.
+
+Status: Complete and pushed for the code-level and API-level-verifiable
+portion (authorization gating, confirmed live). The scan engine itself
+and the frontend page need the user's own real-identity testing plus a
+manual frontend deploy before this is usable end-to-end - both
+explicitly flagged above, not claimed as tested.
