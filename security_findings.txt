@@ -4717,3 +4717,104 @@ Status: Complete and pushed, code-level verified. Needs the user's own
 super-admin session to confirm the discovered-routes list and bulk-add
 flows behave as designed once both halves are deployed - flagged above,
 not claimed as tested.
+
+ROUND 36 - ESCALATING MFA LOCKOUT (2min/10min/1hr/1day), VISIBLE COUNTDOWN,
+LOCKOUT EMAIL
+==================================================
+Date: 2026-08-14
+Trigger: user asked for a countdown to be visible after too many wrong
+MFA codes, and an email to the affected user when that happens. Went
+through this session's plan-mode workflow given the scope (a real
+security-policy change touching three separate call sites, a new
+durable per-login data model, and a new per-user email concept this app
+didn't have before) - two rounds of clarifying questions first: (1)
+confirmed the email goes to a NEW self-service per-user address (not
+this app's existing fixed ops/deploy-notification address, which
+couldn't reach a specific end user); (2) confirmed the specific
+escalating tier schedule (5 attempts->2min, 3->10min, 2->1hr, 1->1day);
+(3) confirmed explicitly that PIN's existing destructive "wipe on 5th
+wrong guess" behavior stays exactly as-is - this round is MFA-only, not
+a general lockout-policy change.
+
+Also surfaced and fixed, along the way: the flat "5 attempts/15-minute"
+lockout this replaces was duplicated THREE separate times
+(AuthController.MfaVerify, MfaController.VerifyEnrollment/Disable,
+MfaGate.DenyUnlessVerifiedAsync), each maintaining its own copy of the
+same constants against the same in-memory SessionActivityService
+counters - and because those counters were in-memory
+(ConcurrentDictionary, Singleton), a lockout silently reset on every
+backend restart/redeploy, undermining the entire point of an escalating
+lockout as a real deterrent (an attacker could just wait for the next
+Render redeploy instead of the actual lockout window). Neither of these
+was something the user asked about directly - found while implementing
+the requested feature and fixed as part of doing it properly rather
+than left as a known gap.
+
+What was built:
+  - Helpers/MfaLockoutPolicy.cs - single shared decision (CheckAsync/
+    RecordFailureAsync/RecordSuccessAsync) used by all three call sites
+    now, so they can never drift apart again. Durable state
+    (SettingsService's new MfaLockouts dict, per-login) instead of
+    in-memory - survives a restart, which is what makes tier 3/4 (1hr/
+    1day) meaningful at all.
+  - Every MFA_LOCKED response now carries a real lockedUntilUtc
+    timestamp instead of a static "try again in a few minutes" string.
+  - New self-service per-login notification email
+    (SettingsService.GetMfaNotificationEmailAsync/SetMfaNotificationEmailAsync,
+    stored in Mfa[login], preserved across re-enrollment the same way
+    AdminRequired already is) - only settable once MFA is actually
+    enabled, since there's nothing to notify about otherwise.
+  - NotificationService.SendMfaLockoutEmailAsync - emails that specific
+    address (not the portal's fixed ops address the rest of
+    NotificationService already uses for deploy events) the moment a
+    lockout newly takes effect, naming the current tier and unlock
+    time. Same "unconfigured channel = silent no-op" rule as the rest
+    of that file - no email registered, or no SMTP configured
+    portal-wide, and this step is skipped, not an error.
+  - Frontend: new hooks/useLockoutCountdown.js drives a live countdown
+    (scales from MM:SS up to Hh MMm / Dd HHh depending on the tier) in
+    both MfaVerifyPage.jsx (login flow) and MfaSection.jsx (self-service
+    verify-enroll and disable forms), disabling the form while locked
+    and re-enabling it the instant the countdown reaches zero - no
+    reload needed. MfaSection.jsx also gets the new notification-email
+    field, shown once MFA is enabled.
+
+Verification performed:
+  - `dotnet build` (isolated output dir): 0 errors, same 2 pre-existing
+    unrelated warnings as every prior round, despite touching 5
+    controllers/services and removing 4 now-superseded methods from
+    SessionActivityService.
+  - `npm run lint` / `npm run build`: clean, no new warnings.
+  - Live checks against the deployed Render backend after push:
+    * GET/POST api/mfa/notification-email with no GitHub token connected
+      -> 403 (RequireLoginAsync's existing gate, unchanged, confirmed
+      still correctly wired through the refactor).
+    * Regression: fake-token pat-login still behaves identically
+      (clean rejection, no crash) - confirms the AuthController.MfaVerify
+      refactor didn't disturb the surrounding login flow.
+  - Could NOT live-verify the actual escalating-lockout sequence (5
+    wrong codes -> 2min lock -> wait it out -> 3 more wrong -> 10min
+    lock, etc.), the countdown UI against a real lockout, or actual
+    email delivery - all need a real GitHub-PAT-with-MFA-enabled
+    identity, and email delivery specifically also needs a working SMTP
+    config in Render's environment (Email:SmtpHost/Username/Password/From)
+    which this session has no visibility into either way. If those
+    aren't set, the email step is a silent no-op by design (matching
+    NotificationService's existing "unconfigured channel" convention),
+    not a visible error - worth the user confirming those are actually
+    set if they want the email to really send. Recommend testing the
+    full sequence live once possible.
+
+Files changed: src/DeploymentAPI/Helpers/{MfaLockoutPolicy (new),MfaGate}.cs,
+DTOs/{MfaLockoutStateDto (new),MfaCodeRequestDto}.cs,
+Controllers/{AuthController,MfaController,SettingsController}.cs,
+Services/{NotificationService,SessionActivityService,SettingsService}.cs;
+deployment-ui/src/hooks/useLockoutCountdown.js (new),
+pages/MfaVerifyPage.jsx, components/settings/credentials/MfaSection.jsx,
+services/mfaService.js.
+Commit: f59cc05.
+
+Status: Complete and pushed, code-level and gate-level verified live.
+The actual multi-tier escalation sequence and email delivery need the
+user's own real-identity testing (and confirmed SMTP config) to verify
+end-to-end - flagged above, not claimed as tested.
