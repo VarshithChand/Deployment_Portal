@@ -4330,3 +4330,84 @@ noting (TOTP enrollment secret in its own enroll response) is standard,
 necessary UX for self-service 2FA setup, not a defect, and is
 explicitly documented here rather than silently passed over per the
 checklist's own "search for secret" instruction.
+
+ROUND 32 - EXPOSED-TOKEN INCIDENT NOTE, AND A REAL BUG: SIGNING OUT DIDN'T
+FREE THE ACCOUNT FOR ANOTHER DEVICE TO LOG INTO
+==================================================
+Date: 2026-08-14
+
+INCIDENT NOTE (not a codebase finding): mid-audit, the user shared a
+Chrome DevTools screenshot of the pat-login request that included a
+live-looking, unredacted GitHub PAT in the visible payload. Per this
+engagement's standing rule, this was flagged immediately as "SECRET
+FOUND - ROTATE IMMEDIATELY" without repeating the value, and the user
+was told to revoke it on GitHub before anything else. No further action
+was taken with that token. This is a reminder that the pat-login
+request legitimately contains the PAT in its payload by design (see
+Round 31) - screenshots/recordings of that specific request need the
+same care as a screenshot of any other password field.
+
+Trigger: the user then reported, across two follow-up messages, that
+after signing out on one device and trying to log in with the same
+account on a second device, they got "This GitHub account is already
+signed in on another device. Sign out there first, then try again." -
+even though they HAD already signed out on the first device. (An
+earlier report in the same exchange, about "Back to Login" on the MFA
+page appearing to do nothing, turned out to be working as designed -
+cancelling and resubmitting correctly starts a fresh MFA challenge
+rather than silently reusing the cancelled one; no fix needed there.)
+
+Root cause (REAL BUG, confirmed): SettingsService.IsLoginActiveOnAnotherSessionAsync
+(the pre-check AuthController.PatLogin uses for a no-MFA account) and
+the matching inline duplicate-check inside SaveUserGitHubCredentialsAsync
+both decided "is the other device still active" using ONLY how recently
+SessionActivityService last saw a request from it (a 2-minute
+ActiveDeviceWindow) - neither checked whether that session had actually
+signed out. The sign-out flow itself is several requests (POST
+me/github/signout, POST auth/logout, then the reload onto
+PatLoginPage) - every one of them touches that session's lastSeen
+timestamp via the Touch() middleware, right up to the literal moment of
+signing out. So the "how recently active" clock kept getting reset
+through the act of signing out, meaning a properly signed-out device
+still read as "active" (and blocked a second device's login) for up to
+2 more minutes afterward - the opposite of what signing out exists to
+do. This is not something introduced this session; it's a pre-existing
+bug in the original one-session-per-account design (same family as
+Round 24/27's other pre-existing gaps this engagement has found).
+
+Fix: extracted the shared decision into one place,
+IsSessionConsideredActiveAsync(key) - checks the SignedOut flag first
+and short-circuits to "not active" if set, only falling through to the
+recency check otherwise. Both call sites (the PatLogin pre-check and
+SaveUserGitHubCredentialsAsync's authoritative race-safe check) now
+call this instead of duplicating the recency-only logic. An explicit
+sign-out is a stronger, deliberate signal than mere silence, so it
+should free the account immediately, not after an idle-timeout that was
+never the actual scenario.
+
+Verification performed:
+  - `dotnet build` (isolated output dir): 0 errors, same 2 pre-existing
+    unrelated warnings as every prior round.
+  - Live regression check against the deployed Render backend after
+    push: fresh-session GET api/bootstrap continues to respond
+    correctly post-deploy.
+  - Could NOT live-verify the actual two-device repro (sign out on
+    device A, immediately log in as the same account on device B,
+    confirm no "already signed in" error) - doing so would require a
+    real, resolvable GitHub PAT, which isn't available in this
+    sandboxed session (and the one the user showed was mid-rotation per
+    the incident above, so intentionally not used for this either).
+    The fix is a narrow, directly-reasoned change (one additional flag
+    check short-circuiting an existing boolean, in exactly the two
+    places that already dealt with
+    this decision) with no other logic touched - recommend the user
+    verify the original two-device repro now resolves once they've
+    rotated their token and can log in fresh.
+
+Files changed: src/DeploymentAPI/Services/SettingsService.cs.
+Commit: 52ae9cd.
+
+Status: Complete for the code-level and build-verifiable portion; the
+live two-device repro needs the user's own confirmation once they have
+a fresh, non-exposed token to test with, flagged above rather than
+claimed as tested.
