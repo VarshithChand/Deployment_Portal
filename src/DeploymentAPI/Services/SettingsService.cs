@@ -336,6 +336,30 @@ public class SettingsService
     // again a few minutes later isn't blocked by your own old session.
     private static readonly TimeSpan ActiveDeviceWindow = TimeSpan.FromMinutes(2);
 
+    // A session counts as "still active" (and therefore blocks another
+    // device's login for the same account) only if it's BOTH been seen
+    // recently AND hasn't explicitly signed out. Recency alone isn't
+    // enough: the sign-out flow's own requests (POST me/github/signout,
+    // POST auth/logout, then the reload that follows onto PatLoginPage)
+    // all touch this same session's lastSeen right up to the moment of
+    // signing out - so checking recency alone meant explicitly signing
+    // out on one device didn't actually free the account for a SECOND
+    // device to log into for up to ActiveDeviceWindow afterward, the
+    // exact opposite of what signing out is for. An explicit sign-out is
+    // a stronger, deliberate signal than mere silence, so it short-
+    // circuits the recency check entirely rather than waiting it out.
+    private async Task<bool> IsSessionConsideredActiveAsync(string key)
+    {
+        var root = await ReadRootAsync();
+        var entry = (root["UserGitHubCredentials"] as JObject)?[key] as JObject;
+
+        if (entry?["SignedOut"]?.Value<bool>() ?? false)
+            return false;
+
+        var lastSeen = _activity.GetLastSeen(key);
+        return lastSeen.HasValue && DateTime.UtcNow - lastSeen.Value < ActiveDeviceWindow;
+    }
+
     // Public so AuthController.PatLogin can reject a duplicate-device
     // login BEFORE asking for an MFA code (better UX - no point making
     // someone type a code just to be told no) - SaveUserGitHubCredentialsAsync
@@ -348,10 +372,7 @@ public class SettingsService
         var existing = await GetPatUsersAsync();
         var other = existing.FirstOrDefault(u => u.Key != excludingKey && u.PatOwnerLogin == resolvedLogin);
 
-        if (other == null) return false;
-
-        var lastSeen = _activity.GetLastSeen(other.Key);
-        return lastSeen.HasValue && DateTime.UtcNow - lastSeen.Value < ActiveDeviceWindow;
+        return other != null && await IsSessionConsideredActiveAsync(other.Key);
     }
 
     // allowTakeoverIfActive: false (default) is Round 21's behavior - a
@@ -397,8 +418,7 @@ public class SettingsService
                 {
                     if (!allowTakeoverIfActive)
                     {
-                        var lastSeen = _activity.GetLastSeen(other.Key);
-                        var stillActive = lastSeen.HasValue && DateTime.UtcNow - lastSeen.Value < ActiveDeviceWindow;
+                        var stillActive = await IsSessionConsideredActiveAsync(other.Key);
 
                         if (stillActive)
                         {
