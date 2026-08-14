@@ -288,6 +288,13 @@ export default function SecurityTestingView() {
     }
 
     const findings = sortFindings(result?.findings);
+    const performanceFindings = sortFindings(result?.performanceFindings);
+
+    function formatBytes(bytes) {
+        if (bytes == null) return "—";
+        if (bytes < 1024) return `${bytes} B`;
+        return `${(bytes / 1024).toFixed(1)} KB`;
+    }
 
     return (
 
@@ -457,7 +464,7 @@ export default function SecurityTestingView() {
                         probes GET reachability of endpoints already referenced on the page.
                     </p>
 
-                    <label className="checkbox-label" style={{ marginTop: 8 }}>
+                    <label className="checkbox-list-item" style={{ marginTop: 8 }}>
                         <input
                             type="checkbox"
                             checked={activeConfirmed}
@@ -531,6 +538,27 @@ export default function SecurityTestingView() {
                     ))}
                 </div>
 
+                <h3 className="settings-subhead">Third-Party Hosts</h3>
+
+                <p className="field-hint" style={{ padding: "0 0 10px" }}>
+                    Other origins this page's own markup references (scripts, images, stylesheets,
+                    links) — every one of these can potentially observe the visit.
+                </p>
+
+                {result.targetInfo.thirdPartyHosts?.length > 0 ? (
+
+                    <div className="button-row" style={{ flexWrap: "wrap" }}>
+                        {result.targetInfo.thirdPartyHosts.map((host) => (
+                            <span key={host} className="badge badge-secondary">{host}</span>
+                        ))}
+                    </div>
+
+                ) : (
+
+                    <p className="empty-state">No third-party hosts referenced.</p>
+
+                )}
+
                 <h3 className="settings-subhead">Security Score</h3>
 
                 <p className={scoreClass(result.securityScore)} style={{ fontSize: 28, fontWeight: 700 }}>
@@ -545,6 +573,29 @@ export default function SecurityTestingView() {
                     <span className="badge badge-secondary">Info: {result.summary.info}</span>
                 </div>
 
+                <div className="settings-subsection" style={{ marginTop: 20 }}>
+
+                    <h3 className="settings-subhead">Performance Score</h3>
+
+                    <p className="field-hint" style={{ padding: "0 0 10px" }}>
+                        A lightweight HTTP-level check (response time, compression, payload size,
+                        caching) from this same request — not a full page-load audit like Lighthouse,
+                        since this tool never renders the page or fetches its linked assets.
+                    </p>
+
+                    <p className={scoreClass(result.performanceScore)} style={{ fontSize: 28, fontWeight: 700 }}>
+                        {result.performanceScore} / 100
+                    </p>
+
+                    <div className="button-row" style={{ flexWrap: "wrap" }}>
+                        <span className="badge badge-secondary">Response time: {result.targetInfo.responseTimeMs ?? "—"} ms</span>
+                        <span className="badge badge-secondary">Size: {formatBytes(result.targetInfo.responseSizeBytes)}</span>
+                        <span className="badge badge-secondary">Compression: {result.targetInfo.contentEncoding || "None"}</span>
+                        <span className="badge badge-secondary">Cache-Control: {result.targetInfo.cacheControl || "None"}</span>
+                    </div>
+
+                </div>
+
                 <p className="field-hint" style={{ marginTop: 10 }}>
                     Automated security assessment — not a complete penetration test.
                 </p>
@@ -557,7 +608,7 @@ export default function SecurityTestingView() {
 
         <div className="card">
 
-            <h2 className="card-title">Findings</h2>
+            <h2 className="card-title">Security Findings</h2>
 
             {!result || result.error ? (
 
@@ -570,6 +621,40 @@ export default function SecurityTestingView() {
             ) : (
 
                 findings.map((finding, index) => (
+
+                    <div key={index} className="settings-subsection">
+
+                        <span className={`badge ${SEVERITY_BADGE[finding.severity] || "badge-secondary"}`}>
+                            {finding.severity}
+                        </span>
+
+                        <p style={{ fontWeight: 600, marginTop: 6, marginBottom: 4 }}>{finding.title}</p>
+                        <p className="field-hint">{finding.description}</p>
+                        <p className="field-hint"><strong>Recommendation:</strong> {finding.recommendation}</p>
+
+                    </div>
+
+                ))
+
+            )}
+
+        </div>
+
+        <div className="card">
+
+            <h2 className="card-title">Performance Findings</h2>
+
+            {!result || result.error ? (
+
+                <p className="empty-state">No scan has been performed.</p>
+
+            ) : performanceFindings.length === 0 ? (
+
+                <p className="empty-state">No findings — every check passed.</p>
+
+            ) : (
+
+                performanceFindings.map((finding, index) => (
 
                     <div key={index} className="settings-subsection">
 
@@ -613,7 +698,8 @@ export default function SecurityTestingView() {
                             <tr>
                                 <th>Target</th>
                                 <th>When</th>
-                                <th>Score</th>
+                                <th>Security</th>
+                                <th>Performance</th>
                                 <th>Findings</th>
                                 <th></th>
                             </tr>
@@ -627,6 +713,7 @@ export default function SecurityTestingView() {
                                     <td>{entry.target}</td>
                                     <td>{new Date(entry.startedAtUtc).toLocaleString()}</td>
                                     <td>{entry.error ? "—" : `${entry.securityScore}/100`}</td>
+                                    <td>{entry.error ? "—" : `${entry.performanceScore}/100`}</td>
                                     <td>
                                         {entry.error
                                             ? entry.error

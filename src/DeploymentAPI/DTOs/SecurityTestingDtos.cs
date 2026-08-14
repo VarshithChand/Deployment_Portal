@@ -81,9 +81,24 @@ public class SecurityScanResultDto
 
     public int SecurityScore { get; set; }
 
+    // A second, independent score - deliberately NOT blended into
+    // SecurityScore above (a fast-but-insecure or slow-but-secure site
+    // shouldn't average out to looking "medium" on both fronts). Computed
+    // from the same already-fetched response, so this costs no extra
+    // requests - this is a lightweight HTTP-level performance check
+    // (response time, compression, payload size, caching), not a full
+    // rendered-page audit like Lighthouse - there's no headless browser
+    // here to measure paint/layout/script-execution time with.
+    public int PerformanceScore { get; set; }
+
     public SecurityScanSummaryDto Summary { get; set; } = new();
 
     public List<SecurityFindingDto> Findings { get; set; } = new();
+
+    // Kept separate from Findings above (not merged in with a Category
+    // filter) so PerformanceScore has one unambiguous source list, the
+    // same way SecurityScore only ever reflects Findings.
+    public List<SecurityFindingDto> PerformanceFindings { get; set; } = new();
 
     // Safe, informational-only fields about the target itself - never a
     // raw header dump (see TargetInformationDto below for exactly what's
@@ -121,6 +136,23 @@ public class SecurityTargetInformationDto
 
     public bool SecurityTxtFound { get; set; }
 
+    // Performance-relevant fields, captured from the same fetch above -
+    // no separate request is made to gather these.
+    public long ResponseSizeBytes { get; set; }
+
+    public string? ContentEncoding { get; set; }
+
+    public string? CacheControl { get; set; }
+
+    // Distinct external hostnames referenced by src=/href= attributes in
+    // the fetched page - "what other origins does this page hand a
+    // visitor's browser off to" (scripts, images, stylesheets, links),
+    // the direct answer to "how much of our users' data/traffic goes to
+    // someone else." Never fetched or otherwise contacted - this is a
+    // static reference list only. Capped and deduped the same way
+    // DiscoverApiPaths already is.
+    public List<string> ThirdPartyHosts { get; set; } = new();
+
     // Header display name -> "PASS" | "WARN" | "MISSING" - the quick
     // scannable checklist the spec's own mockup shows (section 10),
     // separate from the scored Findings list (a MISSING/WARN entry here
@@ -155,6 +187,8 @@ public class SecurityScanHistoryEntryDto
     public bool ActiveMode { get; set; }
 
     public int SecurityScore { get; set; }
+
+    public int PerformanceScore { get; set; }
 
     public SecurityScanSummaryDto Summary { get; set; } = new();
 

@@ -1317,6 +1317,7 @@ public class SettingsService
                 DurationMs = s.DurationMs,
                 ActiveMode = s.ActiveMode,
                 SecurityScore = s.SecurityScore,
+                PerformanceScore = s.PerformanceScore,
                 Summary = s.Summary,
                 Error = s.Error
             })

@@ -40,6 +40,16 @@ public class SecurityTestingScanService
     private static readonly Regex VersionLikeRegex = new(
         @"\d+\.\d+", RegexOptions.Compiled, TimeSpan.FromSeconds(1));
 
+    // Matches src="http(s)://host/..." / href="http(s)://host/..." - only
+    // ABSOLUTE, cross-origin references (a relative path or same-origin
+    // absolute URL is never "someone else"). Deliberately simple (no HTML
+    // parser) - this only needs to answer "what other hosts does this
+    // page's markup point at," not build a full DOM.
+    private static readonly Regex ExternalReferenceRegex = new(
+        @"(?:src|href)\s*=\s*[""']https?://([^/""'\s]+)", RegexOptions.IgnoreCase | RegexOptions.Compiled, TimeSpan.FromSeconds(2));
+
+    private const int MaxThirdPartyHosts = 25;
+
     private readonly IHttpClientFactory _httpClientFactory;
 
     public SecurityTestingScanService(IHttpClientFactory httpClientFactory)
@@ -60,8 +70,16 @@ public class SecurityTestingScanService
         };
 
         var findings = new List<SecurityFindingDto>();
+        var performanceFindings = new List<SecurityFindingDto>();
 
+        // Timed separately from the overall scan's own stopwatch (which
+        // also covers robots.txt/security.txt/active-probe requests below)
+        // - this is specifically "how long did the target itself take to
+        // answer," the number a Performance Score should actually be based
+        // on.
+        var fetchStopwatch = Stopwatch.StartNew();
         var fetch = await FetchWithRedirectValidationAsync(target, HttpMethod.Get);
+        fetchStopwatch.Stop();
 
         if (fetch.Error != null)
         {
@@ -72,8 +90,11 @@ public class SecurityTestingScanService
         }
 
         var bodyRedaction = SecretRedactor.Redact(fetch.Body);
+        var responseSizeBytes = Encoding.UTF8.GetByteCount(fetch.Body);
 
-        result.TargetInfo = BuildTargetInfo(fetch, bodyRedaction.Text);
+        result.TargetInfo = BuildTargetInfo(fetch, bodyRedaction.Text, responseSizeBytes);
+        result.TargetInfo.ResponseTimeMs = Math.Round(fetchStopwatch.Elapsed.TotalMilliseconds, 0);
+
         findings.AddRange(BuildSecurityHeaderFindings(fetch, result.TargetInfo));
         findings.AddRange(BuildInfoDisclosureFindings(fetch));
         findings.AddRange(BuildCookieFindings(fetch, target));
@@ -82,6 +103,10 @@ public class SecurityTestingScanService
 
         var discoveredPaths = DiscoverApiPaths(bodyRedaction.Text);
         findings.AddRange(BuildApiDiscoveryFindings(discoveredPaths));
+
+        var thirdPartyHosts = DiscoverThirdPartyHosts(bodyRedaction.Text, target);
+        result.TargetInfo.ThirdPartyHosts = thirdPartyHosts;
+        findings.AddRange(BuildThirdPartyFindings(thirdPartyHosts));
 
         var (robotsFound, securityTxtFound) = await CheckWellKnownFilesAsync(target);
         result.TargetInfo.RobotsTxtFound = robotsFound;
@@ -92,9 +117,13 @@ public class SecurityTestingScanService
             findings.AddRange(await BuildActiveProbeFindingsAsync(target, discoveredPaths));
         }
 
+        performanceFindings.AddRange(BuildPerformanceFindings(result.TargetInfo, responseSizeBytes));
+
         result.Findings = findings;
+        result.PerformanceFindings = performanceFindings;
         result.Summary = Summarize(findings);
         result.SecurityScore = ComputeScore(findings);
+        result.PerformanceScore = ComputeScore(performanceFindings);
 
         stopwatch.Stop();
         result.DurationMs = Math.Round(stopwatch.Elapsed.TotalMilliseconds, 0);
@@ -232,7 +261,7 @@ public class SecurityTestingScanService
         return (Encoding.UTF8.GetString(memory.ToArray()), truncated);
     }
 
-    private static SecurityTargetInformationDto BuildTargetInfo(FetchResult fetch, string redactedBody)
+    private static SecurityTargetInformationDto BuildTargetInfo(FetchResult fetch, string redactedBody, int responseSizeBytes)
     {
         var info = new SecurityTargetInformationDto
         {
@@ -241,7 +270,10 @@ public class SecurityTestingScanService
             RedirectChain = fetch.RedirectChain,
             ContentType = fetch.ContentType,
             BodyTruncated = fetch.BodyTruncated,
-            PageTitle = ExtractTitle(redactedBody)
+            PageTitle = ExtractTitle(redactedBody),
+            ResponseSizeBytes = responseSizeBytes,
+            ContentEncoding = fetch.Headers.TryGetValue("Content-Encoding", out var encoding) ? encoding : null,
+            CacheControl = fetch.Headers.TryGetValue("Cache-Control", out var cacheControl) ? cacheControl : null
         };
 
         foreach (var name in SecurityHeaderNames)
@@ -530,6 +562,123 @@ public class SecurityTestingScanService
             Recommendation = "Confirm this endpoint enforces the authentication/authorization it's meant to, and isn't exposing more than intended to an unauthenticated caller.",
             Category = "ApiDiscovery"
         }).ToList();
+    }
+
+    // "How much of our users' data/traffic goes to someone else" - every
+    // distinct external host this page's own markup references via src=/
+    // href=. Purely a static read of what's already in the page, never
+    // fetched or contacted - see ExternalReferenceRegex's own comment.
+    private static List<string> DiscoverThirdPartyHosts(string redactedBody, Uri target)
+    {
+        return ExternalReferenceRegex.Matches(redactedBody)
+            .Select(m => m.Groups[1].Value)
+            .Where(host => !string.Equals(host, target.Host, StringComparison.OrdinalIgnoreCase)
+                && !host.EndsWith("." + target.Host, StringComparison.OrdinalIgnoreCase))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Take(MaxThirdPartyHosts)
+            .ToList();
+    }
+
+    private static List<SecurityFindingDto> BuildThirdPartyFindings(List<string> thirdPartyHosts)
+    {
+        return thirdPartyHosts.Select(host => new SecurityFindingDto
+        {
+            Severity = "INFO",
+            Title = $"Page references third-party host: {host}",
+            Description = "This page's own HTML loads a resource (script, image, stylesheet, or link) from an " +
+                "origin outside this site. Depending on what that resource is, the third party can potentially " +
+                "observe the visit (via the request itself, cookies it sets, or the Referer header) even without " +
+                "any data being deliberately sent to it.",
+            Recommendation = "Confirm this third party is expected and trusted, and that no more information than " +
+                "necessary (query parameters, referrer, cookies) reaches it.",
+            Category = "ThirdPartyRequests"
+        }).ToList();
+    }
+
+    // A lightweight, HTTP-level performance check - response time,
+    // compression, payload size, and caching, all computed from the same
+    // single fetch every other check already ran against. This is NOT a
+    // Lighthouse-style page-load audit: there's no headless browser here
+    // to measure paint, layout, or script execution time, and this scan
+    // never fetches a page's linked CSS/JS/images to measure their own
+    // weight - only the one HTML/API response actually requested.
+    private static List<SecurityFindingDto> BuildPerformanceFindings(SecurityTargetInformationDto info, int responseSizeBytes)
+    {
+        var findings = new List<SecurityFindingDto>();
+
+        var responseTimeMs = info.ResponseTimeMs ?? 0;
+
+        if (responseTimeMs > 3000)
+        {
+            findings.Add(new SecurityFindingDto
+            {
+                Severity = "HIGH",
+                Title = $"Slow response time ({responseTimeMs:0} ms)",
+                Description = "The target took over 3 seconds to respond, which most visitors will perceive as the site being broken or unresponsive.",
+                Recommendation = "Investigate server-side latency (cold starts, slow queries, unoptimized rendering) for this endpoint.",
+                Category = "Performance"
+            });
+        }
+        else if (responseTimeMs > 1000)
+        {
+            findings.Add(new SecurityFindingDto
+            {
+                Severity = "MEDIUM",
+                Title = $"Elevated response time ({responseTimeMs:0} ms)",
+                Description = "The target took over 1 second to respond - noticeable to visitors, though not yet severe.",
+                Recommendation = "Look for easy wins (caching, a warm server instance, a slow dependency call) before this grows further.",
+                Category = "Performance"
+            });
+        }
+
+        if (responseSizeBytes > 500_000 && string.IsNullOrEmpty(info.ContentEncoding))
+        {
+            findings.Add(new SecurityFindingDto
+            {
+                Severity = "MEDIUM",
+                Title = $"Large uncompressed response ({responseSizeBytes / 1024} KB)",
+                Description = "The response is over 500 KB and isn't compressed (no Content-Encoding), meaning every visitor downloads the full uncompressed size.",
+                Recommendation = "Enable gzip or Brotli compression at the server/CDN level.",
+                Category = "Performance"
+            });
+        }
+        else if (string.IsNullOrEmpty(info.ContentEncoding) && responseSizeBytes > 50_000)
+        {
+            findings.Add(new SecurityFindingDto
+            {
+                Severity = "LOW",
+                Title = "Response not compressed",
+                Description = "No Content-Encoding (gzip/br) header was present on a response over 50 KB.",
+                Recommendation = "Enable compression at the server/CDN level - it's usually a free, no-tradeoff win.",
+                Category = "Performance"
+            });
+        }
+
+        if (info.BodyTruncated)
+        {
+            findings.Add(new SecurityFindingDto
+            {
+                Severity = "INFO",
+                Title = "Response exceeds 1 MB (truncated for this scan)",
+                Description = "This scan only reads the first 1 MB of a response - the real page is at least that large, which is worth checking directly regardless of this tool's own cap.",
+                Recommendation = "Review the full response size with browser DevTools' Network tab for the real figure.",
+                Category = "Performance"
+            });
+        }
+
+        if (string.IsNullOrEmpty(info.CacheControl))
+        {
+            findings.Add(new SecurityFindingDto
+            {
+                Severity = "INFO",
+                Title = "No Cache-Control header",
+                Description = "Without Cache-Control, browsers fall back to heuristic caching, which can mean unnecessary repeat downloads for returning visitors.",
+                Recommendation = "Set an explicit Cache-Control appropriate to how often this content actually changes.",
+                Category = "Performance"
+            });
+        }
+
+        return findings;
     }
 
     private async Task<(bool RobotsFound, bool SecurityTxtFound)> CheckWellKnownFilesAsync(Uri target)
