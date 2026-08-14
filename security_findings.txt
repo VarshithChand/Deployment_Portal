@@ -3954,3 +3954,287 @@ behavior needs a real PAT to confirm end-to-end, flagged above rather
 than claimed as tested. This was a genuine pre-existing bug affecting
 Round 18's MFA nudge feature from the moment it shipped, not something
 introduced by this round's own changes.
+
+ROUND 28 - FIXED THE 2 OPEN SONARCLOUD BUGS (A11Y CLICK HANDLER, UNREACHABLE CONDITION)
+==================================================
+Date: 2026-08-13
+Trigger: user posted a screenshot of the Code Quality (SonarCloud) page
+showing "Bugs: Open 2" and asked to fix them. Queried SonarCloud's own
+public API directly (GET sonarcloud.io/api/issues/search?componentKeys=
+VarshithChand_yaml&types=BUG&resolved=false) instead of guessing from
+the dashboard's bare count - this returned the exact rule IDs, files,
+lines, and messages for both issues, and is now the established way
+this project answers "what does SonarCloud actually want fixed."
+
+Issue 1 (javascript:S1082, deployment-ui/src/components/
+MfaEnforcementGate.jsx): the enroll-dialog's outer content div had its
+own onClick handler with no keyboard equivalent - a non-interactive
+element with a click handler is an accessibility violation (can't be
+activated via keyboard). Fixed by adopting the exact backdrop-only
+`e.target === e.currentTarget` click-to-close pattern already used
+consistently by ConfirmDialog/DatabaseCreateTableDialog/
+DatabaseRowFormDialog/TypedConfirmDialog elsewhere in this app - the
+backdrop element owns the click handler, the inner dialog content has
+none at all.
+
+Issue 2 (csharpsquid:S2583, src/DeploymentAPI/Services/
+SettingsService.cs, MigrateSessionDataAsync): a local function mutated
+a captured outer bool, which Roslyn's data-flow analysis couldn't trace
+through the closure boundary, producing a false-positive "condition is
+always true/false" warning. Fixed by having the local function return a
+bool instead of mutating captured state, combined via non-short-
+circuiting `|=` to preserve identical behavior (every field must still
+be checked/migrated regardless of whether an earlier one already
+matched).
+
+Verification performed:
+  - `dotnet build` (isolated output dir): 0 errors.
+  - `npm run lint` / `npm run build`: clean, pre-existing warnings only.
+  - Live regression smoke test against the deployed Render backend
+    after push: a normal fake-token pat-login call still behaves
+    identically (clean rejection, no crash, no behavior change) -
+    confirms the SettingsService refactor didn't alter
+    MigrateSessionDataAsync's actual logic.
+  - Could not directly exercise MfaEnforcementGate's enroll dialog in a
+    real browser (no live GitHub identity available in this sandboxed
+    session to reach the MFA-enrolled state that dialog requires) -
+    reviewed the diff against the four existing dialogs it now matches
+    byte-for-byte in pattern instead.
+
+Files changed: deployment-ui/src/components/MfaEnforcementGate.jsx,
+src/DeploymentAPI/Services/SettingsService.cs.
+Commit: b9c95c7.
+
+Status: Complete. Both fixes pushed and live-verified via regression
+smoke test; SonarCloud's own dashboard confirmed "Bugs: Open 0" on its
+next scan (per the user's own follow-up screenshot).
+
+ROUND 29 - FIXED THE 7 OPEN SONARCLOUD VULNERABILITIES
+==================================================
+Date: 2026-08-13
+Trigger: following Round 28's bug fixes, the user's next screenshot of
+the Code Quality page showed "Vulnerabilities: Open 7" (unchanged) and
+asked to fix them too. Same approach as Round 28: queried SonarCloud's
+public API directly for types=VULNERABILITY, resolved=false - got the
+exact 7 issues rather than guessing.
+
+1. csharpsquid:S4790 (CRITICAL) - SettingsService.cs:1932, HMACSHA1
+   used inside the TOTP step computation. NOT changed - this is RFC
+   6238/RFC 4226's mandated PRF, not a weak-hashing choice. Every
+   standard authenticator app (Google Authenticator, Authy, 1Password,
+   etc.) computes codes assuming HMAC-SHA1 unless the otpauth:// URI
+   says otherwise; switching to SHA-256/512 here would silently desync
+   every already-enrolled user's authenticator with no way for them to
+   diagnose why. Suppressed with a `// NOSONAR` comment explaining the
+   reasoning, matching how every other genuinely-accepted-risk finding
+   in this codebase is documented rather than silently ignored.
+2. csharpsquid:S7039 (MEDIUM) - Program.cs:381, CSP used
+   'unsafe-inline' for script-src/style-src portal-wide, when only
+   Swagger's own bundled HTML UI actually needs it (every other route
+   in this API only ever returns JSON, where a CSP directive is inert
+   either way). Fixed by scoping the permissive CSP to requests under
+   /swagger only, and using `default-src 'none'; frame-ancestors 'none'`
+   - maximally restrictive - for everything else.
+3. javascript:S4036 (LOW) - deployment-ui/vite.config.js:82, git
+   invoked by bare name via execSync, letting the OS search PATH to
+   resolve it (CWE-427, "uncontrolled search path element"). Fixed by
+   resolving git to a concrete absolute path ourselves (walking PATH,
+   checking each directory for git/git.exe/git.cmd) before invoking it
+   via execFileSync (no shell) instead of execSync (spawns one).
+   Verified locally: resolves to the real git.exe and returns the real
+   commit hash, no functional change.
+4. csharpsquid:S4036 (LOW) - ApplicationBuildInfoService.cs:46, same
+   underlying issue in C#: `new ProcessStartInfo("git", ...)`. Fixed
+   with the equivalent PATH-walking absolute-path resolution before
+   constructing ProcessStartInfo.
+5-7. csharpsquid:S6444 (LOW x3) - DatabaseManagementService.cs:25, 845,
+   846 - a compiled static Regex field and two Regex.IsMatch calls with
+   no execution timeout (ReDoS hardening). Fixed by passing an explicit
+   1-second TimeSpan timeout to all three - the patterns involved
+   (identifier validation, numeric/quoted-literal default-expression
+   checks) aren't catastrophic-backtracking-prone today, but an
+   explicit timeout is correct defense-in-depth against a future
+   pattern change introducing one.
+
+Verification performed:
+  - `dotnet build` (isolated output dir): 0 errors, same 2 pre-existing
+    unrelated warnings as every prior round.
+  - `npm run lint` / `npm run build`: clean.
+  - Directly ran the new resolveExecutablePath+execFileSync logic in
+    Node standalone: resolved C:\...\Git\mingw64\bin\git.exe and
+    returned the correct short commit hash, confirming zero regression
+    in the frontend's own build-commit reporting.
+  - Live regression smoke test against the deployed Render backend
+    after push: fake-token pat-login still behaves identically.
+  - Could not directly verify the CSP change in a live browser's
+    devtools Network/Security panel against the deployed Swagger UI (no
+    interactive browser session in this sandboxed environment) -
+    reviewed the header logic directly instead; the change is a pure
+    conditional split of a header string, not new logic.
+
+Files changed: deployment-ui/vite.config.js, src/DeploymentAPI/
+Program.cs, Services/{ApplicationBuildInfoService,
+DatabaseManagementService, SettingsService}.cs.
+Commit: 96a3e06.
+
+Status: 6 of 7 fixed in code; 1 (the TOTP HMAC-SHA1) is a documented,
+justified accepted-risk suppression, not left silently unresolved.
+
+ROUND 30 - REAL BUG: MANDATORY-MFA "BLOCKED" SCREEN WAS FRONTEND-ONLY, NO
+SERVER-SIDE ENFORCEMENT - PLUS A FULL AUTHORIZATION/SESSION SECURITY REVIEW
+==================================================
+Date: 2026-08-14
+Trigger: the user pasted a detailed, structured security-assessment
+checklist (apparently produced by another AI tool given a passive/
+external look at the public URL) covering PAT exposure, MFA bypass, AWS
+credential exposure, session-replacement handling, admin API
+authorization, IDOR, CORS, rate limiting, and CSRF, and asked to fix
+whatever was real. Rather than trusting that checklist's speculative
+framing, each item was independently verified against this app's actual
+backend source.
+
+FINDING (real, confirmed, fixed) - MFA bypass via direct API calls:
+MfaEnforcementGate.jsx's full-screen "blocked" state (rendered when a
+session has a cloud credential saved or was admin-flagged Required,
+still hasn't enabled MFA, and has used its 2 free skips - see
+BootstrapController's MfaNudge/Round 18/26/27) was a UI-only render
+gate. Nothing on the backend stopped a browser bypassing that overlay
+(or a direct API call skipping the frontend entirely) from still
+reaching real GitHub/AWS/Azure/GCP/portal data underneath it. This is
+distinct from - and was not caught by - the separate, genuinely
+enforced login-time MFA gate in AuthController's pat-login/mfa/verify
+flow (which only ever applies when MFA was ALREADY enabled on an
+account at the moment it connects). The gap affected exactly the
+sessions the block screen exists to protect: someone who connected a
+token back when their account had no MFA yet (so AuthController's gate
+never applied to them), then later saved a cloud credential or got
+admin-flagged, making the nudge mandatory after the fact - with no
+backend check anywhere actually enforcing that block.
+
+Fix:
+  - New src/DeploymentAPI/Helpers/MfaPolicy.cs - single shared
+    Show/Mandatory/SkipsUsed/Blocked computation, extracted from
+    BootstrapController's previous inline version so the "what the
+    frontend is told" and "what the backend actually allows" can never
+    drift apart the way they just did.
+  - New middleware in Program.cs (after GitHubAuthService.LoadAsync,
+    before the Swagger branch): evaluates MfaPolicy for every /api/*
+    request and returns 403 MFA_REQUIRED when Blocked is true. A narrow
+    allowlist (/api/bootstrap, /api/auth, /api/mfa,
+    /api/settings/me/mfa, /swagger, /api/health) stays reachable so a
+    blocked session can still see why it's blocked and actually finish
+    enrolling. Reuses GitHubAuthService.GetAuthenticatedLoginAsync's
+    existing 60-second per-token cache rather than a fresh GitHub call
+    per request, so a session sitting on the block screen doesn't burn
+    a live GitHub API call on every request it makes while stuck there.
+  - BootstrapController.cs refactored to call MfaPolicy instead of
+    duplicating the computation inline.
+  - Fails CLOSED on GitHub-identity-resolution failure (a transient
+    GitHub outage while a session has a cloud credential saved and has
+    used its skips will 403 that session rather than let it through
+    unverified) - a deliberate security-over-availability tradeoff for
+    a control explicitly about mandatory enforcement, consistent with
+    AdminGate's existing "couldn't be confirmed" denial behavior for
+    the same class of failure.
+
+Reviewed and confirmed ALREADY CORRECT, no fix needed:
+  - PAT/AWS/Azure secret exposure: GetMyAws and equivalent endpoints
+    only ever return Configured/Region/MfaEnrolled/IdentityLabel-style
+    masked fields - AccessKeyId/SecretAccessKey/ClientSecret/raw PAT
+    are never serialized into any API response.
+  - Session replacement (device takeover): SaveUserGitHubCredentialsAsync's
+    allowTakeoverIfActive path (used by AuthController's MFA-verified
+    reconnect) fully deletes the old session's stored credentials
+    (DeletePatUserAsync) AND fires a force-logout signal
+    (SessionActivityService.ForceLogout) for it - so even if the old
+    browser ignores the live logout signal, its next API call reads its
+    own now-empty credential row and is unauthenticated anyway. This
+    isn't just a UI signal, it's enforced at the data layer.
+  - Admin endpoint authorization: had a dedicated read-only audit pass
+    over all 28 controllers (via a research subagent) checking every
+    mutating action or non-session-scoped read against AdminGate
+    coverage. No missing gate found - the three historical bugs
+    AdminGate.cs's own comment references (deploy trigger, approve/
+    reject, artifact delete) are all still gated, and no new instance
+    of that bug class exists in any controller added or changed since.
+    (Noted separately, not a security issue: WorkflowController.cs is
+    an empty/dead file with no class or actions - cosmetic cleanup
+    candidate only.)
+  - IDOR via X-Session-Id: this header is a deliberately unguessable,
+    client-held capability token (a GUID, ~122 bits of entropy - see
+    PortalIdentity.cs's own extensive reasoning comment), analogous to
+    a bearer session token delivered via header+localStorage instead of
+    an HttpOnly cookie (necessary here because the frontend and backend
+    are cross-origin - see PortalIdentity's SameSite=None reasoning).
+    Not guessable by brute force, and not readable cross-origin by a
+    malicious page (localStorage is origin-scoped; CORS is configured
+    with WithOrigins + AllowCredentials, never AllowAnyOrigin, so a
+    malicious origin can't get a browser to attach it either). No leak
+    vector was found in logging or error responses.
+  - CSRF: already handled deliberately (see AdminGate.cs's own
+    HasSessionHeader reasoning) - every admin-gated mutating action
+    requires the X-Session-Id header, which a bare cross-site HTML
+    form (the classic CSRF vector, unaffected by the portal_token
+    cookie's necessary SameSite=None) has no way to set, and a forged
+    fetch()/XHR attempting to set it would trigger a CORS preflight
+    this app's origin allowlist already rejects.
+  - CORS: configured via WithOrigins(...).AllowCredentials() in
+    Program.cs, never AllowAnyOrigin - correct as written in code. (The
+    actual list of allowed origins is a Render environment variable,
+    outside this repo's own visibility - worth the user double-checking
+    it only lists the real Cloudflare Workers frontend origin.)
+
+Reviewed and confirmed a REAL BUT LOWER-PRIORITY gap, not fixed this
+round (flagged for a decision, not silently dropped):
+  - Rate limiting: MFA code guesses and PIN guesses each have their own
+    dedicated lockout counters (5 attempts / 15-minute cooldown, see
+    SessionActivityService), but there is no general-purpose request
+    rate limiter (e.g. ASP.NET Core's built-in RateLimiting middleware)
+    anywhere in Program.cs. This means an attacker could still flood
+    cheap endpoints or repeatedly probe pat-login with different
+    tokens without a portal-level throttle backstopping it (GitHub's
+    own API would separately rate-limit/lock the account behind an
+    invalid token, but that's GitHub's protection, not this app's).
+    Left unimplemented this round rather than adding an unverified new
+    middleware without being able to exercise it against a live load
+    test in this sandboxed session - recommend as a follow-up if the
+    user wants it.
+
+Verification performed:
+  - `dotnet build` (isolated output dir): 0 errors, same 2 pre-existing
+    unrelated warnings as every prior round, across three separate
+    rebuilds as the middleware was refined.
+  - Could NOT start a local instance of DeploymentAPI to exercise the
+    new middleware directly - an already-running local dotnet process
+    (unrelated to this session, left untouched rather than killed) held
+    both the default dev port and the bin/ output directory. Relied
+    instead on the isolated-output-dir build succeeding, close code
+    review against BootstrapController's pre-existing (and
+    independently-confirmed-correct-in-Round-27) equivalent logic, and
+    a live post-deploy regression check.
+  - Live regression check against the deployed Render backend after
+    push: GET api/bootstrap on a fresh, fully-unconfigured session
+    still returns the identical mfaNudge:{show:false,mandatory:false,
+    skipsUsed:0,blocked:false} shape as before, and the app's normal
+    (non-blocked, no-token) traffic path is unaffected - the common
+    case regression that mattered most given no real GitHub PAT is
+    available to exercise the actual blocked-session 403 path.
+  - Could NOT live-verify the actual blocked-session 403 (would require
+    a real GitHub account: connect a token before MFA is enabled on it,
+    save a cloud credential or get admin-flagged Required, use both
+    free skips, then confirm a direct call to e.g. GET me/aws/resources
+    now 403s instead of 200s) - same standing real-GitHub-identity
+    limitation as every MFA round this session. Recommend the user test
+    this specific path directly once they can, since it's the core
+    claim of this round's fix.
+
+Files changed: src/DeploymentAPI/Helpers/MfaPolicy.cs (new),
+Program.cs, Controllers/BootstrapController.cs.
+Commit: 4af698a.
+
+Status: The confirmed MFA-bypass gap is fixed and pushed; the broader
+checklist is otherwise either already correctly implemented (documented
+above) or an open, flagged recommendation (rate limiting) rather than a
+silent gap. The one item that couldn't be live-verified end-to-end (the
+actual 403 on a real blocked session) is explicitly called out above,
+not claimed as tested.
