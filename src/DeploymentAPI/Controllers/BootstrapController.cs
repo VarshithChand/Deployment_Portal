@@ -80,11 +80,10 @@ public class BootstrapController : ControllerBase
         var gcpCredsTask = _settings.GetUserGcpCredentialsAsync(key);
         var pinConfiguredTask = _settings.HasPinAsync(key);
         var wasSignedOutTask = _settings.IsPatUserSignedOutAsync(key);
-        var mfaNudgeSkipsTask = _settings.GetMfaNudgeSkipCountAsync(key);
 
         await Task.WhenAll(
             githubCredsTask, awsCredsTask, azureCredsTask, gcpCredsTask,
-            pinConfiguredTask, wasSignedOutTask, mfaNudgeSkipsTask);
+            pinConfiguredTask, wasSignedOutTask);
 
         var githubCreds = githubCredsTask.Result;
         var awsCreds = awsCredsTask.Result;
@@ -92,7 +91,6 @@ public class BootstrapController : ControllerBase
         var gcpCreds = gcpCredsTask.Result;
         var pinConfigured = pinConfiguredTask.Result;
         var wasSignedOut = wasSignedOutTask.Result;
-        var mfaNudgeSkips = mfaNudgeSkipsTask.Result;
 
         // Both of these are real outbound calls (AWS STS, GitHub's own
         // API) and independent of each other - only run when their own
@@ -116,30 +114,11 @@ public class BootstrapController : ControllerBase
         // tokenOwner.Login (just resolved above) is already the live,
         // confirmed GitHub identity behind this session's token - reusing
         // it here means checking MFA status costs no extra GitHub call.
-        var mfaEnabled = tokenOwner != null && await _settings.IsMfaEnabledAsync(tokenOwner.Login);
-        var mfaRequiredByAdmin = tokenOwner != null && await _settings.IsMfaRequiredByAdminAsync(tokenOwner.Login);
-        var hasCloudCredential = awsCreds.IsConfigured || azureCreds.IsConfigured || gcpCreds.IsConfigured;
-
-        // TokenConfigured, not IsConfigured - IsConfigured also requires
-        // Owner/Repository to be set, but Round 17's two-page login flow
-        // deliberately saves a fresh connection with both blank (repo
-        // selection happens afterward, from the Dashboard's own picker -
-        // see PatLoginPage/MfaVerifyPage). Using IsConfigured here meant
-        // the entire nudge/mandatory/block system silently never
-        // activated for anyone who'd connected a token but hadn't yet
-        // picked a repo from the Dashboard - MFA is about protecting the
-        // account/credential itself, not something that should wait on
-        // an unrelated repo-selection step.
-        var mfaNudgeShow = githubCreds.TokenConfigured && !mfaEnabled;
-
-        // Mandatory either because this session has a cloud credential
-        // saved (Round 18's original trigger) OR because a super-admin
-        // explicitly flagged this identity as required (Admin Access'
-        // "Require MFA" - see AdminUsersController.RequireMfa) - either
-        // reason escalates the same nudge into the same full-screen block
-        // once the 2-skip budget is spent, MfaEnforcementGate doesn't
-        // need to know or care which one applied.
-        var mfaNudgeMandatory = mfaNudgeShow && (hasCloudCredential || mfaRequiredByAdmin);
+        // The actual Show/Mandatory/Blocked computation lives in one
+        // shared place (MfaPolicy) so this reported state can never
+        // quietly drift from what Program.cs's enforcement middleware
+        // actually allows through - see that middleware's comment.
+        var mfaPolicy = await MfaPolicy.EvaluateAsync(_settings, key, tokenOwner?.Login);
 
         var authenticated = User.Identity?.IsAuthenticated == true;
 
@@ -179,10 +158,10 @@ public class BootstrapController : ControllerBase
             TokenOwner = tokenOwner,
             MfaNudge = new BootstrapMfaNudgeDto
             {
-                Show = mfaNudgeShow,
-                Mandatory = mfaNudgeMandatory,
-                SkipsUsed = mfaNudgeSkips,
-                Blocked = mfaNudgeMandatory && mfaNudgeSkips >= 2
+                Show = mfaPolicy.Show,
+                Mandatory = mfaPolicy.Mandatory,
+                SkipsUsed = mfaPolicy.SkipsUsed,
+                Blocked = mfaPolicy.Blocked
             }
         });
     }

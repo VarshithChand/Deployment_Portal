@@ -459,6 +459,78 @@ app.Use(async (context, next) =>
 });
 
 //
+// Mandatory-MFA enforcement
+// MfaEnforcementGate.jsx's full-screen "blocked" state (see BootstrapController's
+// MfaNudge.Blocked / MfaPolicy) was, until now, a UI-only render gate —
+// nothing on the backend stopped a browser (or a direct API call bypassing
+// the frontend entirely) from still reaching real GitHub/AWS/Azure/GCP/
+// portal data underneath it. That gap is real for exactly the sessions
+// this screen exists to lock down: anyone who connected a token back when
+// their account had no MFA enabled yet (so the two-step PAT-login/MFA
+// gate in AuthController never applied to them), then later saved a cloud
+// credential or got flagged Required by an admin, making the nudge
+// mandatory *after the fact*. This closes that gap where every other real
+// authorization boundary in this app already lives — server-side, never
+// trusted to the frontend alone (same reasoning as SessionActivityService's
+// PIN-attempt counter, or MfaGate's login-time enforcement).
+//
+// Deliberately allowlisted (must stay reachable for a blocked session to
+// ever see why it's blocked, or to actually get unblocked):
+//   - /api/bootstrap        - the only way the frontend learns it's blocked
+//   - /api/auth              - logout, session-epoch polling, mfa/pending, /me
+//   - /api/mfa               - the actual enroll/verify/disable flow
+//   - /api/settings/me/mfa   - the skip-nudge action
+//   - /swagger, /api/health  - unrelated to this session's own MFA state
+// Uses GitHubAuthService.GetAuthenticatedLoginAsync (already 60s-cached
+// per token, see that service's own comment) rather than a fresh GitHub
+// call, so a session sitting on the block screen doesn't burn a live
+// GitHub API call on every request it makes while stuck there.
+//
+var mfaBlockAllowlist = new[]
+{
+    "/api/bootstrap", "/api/auth", "/api/mfa", "/api/settings/me/mfa", "/swagger", "/api/health"
+};
+
+app.Use(async (context, next) =>
+{
+    var path = context.Request.Path;
+
+    if (!path.StartsWithSegments("/api") || mfaBlockAllowlist.Any(p => path.StartsWithSegments(p)))
+    {
+        await next();
+        return;
+    }
+
+    var settings = context.RequestServices.GetRequiredService<SettingsService>();
+    var githubAuth = context.RequestServices.GetRequiredService<GitHubAuthService>();
+    var key = PortalIdentity.GetOrCreateKey(context);
+
+    var login = githubAuth.HasToken ? await githubAuth.GetAuthenticatedLoginAsync() : null;
+    var policy = await MfaPolicy.EvaluateAsync(settings, key, login);
+
+    if (policy.Blocked)
+    {
+        context.Response.StatusCode = StatusCodes.Status403Forbidden;
+        context.Response.ContentType = "application/json";
+
+        await context.Response.WriteAsJsonAsync(new ApiErrorResponse
+        {
+            Success = false,
+            Error = new ApiError
+            {
+                Code = "MFA_REQUIRED",
+                Message = "Multi-factor authentication is required for this account before continuing. Finish setting it up to regain access.",
+                CorrelationId = context.TraceIdentifier
+            }
+        });
+
+        return;
+    }
+
+    await next();
+});
+
+//
 // Swagger
 // Kept available in every environment (not just Development) so the API
 // surface is checkable on the deployed instance too - but gated behind the
