@@ -4540,3 +4540,103 @@ portion (authorization gating, confirmed live). The scan engine itself
 and the frontend page need the user's own real-identity testing plus a
 manual frontend deploy before this is usable end-to-end - both
 explicitly flagged above, not claimed as tested.
+
+ROUND 34 - SECURITY TESTING LAB'S FIRST REAL SCAN RESULTS, ACTED ON
+==================================================
+Date: 2026-08-14
+Trigger: after deploying Round 33's Security Testing Lab, the user ran
+their first real scan (against this app's own frontend) and shared the
+Findings results directly - the first live proof the feature works
+end-to-end, and immediately useful as real signal.
+
+Findings acted on:
+  - Missing Strict-Transport-Security, Missing Cross-Origin-Opener-Policy,
+    Missing Cross-Origin-Resource-Policy - all real, all previously
+    absent from deployment-ui/vite.config.js's generated Cloudflare
+    _headers file. Fixed by adding all three: HSTS
+    (max-age=31536000; includeSubDomains, no `preload` since that's a
+    one-way commitment this repo can't make on the user's behalf), COOP
+    same-origin (confirmed safe - GitHub OAuth login is a full-page
+    redirect, AuthContext.jsx's login(), never a window.open() popup, so
+    there's no window.opener flow for COOP to break), CORP same-origin
+    (confirmed safe - nothing outside this origin embeds this site's own
+    images/scripts). User re-ran the scan after deploying and confirmed
+    all three now PASS.
+  - Weak Content-Security-Policy (style-src 'unsafe-inline') -
+    investigated a real fix (splitting into style-src-attr 'unsafe-inline'
+    + a stricter bare style-src, confirmed via grep that no CSS-in-JS
+    library or dynamic <style> injection exists anywhere in this
+    codebase, so functionally the split would be safe) but flagged the
+    real risk honestly: style-src-attr is a CSP Level 3 directive, and a
+    browser without CSP3 support would fall back to enforcing the
+    now-stricter bare style-src, silently breaking every inline
+    style={{}} prop (used extensively throughout this app's JSX) for
+    that visitor - untestable across real browsers from this sandboxed
+    session. Asked the user directly rather than deciding unilaterally;
+    they chose to leave it as documented, accepted risk rather than take
+    that regression risk. No code change.
+
+Feature extension (same session, natural follow-up): user asked for a
+Performance Score alongside the Security Score, and a way to see "how
+much of our user data is going to other [domains]," kept as a sub-
+section of Security Testing Lab rather than a separate page.
+  - Fixed a real, previously-shipped bug: SecurityTargetInformationDto.
+    ResponseTimeMs was declared in Round 33 but never actually
+    populated by SecurityTestingScanService - the frontend silently fell
+    back to the whole scan's total duration (including robots.txt/
+    security.txt/active-probe requests, not just the target's own
+    response) instead. Now measured with its own stopwatch around just
+    the main target fetch.
+  - New Performance Score (0-100, same weighted-deduction scoring
+    pattern as Security Score, kept as an entirely separate score/
+    finding list rather than blended in - a fast-but-insecure or
+    slow-but-secure site shouldn't average out to "medium" on both).
+    Checks: response time (>1s MEDIUM, >3s HIGH), compression presence
+    (Content-Encoding on responses over 50KB/500KB), response truncation
+    (this scan's own 1MB cap, not the real page's actual size), and
+    Cache-Control presence. All computed from the SAME already-fetched
+    response - no additional requests. Explicitly labeled in the UI as
+    a lightweight HTTP-level check, not a Lighthouse-style rendered-page
+    audit (this tool has no headless browser to measure paint/layout/
+    script execution, and never fetches a page's linked CSS/JS/image
+    assets to weigh them).
+  - New third-party-host discovery: regex-scans the fetched page's own
+    markup for external (cross-origin) src=/href= references, surfaces
+    each as its own INFO finding ("Page references third-party host: X")
+    folded into the Security findings/score (a data-exposure concern,
+    not a performance one) - directly answers "how much of our users'
+    traffic goes to someone else," purely from static markup, never
+    fetched or contacted itself.
+
+Verification performed:
+  - `dotnet build` (isolated output dir): 0 errors both times (header
+    fix commit and performance-extension commit), same 2 pre-existing
+    unrelated warnings as every prior round.
+  - `npm run lint` / `npm run build`: clean both times, no new warnings.
+  - Frontend build directly inspected after the header-fix commit:
+    confirmed dist/_headers contains all three new header lines with
+    correct values before pushing.
+  - Live verification of the header fix came from the USER's own
+    re-scan (their screenshot showing HSTS/COOP/CORP now passing) -
+    genuinely confirmed working, not just code-reviewed.
+  - Could NOT live-verify the Performance Score/third-party-discovery
+    extension's actual output (needs the real VarshithChand identity to
+    reach the super-admin-gated scan endpoint) - same standing
+    limitation as Round 33. Recommend the user re-run a scan after their
+    next frontend deploy and confirm the new Performance Score section
+    and third-party host list render sensibly against a real target.
+
+Files changed: deployment-ui/vite.config.js (header fix);
+src/DeploymentAPI/{DTOs/SecurityTestingDtos,Services/SecurityTestingScanService,
+Services/SettingsService}.cs, deployment-ui/src/components/settings/
+SecurityTestingView.jsx (performance extension).
+Commits: d828987 (headers), a302ca7 (performance).
+
+Status: Header fix complete and user-confirmed live. Performance
+extension complete and pushed, code-level verified only - needs the
+user's own scan to confirm real output, flagged above rather than
+claimed as tested. The CSP style-src-attr split was investigated,
+found genuinely safe for this codebase specifically, but left
+unapplied at the user's explicit choice given the untestable-from-here
+older-browser compatibility risk - documented as a deliberate decision,
+not an oversight.
