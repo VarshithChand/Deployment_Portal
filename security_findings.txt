@@ -5863,3 +5863,33 @@ gotten wrong. Recommend the user test with their own MFA-enabled
 account: attempt Remove PIN, confirm the code prompt appears, enter a
 wrong code once or twice to confirm the error message, then a correct
 code to confirm it actually removes the PIN.
+
+==================================================
+ROUND 46 FOLLOW-UP - UI FIX: PIN LOCK SCREEN CARET MISALIGNED AGAINST
+THE PLACEHOLDER
+==================================================
+Date: 2026-08-17
+Trigger: user reported UI alignment looked off on the idle-lock PIN
+screen (PinLockScreen.jsx), and separately confirmed the semi-
+transparent backdrop was fine as-is ("no transparency needed" - not a
+request to change it).
+
+Root cause: .pin-lock-input applies .5em letter-spacing + centered text
+unconditionally, meant to give TYPED digits an OTP-box look - but with
+the field empty, that same spacing/centering also applied to the
+plain-text "PIN" placeholder (placeholders render as plain text even
+on a type="password" input), spreading "P I N" out and leaving the
+blinking caret sitting nowhere near where it visually starts.
+
+Fix: global.css - a new :placeholder-shown rule makes the field plain
+left-aligned with normal spacing only while empty; the spaced "OTP"
+look still applies the instant there's real content, unchanged.
+Confirmed via code read that .dialog-backdrop already uses a semi-
+transparent var(--overlay-bg) (rgba, alpha .35-.75 depending on theme)
+across every theme - not a solid/blank overlay - so left untouched per
+the user's own "no transparency needed" note.
+
+Files changed: deployment-ui/src/styles/global.css.
+Commit: ef67981.
+
+Status: Complete and pushed. CSS-only, no backend involved.
