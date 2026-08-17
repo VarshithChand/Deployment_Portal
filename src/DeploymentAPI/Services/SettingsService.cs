@@ -2501,17 +2501,18 @@ public class SettingsService
         if (BitConverter.IsLittleEndian)
             Array.Reverse(stepBytes);
 
-        // NOSONAR (csharpsquid:S4790) - SHA-1 here isn't a weak-hashing
-        // choice, it's RFC 6238/RFC 4226's mandated PRF. Every standard
-        // TOTP app (Google Authenticator, Authy, 1Password, etc.) computes
-        // codes assuming HMAC-SHA1 unless the otpauth:// URI explicitly
-        // says otherwise; switching this to SHA-256/512 would silently
-        // desync every already-enrolled user's authenticator with no way
-        // for them to detect why, since their app has no error path for
-        // "server changed algorithms." Secrets/PATs/recovery codes
-        // elsewhere in this file already use SHA-256 - this is the one
-        // deliberate, spec-forced exception.
-        using var hmac = new HMACSHA1(key);
+        // SHA-1 here isn't a weak-hashing choice, it's RFC 6238/RFC 4226's
+        // mandated PRF. Every standard TOTP app (Google Authenticator,
+        // Authy, 1Password, etc.) computes codes assuming HMAC-SHA1 unless
+        // the otpauth:// URI explicitly says otherwise; switching this to
+        // SHA-256/512 would silently desync every already-enrolled user's
+        // authenticator with no way for them to detect why, since their
+        // app has no error path for "server changed algorithms." Secrets/
+        // PATs/recovery codes elsewhere in this file already use SHA-256 -
+        // this is the one deliberate, spec-forced exception. The NOSONAR
+        // marker has to be on this exact line (not in the paragraph above)
+        // for SonarQube to actually recognize the suppression.
+        using var hmac = new HMACSHA1(key); // NOSONAR (csharpsquid:S4790) - RFC 6238/4226-mandated PRF for TOTP, see comment above
         var hash = hmac.ComputeHash(stepBytes);
 
         var offset = hash[^1] & 0x0F;
