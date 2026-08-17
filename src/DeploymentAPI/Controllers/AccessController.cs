@@ -144,10 +144,17 @@ public class AccessController : ControllerBase
         return Ok(await _github.GetAccessEntriesAsync(forceRefresh: true));
     }
 
+    // allowRepoWrite: true — creating a branch is a "push"-level action on
+    // GitHub's own side (unlike inviting collaborators or setting branch
+    // protection rules below, both of which genuinely need admin
+    // permission there), so - same reasoning/precedent as
+    // DeploymentController.Deploy - anyone whose connected token already
+    // has real GitHub push access to this repo can create one without
+    // also needing a separate entry on the portal's own admin allowlist.
     [HttpPost("branches")]
     public async Task<IActionResult> CreateBranch(CreateBranchDto request)
     {
-        if (await AdminGate.DenyUnlessAdminAsync(this, _settings, "change repository access") is IActionResult denied)
+        if (await AdminGate.DenyUnlessAdminAsync(this, _settings, "change repository access", allowRepoWrite: true) is IActionResult denied)
             return denied;
 
         if (string.IsNullOrWhiteSpace(request.Name) || string.IsNullOrWhiteSpace(request.SourceBranch))
