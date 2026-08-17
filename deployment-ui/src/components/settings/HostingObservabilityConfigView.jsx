@@ -376,8 +376,8 @@ export default function HostingObservabilityConfigView() {
             />
 
             <TargetRoleFields
-                label="Database metrics (optional)"
-                hint={'Only for CPU/Memory/Storage charts, and only meaningful if the database below is also a Render-managed resource — links it to Render’s Metrics API. Health/size/tables/connection-pool need the connection set below regardless — the Database tab shows "not connected" until one is set, even for the super-admin.'}
+                label="CPU/Memory/Storage Metrics Link (optional)"
+                hint={'Not the database connection itself (that’s the separate "Database" card below, required either way) - this only links the Database tab’s CPU/Memory/Storage graphs to Render’s Metrics API, for when the connected database is also a Render-managed resource.'}
                 provider={targets.databaseProvider}
                 serviceId={targets.databaseServiceId}
                 onProviderChange={(v) => updateTarget("databaseProvider", v)}

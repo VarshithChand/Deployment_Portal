@@ -10,10 +10,16 @@ import {
 
 const EMPTY_FORM = { token: "", accountId: "" };
 
+// checkboxText, not a plain label, so the "database" role never has to
+// stand alone as the word "Database" - too easy to mistake for the
+// SEPARATE Database connection tab/card on this same page (the actual
+// credential powering health/tables/connection-pool - see
+// DatabaseConnectionSection.jsx). This role only ever links Render's
+// CPU/Memory metrics graphs, nothing about the connection itself.
 const ROLES = [
-    { key: "frontend", label: "Frontend" },
-    { key: "backend", label: "Backend" },
-    { key: "database", label: "Database (only meaningful for a Render-managed database)" }
+    { key: "frontend", label: "Frontend", checkboxText: (provider) => `Use ${provider} as Frontend` },
+    { key: "backend", label: "Backend", checkboxText: (provider) => `Use ${provider} as Backend` },
+    { key: "database", label: "Database", checkboxText: (provider) => `Link ${provider}'s CPU/Memory metrics to the database (optional)` }
 ];
 
 // Toggling ONE role only ever touches that role's provider/serviceId
@@ -231,7 +237,7 @@ export default function DashboardRoleSection({ provider, label, hasAccountId }) 
                                 checked={active}
                                 onChange={(e) => handleRoleToggle(r.key, e.target.checked)}
                             />
-                            Use {label} as {r.label}
+                            {r.checkboxText(label)}
                         </label>
 
                         {active && (
