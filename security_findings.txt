@@ -5343,3 +5343,124 @@ Commit: 70bfc46.
 
 Status: Fix complete and pushed. Awaiting the user's confirmation that
 the Environments card is populated again after this deploy rolls out.
+
+==================================================
+ROUND 42 - NEW FEATURE: "HOSTING PROVIDERS" PAGE - CONNECT RENDER,
+CLOUDFLARE, NETLIFY, VERCEL
+==================================================
+Date: 2026-08-17
+Trigger: user asked for a new page listing frontend + backend PaaS
+providers where they could connect their own accounts and check how
+they're connected to each service, pasting a detailed 2026 free-tier
+comparison table (Render/Railway/Koyeb/Fly.io/Heroku/Northflank/Qovery
+for backend, Cloudflare Pages/Netlify/Vercel/GitHub Pages/Firebase/
+GitLab Pages/Surge for frontend) as context for what to support.
+
+Scoped down from that 13-provider table via two clarifying questions
+before any code was written:
+  1. Providers for v1: Render + Cloudflare Pages, plus Netlify + Vercel
+     (4 total) - not Railway/Koyeb (GraphQL/less-common APIs) or GitHub
+     Pages/Firebase (deferred, different auth shapes).
+  2. Credential storage: per-session, exactly like the existing AWS/
+     Azure Cloud Services model - never portal-wide, never durable
+     across devices, cleared on sign-out.
+Went through EnterPlanMode given the real size (4 new third-party API
+integrations + a new page + new nav entry + new credential storage) -
+plan approved before implementation began.
+
+What was built:
+  - New DTOs (DTOs/PaasProviderDtos.cs): UserPaasCredentials(Token,
+    AccountId) - ONE generic record for all four providers (three are
+    plain bearer-token APIs; only Cloudflare needs the second field,
+    since its Pages/Workers endpoints are namespaced under /accounts/
+    {account_id}/) - plus PaasProviderStatusDto/PaasServiceItemDto,
+    modeled on the existing AwsServiceStatusDto/AwsResourceItemDto
+    generic-shape precedent rather than CloudStatusDto's named-field-
+    per-provider shape (which doesn't scale past 2 providers).
+  - New Services/PaasProviderService.cs: one GetStatusAsync(provider,
+    credentials) dispatcher + 4 private per-provider methods, each
+    doing a real "who am I" call plus a real "list my services/sites/
+    projects" call against that provider's own API (Render: GET /v1/
+    owners + /v1/services; Cloudflare: GET /user/tokens/verify +
+    /accounts/{id} + /accounts/{id}/pages/projects + /accounts/{id}/
+    workers/scripts; Netlify: GET /user + /sites; Vercel: GET /v2/user
+    + /v9/projects). Every call wrapped so a bad/expired token or
+    provider hiccup degrades to Found=false + a friendly message
+    instead of throwing - same "never break the caller" contract
+    CloudStatusService already uses for AWS/Azure's
+    GetAzureWebAppStatusAsync (inline IsSuccessStatusCode checks, not
+    a thrown/caught exception type, since none of these four providers
+    have an AWS-SDK-style exception class).
+  - SettingsService: one generic, parameterized credential-storage
+    method set (GetUserPaasCredentialsAsync/SaveUserPaasCredentialsAsync/
+    ClearUserPaasCredentialsAsync(provider, key, ...)) rather than four
+    AWS/Azure-style copies, since all four providers store the exact
+    same two fields. Storage layout: root["UserPaasCredentials"]
+    [provider][sessionKey] = {Token, AccountId}. Token is the only
+    field run through the existing _protector.Protect()/Unprotect()
+    encryption (same treatment as SecretAccessKey/ClientSecret);
+    AccountId stored plain (same treatment as TenantId).
+  - New Controllers/PaasController.cs (api/paas): GET {provider}/status
+    (ungated read, matches GetMyAws/GetMyAzure), POST/DELETE
+    {provider}/credentials (gated behind the existing screen-lock PIN
+    via CredentialGate.DenyUnlessUnlockedAsync - same gate SaveMyAws/
+    ClearMyAws already use). Added "render"/"cloudflare"/"netlify"/
+    "vercel" to CredentialGate.AllProviders so one PIN unlock also
+    covers these new credentials. An unknown provider route value
+    404s before touching any service. No AdminGate anywhere - same
+    open, self-service posture as Cloud Services, since this is the
+    visitor's own account credential.
+  - Program.cs: new named HttpClient("PaasProviders") (no
+    AllowAutoRedirect=false unlike ExternalHealthCheck/
+    SecurityTestingScan - the four base URLs are fixed literals, not
+    user-supplied input, so that SSRF-redirect concern doesn't apply
+    here) + AddSingleton<PaasProviderService>().
+  - Frontend: one generic PaasProviderCard.jsx reused for all four
+    providers (mirrors the backend's generic-shape decision) rather
+    than four near-duplicate components - combines
+    AzureLoginSection.jsx's connect-form conventions (ClearableInput,
+    useToast, pinConfigured tip) with CloudStatusPanel.jsx's "form OR
+    live status" toggle. Deliberately NO polling (fetch-on-mount +
+    manual Refresh only) - unlike CloudServices.jsx's AWS auto-poll,
+    which rides a shared SERVER-SIDE cache, four separate external
+    providers with no such shared cache would mean every open tab
+    re-hitting all four real APIs on a timer. New pages/PaasHosting.jsx
+    wraps one card per provider with a one-line description each.
+  - New "Hosting Providers" nav entry (Sidebar.jsx, new
+    HostingProvidersIcon in SidebarIcons.jsx, App.jsx tab switch) -
+    deliberately NOT in GATED_TABS/ADMIN_ONLY_TABS/
+    SettingsService.GrantablePageKeys, matching Cloud Services' open
+    posture exactly.
+
+Verification performed:
+  - `dotnet build` (isolated output dir): 0 errors, same 3 pre-existing
+    unrelated warnings as every prior round.
+  - `npm run lint` / `npm run build`: clean, no new warnings; new
+    PaasHosting chunk present in the build output.
+  - Live check against the deployed Render backend after the push:
+    /api/bootstrap healthy (HTTP 200).
+  - Confirmed the wrangler.jsonc change already sitting in the working
+    tree (Cloudflare project name "yaml" -> "deployment-portal",
+    presumably related to the GitHub repo rename flagged in Round 41)
+    was NOT made by this round's work and was deliberately left out of
+    this commit - not mine to commit or discard.
+
+Files changed: src/DeploymentAPI/Controllers/PaasController.cs (new),
+DTOs/PaasProviderDtos.cs (new), Services/PaasProviderService.cs (new),
+Services/SettingsService.cs, Helpers/CredentialGate.cs, Program.cs;
+deployment-ui/src/pages/PaasHosting.jsx (new),
+components/paas/PaasProviderCard.jsx (new), api/paasApi.js (new),
+services/paasService.js (new), components/layout/Sidebar.jsx,
+components/layout/SidebarIcons.jsx, App.jsx.
+Commit: 0b7697a.
+
+Status: Complete and pushed, live-verified the backend is up. Could
+NOT live-verify any of the four provider integrations' actual behavior
+(exact JSON field names, auth acceptance, real error-body shapes on a
+bad token) - no real Render/Cloudflare/Netlify/Vercel API token exists
+in this sandboxed session. The API shapes were implemented as
+precisely as possible from each provider's public API documentation.
+Recommend testing each card with one real token per provider (even a
+free-tier account is enough) to confirm the live behavior end-to-end -
+same standing limitation already true of every AWS/Azure/GitHub-token-
+dependent feature built this engagement.
