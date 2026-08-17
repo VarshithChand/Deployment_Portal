@@ -6876,3 +6876,70 @@ just shipping the wording fix silently. Recommend @VarshithChand
 confirm the new labels read clearly and, separately, click Clear on
 the actual "Database" connection card if full disconnection is still
 wanted.
+
+==================================================
+ROUND 48 FOLLOW-UP 11 - REAL, ALWAYS-VISIBLE CONNECTION-FLOW DIAGRAM
+ON THE HOSTING PROVIDERS DASHBOARD (FRONTEND/BACKEND URLS, DB ACTIVE
+CONNECTIONS)
+==================================================
+Date: 2026-08-17
+Trigger: user asked for the Hosting Providers dashboard to show a
+real "connection flow" - what is Frontend, what is Backend, what is
+the DB - with the actual application/frontend URL, backend URL, and
+the database's active connection count, visible as a running flow on
+the dashboard rather than only inside each separate tab.
+
+Previously each of the 3 tabs (Frontend/Backend/Database) rendered its
+own small ConnectionMap with placeholder text ("This portal's API",
+"PostgreSQL") instead of real data - three near-duplicate, mostly-fake
+diagrams. Replaced all three with one new ArchitectureFlow component,
+shown above the tab buttons regardless of which tab is selected, built
+from the exact same overview data those tabs already fetch (no new
+backend endpoints needed):
+
+  - Frontend node: provider name, a live status dot (green/amber/gray
+    for found/configured-but-unreachable/not-configured), and its real
+    public URL - the actual application URL end users visit.
+  - Backend node: same shape, its own real API base URL.
+  - Database node: masked connection label plus a live "Active: X / Y"
+    connection-pool stat.
+
+Every URL shown is one already public - the same one anyone could
+already open directly in a browser - never a token, connection
+string, or anything that requires authentication to see. Fetches all
+3 roles' overviews once on mount (range fixed at "15m" since this only
+needs current status, not a chart) with its own Refresh button,
+independent of which tab happens to be selected, so landing straight
+on Backend or Database still shows the full picture.
+
+ConnectionMap.jsx itself was extended (status dot, clickable URL,
+meta stat line) rather than replaced, so it stays the one shared
+"safe flow diagram" primitive for this feature. Extracted PROVIDER_LABEL
+(previously duplicated identically in FrontendView.jsx and
+BackendView.jsx) into a new shared deployment-ui/src/constants/
+paasProviders.js now that ArchitectureFlow needed it too, rather than
+adding a third copy.
+
+Verification performed:
+  - `npm run lint` in deployment-ui/: no new warnings/errors.
+  - `npm run build` in deployment-ui/: succeeded.
+  - No backend files touched this round, so no dotnet build/health
+    check needed - purely additive frontend work reusing existing
+    endpoints.
+
+Files changed: deployment-ui/src/components/hosting-observability/
+ArchitectureFlow.jsx (new), ConnectionMap.jsx, FrontendView.jsx,
+BackendView.jsx, DatabaseView.jsx, deployment-ui/src/constants/
+paasProviders.js (new), deployment-ui/src/pages/PaasHosting.jsx,
+deployment-ui/src/styles/global.css.
+Commit: d500c75.
+
+Status: Complete and pushed (frontend-only). Could not click through
+the rendered diagram against real Frontend/Backend/Database
+connections in this sandboxed session (no real super-admin session
+available here) - grounded in reusing the exact overview shape
+(HostingRoleOverviewDto.Url/Status, HostingDatabaseOverviewDto.
+ConnectionPool) already verified working in earlier rounds, not new
+backend logic. Recommend @VarshithChand confirm the flow diagram shows
+real Frontend/Backend URLs and the live DB connection count once
+deployed.
