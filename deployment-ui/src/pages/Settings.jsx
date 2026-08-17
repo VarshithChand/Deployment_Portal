@@ -41,6 +41,7 @@ import AppearanceView from "../components/settings/AppearanceView";
 import EnvironmentsAdminView from "../components/settings/EnvironmentsAdminView";
 import DatabaseView from "../components/settings/DatabaseView";
 import SecurityTestingView from "../components/settings/SecurityTestingView";
+import HostingObservabilityConfigView from "../components/settings/HostingObservabilityConfigView";
 import useToast from "../hooks/useToast";
 import useConfirm from "../hooks/useConfirm";
 import useAuth from "../hooks/useAuth";
@@ -1105,6 +1106,12 @@ export default function Settings() {
             {view === "security-testing" && isSuperAdminSession && (
 
                 <SecurityTestingView />
+
+            )}
+
+            {view === "observability-config" && isSuperAdminSession && (
+
+                <HostingObservabilityConfigView />
 
             )}
 

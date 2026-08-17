@@ -3994,6 +3994,128 @@ textarea{
 
 }
 
+.line-chart{
+
+    width:100%;
+
+    height:auto;
+
+    display:block;
+
+}
+
+.line-chart-grid{
+
+    stroke:var(--viz-grid);
+
+    stroke-width:1;
+
+}
+
+.line-chart-baseline{
+
+    stroke:var(--viz-baseline);
+
+    stroke-width:1;
+
+}
+
+.line-chart-axis-label{
+
+    fill:var(--viz-muted);
+
+    font-size:10px;
+
+}
+
+.line-chart-line{
+
+    fill:none;
+
+    stroke-width:2;
+
+    stroke-linejoin:round;
+
+    stroke-linecap:round;
+
+}
+
+.line-chart-area{
+
+    stroke:none;
+
+    opacity:.12;
+
+}
+
+.connection-map{
+
+    display:flex;
+
+    align-items:center;
+
+    justify-content:center;
+
+    flex-wrap:wrap;
+
+    gap:6px;
+
+    padding:18px 8px;
+
+}
+
+.connection-map-node{
+
+    display:flex;
+
+    flex-direction:column;
+
+    align-items:center;
+
+    gap:4px;
+
+    min-width:120px;
+
+    padding:12px 16px;
+
+    border:1px solid var(--border);
+
+    border-radius:8px;
+
+    background:var(--card-bg);
+
+    text-align:center;
+
+}
+
+.connection-map-node-label{
+
+    font-size:12px;
+
+    font-weight:600;
+
+    color:var(--text);
+
+}
+
+.connection-map-node-sub{
+
+    font-size:11px;
+
+    color:var(--text-muted);
+
+}
+
+.connection-map-arrow{
+
+    font-size:20px;
+
+    color:var(--viz-muted);
+
+    padding:0 4px;
+
+}
+
 .chart-row{
 
     display:grid;

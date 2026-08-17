@@ -1,87 +1,105 @@
-import { useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 
 import PageLayout from "../components/layout/PageLayout";
-import PaasProviderCard from "../components/paas/PaasProviderCard";
-import LoadingSpinner from "../components/LoadingSpinner";
+import FrontendView from "../components/hosting-observability/FrontendView";
+import BackendView from "../components/hosting-observability/BackendView";
+import HostingDatabaseView from "../components/hosting-observability/DatabaseView";
+import useAuth from "../hooks/useAuth";
 import useNavigation from "../hooks/useNavigation";
-import { getPaasStatus } from "../services/paasService";
 
-const PROVIDERS = [
-    { key: "render", label: "Render" },
-    { key: "cloudflare", label: "Cloudflare Pages" },
-    { key: "netlify", label: "Netlify" },
-    { key: "vercel", label: "Vercel" }
-];
+const VIEWS = ["frontend", "backend", "database"];
 
-// Session-scoped, exactly like the Cloud Services page's AWS/Azure
-// credentials (see PortalIdentity) — read-only status here; connecting/
-// editing/clearing a provider lives on Settings > Credentials (see
-// PaasLoginSection). Only shows a card for a provider that's actually
-// configured, rather than four cards with empty connect forms.
+const VIEW_LABELS = { frontend: "Frontend", backend: "Backend", database: "Database" };
+
+// Mirrors Settings.jsx's own "?view=" pattern, owned locally rather than by
+// NavigationContext (which only owns the top-level "?tab=") - same
+// precedent as CloudServices.jsx/Services.jsx for a page-owned sub-nav.
+// replaceState (not pushState) since Frontend/Backend/Database are
+// siblings, not a drill-down chain.
+function readViewFromUrl() {
+
+    const requested = new URLSearchParams(window.location.search).get("view");
+
+    return VIEWS.includes(requested) ? requested : "frontend";
+
+}
+
+// This page used to be a session-scoped self-service "what's under MY
+// connected account" view - that now lives on Settings → Credentials (see
+// MyConnectedAccounts, rendered right next to each provider's login form).
+// The "Hosting Providers" nav item is reused, unchanged, for a materially
+// different thing: a live view of THIS PORTAL'S OWN real production
+// deployment (whichever Cloudflare/Render/Postgres an admin has configured
+// as the Frontend/Backend/Database targets - see
+// HostingObservabilityController), shown identically to every visitor.
+// Restricted to the single super-admin identity, same posture as Settings'
+// Database Management / Security Testing Lab pages.
 export default function PaasHosting() {
 
+    const { isSuperAdminSession } = useAuth();
     const { setTab } = useNavigation();
 
-    const [configured, setConfigured] = useState([]);
-    const [loading, setLoading] = useState(true);
+    const [view, setViewState] = useState(readViewFromUrl);
 
-    useEffect(() => {
+    const setView = useCallback((next) => {
 
-        Promise.all(PROVIDERS.map((p) => getPaasStatus(p.key).catch(() => null))).then((results) => {
+        setViewState(next);
 
-            setConfigured(PROVIDERS.filter((p, i) => results[i]?.configured));
-            setLoading(false);
-
-        });
+        const url = new URL(window.location.href);
+        url.searchParams.set("view", next);
+        window.history.replaceState(null, "", url);
 
     }, []);
 
-    if (loading) {
-        return <LoadingSpinner />;
+    if (!isSuperAdminSession) {
+
+        return (
+
+            <PageLayout title="Hosting Providers">
+
+                <div className="card">
+
+                    <p className="empty-state" style={{ textAlign: "left" }}>
+                        This page is restricted to a single administrator account. Your own
+                        connected Render/Cloudflare/Netlify/Vercel accounts are still available
+                        under{" "}
+                        <a href="#" onClick={(e) => { e.preventDefault(); setTab("settings"); }}>
+                            Settings → Credentials
+                        </a>.
+                    </p>
+
+                </div>
+
+            </PageLayout>
+
+        );
+
     }
 
     return (
 
         <PageLayout title="Hosting Providers">
 
-            {configured.length === 0 ? (
+            <div className="button-row" style={{ marginBottom: "18px" }}>
 
-                <div className="card">
+                {VIEWS.map((v) => (
 
-                    <p className="empty-state" style={{ textAlign: "left" }}>
-                        No hosting providers connected yet. Connect Render, Cloudflare, Netlify,
-                        or Vercel from{" "}
-                        <a href="#" onClick={(e) => { e.preventDefault(); setTab("settings"); }}>
-                            Settings → Credentials
-                        </a>
-                        {" "}to see what's actually deployed under each account.
-                    </p>
-
-                </div>
-
-            ) : (
-
-                <>
-
-                <p className="field-hint" style={{ marginBottom: "18px" }}>
-                    What's actually deployed under your connected accounts. Manage connections
-                    from{" "}
-                    <a href="#" onClick={(e) => { e.preventDefault(); setTab("settings"); }}>
-                        Settings → Credentials
-                    </a>.
-                </p>
-
-                {configured.map((p) => (
-
-                    <div key={p.key} style={{ marginBottom: "18px" }}>
-                        <PaasProviderCard provider={p.key} label={p.label} />
-                    </div>
+                    <button
+                        key={v}
+                        type="button"
+                        className={`btn btn-sm ${view === v ? "btn-primary" : "btn-secondary"}`}
+                        onClick={() => setView(v)}
+                    >
+                        {VIEW_LABELS[v]}
+                    </button>
 
                 ))}
 
-                </>
+            </div>
 
-            )}
+            {view === "frontend" && <FrontendView />}
+            {view === "backend" && <BackendView />}
+            {view === "database" && <HostingDatabaseView />}
 
         </PageLayout>
 

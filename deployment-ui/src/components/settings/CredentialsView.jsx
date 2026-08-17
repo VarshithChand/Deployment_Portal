@@ -6,6 +6,7 @@ import AwsLoginSection from "./credentials/AwsLoginSection";
 import AzureLoginSection from "./credentials/AzureLoginSection";
 import GcpLoginSection from "./credentials/GcpLoginSection";
 import PaasLoginSection from "./credentials/PaasLoginSection";
+import MyConnectedAccounts from "./credentials/MyConnectedAccounts";
 import ApiKeySection from "./credentials/ApiKeySection";
 import SecurityPinSection from "./credentials/SecurityPinSection";
 import CredentialPinGate from "./credentials/CredentialPinGate";
@@ -236,10 +237,13 @@ export default function CredentialsView({
                 GitHub, AWS, and Azure below are yours alone — kept for your own browser
                 session, isolated from every other user of this portal. GCP is stored the
                 same way, for future use, and your API Key is scoped the same way too.
-                Render, Cloudflare, Netlify, and Vercel are the same — see them live on
-                the Hosting Providers page once connected. SonarQube, Docker, and OAuth
-                are shared by the whole portal instead. A checkmark below means it's
-                already configured — no need to click in just to check.
+                Render, Cloudflare, Netlify, and Vercel are the same — see what's under
+                your own connected account right below once saved. (The Hosting Providers
+                page itself now shows this portal's own production deployment instead —
+                a separate, portal-wide view restricted to a single administrator account.)
+                SonarQube, Docker, and OAuth are shared by the whole portal instead. A
+                checkmark below means it's already configured — no need to click in just
+                to check.
             </p>
 
             <div className="button-row" style={{ marginBottom: "20px" }}>
@@ -338,24 +342,28 @@ export default function CredentialsView({
             {mode === "render" && (
                 <CredentialPinGate provider="render" unlocked={unlockedProviders.has("render")} onUnlocked={markAllUnlocked}>
                     <PaasLoginSection provider="render" label="Render" onCleared={() => removeUnlocked("render")} />
+                    <MyConnectedAccounts provider="render" label="Render" configured={configuredByMode.render} />
                 </CredentialPinGate>
             )}
 
             {mode === "cloudflare" && (
                 <CredentialPinGate provider="cloudflare" unlocked={unlockedProviders.has("cloudflare")} onUnlocked={markAllUnlocked}>
                     <PaasLoginSection provider="cloudflare" label="Cloudflare" hasAccountId onCleared={() => removeUnlocked("cloudflare")} />
+                    <MyConnectedAccounts provider="cloudflare" label="Cloudflare Pages" configured={configuredByMode.cloudflare} />
                 </CredentialPinGate>
             )}
 
             {mode === "netlify" && (
                 <CredentialPinGate provider="netlify" unlocked={unlockedProviders.has("netlify")} onUnlocked={markAllUnlocked}>
                     <PaasLoginSection provider="netlify" label="Netlify" onCleared={() => removeUnlocked("netlify")} />
+                    <MyConnectedAccounts provider="netlify" label="Netlify" configured={configuredByMode.netlify} />
                 </CredentialPinGate>
             )}
 
             {mode === "vercel" && (
                 <CredentialPinGate provider="vercel" unlocked={unlockedProviders.has("vercel")} onUnlocked={markAllUnlocked}>
                     <PaasLoginSection provider="vercel" label="Vercel" onCleared={() => removeUnlocked("vercel")} />
+                    <MyConnectedAccounts provider="vercel" label="Vercel" configured={configuredByMode.vercel} />
                 </CredentialPinGate>
             )}
 

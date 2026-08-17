@@ -146,6 +146,60 @@ public class DatabaseManagementService
         }
     }
 
+    // ---- Connection pool (pg_stat_activity) ---------------------------
+
+    // Backs the Hosting Observability Database tab - no existing query in
+    // this file (or anywhere else in this app) reads pg_stat_activity.
+    // datname = current_database() scopes this to just this app's own
+    // database, not every database on a shared/managed Postgres instance.
+    // state IS NOT NULL excludes background workers/the autovacuum
+    // launcher, which have no meaningful "active"/"idle" state. A
+    // non-superuser app role can always COUNT(*) here even if some
+    // per-connection columns would be null-masked for other roles' rows on
+    // a managed provider - the count itself is unaffected by that masking.
+    public async Task<DatabaseConnectionPoolDto?> GetConnectionPoolAsync()
+    {
+        if (!IsConfigured) return null;
+
+        try
+        {
+            await using var conn = await OpenAsync();
+
+            var result = new DatabaseConnectionPoolDto();
+
+            await using (var cmd = new NpgsqlCommand(
+                "SELECT " +
+                "COUNT(*) FILTER (WHERE state = 'active') AS active, " +
+                "COUNT(*) FILTER (WHERE state = 'idle') AS idle, " +
+                "COUNT(*) AS total " +
+                "FROM pg_stat_activity " +
+                "WHERE datname = current_database() AND state IS NOT NULL", conn))
+            await using (var reader = await cmd.ExecuteReaderAsync())
+            {
+                if (await reader.ReadAsync())
+                {
+                    result.ActiveConnections = Convert.ToInt32(reader.GetValue(0));
+                    result.IdleConnections = Convert.ToInt32(reader.GetValue(1));
+                    result.TotalConnections = Convert.ToInt32(reader.GetValue(2));
+                }
+            }
+
+            await using (var cmd = new NpgsqlCommand(
+                "SELECT setting FROM pg_settings WHERE name = 'max_connections'", conn))
+            {
+                var raw = await cmd.ExecuteScalarAsync();
+                result.MaxConnections = raw != null ? Convert.ToInt32(raw) : 0;
+            }
+
+            return result;
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[Database:connectionPool] {ex}");
+            return null;
+        }
+    }
+
     // ---- Schemas / tables --------------------------------------------
 
     public async Task<DatabaseSchemaListDto> GetSchemasAsync()

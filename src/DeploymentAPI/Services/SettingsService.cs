@@ -782,6 +782,82 @@ public class SettingsService
         }
     }
 
+    // Portal-wide PaaS credentials for the Hosting Observability dashboard
+    // (Frontend/Backend/Database tabs) - parallel to, and completely
+    // separate from, UserPaasCredentials above. That store is per-VISITOR-
+    // session and answers "what's under MY connected account"; this one is
+    // per-PORTAL and answers "what's actually running THIS deployment", set
+    // once by the super-admin (see AdminGate.DenyUnlessSuperAdminAsync on
+    // every action that reads/writes it) and shown identically to every
+    // visitor of the new dashboard. Storage layout:
+    // root["PortalPaasCredentials"][provider] = { Token, AccountId } - same
+    // shape as UserPaasCredentials's entry, minus the session-key dimension.
+    public async Task<UserPaasCredentials> GetPortalPaasCredentialsAsync(string provider)
+    {
+        var root = await ReadRootAsync();
+        var entry = (root["PortalPaasCredentials"] as JObject)?[provider] as JObject;
+
+        return new UserPaasCredentials(
+            Unprotect(entry?["Token"]?.ToString()),
+            entry?["AccountId"]?.ToString());
+    }
+
+    // Blank fields keep whatever was already saved - see SaveUserPaasCredentialsAsync.
+    public async Task SavePortalPaasCredentialsAsync(string provider, PaasCredentialsUpdateDto update)
+    {
+        var root = await ReadRootAsync();
+        var providers = root["PortalPaasCredentials"] as JObject ?? new JObject();
+        var entry = providers[provider] as JObject ?? new JObject();
+
+        if (!string.IsNullOrWhiteSpace(update.Token))
+            entry["Token"] = Protect(update.Token.Trim());
+
+        if (!string.IsNullOrWhiteSpace(update.AccountId))
+            entry["AccountId"] = update.AccountId.Trim();
+
+        providers[provider] = entry;
+        root["PortalPaasCredentials"] = providers;
+        await WriteRootAsync(root);
+
+        _log.LogInfo("Settings", $"Portal-wide {provider} credentials saved.");
+    }
+
+    public async Task ClearPortalPaasCredentialsAsync(string provider)
+    {
+        var root = await ReadRootAsync();
+
+        if (root["PortalPaasCredentials"] is JObject providers && providers[provider] != null)
+        {
+            providers.Remove(provider);
+            await WriteRootAsync(root);
+
+            _log.LogInfo("Settings", $"Portal-wide {provider} credentials cleared.");
+        }
+    }
+
+    // Which provider+service fills each of the Hosting Observability
+    // dashboard's 3 roles - see PortalDeploymentTargetsDto. One object, not
+    // per-provider, since there's exactly one Frontend/Backend/(optional)
+    // Database target for the whole portal. Storage: flat
+    // root["PortalDeploymentTargets"] = { ... }, no secrets in it (provider/
+    // service IDs only), so no Protect/Unprotect treatment is needed.
+    public async Task<PortalDeploymentTargetsDto> GetPortalDeploymentTargetsAsync()
+    {
+        var root = await ReadRootAsync();
+        var node = root["PortalDeploymentTargets"] as JObject;
+
+        return node?.ToObject<PortalDeploymentTargetsDto>() ?? new PortalDeploymentTargetsDto();
+    }
+
+    public async Task SavePortalDeploymentTargetsAsync(PortalDeploymentTargetsDto targets)
+    {
+        var root = await ReadRootAsync();
+        root["PortalDeploymentTargets"] = JObject.FromObject(targets);
+        await WriteRootAsync(root);
+
+        _log.LogInfo("Settings", "Portal deployment targets saved.");
+    }
+
     public async Task<SettingsViewDto> SaveDockerAsync(DockerSettingsUpdateDto update)
     {
         var root = await ReadRootAsync();

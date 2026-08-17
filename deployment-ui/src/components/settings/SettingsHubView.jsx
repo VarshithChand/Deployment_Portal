@@ -114,6 +114,19 @@ export default function SettingsHubView({
 
             {isSuperAdmin && (
 
+                <button type="button" className="settings-hub-tile" onClick={() => setView("observability-config")}>
+                    <h2>Hosting Observability</h2>
+                    <p>
+                        Which Cloudflare/Render/Postgres this portal's own Frontend/Backend/
+                        Database dashboard monitors, and the portal-wide credentials it uses.
+                        Restricted to a single administrator account.
+                    </p>
+                </button>
+
+            )}
+
+            {isSuperAdmin && (
+
                 <button type="button" className="settings-hub-tile" onClick={() => setView("admin-access")}>
                     <h2>Admin Access</h2>
                     <p>

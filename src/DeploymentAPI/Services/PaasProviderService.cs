@@ -63,7 +63,13 @@ public class PaasProviderService
     // account-level build-minute/bandwidth usage, not a per-project "load"
     // concept at all. Cloudflare/Netlify/Vercel deliberately return an
     // empty series list here - not a gap, a scope decision.
-    public async Task<PaasServiceMetricsDto> GetServiceMetricsAsync(string provider, UserPaasCredentials credentials, string serviceId)
+    // range (optional): how far back to pull points - defaults to the last
+    // hour, same as this call always did before the Hosting Observability
+    // dashboard's 15m/1h/6h/24h/7d range selector needed to vary it (see
+    // HostingObservabilityController). Optional/trailing so
+    // PaasController.GetServiceMetrics's existing call site keeps compiling
+    // unchanged.
+    public async Task<PaasServiceMetricsDto> GetServiceMetricsAsync(string provider, UserPaasCredentials credentials, string serviceId, TimeSpan? range = null)
     {
         var result = new PaasServiceMetricsDto();
 
@@ -74,7 +80,7 @@ public class PaasProviderService
         {
             return provider switch
             {
-                "render" => await GetRenderMetricsAsync(credentials, serviceId, result),
+                "render" => await GetRenderMetricsAsync(credentials, serviceId, range, result),
                 _ => result
             };
         }
@@ -92,10 +98,13 @@ public class PaasProviderService
     // Render's core Services API) - each of the two calls is independently
     // wrapped so a wrong field name or an unsupported plan tier degrades
     // that ONE series to "not shown" rather than failing the whole thing.
-    private async Task<PaasServiceMetricsDto> GetRenderMetricsAsync(UserPaasCredentials credentials, string serviceId, PaasServiceMetricsDto result)
+    // Longer windows (6h/24h/7d) are similarly unverified against a real
+    // account - the same per-series try/catch degrades a rejected/empty
+    // response the same way rather than crashing.
+    private async Task<PaasServiceMetricsDto> GetRenderMetricsAsync(UserPaasCredentials credentials, string serviceId, TimeSpan? range, PaasServiceMetricsDto result)
     {
         var client = CreateClient(credentials.Token!);
-        var since = Uri.EscapeDataString(DateTime.UtcNow.AddHours(-1).ToString("o"));
+        var since = Uri.EscapeDataString(DateTime.UtcNow.Subtract(range ?? TimeSpan.FromHours(1)).ToString("o"));
         var resource = Uri.EscapeDataString(serviceId);
 
         await TryAddRenderSeriesAsync(client, "cpu", "%", resource, since, result);

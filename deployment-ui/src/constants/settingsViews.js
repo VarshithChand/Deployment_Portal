@@ -2,7 +2,7 @@
 // pulled out to its own file (rather than only living inside Settings.jsx)
 // so HeaderSearch can list every sub-page as its own searchable result
 // without a layout component reaching into a page component's internals.
-export const VIEWS = ["hub", "credentials", "activity-log", "access-levels", "branches", "sidebar-access", "smoke-tests", "external-apis", "environments", "appearance", "database", "admin-access", "security-testing"];
+export const VIEWS = ["hub", "credentials", "activity-log", "access-levels", "branches", "sidebar-access", "smoke-tests", "external-apis", "environments", "appearance", "database", "admin-access", "security-testing", "observability-config"];
 
 // Every one of these requires Admin server-side (LogsController,
 // SmokeTestController, ExternalHealthController, and the /sidebar/*
@@ -22,7 +22,7 @@ export const ADMIN_ONLY_VIEWS = new Set(["sidebar-access", "activity-log", "smok
 // every api/settings/admins + api/admin/users/*/mfa/recovery-code) call
 // regardless of this - this only decides whether Settings shows/keeps the
 // tile and sub-page.
-export const SUPER_ADMIN_ONLY_VIEWS = new Set(["database", "admin-access", "security-testing"]);
+export const SUPER_ADMIN_ONLY_VIEWS = new Set(["database", "admin-access", "security-testing", "observability-config"]);
 
 export const VIEW_TITLES = {
     credentials: "Credentials",
@@ -36,5 +36,6 @@ export const VIEW_TITLES = {
     appearance: "Appearance",
     database: "Database",
     "admin-access": "Admin Access",
-    "security-testing": "Security Testing Lab"
+    "security-testing": "Security Testing Lab",
+    "observability-config": "Hosting Observability"
 };
