@@ -6990,3 +6990,70 @@ the fix is grounded directly in SonarQube's own documented NOSONAR
 placement rule (same-line-only), not a guess. Recommend
 @VarshithChand confirm the issue closes after the next SonarCloud
 analysis runs.
+
+==================================================
+ROUND 48 FOLLOW-UP 13 - AUTO-RECOVER FROM STALE-CHUNK CRASHES AFTER A
+FRONTEND DEPLOY ("THIS PAGE RAN INTO A PROBLEM" ON UNRELATED PAGES)
+==================================================
+Date: 2026-08-17
+Trigger: user hit "This page ran into a problem" on the Deploy page,
+then confirmed (with a second screenshot) it was also happening on
+Cloud Services - two pages sharing essentially no code, ruling out a
+page-specific bug.
+
+Root cause: every page in this app is lazy-loaded (App.jsx's
+lazy(() => import("./pages/...")) calls) with Vite's content-hashed
+chunk filenames. This session alone pushed well over a dozen frontend
+deploys in rapid succession. A browser tab left open across any one of
+those deploys still holds the OLD module graph in memory - clicking
+into a page whose chunk file has since been replaced by a newer build
+throws a plain failed dynamic import ("Failed to fetch dynamically
+imported module" or equivalent), which the existing ErrorBoundary
+caught and rendered as a dead-end "Go to Dashboard" screen - that
+button doesn't fetch a fresh index.html, so it would have hit the
+exact same stale chunk again on the very next click.
+
+Also found (not modified, but explains why nothing already caught
+this): AppUpdateMonitor.jsx already polls a version counter every 30s
+and prompts a manual refresh - but that counter only bumps when an
+admin explicitly clicks Settings hub's "Force Refresh For All Users"
+(AppVersionController.ClearCache). Nothing in this session's many
+automatic pushes ever bumped it, so that existing safety net never
+fired for any of this session's deploys.
+
+Fix: ErrorBoundary.componentDidCatch now recognizes this specific
+error shape (a regex against common "failed dynamic import" message
+patterns across browsers) and, only for that case, automatically runs
+the exact same "clear caches, then window.location.reload()" recipe
+appCacheManager.js already established for the existing manual
+refresh flow - a real navigation reload is what actually fixes this,
+since it fetches the current index.html and its current chunk
+manifest. Guarded to one auto-reload per browser tab via
+sessionStorage, so a genuinely broken deploy (chunk missing for a real
+reason, not just staleness) falls through to the normal crash screen
+instead of reload-looping forever; the guard is cleared again on every
+successful App.jsx mount, so a later deploy's staleness (the same tab,
+left open again) still gets its own fresh single attempt.
+
+Verification performed:
+  - `npm run lint` in deployment-ui/: no new warnings/errors.
+  - `npm run build` in deployment-ui/: succeeded.
+  - No backend files touched this round, so no dotnet build/health
+    check needed - purely a frontend resilience fix.
+
+Files changed: deployment-ui/src/components/common/ErrorBoundary.jsx,
+deployment-ui/src/App.jsx.
+Commit: 77d9f2d.
+
+Status: Complete and pushed (frontend-only). Could not reproduce/
+verify the exact crash-then-auto-recover sequence live in this
+sandboxed session (no way to hold a stale tab open across a real
+deploy here) - the fix is grounded in the actual error message
+patterns Vite/browsers produce for a failed dynamic import and the
+already-established, already-working reload recipe from
+appCacheManager.js, not a guess. The user's CURRENT open tab (already
+showing the crash) still needs one manual hard refresh to pick up
+this very fix - after that, the same class of issue should self-heal
+automatically on every future deploy. Recommend @VarshithChand hard-
+refresh the tab currently showing the error once, then confirm future
+deploys no longer produce a stuck crash screen.
