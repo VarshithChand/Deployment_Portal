@@ -5,11 +5,11 @@ import {
 } from "../../services/databaseService";
 import usePagination from "../../hooks/usePagination";
 import useToast from "../../hooks/useToast";
-import useNavigation from "../../hooks/useNavigation";
 import SearchBox from "../common/SearchBox";
 import Pagination from "../common/Pagination";
 import DatabaseTableDetail from "./DatabaseTableDetail";
 import DatabaseCreateTableDialog from "./DatabaseCreateTableDialog";
+import DatabaseConnectionSection from "./DatabaseConnectionSection";
 
 const PAGE_SIZE = 10;
 
@@ -37,7 +37,6 @@ function readTableFromUrl() {
 export default function DatabaseView() {
 
     const toast = useToast();
-    const { goToSettingsView } = useNavigation();
 
     const [health, setHealth] = useState(null);
     const [healthLoading, setHealthLoading] = useState(true);
@@ -147,6 +146,16 @@ export default function DatabaseView() {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [schema]);
 
+    // Connecting/clearing the database below changes everything else on
+    // this page - re-pull all of it rather than leaving stale "not
+    // connected" state showing after a successful connect.
+    function handleConnectionChanged() {
+        loadHealth();
+        loadSchemas();
+        loadTables(schema);
+        loadOverview();
+    }
+
     // Client-side search + pagination over the tables list - a set of
     // tables in one schema is realistically small (this app's own database
     // has exactly one), unlike a table's actual row data below, which is
@@ -214,6 +223,10 @@ export default function DatabaseView() {
             </p>
 
             <div className="card">
+                <DatabaseConnectionSection onChanged={handleConnectionChanged} />
+            </div>
+
+            <div className="card" style={{ marginTop: "18px" }}>
 
                 <h2 className="card-title">Connection Health</h2>
 
@@ -223,20 +236,9 @@ export default function DatabaseView() {
 
                 ) : !health?.connected ? (
 
-                    <>
-
                     <p className="error-message">
                         {health?.error || "Unable to connect to the database."}
                     </p>
-
-                    <p className="field-hint" style={{ marginTop: "10px" }}>
-                        <a href="#" onClick={(e) => { e.preventDefault(); goToSettingsView("credentials"); }}>
-                            Go to Settings → Credentials
-                        </a>
-                        {" "}→ Database to connect one.
-                    </p>
-
-                    </>
 
                 ) : (
 

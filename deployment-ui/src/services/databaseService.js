@@ -5,6 +5,41 @@ import api from "../api/databaseApi";
 // AdminGate.DenyUnlessSuperAdminAsync) - a 403 here is expected for anyone
 // else and is handled by the pages that call these, not here.
 
+// This page's OWN database connection - independent of, and never shared
+// with, the Hosting Providers -> Database tab's connection (see
+// hostingObservabilityService.js's getDatabaseConnectionStatus/etc, a
+// completely separate credential). Clearing one never touches the other.
+
+export const getDatabaseConnectionStatus = async () => {
+    const response = await api.get("/connection");
+    return response.data;
+};
+
+export const saveDatabaseConnection = async ({ providerLabel, connectionString }) => {
+    const response = await api.post("/connection", { providerLabel, connectionString });
+    return response.data;
+};
+
+export const saveDatabaseConnectionFields = async (fields) => {
+    const response = await api.post("/connection/fields", fields);
+    return response.data;
+};
+
+export const clearDatabaseConnection = async () => {
+    const response = await api.delete("/connection");
+    return response.data;
+};
+
+export const getRenderDatabases = async () => {
+    const response = await api.get("/connection/render-databases");
+    return response.data;
+};
+
+export const connectRenderDatabase = async (databaseId) => {
+    const response = await api.post(`/connection/render-databases/${encodeURIComponent(databaseId)}/connect`);
+    return response.data;
+};
+
 export const getDatabaseHealth = async () => {
     const response = await api.get("/health");
     return response.data;

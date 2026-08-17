@@ -35,12 +35,14 @@ public class DatabaseController : ControllerBase
 
     private readonly DatabaseManagementService _db;
     private readonly SettingsService _settings;
+    private readonly PaasProviderService _paas;
     private readonly ActivityLogService _log;
 
-    public DatabaseController(DatabaseManagementService db, SettingsService settings, ActivityLogService log)
+    public DatabaseController(DatabaseManagementService db, SettingsService settings, PaasProviderService paas, ActivityLogService log)
     {
         _db = db;
         _settings = settings;
+        _paas = paas;
         _log = log;
     }
 
@@ -63,13 +65,135 @@ public class DatabaseController : ControllerBase
         await AdminGate.ResolveCallerLoginAsync(this) ?? "unknown";
 
     // The one place this controller ever decides what database it's
-    // talking to - the explicitly-connected portal credential, or nothing.
-    // No DATABASE_URL fallback here on purpose (see class comment).
+    // talking to - the explicitly-connected MANAGEMENT database credential
+    // (root["PortalManagementDatabaseConnection"], connected right on this
+    // page - see the connection/* actions below), never DATABASE_URL and
+    // never the SEPARATE credential the Hosting Providers -> Database tab
+    // uses (root["PortalDatabaseConnection"], connected from Settings >
+    // Credentials > Database instead) - the two are deliberately
+    // independent, down to clearing one never touching the other.
     private async Task<string?> ResolveConnectionStringAsync()
     {
-        var (_, connectionString) = await _settings.GetPortalDatabaseConnectionAsync();
+        var (_, connectionString) = await _settings.GetPortalManagementDatabaseConnectionAsync();
         return string.IsNullOrWhiteSpace(connectionString) ? null : connectionString;
     }
+
+    // ---- Connection (this page's OWN credential, separate from the
+    // Hosting Providers -> Database tab's) ------------------------------
+
+    [HttpGet("connection")]
+    public async Task<IActionResult> GetConnection()
+    {
+        var denied = await AdminGate.DenyUnlessSuperAdminAsync(this, "view the database connection");
+        if (denied != null) return denied;
+
+        var (label, connectionString) = await _settings.GetPortalManagementDatabaseConnectionAsync();
+
+        return Ok(new PortalDatabaseConnectionDto
+        {
+            Configured = !string.IsNullOrWhiteSpace(connectionString),
+            ProviderLabel = label,
+            MaskedConnection = SettingsService.BuildMaskedConnection(connectionString)
+        });
+    }
+
+    [HttpPost("connection")]
+    public async Task<IActionResult> SaveConnection(PortalDatabaseConnectionUpdateDto request)
+    {
+        var denied = await AdminGate.DenyUnlessSuperAdminAsync(this, "configure the database connection");
+        if (denied != null) return denied;
+
+        await _settings.SavePortalManagementDatabaseConnectionAsync(request);
+
+        return Ok(new { success = true });
+    }
+
+    [HttpPost("connection/fields")]
+    public async Task<IActionResult> SaveConnectionFields(PortalDatabaseConnectionFieldsUpdateDto request)
+    {
+        var denied = await AdminGate.DenyUnlessSuperAdminAsync(this, "configure the database connection");
+        if (denied != null) return denied;
+
+        if (string.IsNullOrWhiteSpace(request.Host) || string.IsNullOrWhiteSpace(request.Database) ||
+            string.IsNullOrWhiteSpace(request.Username) || string.IsNullOrWhiteSpace(request.Password))
+            return BadRequest(new { message = "Hostname, Database, Username, and Password are all required." });
+
+        var builder = new Npgsql.NpgsqlConnectionStringBuilder
+        {
+            Host = request.Host.Trim(),
+            Port = request.Port > 0 ? request.Port : 5432,
+            Database = request.Database.Trim(),
+            Username = request.Username.Trim(),
+            Password = request.Password,
+            SslMode = Npgsql.SslMode.Require
+        };
+
+        await _settings.SavePortalManagementDatabaseConnectionAsync(new PortalDatabaseConnectionUpdateDto
+        {
+            ProviderLabel = request.ProviderLabel,
+            ConnectionString = builder.ConnectionString
+        });
+
+        return Ok(new { success = true });
+    }
+
+    [HttpDelete("connection")]
+    public async Task<IActionResult> ClearConnection()
+    {
+        var denied = await AdminGate.DenyUnlessSuperAdminAsync(this, "clear the database connection");
+        if (denied != null) return denied;
+
+        await _settings.ClearPortalManagementDatabaseConnectionAsync();
+
+        return Ok(new { success = true });
+    }
+
+    // Live Render Postgres instances, using the SAME portal-wide Render API
+    // credential the Hosting Providers dashboard uses (root["PortalPaasCredentials"]
+    // ["render"] - a bearer token, not tied to any one target) - listing
+    // doesn't touch either database CONNECTION slot, only the connect
+    // action below does, and only this page's own management slot.
+    [HttpGet("connection/render-databases")]
+    public async Task<IActionResult> GetRenderDatabases()
+    {
+        var denied = await AdminGate.DenyUnlessSuperAdminAsync(this, "view Render Postgres instances");
+        if (denied != null) return denied;
+
+        var creds = await _settings.GetPortalPaasCredentialsAsync("render");
+
+        if (!creds.IsConfigured)
+            return Ok(new List<RenderDatabaseItemDto>());
+
+        return Ok(await _paas.GetRenderDatabasesAsync(creds));
+    }
+
+    [HttpPost("connection/render-databases/{databaseId}/connect")]
+    public async Task<IActionResult> ConnectRenderDatabase(string databaseId)
+    {
+        var denied = await AdminGate.DenyUnlessSuperAdminAsync(this, "connect a Render database");
+        if (denied != null) return denied;
+
+        var creds = await _settings.GetPortalPaasCredentialsAsync("render");
+
+        if (!creds.IsConfigured)
+            return BadRequest(new { message = "Save a portal-wide Render credential first." });
+
+        var connectionString = await _paas.GetRenderDatabaseConnectionStringAsync(creds, databaseId);
+
+        if (string.IsNullOrWhiteSpace(connectionString))
+            return BadRequest(new { message = "Unable to fetch that database's connection info from Render right now." });
+
+        await _settings.SavePortalManagementDatabaseConnectionAsync(new PortalDatabaseConnectionUpdateDto
+        {
+            ProviderLabel = "Render",
+            ConnectionString = connectionString
+        });
+
+        return Ok(new { success = true });
+    }
+
+    // ---- Everything below reads/writes the database itself, once
+    // connected above ----------------------------------------------------
 
     [HttpGet("health")]
     public async Task<IActionResult> GetHealth()

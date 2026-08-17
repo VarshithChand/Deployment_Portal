@@ -218,7 +218,7 @@ public class HostingObservabilityController : ControllerBase
         {
             Configured = !string.IsNullOrWhiteSpace(connectionString),
             ProviderLabel = label,
-            MaskedConnection = BuildMaskedConnection(connectionString)
+            MaskedConnection = SettingsService.BuildMaskedConnection(connectionString)
         });
     }
 
@@ -278,26 +278,6 @@ public class HostingObservabilityController : ControllerBase
         await _settings.ClearPortalDatabaseConnectionAsync();
 
         return Ok(new { success = true });
-    }
-
-    // Host/port/database only - same masking rule as
-    // DatabaseManagementService.BuildMaskedConnection, duplicated at this
-    // small scale rather than exposed from that service, since this is the
-    // only place outside it that ever needs to preview a raw connection
-    // string before it's saved.
-    private static string? BuildMaskedConnection(string? connectionString)
-    {
-        if (string.IsNullOrWhiteSpace(connectionString)) return null;
-
-        try
-        {
-            var builder = new Npgsql.NpgsqlConnectionStringBuilder(connectionString);
-            return $"{builder.Host}:{builder.Port}/{builder.Database}";
-        }
-        catch
-        {
-            return null;
-        }
     }
 
     // Live Render Postgres instances, using the portal-wide Render

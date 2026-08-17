@@ -147,6 +147,29 @@ public class SettingsService
         return builder.ConnectionString;
     }
 
+    // Host/port/database name only — never the username or password (see
+    // "never expose credentials to the frontend" rule this app follows
+    // everywhere else). Shared here so DatabaseController and
+    // HostingObservabilityController don't each carry their own copy for
+    // previewing an admin-supplied connection before it's saved -
+    // DatabaseManagementService has its own instance-level copy for the
+    // exact same reason (it already has a live connection string field to
+    // read from, no need to route through here for that one).
+    internal static string? BuildMaskedConnection(string? connectionString)
+    {
+        if (string.IsNullOrWhiteSpace(connectionString)) return null;
+
+        try
+        {
+            var builder = new NpgsqlConnectionStringBuilder(connectionString);
+            return $"{builder.Host}:{builder.Port}/{builder.Database}";
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
     // Called once from Program.cs, before AddJsonFile brings the local file
     // into IConfiguration, when DATABASE_URL is set. Several settings
     // (GitHubOAuthSettings, AuthorizationSettings, DockerSettings, JwtSettings
@@ -859,19 +882,45 @@ public class SettingsService
         _log.LogInfo("Settings", "Portal deployment targets saved.");
     }
 
-    // An admin-pasted connection string for the Hosting Observability
-    // Database tab, when it's a different Postgres instance than this
-    // backend's own DATABASE_URL (see DatabaseManagementService's
-    // connectionStringOverride parameters) - e.g. a standalone database on
-    // a provider this app has no dedicated integration for at all. Storage:
-    // root["PortalDatabaseConnection"] = { ProviderLabel, ConnectionString
-    // (protected) }. Label is plain text (not a secret); the connection
-    // string gets the same Protect/Unprotect treatment as every other
-    // credential in this file.
-    public async Task<(string? ProviderLabel, string? ConnectionString)> GetPortalDatabaseConnectionAsync()
+    // Two INDEPENDENT admin-pasted connection strings, each its own storage
+    // key, each cleared without touching the other - confirmed explicitly
+    // with the user rather than assumed, since it would have been just as
+    // easy to accidentally let one page's "Clear" wipe both:
+    //   - root["PortalDatabaseConnection"] powers ONLY the Hosting
+    //     Providers -> Database tab, connected from Settings > Credentials
+    //     > Database (see HostingObservabilityController).
+    //   - root["PortalManagementDatabaseConnection"] powers ONLY Settings >
+    //     Database's own table browser/editor, connected directly on that
+    //     page (see DatabaseController). This app's own DATABASE_URL is
+    //     still that page's fallback-free "must connect explicitly"
+    //     requirement (see DatabaseManagementService/DatabaseController) -
+    //     this is a SEPARATE credential from DATABASE_URL, not a way to
+    //     re-expose it.
+    // Same shape either way ({ ProviderLabel, ConnectionString(protected) })
+    // so both share PortalDatabaseConnectionDto/*UpdateDto and this one
+    // parametrized implementation - only the storage key differs.
+    public Task<(string? ProviderLabel, string? ConnectionString)> GetPortalDatabaseConnectionAsync() =>
+        GetDatabaseConnectionAsync("PortalDatabaseConnection");
+
+    public Task SavePortalDatabaseConnectionAsync(PortalDatabaseConnectionUpdateDto update) =>
+        SaveDatabaseConnectionAsync("PortalDatabaseConnection", update);
+
+    public Task ClearPortalDatabaseConnectionAsync() =>
+        ClearDatabaseConnectionAsync("PortalDatabaseConnection", "Hosting Providers dashboard");
+
+    public Task<(string? ProviderLabel, string? ConnectionString)> GetPortalManagementDatabaseConnectionAsync() =>
+        GetDatabaseConnectionAsync("PortalManagementDatabaseConnection");
+
+    public Task SavePortalManagementDatabaseConnectionAsync(PortalDatabaseConnectionUpdateDto update) =>
+        SaveDatabaseConnectionAsync("PortalManagementDatabaseConnection", update);
+
+    public Task ClearPortalManagementDatabaseConnectionAsync() =>
+        ClearDatabaseConnectionAsync("PortalManagementDatabaseConnection", "Settings > Database management");
+
+    private async Task<(string? ProviderLabel, string? ConnectionString)> GetDatabaseConnectionAsync(string storageKey)
     {
         var root = await ReadRootAsync();
-        var entry = root["PortalDatabaseConnection"] as JObject;
+        var entry = root[storageKey] as JObject;
 
         var stored = Unprotect(entry?["ConnectionString"]?.ToString());
 
@@ -886,10 +935,10 @@ public class SettingsService
 
     // Blank ConnectionString keeps whatever was already saved - see
     // SaveUserPaasCredentialsAsync's identical convention.
-    public async Task SavePortalDatabaseConnectionAsync(PortalDatabaseConnectionUpdateDto update)
+    private async Task SaveDatabaseConnectionAsync(string storageKey, PortalDatabaseConnectionUpdateDto update)
     {
         var root = await ReadRootAsync();
-        var entry = root["PortalDatabaseConnection"] as JObject ?? new JObject();
+        var entry = root[storageKey] as JObject ?? new JObject();
 
         if (!string.IsNullOrWhiteSpace(update.ProviderLabel))
             entry["ProviderLabel"] = update.ProviderLabel.Trim();
@@ -897,10 +946,23 @@ public class SettingsService
         if (!string.IsNullOrWhiteSpace(update.ConnectionString))
             entry["ConnectionString"] = Protect(NormalizeConnectionString(update.ConnectionString.Trim()));
 
-        root["PortalDatabaseConnection"] = entry;
+        root[storageKey] = entry;
         await WriteRootAsync(root);
 
-        _log.LogInfo("Settings", "Portal-wide database connection saved.");
+        _log.LogInfo("Settings", $"Database connection saved ({storageKey}).");
+    }
+
+    private async Task ClearDatabaseConnectionAsync(string storageKey, string ownerLabel)
+    {
+        var root = await ReadRootAsync();
+
+        if (root[storageKey] != null)
+        {
+            root.Remove(storageKey);
+            await WriteRootAsync(root);
+
+            _log.LogInfo("Settings", $"Database connection cleared ({ownerLabel}).");
+        }
     }
 
     private static readonly Regex EmbeddedPostgresUriRegex =
@@ -934,19 +996,6 @@ public class SettingsService
         return embedded.Success
             ? BuildConnectionString(embedded.Value.Trim('"', '\''))
             : trimmed;
-    }
-
-    public async Task ClearPortalDatabaseConnectionAsync()
-    {
-        var root = await ReadRootAsync();
-
-        if (root["PortalDatabaseConnection"] != null)
-        {
-            root.Remove("PortalDatabaseConnection");
-            await WriteRootAsync(root);
-
-            _log.LogInfo("Settings", "Portal-wide database connection cleared.");
-        }
     }
 
     public async Task<SettingsViewDto> SaveDockerAsync(DockerSettingsUpdateDto update)
