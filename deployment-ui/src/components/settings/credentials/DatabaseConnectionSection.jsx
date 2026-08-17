@@ -18,11 +18,11 @@ export default function DatabaseConnectionSection() {
         <DatabaseConnectionForm
             description={
                 "Points the Hosting Providers dashboard's Database tab at a specific Postgres " +
-                "instance. Leave this unset and the dashboard falls back to this backend's own " +
-                "DATABASE_URL, its default. The connection string is only ever used server-side to " +
-                "run read queries — never sent to the browser, and never shown back once saved."
+                "instance — required before that tab shows anything, even for the super-admin. " +
+                "The connection string is only ever used server-side to run read queries — never " +
+                "sent to the browser, and never shown back once saved."
             }
-            fallbackNote="the dashboard will use this backend's own DATABASE_URL again."
+            fallbackNote={'the Database tab shows "not connected" again until you connect one here.'}
             getStatus={getDatabaseConnectionStatus}
             saveConnection={saveDatabaseConnection}
             saveConnectionFields={saveDatabaseConnectionFields}

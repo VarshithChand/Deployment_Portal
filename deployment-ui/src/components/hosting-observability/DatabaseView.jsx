@@ -8,10 +8,12 @@ import ConnectionMap from "./ConnectionMap";
 import usePagination from "../../hooks/usePagination";
 import Pagination from "../common/Pagination";
 
-// Database tab - this app's actual Postgres (via DATABASE_URL), reusing
-// DatabaseManagementService's existing health/table queries plus the new
-// pg_stat_activity-based connection pool count (see
-// HostingObservabilityController.GetDatabase). CPU/Memory/Storage graphs
+// Database tab - whichever Postgres instance is explicitly connected on
+// Settings → Credentials → Database (never an automatic DATABASE_URL
+// fallback, even for the super-admin - see HostingObservabilityController.
+// GetDatabase), reusing DatabaseManagementService's existing health/table
+// queries plus the pg_stat_activity-based connection pool count.
+// CPU/Memory/Storage graphs
 // only render if the admin has additionally linked this database to a
 // Render-managed resource in Settings → Hosting Observability - otherwise
 // the spec-required literal fallback text is shown, never a fabricated

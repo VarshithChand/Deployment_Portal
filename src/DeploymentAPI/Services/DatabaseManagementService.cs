@@ -17,16 +17,18 @@ namespace DeploymentAPI.Services;
 // never interpolated. There is deliberately no path anywhere in this file
 // that runs arbitrary, caller-supplied SQL.
 //
-// _connectionString (this app's own DATABASE_URL) is only ever a fallback
-// default now, not an auto-connect: DatabaseController always resolves and
-// passes the super-admin's explicitly-connected database credential (see
-// SettingsService.GetPortalDatabaseConnectionAsync) as connectionStringOverride
-// on every call, and refuses to call at all if none is set — even the
-// super-admin has to connect a database before Settings > Database shows
-// anything, same as every other credential in this app. The Hosting
-// Providers > Database tab is the one caller that still falls back to
-// DATABASE_URL by design when nothing else is configured (its whole point
-// is monitoring this portal's own production deployment by default).
+// _connectionString (this app's own DATABASE_URL) is no longer an implicit
+// auto-connect for either admin-facing database feature: both
+// DatabaseController and HostingObservabilityController resolve their own
+// explicitly-connected database credential (see SettingsService.
+// GetPortalDatabaseConnectionAsync / GetPortalManagementDatabaseConnectionAsync)
+// and always pass it as connectionStringOverride, refusing to query at all
+// when neither is set — even the super-admin has to connect a database
+// first, same as every other credential in this app. _connectionString
+// still exists as a fallback default purely for the one remaining caller
+// that omits the override entirely: AiToolsService's Deployment Copilot
+// tools (get_database_health and its table listing), left unchanged
+// on purpose since that's a separate surface out of scope of this rule.
 public class DatabaseManagementService
 {
     private readonly string? _connectionString;

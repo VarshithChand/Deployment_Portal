@@ -16,15 +16,18 @@ namespace DeploymentAPI.Controllers;
 // as parameters. There is no "run arbitrary SQL" endpoint anywhere here.
 //
 // This page never auto-connects using this app's own DATABASE_URL, even for
-// the super-admin - it requires the same explicit database credential the
-// Hosting Providers -> Database tab can connect (see
-// SettingsService.GetPortalDatabaseConnectionAsync / Settings > Credentials
-// > Database), resolved fresh on every request and always passed explicitly
-// to DatabaseManagementService. That's a deliberate difference from the
-// Hosting Providers tab, which DOES fall back to DATABASE_URL by default -
-// this page is the admin's own database *management* console (row edit/
-// insert/delete, table creation), so it stays consistent with every other
-// credential in this app: nothing is ever implicitly connected, even for
+// the super-admin - it requires its OWN explicit database credential (see
+// SettingsService.GetPortalManagementDatabaseConnectionAsync, connected
+// directly on this page - see settings/DatabaseConnectionSection.jsx),
+// resolved fresh on every request and always passed explicitly to
+// DatabaseManagementService. Deliberately a SEPARATE credential from the
+// one the Hosting Providers -> Database tab uses (root["PortalDatabaseConnection"],
+// connected from Settings > Credentials > Database instead) - connecting
+// or clearing one never touches the other. Both now share the same
+// explicit-only posture (neither falls back to DATABASE_URL anymore): this
+// page is the admin's own database *management* console (row edit/insert/
+// delete, table creation), so it stays consistent with every other
+// credential in this app - nothing is ever implicitly connected, even for
 // the person who could technically reach it anyway.
 [ApiController]
 [Route("api/database")]

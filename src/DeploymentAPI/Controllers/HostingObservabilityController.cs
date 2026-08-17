@@ -335,17 +335,33 @@ public class HostingObservabilityController : ControllerBase
         if (await AdminGate.DenyUnlessSuperAdminAsync(this, "view the database overview") is IActionResult denied)
             return denied;
 
-        var (dbLabel, dbConnectionOverride) = await _settings.GetPortalDatabaseConnectionAsync();
-        var hasOverride = !string.IsNullOrWhiteSpace(dbConnectionOverride);
+        var (dbLabel, dbConnectionString) = await _settings.GetPortalDatabaseConnectionAsync();
 
-        var health = await _db.GetHealthAsync(hasOverride ? dbConnectionOverride : null);
+        // No DATABASE_URL fallback here (this used to have one) - clearing
+        // this connection on Settings > Credentials > Database must
+        // actually disconnect the tab, not silently keep showing this
+        // backend's own database. Same explicit-only posture as
+        // DatabaseController now uses for Settings > Database Management.
+        if (string.IsNullOrWhiteSpace(dbConnectionString))
+        {
+            return Ok(new HostingDatabaseOverviewDto
+            {
+                Health = new DatabaseInspectionHealthDto
+                {
+                    Connected = false,
+                    Error = "Not connected — connect a database in Settings → Credentials → Database first."
+                }
+            });
+        }
+
+        var health = await _db.GetHealthAsync(dbConnectionString);
 
         var overview = new HostingDatabaseOverviewDto
         {
             Health = health,
-            ConnectionPool = health.Connected ? await _db.GetConnectionPoolAsync(hasOverride ? dbConnectionOverride : null) : null,
-            Tables = health.Connected ? (await _db.GetTablesAsync(null, hasOverride ? dbConnectionOverride : null)).Tables : new List<DatabaseTableSummaryDto>(),
-            ProviderLabel = hasOverride ? dbLabel : null
+            ConnectionPool = health.Connected ? await _db.GetConnectionPoolAsync(dbConnectionString) : null,
+            Tables = health.Connected ? (await _db.GetTablesAsync(null, dbConnectionString)).Tables : new List<DatabaseTableSummaryDto>(),
+            ProviderLabel = dbLabel
         };
 
         var targets = await _settings.GetPortalDeploymentTargetsAsync();
