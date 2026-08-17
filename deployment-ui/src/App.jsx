@@ -101,6 +101,17 @@ function App(){
 
     }, []);
 
+    // A successful mount means this tab is now running fresh, current
+    // assets - reset ErrorBoundary's stale-chunk reload guard so a LATER
+    // deploy's staleness (a tab left open again for a long time) still
+    // gets its own single auto-reload attempt instead of the guard from
+    // an earlier recovery blocking it for the rest of this tab's life.
+    useEffect(() => {
+
+        sessionStorage.removeItem("chunkErrorAutoReloaded");
+
+    }, []);
+
     // Locking/hiding a tab (see Settings > Sidebar Access) has to actually
     // block it, not just grey out its Sidebar entry — otherwise a direct
     // link or an already-open tab in another window still reaches it.
