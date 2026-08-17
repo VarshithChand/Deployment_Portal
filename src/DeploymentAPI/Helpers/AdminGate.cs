@@ -45,7 +45,17 @@ public static class AdminGate
     // on the full AdminGitHubUsernames allowlist. Omitted entirely for
     // actions with no page-scoped equivalent (e.g. Settings itself), which
     // stay full-admin-only exactly as before.
-    public static async Task<IActionResult?> DenyUnlessAdminAsync(ControllerBase controller, SettingsService settings, string action, string? pageKey = null)
+    //
+    // allowRepoWrite (optional, default false): also passes a caller whose
+    // configured token has real GitHub "push" access on the connected repo
+    // — the same permission level GitHub's own Actions API requires just to
+    // dispatch a workflow_dispatch run. Unlike pageKey, this isn't a portal-
+    // side allowlist at all; it's a live check against GitHub. Deliberately
+    // opt-in per call site (currently only Deploy) rather than a blanket
+    // change to every AdminGate-gated action, since most of those (Storage,
+    // Environments, Docker, Services, Code Quality) have no equivalent
+    // GitHub-side permission to defer to.
+    public static async Task<IActionResult?> DenyUnlessAdminAsync(ControllerBase controller, SettingsService settings, string action, string? pageKey = null, bool allowRepoWrite = false)
     {
         if (!HasSessionHeader(controller))
             return controller.StatusCode(403, new { message = "Missing required request header." });
@@ -77,7 +87,17 @@ public static class AdminGate
         if (await IsAdminForRequestAsync(settings, view, login, pageKey))
             return null;
 
+        if (allowRepoWrite && await HasRepoWriteAccessAsync(controller))
+            return null;
+
         return controller.StatusCode(403, new { message = $"Admin login required to {action}. {BuildDenialDetail(login, pageKey)}" });
+    }
+
+    private static async Task<bool> HasRepoWriteAccessAsync(ControllerBase controller)
+    {
+        var github = controller.HttpContext.RequestServices.GetRequiredService<GitHubApiService>();
+        var owner = await github.GetTokenOwnerAsync();
+        return owner.Configured && owner.CanDeploy;
     }
 
     private static async Task<bool> IsAdminForRequestAsync(SettingsService settings, SettingsViewDto view, string? login, string? pageKey)

@@ -16,4 +16,12 @@ public class TokenOwnerDto
     // when they aren't one of that environment's named required reviewers —
     // so this drives whether the Approvals page/nav-tab is shown at all.
     public bool CanApprove { get; set; }
+
+    // Repo-write ("push") access — the same permission level GitHub's own
+    // Actions API requires to dispatch a workflow_dispatch run at all, so
+    // triggering a deployment through this portal accepts it as an
+    // alternative to being on the portal's own admin allowlist (see
+    // AdminGate's allowRepoWrite). Admin implies push, so this is true for
+    // repo admins too, not just push-only collaborators.
+    public bool CanDeploy { get; set; }
 }

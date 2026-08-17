@@ -230,7 +230,8 @@ public class GitHubApiService
                     Configured = true,
                     Login = user["login"]?.ToString() ?? string.Empty,
                     AvatarUrl = user["avatar_url"]?.ToString() ?? string.Empty,
-                    CanApprove = false
+                    CanApprove = false,
+                    CanDeploy = false
                 };
             }
 
@@ -238,19 +239,22 @@ public class GitHubApiService
             // authenticated token when the token can see the repo at all.
             // "admin" is the same bit GitHub itself checks to let someone
             // approve a protected-environment deployment they weren't
-            // explicitly named a reviewer on.
+            // explicitly named a reviewer on. "push" is the lower bit GitHub
+            // itself requires just to dispatch a workflow_dispatch run.
             var repoJson = await HttpClientHelper.GetAsync(
                 client, $"https://api.github.com/repos/{Uri.EscapeDataString(_auth.Owner)}/{Uri.EscapeDataString(_auth.Repository)}");
 
             var repo = JObject.Parse(repoJson);
             var canApprove = (bool?)repo["permissions"]?["admin"] ?? false;
+            var canDeploy = (bool?)repo["permissions"]?["push"] ?? false;
 
             return new TokenOwnerDto
             {
                 Configured = true,
                 Login = user["login"]?.ToString() ?? string.Empty,
                 AvatarUrl = user["avatar_url"]?.ToString() ?? string.Empty,
-                CanApprove = canApprove
+                CanApprove = canApprove,
+                CanDeploy = canDeploy
             };
         });
     }

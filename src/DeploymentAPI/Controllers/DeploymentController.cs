@@ -26,12 +26,18 @@ public class DeploymentController : ControllerBase
     // Triggering a real GitHub Actions run against the configured repo is
     // exactly the kind of action the admin allowlist exists to gate — this
     // had no check at all before, meaning any anonymous visitor could kick
-    // off a workflow run.
+    // off a workflow run. allowRepoWrite: true additionally lets through
+    // anyone whose connected token has real GitHub push access to the repo
+    // (the same permission level GitHub's own Actions API itself requires
+    // to dispatch a workflow_dispatch run) — not just people on the
+    // portal's own admin allowlist/page grant, since requiring a SEPARATE
+    // portal-side allowlist entry for someone who already has GitHub write
+    // access to the repo added no real security here.
     [HttpPost("deploy")]
     public async Task<IActionResult> Deploy(
         DeployDto request)
     {
-        if (await AdminGate.DenyUnlessAdminAsync(this, _settings, "trigger a deployment", "deploy") is IActionResult denied)
+        if (await AdminGate.DenyUnlessAdminAsync(this, _settings, "trigger a deployment", "deploy", allowRepoWrite: true) is IActionResult denied)
             return denied;
 
         var result =
