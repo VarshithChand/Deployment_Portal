@@ -5464,3 +5464,105 @@ Recommend testing each card with one real token per provider (even a
 free-tier account is enough) to confirm the live behavior end-to-end -
 same standing limitation already true of every AWS/Azure/GitHub-token-
 dependent feature built this engagement.
+
+--------------------------------------------------
+ROUND 42 FOLLOW-UP 1 - REAL BUG: CLOUDFLARE STATUS CHECK REQUIRED A
+PERMISSION THE RECOMMENDED MINIMAL TOKEN DOESN'T HAVE
+--------------------------------------------------
+Date: 2026-08-17
+Trigger: user followed the least-privilege guidance given for creating
+the Cloudflare token (Pages Read + Workers Scripts Read only, no
+Account Settings/Billing/etc.) and the card showed "Cloudflare rejected
+this token" once connected.
+
+Root cause: GetCloudflareStatusAsync's account-name lookup (GET
+/accounts/{id}, used only to show "Signed in as: ...") requires a
+separate "Account Settings" permission that a token scoped to just
+Pages Read + Workers Scripts Read - the exact minimal scope
+recommended - doesn't have. That call was written as a hard blocker
+(any non-2xx response aborted the whole status check with an error),
+so a correctly-scoped, least-privilege token would never even reach
+the Pages/Workers listing calls it genuinely CAN make.
+
+Fix: the account-name lookup is now best-effort - a failure there just
+means no account label shown, never that the real Pages/Workers
+listing (independently gated per-call already) gets skipped too.
+
+Files changed: src/DeploymentAPI/Services/PaasProviderService.cs.
+Commit: 742c66f.
+
+Status: Complete and pushed, backend healthy after redeploy. Also
+notable this round: while diagnosing, the user pasted TWO live
+Cloudflare credentials directly into chat (a token and, separately,
+what appeared to be an API key) while asking me to "check" them via
+curl - both flagged immediately per the standing "SECRET FOUND -
+ROTATE IMMEDIATELY" protocol, neither value was echoed or used, and
+the user was instructed to revoke/roll both on Cloudflare and re-paste
+only into the app's own credential form going forward, never into
+chat.
+
+==================================================
+ROUND 43 - MOVE HOSTING PROVIDER CREDENTIALS TO SETTINGS > CREDENTIALS,
+SHOW ONLY CONFIGURED PROVIDERS
+==================================================
+Date: 2026-08-17
+Trigger: user asked for hosting provider credentials to live on the
+existing Settings > Credentials page (alongside GitHub/AWS/Azure/GCP)
+rather than inline on the Hosting Providers page, and for that page to
+show only the providers actually configured rather than four cards
+including empty ones. (Two further asks in the same message - live
+server-load metrics, and linking a specific hosting service to an
+Environment the way CD-workflow detection already does - were
+deferred pending scope clarification with the user, not implemented
+this round.)
+
+This mirrors an architecture that already existed for AWS/Azure/GCP:
+those credentials are entered via Settings > Credentials
+(AwsLoginSection/AzureLoginSection/GcpLoginSection, each behind
+CredentialPinGate), and consuming pages (Cloud Services, Environments'
+CloudStatusPanel) just read whatever's already saved. This round
+brings the four PaaS providers in line with that same pattern - no
+backend changes needed at all, since the existing api/paas endpoints
+already supported this restructuring; purely a frontend move.
+
+What was built:
+  - New components/settings/credentials/PaasLoginSection.jsx - one
+    generic connect/edit/clear form reused for all four providers
+    (mirrors GcpLoginSection's simple "form always visible, Save +
+    Clear together" shape, since none of these four need AWS's SSO/
+    MFA-session complexity). Takes token + optional Account ID
+    (Cloudflare only).
+  - CredentialsView.jsx: four new tabs (Render/Cloudflare/Netlify/
+    Vercel), each wrapped in the existing CredentialPinGate - same PIN
+    gate every other credential there already has. Added the same four
+    provider keys to the frontend's ALL_CREDENTIAL_PROVIDERS mirror
+    list (matching the backend's CredentialGate.AllProviders from
+    Round 42).
+  - PaasProviderCard.jsx stripped down to status-only (account label +
+    services table + Refresh) - all connect/edit/clear form logic
+    removed, since that now lives on Settings > Credentials.
+  - PaasHosting.jsx now fetches all four providers' status once on
+    load and renders a card ONLY for ones where configured===true. With
+    nothing connected yet, shows a single message linking to Settings >
+    Credentials instead of four empty forms.
+
+Verification performed:
+  - `npm run lint` / `npm run build`: clean, no new warnings.
+  - No backend files touched this round, so no Render redeploy/health
+    check needed - this is a Cloudflare-Workers-hosted frontend-only
+    change (auto-deploys on push per this project's existing Cloudflare
+    Git integration, confirmed by the user's own screenshots already
+    showing prior rounds' frontend changes live).
+
+Files changed: deployment-ui/src/components/settings/credentials/
+PaasLoginSection.jsx (new), components/settings/CredentialsView.jsx,
+components/paas/PaasProviderCard.jsx, pages/PaasHosting.jsx.
+Commit: fe3b726.
+
+Status: Complete and pushed. Deferred (not yet scoped): live server-
+load/metrics display, and linking a specific hosting-provider service
+to an Environment definition the way CD-workflow auto-detection
+already works - both raised in the same request but genuinely
+ambiguous in scope (which metrics, which provider APIs, what exact
+Environments integration), pending a clarifying question to the user
+before implementing either.
