@@ -9,36 +9,30 @@ import {
 
 const EMPTY_FORM = { token: "", accountId: "" };
 
-function roleForProvider(targets, provider) {
+const ROLES = [
+    { key: "frontend", label: "Frontend" },
+    { key: "backend", label: "Backend" },
+    { key: "database", label: "Database (only meaningful for a Render-managed database)" }
+];
 
-    if (targets.frontendProvider === provider) return "frontend";
-    if (targets.backendProvider === provider) return "backend";
-    if (targets.databaseProvider === provider) return "database";
-
-    return "none";
-
-}
-
-// Reassigning this provider to a new role (or to "none") only ever touches
-// the role slot(s) it's currently in and the one it's moving to - whichever
-// OTHER provider previously held the target role is left with no matching
-// field left in `targets` afterwards, which is exactly "unassigned" (see
-// roleForProvider above), no explicit clearing needed for it.
-function applyRole(targets, provider, role) {
+// Toggling ONE role only ever touches that role's provider/serviceId
+// fields - it deliberately does NOT clear this provider's OTHER roles,
+// since a single provider can legitimately fill more than one role at
+// once (the common case: Render hosting both the backend web service AND
+// a separate Render Postgres resource - Backend and Database both
+// "render", two different ServiceIds). Checking a role that's currently
+// held by a DIFFERENT provider simply displaces it - that provider no
+// longer has a matching field afterwards, which is exactly "unassigned".
+function toggleRole(targets, provider, role, active) {
 
     const next = { ...targets };
 
-    ["frontend", "backend", "database"].forEach((r) => {
-
-        if (next[`${r}Provider`] === provider) {
-            next[`${r}Provider`] = "";
-            next[`${r}ServiceId`] = "";
-        }
-
-    });
-
-    if (role !== "none") {
+    if (active) {
         next[`${role}Provider`] = provider;
+        next[`${role}ServiceId`] = "";
+    }
+    else if (next[`${role}Provider`] === provider) {
+        next[`${role}Provider`] = "";
         next[`${role}ServiceId`] = "";
     }
 
@@ -46,15 +40,23 @@ function applyRole(targets, provider, role) {
 
 }
 
-// Lets a super-admin assign this ONE provider's role in the Hosting
-// Providers dashboard (Frontend/Backend/Database/Not used) and connect its
-// portal-wide credential, right here on Credentials next to the provider
-// they're already looking at - instead of a separate trip to Settings ->
-// Hosting Observability (which still exists, for reviewing all 3 roles at
-// once, and reads/writes this exact same PortalDeploymentTargetsDto/
-// PortalPaasCredentials data, so the two stay in sync automatically).
-// Only rendered for isSuperAdminSession - the backend enforces the same
-// restriction on every api/observability/* call regardless.
+// Lets a super-admin assign this ONE provider to any combination of the
+// Hosting Providers dashboard's 3 roles (Frontend/Backend/Database - a
+// provider can hold more than one, e.g. Render as both Backend and
+// Database) and connect its portal-wide credential, right here on
+// Credentials next to the provider they're already looking at - instead
+// of a separate trip to Settings -> Hosting Observability (which still
+// exists, for reviewing all 3 roles at once, and reads/writes this exact
+// same PortalDeploymentTargetsDto/PortalPaasCredentials data, so the two
+// stay in sync automatically). Only rendered for isSuperAdminSession -
+// the backend enforces the same restriction on every api/observability/*
+// call regardless.
+//
+// Note: the Database role here only controls the OPTIONAL CPU/Memory/
+// Storage graph linkage (Render's Metrics API against a Postgres
+// resource) - the Database tab's health/size/tables/connection-pool
+// always come straight from DATABASE_URL and need no connection step at
+// all, on this page or anywhere else.
 export default function DashboardRoleSection({ provider, label, hasAccountId }) {
 
     const toast = useToast();
@@ -89,19 +91,12 @@ export default function DashboardRoleSection({ provider, label, hasAccountId }) 
 
     useEffect(load, [provider]);
 
-    async function handleRoleChange(role) {
+    async function persist(next) {
 
-        const next = applyRole(targets, provider, role);
         setTargets(next);
 
         try {
             await saveObservabilityConfig(next);
-            toast.show(
-                role === "none"
-                    ? `${label} is no longer used by the Hosting Providers dashboard.`
-                    : `${label} set as the dashboard's ${role} target.`,
-                "success"
-            );
         }
         catch (err) {
             console.error(err);
@@ -110,19 +105,23 @@ export default function DashboardRoleSection({ provider, label, hasAccountId }) 
 
     }
 
-    async function handleServiceIdChange(role, serviceId) {
+    async function handleRoleToggle(role, active) {
 
-        const next = { ...targets, [`${role}ServiceId`]: serviceId };
-        setTargets(next);
+        const next = toggleRole(targets, provider, role, active);
 
-        try {
-            await saveObservabilityConfig(next);
-        }
-        catch (err) {
-            console.error(err);
-            toast.show(err.response?.data?.message || "Unable to save the dashboard target.", "error");
-        }
+        await persist(next);
 
+        toast.show(
+            active
+                ? `${label} added as the dashboard's ${role} target.`
+                : `${label} removed from the dashboard's ${role} target.`,
+            "success"
+        );
+
+    }
+
+    function handleServiceIdChange(role, serviceId) {
+        persist({ ...targets, [`${role}ServiceId`]: serviceId });
     }
 
     async function handleSaveCredential(e) {
@@ -174,10 +173,10 @@ export default function DashboardRoleSection({ provider, label, hasAccountId }) 
         return <p className="field-hint">Loading dashboard role...</p>;
     }
 
-    const role = roleForProvider(targets, provider);
     const configured = !!status?.configured;
     const hasLiveList = status?.configured && status?.found && status.services?.length > 0;
-    const serviceId = role === "none" ? "" : targets[`${role}ServiceId`] || "";
+    const activeRoles = ROLES.filter((r) => targets[`${r.key}Provider`] === provider);
+    const anyActive = activeRoles.length > 0;
 
     return (
 
@@ -186,67 +185,78 @@ export default function DashboardRoleSection({ provider, label, hasAccountId }) 
             <h3 className="settings-subhead">Hosting Providers Dashboard</h3>
 
             <p className="field-hint" style={{ marginBottom: "12px" }}>
-                Assign {label} to one of the dashboard's 3 roles — a portal-wide setting shown
-                the same way to every visitor of Hosting Providers, separate from your own
-                connection above.
+                Assign {label} to any of the dashboard's roles — a portal-wide setting shown the
+                same way to every visitor of Hosting Providers, separate from your own connection
+                above. One provider can hold more than one role (e.g. Render as both Backend and
+                Database, if your Postgres is a separate Render resource under the same account).
+                The Database tab's health/size/tables always come straight from this backend's
+                DATABASE_URL regardless — nothing to connect for that part.
             </p>
 
-            <div className="form-group">
+            {ROLES.map((r) => {
 
-                <label>Use {label} as</label>
+                const active = targets[`${r.key}Provider`] === provider;
 
-                <select className="form-control" value={role} onChange={(e) => handleRoleChange(e.target.value)}>
-                    <option value="none">Not used</option>
-                    <option value="frontend">Frontend</option>
-                    <option value="backend">Backend</option>
-                    <option value="database">Database (only meaningful for a Render-managed database)</option>
-                </select>
+                return (
 
-            </div>
+                    <div key={r.key} className="form-group" style={{ marginBottom: active ? "6px" : "12px" }}>
 
-            {role !== "none" && (
+                        <label style={{ display: "flex", alignItems: "center", gap: "8px", fontWeight: "normal" }}>
+                            <input
+                                type="checkbox"
+                                checked={active}
+                                onChange={(e) => handleRoleToggle(r.key, e.target.checked)}
+                            />
+                            Use {label} as {r.label}
+                        </label>
 
-                <div className="form-group">
+                        {active && (
 
-                    <label>Service</label>
+                            <div style={{ marginTop: "8px", marginLeft: "24px" }}>
 
-                    {hasLiveList ? (
+                                {hasLiveList ? (
 
-                        <select
-                            className="form-control"
-                            value={serviceId}
-                            onChange={(e) => handleServiceIdChange(role, e.target.value)}
-                        >
-                            <option value="">Select a service…</option>
-                            {status.services.map((s) => (
-                                <option key={s.id || s.name} value={s.id || s.name}>{s.name}</option>
-                            ))}
-                        </select>
+                                    <select
+                                        className="form-control"
+                                        value={targets[`${r.key}ServiceId`] || ""}
+                                        onChange={(e) => handleServiceIdChange(r.key, e.target.value)}
+                                    >
+                                        <option value="">Select a service…</option>
+                                        {status.services.map((s) => (
+                                            <option key={s.id || s.name} value={s.id || s.name}>{s.name}</option>
+                                        ))}
+                                    </select>
 
-                    ) : (
+                                ) : (
 
-                        <input
-                            className="form-control"
-                            placeholder="Service/site id"
-                            value={serviceId}
-                            onChange={(e) => handleServiceIdChange(role, e.target.value)}
-                        />
+                                    <input
+                                        className="form-control"
+                                        placeholder="Service/site id"
+                                        value={targets[`${r.key}ServiceId`] || ""}
+                                        onChange={(e) => handleServiceIdChange(r.key, e.target.value)}
+                                    />
 
-                    )}
+                                )}
 
-                    {!hasLiveList && (
-                        <p className="field-hint">
-                            {configured
-                                ? "Unable to reach this provider with the portal-wide credential below right now."
-                                : "Save the portal-wide credential below to pick from a live list instead of typing an id."}
-                        </p>
-                    )}
+                                {!hasLiveList && (
+                                    <p className="field-hint">
+                                        {configured
+                                            ? "Unable to reach this provider with the portal-wide credential below right now."
+                                            : "Save the portal-wide credential below to pick from a live list instead of typing an id."}
+                                    </p>
+                                )}
 
-                </div>
+                            </div>
 
-            )}
+                        )}
 
-            {role !== "none" && (
+                    </div>
+
+                );
+
+            })}
+
+            {anyActive && (
 
                 <>
 
