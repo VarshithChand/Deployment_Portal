@@ -6814,3 +6814,65 @@ reviewed pattern exactly. Recommend @VarshithChand confirm the
 Database tab now shows "not connected" with nothing configured, and
 that reconnecting (via either the live Render picker or manual entry)
 brings it back exactly as before.
+
+==================================================
+ROUND 48 FOLLOW-UP 10 - CLARIFY: METRICS-LINK ROLE VS THE ACTUAL
+DATABASE CONNECTION (UX FIX, NOT A FUNCTIONAL BUG)
+==================================================
+Date: 2026-08-17
+Trigger: user reported (screenshots) clearing the "Database metrics
+(optional)" role's Service dropdown on Settings > Hosting Observability
+did not disconnect the Hosting Providers dashboard's Database tab,
+which still showed "Connected" with real data.
+
+Diagnosed as working-as-designed, not a bug: the "Database metrics"
+role (PortalDeploymentTargets.DatabaseProvider/DatabaseServiceId) only
+ever links Render's CPU/Memory/Storage Metrics API to the graphs on
+the Database tab - it has never controlled health/tables/connection-
+pool, which come from the entirely separate root["PortalDatabaseConnection"]
+credential (its own "Database [Configured]" card, right below the role
+picker on the same page). The user's actual database connection was
+still configured because they hadn't cleared THAT card - they'd
+cleared a different, optional thing that happens to share the word
+"Database" in its label.
+
+Root UX problem: both the role checkbox ("Use Render as Database...")
+and the separate connection card ("Database") used the bare word
+"Database" right next to each other on the same page (both on
+Settings > Hosting Observability and on Settings > Credentials' Render
+tab), making the two genuinely easy to conflate - confirmed this was a
+real design smell worth fixing rather than just explaining it away.
+
+Fix: renamed the metrics-link role everywhere so it never stands alone
+as "Database" again -
+  - Credentials page (DashboardRoleSection.jsx): checkbox text changed
+    from "Use {provider} as Database (only meaningful for a Render-
+    managed database)" to "Link {provider}'s CPU/Memory metrics to the
+    database (optional)" - via a new per-role checkboxText(provider)
+    function instead of the generic "Use {label} as {role}" template
+    (which fit Frontend/Backend fine but produced the confusing
+    standalone "Database" for this one role).
+  - Settings > Hosting Observability (HostingObservabilityConfigView.jsx):
+    role heading changed from "Database metrics (optional)" to
+    "CPU/Memory/Storage Metrics Link (optional)", with hint text that
+    now explicitly says this is "Not the database connection itself
+    (that's the separate 'Database' card below, required either way)".
+
+Verification performed:
+  - `npm run lint` in deployment-ui/: no new warnings/errors.
+  - `npm run build` in deployment-ui/: succeeded.
+  - No backend files touched this round, so no dotnet build/health
+    check needed.
+
+Files changed: deployment-ui/src/components/settings/credentials/
+DashboardRoleSection.jsx, deployment-ui/src/components/settings/
+HostingObservabilityConfigView.jsx.
+Commit: 049b377.
+
+Status: Complete and pushed (frontend-only). Told the user directly
+what to click to actually disconnect the database (the "Database"
+card's own Clear button, not the metrics role dropdown) rather than
+just shipping the wording fix silently. Recommend @VarshithChand
+confirm the new labels read clearly and, separately, click Clear on
+the actual "Database" connection card if full disconnection is still
+wanted.
