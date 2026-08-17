@@ -6411,3 +6411,77 @@ function, same SSL-required default), so it should resolve the exact
 symptom reported, but ask @VarshithChand to reload the Database tab
 (no reconnect needed - GetPortalDatabaseConnectionAsync now normalizes
 on every read) and confirm it shows Connected.
+
+==================================================
+ROUND 48 FOLLOW-UP 5 - FIELD-BY-FIELD DATABASE CONNECTION ENTRY
+(HOST/PORT/DATABASE/USERNAME/PASSWORD), ACCESS-CONTROL AUDIT
+==================================================
+Date: 2026-08-17
+Trigger: user shared a screenshot of Render's own "Connections" panel
+(Hostname/Port/Database/Username/Password/Internal+External URL/PSQL
+Command) and asked for the entire dashboard to be connectable from
+Credentials, the database "like this" (field-by-field), explicitly
+asking that only super-admin can see/connect it and "no data leaks."
+
+Added a second manual sub-mode on the Database tab's "Other" path -
+"Fields" (Hostname/Port/Database/Username/Password, matching Render's
+own panel exactly) alongside the existing "Connection String" paste.
+New PortalDatabaseConnectionFieldsUpdateDto + POST database/connection/
+fields action, gated identically to every other database/* action
+(AdminGate.DenyUnlessSuperAdminAsync - the single hardcoded super-admin
+identity, not the general admin allowlist, not regular users). The
+connection string is assembled server-side via
+NpgsqlConnectionStringBuilder (never string-concatenated, so a
+password/username containing special characters can't break out of
+its place) and routed through the exact same save path as every other
+entry method - encrypted at rest via the same Data Protection
+protector used for every other credential in this app, and the
+response is success/failure only, never an echo of what was saved.
+Also hardened NormalizeConnectionString to tolerate a quoted URI or
+one embedded in a larger pasted string (e.g. someone pasting a psql
+command line containing the URL instead of the URL field alone) -
+explicitly does NOT attempt to parse Render's discrete-flags "PSQL
+Command" format, which is called out in the UI copy so nobody pastes
+that expecting it to work.
+
+Access-control audit performed in response to the explicit "no data
+leaks" requirement (confirmed, no changes needed):
+  - Every api/observability/database/* action requires
+    AdminGate.DenyUnlessSuperAdminAsync - a live check against the
+    single hardcoded super-admin GitHub identity, not the portal's
+    general admin allowlist and not any authenticated/anonymous user.
+  - GetDatabaseConnection only ever returns Configured/ProviderLabel/
+    a masked host:port/db (PortalDatabaseConnectionDto) - the actual
+    username/password/full connection string is never part of any
+    response body, at any point, to any caller.
+  - The Database tab's own overview (GetDatabase) only ever surfaces
+    DatabaseInspectionHealthDto.MaskedConnection, the same masking
+    rule already established for the app's own DATABASE_URL.
+  - Storage is the connection string only, Data-Protection-encrypted
+    at rest (root["PortalDatabaseConnection"]["ConnectionString"]) -
+    no separate plaintext copy of host/port/user/password fields is
+    ever persisted once assembled.
+
+Verification performed:
+  - `dotnet build` (isolated output dir): 0 errors, only pre-existing
+    unrelated warnings.
+  - `npm run lint` in deployment-ui/: no new warnings/errors.
+  - `npm run build` in deployment-ui/: succeeded.
+  - Live check against the deployed Render backend after the push:
+    /api/bootstrap healthy (HTTP 200).
+
+Files changed: src/DeploymentAPI/DTOs/HostingObservabilityDtos.cs,
+src/DeploymentAPI/Services/SettingsService.cs,
+src/DeploymentAPI/Controllers/HostingObservabilityController.cs,
+deployment-ui/src/services/hostingObservabilityService.js,
+deployment-ui/src/components/settings/credentials/
+DatabaseConnectionSection.jsx.
+Commit: 553d600.
+
+Status: Complete and pushed, live-verified the backend is up. Could
+NOT live-verify the Fields form against a real database in this
+sandboxed session - only that the SQL/C# path compiles and mirrors the
+already-working DATABASE_URL conversion logic exactly. Recommend
+@VarshithChand try the Fields tab against the same Render database
+already connected in follow-up 3/4 and confirm it still shows
+Connected.
