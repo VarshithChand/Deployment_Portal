@@ -5087,3 +5087,80 @@ scope either way. Recommend the user test with a token that has the
 "project" scope to confirm the success path, and separately with one
 that doesn't to confirm the graceful "couldn't add it to the project"
 warning message reads as expected.
+
+==================================================
+ROUND 40 - POLICY CHANGE: DEPLOY TRIGGER NOW ALSO ACCEPTS REAL GITHUB
+WRITE ACCESS, NOT JUST THE PORTAL ADMIN ALLOWLIST
+==================================================
+Date: 2026-08-17
+Trigger: user (GitHub login @vvarshithchand) hit "Admin login required
+to trigger a deployment... isn't in the admin allowlist and hasn't
+been granted access to this page" when trying to deploy, and pointed
+out they already have write access to the repo on GitHub - asked why
+that wasn't sufficient.
+
+This was NOT a bug - AdminGate.cs (see Round 37/38's writeup on the
+same file) deliberately gates every mutating action, Deploy included,
+against this app's OWN admin allowlist/page-grant system, entirely
+independent of what permission level GitHub itself reports for the
+caller. That's the intended design for most of AdminGate's callers
+(Storage, Environments, Docker, Services, Code Quality have no GitHub-
+side permission equivalent to defer to at all), but for Deploy
+specifically it meant requiring a SEPARATE portal-side allowlist entry
+for someone who already has real GitHub push access to the repo - the
+same permission level GitHub's own Actions API itself requires just to
+accept a workflow_dispatch call. Presented two options (grant this one
+user access through the existing UI with no code change, vs. changing
+the underlying policy for everyone): user explicitly chose the policy
+change.
+
+What changed:
+  - GitHubApiService.GetTokenOwnerAsync(): now also reads the repo
+    permissions block's "push" bit (previously only "admin", used for
+    CanApprove/canApproveReleases) into a new TokenOwnerDto.CanDeploy.
+    Admin implies push on GitHub's side, so this covers repo admins
+    too, not just push-only collaborators.
+  - AdminGate.DenyUnlessAdminAsync gained a new optional parameter,
+    allowRepoWrite (default false, so every other existing call site's
+    behavior is completely unchanged) - when true, a caller who fails
+    both the admin-allowlist check AND the page-grant check is given
+    one more chance: a live check of their configured token's CanDeploy
+    bit via GetTokenOwnerAsync(). Deliberately a live GitHub check, not
+    a cached/portal-side flag, matching how CanApprove already works
+    for Approve/Merge.
+  - DeploymentController.Deploy is the only call site that opts in
+    (allowRepoWrite: true). Every other AdminGate-gated action (Storage,
+    Environments, Docker, Services, Code Quality, Settings, the Admin
+    Allowlist itself, Pull Requests' Create Issue) is completely
+    unaffected - they still require the portal's own admin allowlist or
+    an explicit page grant, exactly as before.
+  - No frontend change needed: the Deploy page/button was already
+    unconditionally visible to anyone with a repo configured (Deploy
+    isn't in Sidebar's GATED_TABS) - the 403 shown in the screenshot
+    was always a submit-time toast, not a hidden button, so this is
+    purely a backend authorization change.
+
+Verification performed:
+  - `dotnet build` (isolated output dir): 0 errors, same 3 pre-existing
+    unrelated warnings as every prior round. No frontend files touched,
+    so no `npm run lint`/`npm run build` needed this round.
+  - Live check against the deployed Render backend after the push:
+    /api/bootstrap healthy (HTTP 200), and POST api/deployment/deploy
+    without the required X-Session-Id header still correctly returns
+    403 (the separate CSRF guard - see AdminGate's HasSessionHeader -
+    runs before either authorization check and is untouched by this
+    change).
+
+Files changed: src/DeploymentAPI/Controllers/DeploymentController.cs,
+DTOs/TokenOwnerDto.cs, Helpers/AdminGate.cs, Services/GitHubApiService.cs.
+Commit: 3d0a57d.
+
+Status: Complete and pushed, live-verified that the endpoint is up and
+the unrelated CSRF guard still blocks headerless requests. Could NOT
+live-verify the actual new pass condition (a real collaborator with
+GitHub push-but-not-admin access on the connected repo successfully
+triggering a deployment through the portal) - needs a real second
+GitHub identity/token with that specific permission level connected to
+a real repo, which this sandboxed session doesn't have. Recommend
+@vvarshithchand (or another push-level collaborator) try triggering a
+deployment directly to confirm.
