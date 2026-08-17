@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { createPortal } from "react-dom";
 
 import { verifyMyPin } from "../services/settingsService";
 import performSelfClear from "../utils/performSelfClear";
@@ -94,7 +95,15 @@ export default function PinLockScreen({ onUnlock }) {
 
     }
 
-    return (
+    // Portalled to document.body (same fix/reasoning as
+    // SwitchRepositoryModal's own createPortal use): position:fixed's
+    // containing block becomes the nearest transformed/filtered ancestor,
+    // not the viewport, if one exists anywhere between this and <body> -
+    // mounting straight onto body sidesteps that regardless of whatever
+    // this renders underneath (this component can be triggered from any
+    // page in the app, so there's no way to audit every possible ancestor
+    // for a stray transform/backdrop-filter and trust that staying true).
+    return createPortal(
 
         <div className="dialog-backdrop pin-lock-backdrop" role="presentation">
 
@@ -156,7 +165,9 @@ export default function PinLockScreen({ onUnlock }) {
 
             </div>
 
-        </div>
+        </div>,
+
+        document.body
 
     );
 
