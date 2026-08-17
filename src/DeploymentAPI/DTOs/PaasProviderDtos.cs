@@ -62,6 +62,23 @@ public class PaasServiceItemDto
     public string? Url { get; set; }
 
     public DateTime? UpdatedAt { get; set; }
+
+    // Latest deploy's commit, when the provider's own API surfaces one -
+    // Render (a separate per-service Deploys call), Cloudflare Pages
+    // (already present on the same latest_deployment object this file
+    // already reads), Netlify (published_deploy.commit_ref, no separate
+    // call), Vercel (latestDeployments[0].meta, no separate call). Null
+    // wherever that provider's API doesn't expose it for this service
+    // (e.g. never deployed yet) - never guessed.
+    public string? CommitSha { get; set; }
+
+    public string? CommitMessage { get; set; }
+
+    // Capacity/instance-type label, e.g. Render's plan name ("starter",
+    // "standard") - only Render populates this today; null for the other
+    // three (their APIs don't expose a comparable single "plan" field the
+    // same simple way in the calls this app already makes).
+    public string? Plan { get; set; }
 }
 
 // One provider's connection status — same Configured/Found/Error contract

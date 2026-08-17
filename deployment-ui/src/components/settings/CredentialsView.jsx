@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import ClearableInput from "../common/ClearableInput";
 import GitHubAccessSection from "./GitHubAccessSection";
@@ -9,6 +9,10 @@ import PaasLoginSection from "./credentials/PaasLoginSection";
 import ApiKeySection from "./credentials/ApiKeySection";
 import SecurityPinSection from "./credentials/SecurityPinSection";
 import CredentialPinGate from "./credentials/CredentialPinGate";
+import useAuth from "../../hooks/useAuth";
+import { getMyAwsSettings, getMyAzureSettings, getMyGcpSettings } from "../../services/settingsService";
+import { getMyApiKeys } from "../../services/securityService";
+import { getPaasStatus } from "../../services/paasService";
 
 const MODES = [
     { key: "github", label: "GitHub" },
@@ -122,6 +126,60 @@ export default function CredentialsView({
 }) {
 
     const [mode, setMode] = useState("github");
+    const { pinConfigured } = useAuth();
+
+    // "At a glance" status per tab, shown as a small checkmark on the
+    // button-row below so you can see what's already connected without
+    // clicking into each tab. Undefined = not fetched yet (shows nothing
+    // rather than a wrong guess); github/docker/sonarqube/oauth/ai reuse
+    // the props Settings.jsx already fetched, everything else here gets
+    // its own lightweight fetch on mount.
+    const [remoteStatus, setRemoteStatus] = useState({});
+
+    useEffect(() => {
+
+        Promise.all([
+            getMyAwsSettings().catch(() => null),
+            getMyAzureSettings().catch(() => null),
+            getMyGcpSettings().catch(() => null),
+            getMyApiKeys().catch(() => null),
+            getPaasStatus("render").catch(() => null),
+            getPaasStatus("cloudflare").catch(() => null),
+            getPaasStatus("netlify").catch(() => null),
+            getPaasStatus("vercel").catch(() => null)
+        ]).then(([aws, azure, gcp, apiKeysRes, render, cloudflare, netlify, vercel]) => {
+
+            const activeKeyCount = Array.isArray(apiKeysRes?.data)
+                ? apiKeysRes.data.filter((k) => !k.revoked).length
+                : 0;
+
+            setRemoteStatus({
+                aws: aws?.configured,
+                azure: azure?.configured,
+                gcp: gcp?.configured,
+                apikey: activeKeyCount > 0,
+                render: render?.configured,
+                cloudflare: cloudflare?.configured,
+                netlify: netlify?.configured,
+                vercel: vercel?.configured
+            });
+
+        });
+
+    }, []);
+
+    // Merges the remote fetch above with what Settings.jsx already passed
+    // down as props, so every MODES entry has one consistent true/false/
+    // undefined regardless of which of the two sources it comes from.
+    const configuredByMode = {
+        github: githubTokenConfigured,
+        docker: dockerPasswordConfigured,
+        sonarqube: sonarTokenConfigured,
+        oauth: oauthClientSecretConfigured,
+        ai: aiApiKeyConfigured,
+        screenlock: pinConfigured,
+        ...remoteStatus
+    };
 
     // Which providers this browser session has already unlocked via
     // CredentialPinGate this visit - lifted up here (rather than local to
@@ -180,7 +238,8 @@ export default function CredentialsView({
                 same way, for future use, and your API Key is scoped the same way too.
                 Render, Cloudflare, Netlify, and Vercel are the same — see them live on
                 the Hosting Providers page once connected. SonarQube, Docker, and OAuth
-                are shared by the whole portal instead.
+                are shared by the whole portal instead. A checkmark below means it's
+                already configured — no need to click in just to check.
             </p>
 
             <div className="button-row" style={{ marginBottom: "20px" }}>
@@ -194,6 +253,9 @@ export default function CredentialsView({
                         onClick={() => setMode(m.key)}
                     >
                         {m.label}
+                        {configuredByMode[m.key] && (
+                            <span className="badge badge-success" style={{ marginLeft: "6px", padding: "0 5px" }}>✓</span>
+                        )}
                     </button>
 
                 ))}

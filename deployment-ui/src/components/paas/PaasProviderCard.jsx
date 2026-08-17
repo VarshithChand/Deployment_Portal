@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 
-import { getPaasStatus } from "../../services/paasService";
+import { getPaasStatus, getPaasServiceMetrics } from "../../services/paasService";
 
 // Status-only display for one connected provider (Render/Cloudflare/
 // Netlify/Vercel) - connecting/editing/clearing the credential itself now
@@ -14,14 +14,35 @@ export default function PaasProviderCard({ provider, label }) {
     const [status, setStatus] = useState(null);
     const [loading, setLoading] = useState(true);
 
+    // Render's real CPU/memory series per service, keyed by id/name - the
+    // only provider with a comparable per-resource "load" API (see
+    // PaasProviderService.GetServiceMetricsAsync). Fetched lazily once the
+    // service list is in, not blocking the rest of the card on it.
+    const [metricsByService, setMetricsByService] = useState({});
+
     function refresh() {
 
         setLoading(true);
+        setMetricsByService({});
 
         getPaasStatus(provider).then((result) => {
 
             setStatus(result);
             setLoading(false);
+
+            if (provider === "render" && result?.found) {
+
+                result.services.forEach((svc) => {
+
+                    const id = svc.id || svc.name;
+
+                    getPaasServiceMetrics(provider, id)
+                        .then((metrics) => setMetricsByService((current) => ({ ...current, [id]: metrics })))
+                        .catch(() => {});
+
+                });
+
+            }
 
         }).catch((err) => {
 
@@ -33,6 +54,25 @@ export default function PaasProviderCard({ provider, label }) {
     }
 
     useEffect(refresh, [provider]);
+
+    function formatLoad(svc) {
+
+        const metrics = metricsByService[svc.id || svc.name];
+
+        if (!metrics) return "…";
+        if (!metrics.found || metrics.series.length === 0) return "—";
+
+        return metrics.series
+            .map((s) => {
+                const latest = s.points[s.points.length - 1];
+                return latest ? `${s.name}: ${Math.round(latest.value * 100) / 100}${s.unit}` : null;
+            })
+            .filter(Boolean)
+            .join(" · ") || "—";
+
+    }
+
+    const isRender = provider === "render";
 
     return (
 
@@ -85,6 +125,9 @@ export default function PaasProviderCard({ provider, label }) {
                                     <th>Name</th>
                                     <th>Type</th>
                                     <th>Status</th>
+                                    {isRender && <th>Plan</th>}
+                                    <th>Commit</th>
+                                    {isRender && <th>Load</th>}
                                     <th>Updated</th>
                                 </tr>
                             </thead>
@@ -101,6 +144,18 @@ export default function PaasProviderCard({ provider, label }) {
                                         </td>
                                         <td>{svc.type || "—"}</td>
                                         <td>{svc.status || "—"}</td>
+                                        {isRender && <td>{svc.plan || "—"}</td>}
+                                        <td>
+                                            {svc.commitSha ? (
+                                                <>
+                                                    <span className="smoke-test-metric-mono">{svc.commitSha.slice(0, 7)}</span>
+                                                    {svc.commitMessage && (
+                                                        <div className="field-hint" style={{ marginTop: "2px" }}>{svc.commitMessage}</div>
+                                                    )}
+                                                </>
+                                            ) : "—"}
+                                        </td>
+                                        {isRender && <td>{formatLoad(svc)}</td>}
                                         <td>{svc.updatedAt ? new Date(svc.updatedAt).toLocaleString() : "—"}</td>
                                     </tr>
 

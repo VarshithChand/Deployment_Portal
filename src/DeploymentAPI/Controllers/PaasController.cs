@@ -50,6 +50,24 @@ public class PaasController : ControllerBase
         return Ok(await _paas.GetStatusAsync(normalized, creds));
     }
 
+    // On-demand usage/load metrics for one of THIS session's own connected
+    // services - independent of the Environments linking feature (see
+    // EnvironmentsController.GetCloudStatus, which calls the same
+    // PaasProviderService method but scoped to a saved Environment target).
+    // Here it's just "give me metrics for a service I can already see in my
+    // own /status listing" - no Environment involved at all.
+    [HttpGet("{provider}/services/{serviceId}/metrics")]
+    public async Task<IActionResult> GetServiceMetrics(string provider, string serviceId)
+    {
+        if (ValidateProvider(provider, out var normalized) is IActionResult invalid)
+            return invalid;
+
+        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var creds = await _settings.GetUserPaasCredentialsAsync(normalized, key);
+
+        return Ok(await _paas.GetServiceMetricsAsync(normalized, creds, serviceId));
+    }
+
     [HttpPost("{provider}/credentials")]
     public async Task<IActionResult> SaveCredentials(string provider, PaasCredentialsUpdateDto request)
     {

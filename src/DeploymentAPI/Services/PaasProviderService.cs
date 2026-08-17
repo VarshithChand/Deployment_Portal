@@ -198,27 +198,63 @@ public class PaasProviderService
         }
 
         var services = JArray.Parse(await servicesResponse.Content.ReadAsStringAsync());
+        var items = new List<PaasServiceItemDto>();
 
-        result.Services = services.Select(entry =>
+        foreach (var entry in services)
         {
             var svc = entry["service"];
             var suspended = svc?["suspended"]?.ToString();
+            var id = svc?["id"]?.ToString();
 
-            return new PaasServiceItemDto
+            var item = new PaasServiceItemDto
             {
                 Name = svc?["name"]?.ToString() ?? string.Empty,
                 // The real "srv-..." id - GetServiceMetricsAsync's Render
                 // call needs this, not the display name.
-                Id = svc?["id"]?.ToString(),
+                Id = id,
                 Type = svc?["type"]?.ToString(),
                 Status = suspended == "suspended" ? "suspended" : "live",
                 Url = svc?["serviceDetails"]?["url"]?.ToString(),
-                UpdatedAt = DateTime.TryParse(svc?["updatedAt"]?.ToString(), out var updated) ? updated : null
+                UpdatedAt = DateTime.TryParse(svc?["updatedAt"]?.ToString(), out var updated) ? updated : null,
+                Plan = svc?["serviceDetails"]?["plan"]?.ToString() ?? svc?["plan"]?.ToString()
             };
-        }).ToList();
 
+            if (!string.IsNullOrWhiteSpace(id))
+                await TryAddRenderCommitAsync(client, id, item);
+
+            items.Add(item);
+        }
+
+        result.Services = items;
         result.Found = true;
         return result;
+    }
+
+    // Best-effort, one extra call per service against Render's own Deploys
+    // API for its latest commit - a separate endpoint from the services
+    // list above, since Render's /v1/services response doesn't carry
+    // commit info itself. A failure here (rate limit, a service with no
+    // deploys yet) just means no commit shown for that one service, never
+    // breaks the rest of the listing.
+    private static async Task TryAddRenderCommitAsync(HttpClient client, string serviceId, PaasServiceItemDto item)
+    {
+        try
+        {
+            var response = await client.GetAsync($"https://api.render.com/v1/services/{Uri.EscapeDataString(serviceId)}/deploys?limit=1");
+
+            if (!response.IsSuccessStatusCode)
+                return;
+
+            var deploys = JArray.Parse(await response.Content.ReadAsStringAsync());
+            var commit = deploys.FirstOrDefault()?["deploy"]?["commit"];
+
+            item.CommitSha = commit?["id"]?.ToString();
+            item.CommitMessage = commit?["message"]?.ToString();
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[render:commit:{serviceId}] {ex}");
+        }
     }
 
     //===========================================================
@@ -273,6 +309,7 @@ public class PaasProviderService
                 var deployment = p["latest_deployment"];
                 var domains = p["domains"] as JArray;
                 var subdomain = p["subdomain"]?.ToString();
+                var commitMeta = deployment?["deployment_trigger"]?["metadata"];
 
                 return new PaasServiceItemDto
                 {
@@ -280,7 +317,9 @@ public class PaasProviderService
                     Type = "pages_project",
                     Status = deployment?["status"]?.ToString() ?? "no deployments",
                     Url = domains?.FirstOrDefault()?.ToString() ?? (subdomain != null ? $"{subdomain}.pages.dev" : null),
-                    UpdatedAt = DateTime.TryParse(deployment?["modified_on"]?.ToString(), out var updated) ? updated : null
+                    UpdatedAt = DateTime.TryParse(deployment?["modified_on"]?.ToString(), out var updated) ? updated : null,
+                    CommitSha = commitMeta?["commit_hash"]?.ToString(),
+                    CommitMessage = commitMeta?["commit_message"]?.ToString()
                 };
             }));
         }
@@ -340,7 +379,9 @@ public class PaasProviderService
             Type = "site",
             Status = site["published_deploy"]?["state"]?.ToString() ?? site["state"]?.ToString(),
             Url = site["ssl_url"]?.ToString() ?? site["url"]?.ToString(),
-            UpdatedAt = DateTime.TryParse(site["updated_at"]?.ToString(), out var updated) ? updated : null
+            UpdatedAt = DateTime.TryParse(site["updated_at"]?.ToString(), out var updated) ? updated : null,
+            CommitSha = site["published_deploy"]?["commit_ref"]?.ToString(),
+            CommitMessage = site["published_deploy"]?["title"]?.ToString()
         }).ToList();
 
         result.Found = true;
@@ -388,13 +429,17 @@ public class PaasProviderService
             // like every other provider here.
             var updatedMs = p["updatedAt"]?.Value<long?>();
 
+            var commitMeta = latestDeployment?["meta"];
+
             return new PaasServiceItemDto
             {
                 Name = p["name"]?.ToString() ?? string.Empty,
                 Type = "project",
                 Status = production?["readyState"]?.ToString() ?? latestDeployment?["readyState"]?.ToString() ?? "no deployments",
                 Url = alias?.FirstOrDefault()?.ToString() ?? production?["url"]?.ToString(),
-                UpdatedAt = updatedMs.HasValue ? DateTimeOffset.FromUnixTimeMilliseconds(updatedMs.Value).UtcDateTime : null
+                UpdatedAt = updatedMs.HasValue ? DateTimeOffset.FromUnixTimeMilliseconds(updatedMs.Value).UtcDateTime : null,
+                CommitSha = commitMeta?["githubCommitSha"]?.ToString(),
+                CommitMessage = commitMeta?["githubCommitMessage"]?.ToString()
             };
         }).ToList();
 
