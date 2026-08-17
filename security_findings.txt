@@ -5566,3 +5566,124 @@ already works - both raised in the same request but genuinely
 ambiguous in scope (which metrics, which provider APIs, what exact
 Environments integration), pending a clarifying question to the user
 before implementing either.
+
+==================================================
+ROUND 44 - LINK ENVIRONMENTS TO CONNECTED HOSTING PROVIDER SERVICES,
+ADD RENDER METRICS
+==================================================
+Date: 2026-08-17
+Trigger: the two items deferred at the end of Round 43. Clarified via
+two questions: (1) metrics should show whatever each provider's own
+API actually exposes, not a forced uniform number across all four;
+(2) "connect them from here like env" means letting an Environment's
+cloud target be picked from the visitor's own connected Hosting
+Provider services, not just hand-typed or CD-workflow-detected.
+Went through EnterPlanMode given the real size (schema change +
+metrics API research across 4 providers + GetCloudStatus rewrite +
+admin editor live picker + status panel rewrite) - plan approved
+before implementation.
+
+Scope decisions made explicit before writing code (not silently
+guessed):
+  - Only Render gets real metrics (CPU/memory via its Metrics API) -
+    the one provider among the four with an actual per-resource "load"
+    concept.
+  - Cloudflare does NOT get metrics this round - real analytics needs
+    its GraphQL Analytics API (a POST+query-body call, this app's
+    first GraphQL integration was the Round 39 GitHub Projects work,
+    and Cloudflare's analytics is mostly Workers-oriented, not a good
+    fit for the Pages-project-heavy Cloudflare integration this app
+    already has) - not worth the complexity jump for one metric on one
+    provider.
+  - Netlify/Vercel get NO metrics at all - both are static/edge
+    hosting with only account/team-level usage (build minutes,
+    bandwidth), not a per-project "load" concept to begin with.
+  - Netlify/Vercel are never auto-detected from CD workflow YAML
+    (DeploymentTargetDetector untouched) - admin-picked or hand-typed
+    only, unlike render/cloudflare/aws/azure.
+
+What was built:
+  - EnvironmentDefinitionDto gained NetlifySiteId/VercelProjectId,
+    completing the per-provider target-id field set alongside the
+    existing RenderServiceId/CloudflareProjectName (Round 41).
+  - PaasServiceItemDto gained an Id field, populated for Render from
+    the real "srv-..." id (previously only Name/Type/Status/Url/
+    UpdatedAt were read) - Render's Metrics API needs this real id,
+    not the display name Cloudflare/Netlify/Vercel are matched by.
+  - New PaasMetricSeriesDto/PaasMetricPointDto/PaasServiceMetricsDto
+    (generic across providers, same "loose shape over near-identical
+    DTOs" reasoning as PaasServiceItemDto) and
+    PaasProviderService.GetServiceMetricsAsync(provider, credentials,
+    serviceId) - calls Render's GET /v1/metrics/cpu and /v1/metrics/
+    memory (each independently wrapped so one failing doesn't blank
+    the other); cloudflare/netlify/vercel hit the switch's default
+    case and return an empty series list, not an error.
+  - CloudStatusDto (shared with AWS/Azure's existing response shape)
+    gained PaasService/Metrics fields rather than a competing response
+    type, so CloudStatusPanel.jsx's one existing call/response shape
+    keeps working for every provider.
+  - EnvironmentsController.GetCloudStatus: render/cloudflare/netlify/
+    vercel now resolve the VIEWING visitor's own
+    GetUserPaasCredentialsAsync(provider, key) (not portal-wide),
+    call PaasProviderService.GetStatusAsync, match the environment's
+    saved target id (by Id first, Name fallback) against that
+    visitor's real connected services, and - on a match - also fetch
+    metrics. Three distinct states now surfaced: not connected
+    (Configured=false, prompts toward Settings > Credentials, same
+    contract AWS/Azure already use), connected but target not found
+    under that account (a specific error, not a generic failure), and
+    found (real status + metrics).
+  - EnvironmentsAdminView.jsx: RenderServiceId/CloudflareProjectName
+    (plus new NetlifySiteId/VercelProjectId) become live <select>
+    pickers of the CURRENT ADMIN's own connected services (fetched via
+    the existing getPaasStatus, per-row, keyed off each row's chosen
+    provider) when that provider is connected, falling back to the
+    original free-text input with a "connect in Settings > Credentials"
+    hint otherwise. Extracted into one shared PaasServiceIdField
+    component reused across all four providers.
+  - CloudStatusPanel.jsx: replaced the old render/cloudflare-only
+    "not available yet" placeholder with a real three-state display
+    (not connected / error / found) covering all four PaaS providers -
+    matched service's Name/Type/Status/Url/Updated, plus each metric
+    series' last 5 points as a plain list (no charting library exists
+    in this repo and none was introduced, per the plan).
+
+Verification performed:
+  - `dotnet build` (isolated output dir): 0 errors, same 3
+    pre-existing unrelated warnings.
+  - `npm run lint`: caught one real issue immediately - an unused
+    cloudflareAccountId prop after the panel rewrite dropped the
+    info-row that used it; fixed by keeping that context visible
+    (a small "Configured Cloudflare Account ID" row) rather than just
+    deleting the now-unused prop, since the information was still
+    genuinely useful, not dead weight. Clean on the following run.
+  - `npm run build`: clean.
+  - Live check against the deployed Render backend after the push:
+    /api/bootstrap healthy (HTTP 200) - confirms the new
+    PaasProviderService constructor-injection into
+    EnvironmentsController didn't break DI wiring.
+
+Files changed: src/DeploymentAPI/Controllers/EnvironmentsController.cs,
+DTOs/CloudCredentialsDto.cs, DTOs/EnvironmentDto.cs,
+DTOs/PaasProviderDtos.cs, Services/PaasProviderService.cs;
+deployment-ui/src/components/environments/CloudStatusPanel.jsx,
+components/environments/EnvironmentDetailView.jsx,
+components/settings/EnvironmentsAdminView.jsx.
+Commit: 7fe8f9f.
+
+Status: Complete and pushed, live-verified the backend is up after
+the DI change. Could NOT live-verify the actual Render Metrics API
+response shape (field names for timestamp/value, whether "resource="
+is the right query param, whether the connected plan tier even
+returns data) - this is the single most likely thing to need a
+follow-up fix once tested against a real Render account; the
+per-series try/catch means a wrong field name degrades to an empty
+series rather than breaking the page, but the real numbers/labels
+need live verification. Also unverified live: whether Render's
+services list reliably includes "id" the same way it includes "name"
+(assumed yes per Render's public API shape, not confirmed against a
+live response), and whether picking Netlify sites/Vercel projects by
+Name (rather than a separate id) is reliably unique per account.
+Recommend the user test the admin picker and a real Environment's
+Cloud Status panel with Render connected first (the one provider with
+real metrics), then Cloudflare/Netlify/Vercel for the status-only path.
