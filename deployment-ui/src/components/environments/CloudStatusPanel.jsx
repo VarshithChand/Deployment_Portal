@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import formatBytes from "../../utils/formatBytes";
 import useToast from "../../hooks/useToast";
 import { getEnvironmentCloudStatus } from "../../services/environmentsService";
+import { PROVIDER_LABEL } from "./CloudProviderBadge";
 import {
     saveMyAwsSettings, clearMyAwsCredentials,
     saveMyAzureSettings, clearMyAzureCredentials
@@ -15,8 +16,14 @@ const EMPTY_AZURE_FORM = { tenantId: "", clientId: "", clientSecret: "" };
 // view. Credentials are entered here once per browser session (see
 // PortalIdentity/UserAwsCredentials on the backend) — never portal-wide,
 // never sent anywhere except this backend's own AWS/Azure calls made on
-// your behalf.
-export default function CloudStatusPanel({ environmentName, cloudProvider }) {
+// your behalf. Render/Cloudflare targets are detected and shown (see
+// renderServiceId/cloudflareAccountId/cloudflareProjectName) but have no
+// live-status integration yet - see EnvironmentsController.GetCloudStatus.
+export default function CloudStatusPanel({
+    environmentName, cloudProvider,
+    renderServiceId, cloudflareAccountId, cloudflareProjectName,
+    autoDetected, detectionEvidence
+}) {
 
     const toast = useToast();
 
@@ -60,9 +67,63 @@ export default function CloudStatusPanel({ environmentName, cloudProvider }) {
                 </h2>
 
                 <p className="empty-state">
-                    No AWS or Azure target configured for this environment yet — set one in
-                    Settings → Environments.
+                    No AWS, Azure, Render, or Cloudflare target configured for this environment
+                    yet — set one in Settings → Environments, or add a deploy step to
+                    "{environmentName}"'s workflow and it'll be detected automatically.
                 </p>
+
+            </div>
+
+        );
+
+    }
+
+    if (cloudProvider === "render" || cloudProvider === "cloudflare") {
+
+        return (
+
+            <div className="card">
+
+                <h2 className="card-title">
+                    Cloud Status — {PROVIDER_LABEL[cloudProvider]}
+                </h2>
+
+                <p className="empty-state" style={{ textAlign: "left" }}>
+                    {autoDetected ? "Detected from this environment's pipeline. " : ""}
+                    Live status monitoring isn't available for {PROVIDER_LABEL[cloudProvider]} yet
+                    — this is what the pipeline was found to deploy to.
+                </p>
+
+                {cloudProvider === "render" && renderServiceId && (
+                    <div className="info-row">
+                        <span>Render Service ID</span>
+                        <strong className="smoke-test-metric-mono">{renderServiceId}</strong>
+                    </div>
+                )}
+
+                {cloudProvider === "cloudflare" && cloudflareProjectName && (
+                    <div className="info-row">
+                        <span>Cloudflare Project</span>
+                        <strong className="smoke-test-metric-mono">{cloudflareProjectName}</strong>
+                    </div>
+                )}
+
+                {cloudProvider === "cloudflare" && cloudflareAccountId && (
+                    <div className="info-row">
+                        <span>Cloudflare Account ID</span>
+                        <strong className="smoke-test-metric-mono">{cloudflareAccountId}</strong>
+                    </div>
+                )}
+
+                {detectionEvidence?.length > 0 && (
+
+                    <ul className="field-hint" style={{ margin: "12px 0 0", paddingLeft: "18px" }}>
+                        {detectionEvidence.map((line, i) => (
+                            <li key={i}>{line}</li>
+                        ))}
+                    </ul>
+
+                )}
 
             </div>
 

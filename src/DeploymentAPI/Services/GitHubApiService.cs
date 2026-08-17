@@ -1029,28 +1029,35 @@ public class GitHubApiService
 
     // Shared by GetWorkflowInputsAsync (parses it) and GetWorkflowYamlAsync
     // (returns it as-is for the "View YAML" viewer) — both need the same
-    // repo-contents fetch + base64 decode of a workflow file.
-    private async Task<string> FetchFileTextAsync(string path, string? branch)
-    {
-        var client = _auth.CreateClient();
+    // repo-contents fetch + base64 decode of a workflow file. Cached like
+    // every other read in this file: EnvironmentsController now calls this
+    // (via GetWorkflowYamlAsync) once per environment on every Dashboard
+    // poll to auto-detect its deploy target, and a workflow file's content
+    // doesn't change within a 20s window - without this, that alone would
+    // burn through GitHub's rate limit the same way uncached polling always
+    // does here.
+    private Task<string> FetchFileTextAsync(string path, string? branch) =>
+        GetCachedAsync($"file:{_auth.Owner}/{_auth.Repository}:{path}:{branch}", async () =>
+        {
+            var client = _auth.CreateClient();
 
-        var refQuery = string.IsNullOrWhiteSpace(branch) ? "" : $"?ref={Uri.EscapeDataString(branch)}";
+            var refQuery = string.IsNullOrWhiteSpace(branch) ? "" : $"?ref={Uri.EscapeDataString(branch)}";
 
-        // path is a repo-relative file path (e.g. ".github/workflows/deploy.yml")
-        // and its "/" separators have to stay literal for GitHub's contents API -
-        // escaping the whole string would turn them into "%2F" and break every
-        // nested-directory workflow. Escaping segment-by-segment closes the
-        // injection risk (no "..", "?", "#", etc. can smuggle through a
-        // segment) without touching the slashes that give the path its shape.
-        var escapedPath = string.Join('/', path.Split('/').Select(Uri.EscapeDataString));
+            // path is a repo-relative file path (e.g. ".github/workflows/deploy.yml")
+            // and its "/" separators have to stay literal for GitHub's contents API -
+            // escaping the whole string would turn them into "%2F" and break every
+            // nested-directory workflow. Escaping segment-by-segment closes the
+            // injection risk (no "..", "?", "#", etc. can smuggle through a
+            // segment) without touching the slashes that give the path its shape.
+            var escapedPath = string.Join('/', path.Split('/').Select(Uri.EscapeDataString));
 
-        var contentJson = await HttpClientHelper.GetAsync(
-            client,
-            $"https://api.github.com/repos/{Uri.EscapeDataString(_auth.Owner)}/{Uri.EscapeDataString(_auth.Repository)}/contents/{escapedPath}{refQuery}");
+            var contentJson = await HttpClientHelper.GetAsync(
+                client,
+                $"https://api.github.com/repos/{Uri.EscapeDataString(_auth.Owner)}/{Uri.EscapeDataString(_auth.Repository)}/contents/{escapedPath}{refQuery}");
 
-        var base64 = JObject.Parse(contentJson)["content"]?.ToString() ?? "";
-        return Encoding.UTF8.GetString(Convert.FromBase64String(base64.Replace("\n", "").Replace("\r", "")));
-    }
+            var base64 = JObject.Parse(contentJson)["content"]?.ToString() ?? "";
+            return Encoding.UTF8.GetString(Convert.FromBase64String(base64.Replace("\n", "").Replace("\r", "")));
+        });
 
     // Raw YAML text for the "View YAML" viewer — same file GetWorkflowInputsAsync
     // parses, just handed back verbatim instead of reduced to its inputs.

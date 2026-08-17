@@ -218,6 +218,11 @@ export default function EnvironmentDetailView({ name, onBack }) {
                 <CloudStatusPanel
                     environmentName={name}
                     cloudProvider={detail.cloudProvider}
+                    renderServiceId={detail.renderServiceId}
+                    cloudflareAccountId={detail.cloudflareAccountId}
+                    cloudflareProjectName={detail.cloudflareProjectName}
+                    autoDetected={detail.autoDetected}
+                    detectionEvidence={detail.detectionEvidence}
                 />
 
                 </>

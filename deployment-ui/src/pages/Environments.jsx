@@ -5,14 +5,9 @@ import PageAdminAccessButton from "../components/common/PageAdminAccessButton";
 import LoadingSpinner from "../components/LoadingSpinner";
 import StatusBadge from "../components/StatusBadge";
 import EnvironmentDetailView from "../components/environments/EnvironmentDetailView";
+import CloudProviderBadge from "../components/environments/CloudProviderBadge";
 import { getEnvironments } from "../services/environmentsService";
 import useNavigation from "../hooks/useNavigation";
-
-const PROVIDER_LABEL = {
-    aws: "AWS",
-    azure: "Azure",
-    none: "Not configured"
-};
 
 export default function Environments() {
 
@@ -118,9 +113,7 @@ export default function Environments() {
                                     <td>{env.workflowName}</td>
 
                                     <td>
-                                        <span className={`badge ${env.cloudProvider === "none" ? "badge-secondary" : "badge-info"}`}>
-                                            {PROVIDER_LABEL[env.cloudProvider] || env.cloudProvider}
-                                        </span>
+                                        <CloudProviderBadge provider={env.cloudProvider} autoDetected={env.autoDetected} />
                                     </td>
 
                                     <td>

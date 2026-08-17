@@ -6,13 +6,22 @@ namespace DeploymentAPI.Services;
 
 // Reads a CD workflow's actual YAML to answer "what is this really
 // deploying to" instead of trusting an admin to have typed the ECS
-// cluster/service or Azure Web App name into Settings > Environments by
-// hand. Two passes: a structured one over known marketplace deploy actions
-// (aws-actions/amazon-ecs-deploy-task-definition, azure/webapps-deploy),
-// then a text pass over raw `run:` steps for teams that call the AWS/Azure
-// CLI directly instead. Either pass can fill in fields the other missed;
-// first match wins per field so the most specific evidence (a real action's
-// `with:` block) isn't overwritten by a looser text match.
+// cluster/service, Azure Web App name, Render service, or Cloudflare
+// project into Settings > Environments by hand. Two passes: a structured
+// one over known marketplace deploy actions (aws-actions/amazon-ecs-
+// deploy-task-definition, azure/webapps-deploy, render-deploy, cloudflare/
+// wrangler-action, cloudflare/pages-action), then a text pass over raw
+// `run:` steps for teams that call the AWS/Azure CLI, a Render deploy-hook
+// URL, or the wrangler CLI directly instead. Either pass can fill in fields
+// the other missed; first match wins per field so the most specific
+// evidence (a real action's `with:` block) isn't overwritten by a looser
+// text match.
+//
+// One real limitation this can never work around: a deploy with NO
+// workflow step at all - Render's own git-integration auto-deploy, or a
+// developer running `wrangler deploy`/`npx wrangler deploy` from their own
+// machine - leaves nothing in this repo's YAML to find. Detection can only
+// ever be as complete as the pipeline actually is.
 public static class DeploymentTargetDetector
 {
     // Every Regex.Match call below gets this explicit timeout (SonarCloud
@@ -80,6 +89,12 @@ public static class DeploymentTargetDetector
 
         if (result.CloudProvider == "none" && (result.AzureWebAppName != null || result.AzureResourceGroup != null))
             result.CloudProvider = "azure";
+
+        if (result.CloudProvider == "none" && result.RenderServiceId != null)
+            result.CloudProvider = "render";
+
+        if (result.CloudProvider == "none" && (result.CloudflareProjectName != null || result.CloudflareAccountId != null))
+            result.CloudProvider = "cloudflare";
     }
 
     private static void InspectStep(IDictionary<object, object> step, DetectedDeploymentTargetDto result)
@@ -121,6 +136,32 @@ public static class DeploymentTargetDetector
         if (uses.Contains("azure/login", StringComparison.OrdinalIgnoreCase) && result.CloudProvider == "none")
         {
             result.CloudProvider = "azure";
+        }
+
+        // No official "render/deploy-action" exists - render-deploy (by
+        // JorgeLNJunior) is the community action teams actually use, taking
+        // a "service-id" input the same way the official cloud actions above
+        // take theirs.
+        if (uses.Contains("render-deploy", StringComparison.OrdinalIgnoreCase))
+        {
+            result.CloudProvider = "render";
+            result.RenderServiceId ??= GetWithValue(with, "service-id") ?? GetWithValue(with, "serviceId");
+            result.Evidence.Add($"Render deploy action (service-id={result.RenderServiceId ?? "?"})");
+        }
+
+        if (uses.Contains("cloudflare/wrangler-action", StringComparison.OrdinalIgnoreCase))
+        {
+            result.CloudProvider = "cloudflare";
+            result.CloudflareAccountId ??= GetWithValue(with, "accountId");
+            result.Evidence.Add("Cloudflare wrangler-action" + (result.CloudflareAccountId != null ? $" (accountId={result.CloudflareAccountId})" : string.Empty));
+        }
+
+        if (uses.Contains("cloudflare/pages-action", StringComparison.OrdinalIgnoreCase))
+        {
+            result.CloudProvider = "cloudflare";
+            result.CloudflareAccountId ??= GetWithValue(with, "accountId");
+            result.CloudflareProjectName ??= GetWithValue(with, "projectName");
+            result.Evidence.Add($"Cloudflare Pages deploy action (project={result.CloudflareProjectName ?? "?"})");
         }
     }
 
@@ -173,6 +214,34 @@ public static class DeploymentTargetDetector
                 result.AzureResourceGroup ??= resourceGroup;
                 result.Evidence.Add($"az webapp CLI call (name={appName ?? "?"}, resource-group={resourceGroup ?? "?"})");
             }
+        }
+
+        // A Render deploy hook is just a URL a workflow curls/wgets to
+        // trigger a deploy - the only "evidence" a hook-based Render deploy
+        // ever leaves in a workflow file, since Render's own git integration
+        // (auto-deploy on push) leaves none at all. srv-... is Render's own
+        // service ID format.
+        var renderHook = Regex.Match(
+            yamlText, @"api\.render\.com/deploy/(srv-[\w-]+)", RegexOptions.None, RegexTimeout);
+
+        if (renderHook.Success)
+        {
+            result.CloudProvider = "render";
+            result.RenderServiceId ??= renderHook.Groups[1].Value;
+            result.Evidence.Add($"Render deploy-hook URL (service={result.RenderServiceId})");
+        }
+
+        // wrangler is Cloudflare's own CLI - "wrangler deploy" (Workers) or
+        // "wrangler pages deploy" (Pages), optionally naming the project.
+        var wranglerCommand = ExtractCommandWindow(yamlText, @"wrangler\s+(deploy|pages\s+deploy|publish)");
+
+        if (wranglerCommand != null)
+        {
+            var projectName = ExtractFlag(wranglerCommand, "--project-name");
+
+            result.CloudProvider = "cloudflare";
+            result.CloudflareProjectName ??= projectName;
+            result.Evidence.Add("wrangler CLI deploy call" + (projectName != null ? $" (project={projectName})" : string.Empty));
         }
     }
 

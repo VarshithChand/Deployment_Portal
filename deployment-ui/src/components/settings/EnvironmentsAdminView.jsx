@@ -13,7 +13,10 @@ const EMPTY_ENVIRONMENT = {
     ecrRepository: "",
     azureSubscriptionId: "",
     azureResourceGroup: "",
-    azureWebAppName: ""
+    azureWebAppName: "",
+    renderServiceId: "",
+    cloudflareAccountId: "",
+    cloudflareProjectName: ""
 };
 
 // Visible to every visitor (the same data the Dashboard card already
@@ -82,7 +85,7 @@ export default function EnvironmentsAdminView({ isAdmin }) {
             const detected = await detectDeploymentTarget(workflowName);
 
             if (detected.cloudProvider === "none") {
-                toast.show("No AWS or Azure deploy step found in that workflow.", "error");
+                toast.show("No AWS, Azure, Render, or Cloudflare deploy step found in that workflow.", "error");
                 setEvidenceByIndex((current) => ({ ...current, [index]: [] }));
                 return;
             }
@@ -100,7 +103,10 @@ export default function EnvironmentsAdminView({ isAdmin }) {
                         ecsService: detected.ecsService || env.ecsService,
                         ecrRepository: detected.ecrRepository || env.ecrRepository,
                         azureResourceGroup: detected.azureResourceGroup || env.azureResourceGroup,
-                        azureWebAppName: detected.azureWebAppName || env.azureWebAppName
+                        azureWebAppName: detected.azureWebAppName || env.azureWebAppName,
+                        renderServiceId: detected.renderServiceId || env.renderServiceId,
+                        cloudflareAccountId: detected.cloudflareAccountId || env.cloudflareAccountId,
+                        cloudflareProjectName: detected.cloudflareProjectName || env.cloudflareProjectName
                     };
 
                 })
@@ -169,8 +175,13 @@ export default function EnvironmentsAdminView({ isAdmin }) {
 
             <p className="empty-state" style={{ padding: "0 0 15px", textAlign: "left" }}>
                 Each environment tracks one CD/release workflow's latest run for its commit and
-                artifacts. Optionally point it at a real AWS ECS/ECR or Azure Web App — whoever
-                opens that environment then enters their own cloud credentials to see live status.
+                artifacts. Its cloud target is detected automatically by reading that workflow's
+                own YAML (AWS ECS/ECR, Azure Web App, Render, or Cloudflare) whenever nothing has
+                been explicitly set below — "Detect from Pipeline" fills these fields in for you,
+                or type them by hand if detection can't find enough evidence. Whoever opens an AWS
+                or Azure environment then enters their own cloud credentials to see live status
+                (Render and Cloudflare targets are detected and shown, but don't have live status
+                monitoring yet).
                 {!isAdmin && " Only admins can change this list."}
             </p>
 
@@ -257,6 +268,8 @@ export default function EnvironmentsAdminView({ isAdmin }) {
                             <option value="none">Not configured</option>
                             <option value="aws">AWS (ECS / ECR)</option>
                             <option value="azure">Azure Web App</option>
+                            <option value="render">Render</option>
+                            <option value="cloudflare">Cloudflare</option>
                         </select>
                     </div>
 
@@ -339,6 +352,49 @@ export default function EnvironmentsAdminView({ isAdmin }) {
                                 className="form-control"
                                 value={env.azureWebAppName || ""}
                                 onChange={(e) => updateField(index, "azureWebAppName", e.target.value)}
+                                disabled={!isAdmin}
+                            />
+                        </div>
+
+                        </>
+
+                    )}
+
+                    {env.cloudProvider === "render" && (
+
+                        <div className="form-group">
+                            <label>Render Service ID</label>
+                            <input
+                                className="form-control"
+                                placeholder="srv-xxxxxxxxxxxxxxxxxxxx"
+                                value={env.renderServiceId || ""}
+                                onChange={(e) => updateField(index, "renderServiceId", e.target.value)}
+                                disabled={!isAdmin}
+                            />
+                        </div>
+
+                    )}
+
+                    {env.cloudProvider === "cloudflare" && (
+
+                        <>
+
+                        <div className="form-group">
+                            <label>Cloudflare Account ID</label>
+                            <input
+                                className="form-control"
+                                value={env.cloudflareAccountId || ""}
+                                onChange={(e) => updateField(index, "cloudflareAccountId", e.target.value)}
+                                disabled={!isAdmin}
+                            />
+                        </div>
+
+                        <div className="form-group">
+                            <label>Cloudflare Project Name</label>
+                            <input
+                                className="form-control"
+                                value={env.cloudflareProjectName || ""}
+                                onChange={(e) => updateField(index, "cloudflareProjectName", e.target.value)}
                                 disabled={!isAdmin}
                             />
                         </div>

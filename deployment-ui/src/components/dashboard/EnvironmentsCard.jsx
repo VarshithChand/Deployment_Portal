@@ -4,13 +4,8 @@ import { getEnvironments } from "../../services/environmentsService";
 import useNavigation from "../../hooks/useNavigation";
 import useAuth from "../../hooks/useAuth";
 import StatusBadge from "../StatusBadge";
+import CloudProviderBadge from "../environments/CloudProviderBadge";
 import usePolling from "../../hooks/usePolling";
-
-const PROVIDER_LABEL = {
-    aws: "AWS",
-    azure: "Azure",
-    none: "Not configured"
-};
 
 // Each environment is a portal-level deployment target (see
 // EnvironmentDefinitionDto on the backend) tied to a CD/release workflow —
@@ -102,9 +97,7 @@ export default function EnvironmentsCard() {
                                 <td>{env.name}</td>
 
                                 <td>
-                                    <span className={`badge ${env.cloudProvider === "none" ? "badge-secondary" : "badge-info"}`}>
-                                        {PROVIDER_LABEL[env.cloudProvider] || env.cloudProvider}
-                                    </span>
+                                    <CloudProviderBadge provider={env.cloudProvider} autoDetected={env.autoDetected} />
                                 </td>
 
                                 <td>

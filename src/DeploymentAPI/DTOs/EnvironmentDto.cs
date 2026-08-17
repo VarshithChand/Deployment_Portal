@@ -10,8 +10,11 @@ public class EnvironmentDefinitionDto
 
     public string WorkflowName { get; set; } = string.Empty;
 
-    // "aws" | "azure" | "none" — "none" until an admin points it at a real
-    // cloud target; nothing here is guessed.
+    // "aws" | "azure" | "render" | "cloudflare" | "none" — "none" until an
+    // admin explicitly sets one, or until DeploymentTargetDetector finds
+    // real evidence in WorkflowName's own YAML (see EnvironmentsController.
+    // BuildSummaryAsync) - either way, nothing here is hand-typed-and-
+    // trusted without a way to check it against the real pipeline.
     public string CloudProvider { get; set; } = "none";
 
     // AWS target — only meaningful when CloudProvider == "aws".
@@ -29,6 +32,14 @@ public class EnvironmentDefinitionDto
     public string? AzureResourceGroup { get; set; }
 
     public string? AzureWebAppName { get; set; }
+
+    // Render target — only meaningful when CloudProvider == "render".
+    public string? RenderServiceId { get; set; }
+
+    // Cloudflare target — only meaningful when CloudProvider == "cloudflare".
+    public string? CloudflareAccountId { get; set; }
+
+    public string? CloudflareProjectName { get; set; }
 }
 
 public class EnvironmentDefinitionsUpdateDto
@@ -55,6 +66,17 @@ public class EnvironmentSummaryDto : EnvironmentDefinitionDto
     public DateTime? DeployedAt { get; set; }
 
     public string? HtmlUrl { get; set; }
+
+    // True when CloudProvider/its target fields above came from
+    // DeploymentTargetDetector reading the workflow's own YAML rather than
+    // from an explicit admin save - lets the frontend show "(detected from
+    // pipeline)" instead of implying someone configured it by hand.
+    public bool AutoDetected { get; set; }
+
+    // Same evidence lines DetectTarget already returns to the admin editor
+    // - carried through here too so the Dashboard/Environments views can
+    // show WHY a target was auto-detected, not just that it was.
+    public List<string> DetectionEvidence { get; set; } = new();
 }
 
 public class EnvironmentArtifactDto
