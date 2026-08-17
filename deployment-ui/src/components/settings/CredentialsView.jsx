@@ -8,6 +8,7 @@ import GcpLoginSection from "./credentials/GcpLoginSection";
 import PaasLoginSection from "./credentials/PaasLoginSection";
 import MyConnectedAccounts from "./credentials/MyConnectedAccounts";
 import DashboardRoleSection from "./credentials/DashboardRoleSection";
+import DatabaseConnectionSection from "./credentials/DatabaseConnectionSection";
 import ApiKeySection from "./credentials/ApiKeySection";
 import SecurityPinSection from "./credentials/SecurityPinSection";
 import CredentialPinGate from "./credentials/CredentialPinGate";
@@ -30,7 +31,8 @@ const MODES = [
     { key: "render", label: "Render" },
     { key: "cloudflare", label: "Cloudflare" },
     { key: "netlify", label: "Netlify" },
-    { key: "vercel", label: "Vercel" }
+    { key: "vercel", label: "Vercel" },
+    { key: "database", label: "Database" }
 ];
 
 // Every provider key CredentialPinGate can gate - matches the backend's
@@ -370,6 +372,20 @@ export default function CredentialsView({
                     <MyConnectedAccounts provider="vercel" label="Vercel" configured={configuredByMode.vercel} />
                     {isSuperAdminSession && <DashboardRoleSection provider="vercel" label="Vercel" hasAccountId={false} />}
                 </CredentialPinGate>
+            )}
+
+            {mode === "database" && (
+
+                isSuperAdminSession ? (
+                    <DatabaseConnectionSection />
+                ) : (
+                    <div className="settings-subsection">
+                        <p className="empty-state" style={{ textAlign: "left" }}>
+                            Restricted to a single administrator account.
+                        </p>
+                    </div>
+                )
+
             )}
 
             {mode === "apikey" && (

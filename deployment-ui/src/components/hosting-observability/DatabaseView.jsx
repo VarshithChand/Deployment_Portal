@@ -66,7 +66,7 @@ export default function HostingDatabaseView() {
         <div className="card">
 
             <h2 className="card-title">
-                PostgreSQL
+                PostgreSQL{overview.providerLabel ? ` — ${overview.providerLabel}` : ""}
                 {" "}
                 <span className={`badge ${health.connected ? "badge-success" : "badge-danger"}`}>
                     {health.connected ? "Connected" : "Unreachable"}

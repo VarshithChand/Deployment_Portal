@@ -49,9 +49,15 @@ public class DatabaseManagementService
 
     public bool IsConfigured => !string.IsNullOrEmpty(_connectionString);
 
-    private async Task<NpgsqlConnection> OpenAsync()
+    // connectionStringOverride (optional): used only by the Hosting
+    // Observability Database tab, when an admin has pointed it at a
+    // different Postgres instance than this app's own (see
+    // SettingsService.GetPortalDatabaseConnectionAsync) - every other
+    // caller in this file (Settings > Database, the app's own inspector)
+    // always omits it and gets this app's own DATABASE_URL, unchanged.
+    private async Task<NpgsqlConnection> OpenAsync(string? connectionStringOverride = null)
     {
-        var conn = new NpgsqlConnection(_connectionString);
+        var conn = new NpgsqlConnection(connectionStringOverride ?? _connectionString);
         await conn.OpenAsync();
         return conn;
     }
@@ -63,9 +69,11 @@ public class DatabaseManagementService
 
     // ---- Health -----------------------------------------------------
 
-    public async Task<DatabaseInspectionHealthDto> GetHealthAsync()
+    public async Task<DatabaseInspectionHealthDto> GetHealthAsync(string? connectionStringOverride = null)
     {
-        if (!IsConfigured)
+        var effective = connectionStringOverride ?? _connectionString;
+
+        if (string.IsNullOrEmpty(effective))
         {
             return new DatabaseInspectionHealthDto
             {
@@ -78,7 +86,7 @@ public class DatabaseManagementService
 
         try
         {
-            await using var conn = await OpenAsync();
+            await using var conn = await OpenAsync(connectionStringOverride);
 
             await using (var pingCommand = new NpgsqlCommand("SELECT 1", conn))
                 await pingCommand.ExecuteScalarAsync();
@@ -119,7 +127,7 @@ public class DatabaseManagementService
                 DatabaseSizePretty = sizePretty,
                 TableCount = tableCount,
                 LatencyMs = stopwatch.ElapsedMilliseconds,
-                MaskedConnection = BuildMaskedConnection()
+                MaskedConnection = BuildMaskedConnection(connectionStringOverride)
             };
         }
         catch (Exception ex)
@@ -131,13 +139,15 @@ public class DatabaseManagementService
 
     // Host/port/database name only — never the username or password (see
     // section on never exposing credentials to the frontend).
-    private string? BuildMaskedConnection()
+    private string? BuildMaskedConnection(string? connectionStringOverride = null)
     {
-        if (_connectionString == null) return null;
+        var effective = connectionStringOverride ?? _connectionString;
+
+        if (effective == null) return null;
 
         try
         {
-            var builder = new NpgsqlConnectionStringBuilder(_connectionString);
+            var builder = new NpgsqlConnectionStringBuilder(effective);
             return $"{builder.Host}:{builder.Port}/{builder.Database}";
         }
         catch
@@ -157,13 +167,13 @@ public class DatabaseManagementService
     // non-superuser app role can always COUNT(*) here even if some
     // per-connection columns would be null-masked for other roles' rows on
     // a managed provider - the count itself is unaffected by that masking.
-    public async Task<DatabaseConnectionPoolDto?> GetConnectionPoolAsync()
+    public async Task<DatabaseConnectionPoolDto?> GetConnectionPoolAsync(string? connectionStringOverride = null)
     {
-        if (!IsConfigured) return null;
+        if (string.IsNullOrEmpty(connectionStringOverride ?? _connectionString)) return null;
 
         try
         {
-            await using var conn = await OpenAsync();
+            await using var conn = await OpenAsync(connectionStringOverride);
 
             var result = new DatabaseConnectionPoolDto();
 
@@ -283,15 +293,15 @@ public class DatabaseManagementService
         return result;
     }
 
-    public async Task<DatabaseTableListDto> GetTablesAsync(string? schema)
+    public async Task<DatabaseTableListDto> GetTablesAsync(string? schema, string? connectionStringOverride = null)
     {
         var result = new DatabaseTableListDto();
 
-        if (!IsConfigured) return result;
+        if (string.IsNullOrEmpty(connectionStringOverride ?? _connectionString)) return result;
 
         var resolvedSchema = string.IsNullOrWhiteSpace(schema) ? "public" : schema;
 
-        await using var conn = await OpenAsync();
+        await using var conn = await OpenAsync(connectionStringOverride);
 
         if (!await SchemaExistsAsync(conn, resolvedSchema))
             return result;

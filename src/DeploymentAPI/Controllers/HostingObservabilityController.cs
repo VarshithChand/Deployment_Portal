@@ -204,19 +204,83 @@ public class HostingObservabilityController : ControllerBase
         return Ok(result);
     }
 
+    // ---- Database connection override ----------------------------------
+
+    [HttpGet("database/connection")]
+    public async Task<IActionResult> GetDatabaseConnection()
+    {
+        if (await AdminGate.DenyUnlessSuperAdminAsync(this, "view the database connection") is IActionResult denied)
+            return denied;
+
+        var (label, connectionString) = await _settings.GetPortalDatabaseConnectionAsync();
+
+        return Ok(new PortalDatabaseConnectionDto
+        {
+            Configured = !string.IsNullOrWhiteSpace(connectionString),
+            ProviderLabel = label,
+            MaskedConnection = BuildMaskedConnection(connectionString)
+        });
+    }
+
+    [HttpPost("database/connection")]
+    public async Task<IActionResult> SaveDatabaseConnection(PortalDatabaseConnectionUpdateDto request)
+    {
+        if (await AdminGate.DenyUnlessSuperAdminAsync(this, "configure the database connection") is IActionResult denied)
+            return denied;
+
+        await _settings.SavePortalDatabaseConnectionAsync(request);
+
+        return Ok(new { success = true });
+    }
+
+    [HttpDelete("database/connection")]
+    public async Task<IActionResult> ClearDatabaseConnection()
+    {
+        if (await AdminGate.DenyUnlessSuperAdminAsync(this, "clear the database connection") is IActionResult denied)
+            return denied;
+
+        await _settings.ClearPortalDatabaseConnectionAsync();
+
+        return Ok(new { success = true });
+    }
+
+    // Host/port/database only - same masking rule as
+    // DatabaseManagementService.BuildMaskedConnection, duplicated at this
+    // small scale rather than exposed from that service, since this is the
+    // only place outside it that ever needs to preview a raw connection
+    // string before it's saved.
+    private static string? BuildMaskedConnection(string? connectionString)
+    {
+        if (string.IsNullOrWhiteSpace(connectionString)) return null;
+
+        try
+        {
+            var builder = new Npgsql.NpgsqlConnectionStringBuilder(connectionString);
+            return $"{builder.Host}:{builder.Port}/{builder.Database}";
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
     [HttpGet("database")]
     public async Task<IActionResult> GetDatabase([FromQuery] string range = "1h")
     {
         if (await AdminGate.DenyUnlessSuperAdminAsync(this, "view the database overview") is IActionResult denied)
             return denied;
 
-        var health = await _db.GetHealthAsync();
+        var (dbLabel, dbConnectionOverride) = await _settings.GetPortalDatabaseConnectionAsync();
+        var hasOverride = !string.IsNullOrWhiteSpace(dbConnectionOverride);
+
+        var health = await _db.GetHealthAsync(hasOverride ? dbConnectionOverride : null);
 
         var overview = new HostingDatabaseOverviewDto
         {
             Health = health,
-            ConnectionPool = health.Connected ? await _db.GetConnectionPoolAsync() : null,
-            Tables = health.Connected ? (await _db.GetTablesAsync(null)).Tables : new List<DatabaseTableSummaryDto>()
+            ConnectionPool = health.Connected ? await _db.GetConnectionPoolAsync(hasOverride ? dbConnectionOverride : null) : null,
+            Tables = health.Connected ? (await _db.GetTablesAsync(null, hasOverride ? dbConnectionOverride : null)).Tables : new List<DatabaseTableSummaryDto>(),
+            ProviderLabel = hasOverride ? dbLabel : null
         };
 
         var targets = await _settings.GetPortalDeploymentTargetsAsync();

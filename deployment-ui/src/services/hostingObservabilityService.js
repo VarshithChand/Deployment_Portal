@@ -50,3 +50,18 @@ export const getEndpointInventory = async () => {
     const response = await api.get("/endpoints");
     return response.data;
 };
+
+export const getDatabaseConnectionStatus = async () => {
+    const response = await api.get("/database/connection");
+    return response.data;
+};
+
+export const saveDatabaseConnection = async ({ providerLabel, connectionString }) => {
+    const response = await api.post("/database/connection", { providerLabel, connectionString });
+    return response.data;
+};
+
+export const clearDatabaseConnection = async () => {
+    const response = await api.delete("/database/connection");
+    return response.data;
+};

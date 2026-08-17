@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 
 import ClearableInput from "../common/ClearableInput";
+import DatabaseConnectionSection from "./credentials/DatabaseConnectionSection";
 import useToast from "../../hooks/useToast";
 import {
     getObservabilityConfig, saveObservabilityConfig,
@@ -348,8 +349,8 @@ export default function HostingObservabilityConfigView() {
             />
 
             <TargetRoleFields
-                label="Database (optional)"
-                hint="Only meaningful if this app's actual Postgres is also a Render-managed database — links it to Render's Metrics API for CPU/Memory/Storage/Connections charts. Database health/size/tables/connection-pool work either way, straight from DATABASE_URL."
+                label="Database metrics (optional)"
+                hint="Only for CPU/Memory/Storage charts, and only meaningful if the database below is also a Render-managed resource — links it to Render's Metrics API. Health/size/tables/connection-pool work regardless, from the connection set below (or this backend's own DATABASE_URL by default)."
                 provider={targets.databaseProvider}
                 serviceId={targets.databaseServiceId}
                 onProviderChange={(v) => updateTarget("databaseProvider", v)}
@@ -364,6 +365,10 @@ export default function HostingObservabilityConfigView() {
                 </button>
             </div>
 
+        </div>
+
+        <div className="card" style={{ marginTop: "18px" }}>
+            <DatabaseConnectionSection />
         </div>
 
         <div className="card" style={{ marginTop: "18px" }}>

@@ -858,6 +858,55 @@ public class SettingsService
         _log.LogInfo("Settings", "Portal deployment targets saved.");
     }
 
+    // An admin-pasted connection string for the Hosting Observability
+    // Database tab, when it's a different Postgres instance than this
+    // backend's own DATABASE_URL (see DatabaseManagementService's
+    // connectionStringOverride parameters) - e.g. a standalone database on
+    // a provider this app has no dedicated integration for at all. Storage:
+    // root["PortalDatabaseConnection"] = { ProviderLabel, ConnectionString
+    // (protected) }. Label is plain text (not a secret); the connection
+    // string gets the same Protect/Unprotect treatment as every other
+    // credential in this file.
+    public async Task<(string? ProviderLabel, string? ConnectionString)> GetPortalDatabaseConnectionAsync()
+    {
+        var root = await ReadRootAsync();
+        var entry = root["PortalDatabaseConnection"] as JObject;
+
+        return (entry?["ProviderLabel"]?.ToString(), Unprotect(entry?["ConnectionString"]?.ToString()));
+    }
+
+    // Blank ConnectionString keeps whatever was already saved - see
+    // SaveUserPaasCredentialsAsync's identical convention.
+    public async Task SavePortalDatabaseConnectionAsync(PortalDatabaseConnectionUpdateDto update)
+    {
+        var root = await ReadRootAsync();
+        var entry = root["PortalDatabaseConnection"] as JObject ?? new JObject();
+
+        if (!string.IsNullOrWhiteSpace(update.ProviderLabel))
+            entry["ProviderLabel"] = update.ProviderLabel.Trim();
+
+        if (!string.IsNullOrWhiteSpace(update.ConnectionString))
+            entry["ConnectionString"] = Protect(update.ConnectionString.Trim());
+
+        root["PortalDatabaseConnection"] = entry;
+        await WriteRootAsync(root);
+
+        _log.LogInfo("Settings", "Portal-wide database connection saved.");
+    }
+
+    public async Task ClearPortalDatabaseConnectionAsync()
+    {
+        var root = await ReadRootAsync();
+
+        if (root["PortalDatabaseConnection"] != null)
+        {
+            root.Remove("PortalDatabaseConnection");
+            await WriteRootAsync(root);
+
+            _log.LogInfo("Settings", "Portal-wide database connection cleared.");
+        }
+    }
+
     public async Task<SettingsViewDto> SaveDockerAsync(DockerSettingsUpdateDto update)
     {
         var root = await ReadRootAsync();
