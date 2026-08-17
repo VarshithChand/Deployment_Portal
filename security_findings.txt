@@ -5791,3 +5791,75 @@ live response. Worth noting the Render commit fetch is one extra API
 call per service shown (N+1) - acceptable for a typical handful of
 services on a personal account page, but would be worth revisiting if
 someone connects an account with many Render services.
+
+==================================================
+ROUND 46 - REAL FINDING: SCREEN-LOCK PIN COULD BE REMOVED WITH ZERO
+CONFIRMATION, EVEN WITH MFA ENABLED
+==================================================
+Date: 2026-08-17
+Trigger: user asked that removing the Screen Lock PIN require MFA
+verification when correct, mirroring what disabling MFA itself already
+requires.
+
+This was a real gap: ClearMyPin previously had no confirmation step at
+all - one click, unconditionally, regardless of whether the caller's
+GitHub identity had MFA enabled. That single click turns off two real
+protections at once: the Credentials tabs' unlock gate (see Round 42's
+CredentialGate) and the idle-timeout behavior (10 minutes idle would
+go back to WIPING saved GitHub/AWS/Azure/GCP/Render/etc. credentials
+instead of just locking the screen and re-prompting for the PIN). On a
+browser left signed in and momentarily unattended, an intruder could
+permanently strip both protections in one click with nothing to stop
+them - notably weaker than disabling MFA itself, which already
+requires a fresh code.
+
+Fix:
+  - MfaGate.cs: extracted the verify/lockout logic
+    DenyUnlessVerifiedAsync already had (previously reachable only via
+    a raw token being resolved to a login, for the PAT-connect flow)
+    into a new DenyUnlessCodeVerifiedAsync that takes an
+    ALREADY-RESOLVED login directly - DenyUnlessVerifiedAsync now
+    calls it internally instead of duplicating the same lockout/
+    verify/record-success/record-failure block a second time.
+  - SettingsController.ClearMyPin now resolves the caller's own GitHub
+    login (via the same GitHubAuthService every other action here
+    already uses) and gates through the new helper before clearing
+    anything - a no-op when that login has no MFA enabled at all (PIN
+    removal works exactly as it always did), otherwise the first
+    attempt (no code) returns 403 MFA_REQUIRED, and only a verified
+    code or recovery code lets the clear proceed. Same per-login
+    lockout tiers as every other MFA check in this app
+    (MfaLockoutPolicy) - a wrong-code guessing attempt against this
+    endpoint hits the same cooldown a wrong login attempt would.
+  - SecurityPinSection.jsx: "Remove PIN" now tries silently first
+    (matching the no-MFA-enabled no-op case); on MFA_REQUIRED it
+    reveals an inline code/recovery-code form (mirroring MfaSection's
+    existing "Disable MFA" form almost exactly - same
+    useLockoutCountdown hook, same MFA_LOCKED/INVALID_MFA_CODE error
+    handling) instead of showing that form unconditionally, since most
+    sessions won't have MFA enabled and an always-visible code field
+    would just be confusing noise.
+
+Verification performed:
+  - `dotnet build` (isolated output dir): 0 errors, same 3
+    pre-existing unrelated warnings.
+  - `npm run lint` / `npm run build`: clean, no new warnings.
+  - Live check against the deployed Render backend after the push:
+    /api/bootstrap healthy (HTTP 200).
+
+Files changed: src/DeploymentAPI/Controllers/SettingsController.cs,
+Helpers/MfaGate.cs; deployment-ui/src/components/settings/credentials/
+SecurityPinSection.jsx, services/settingsService.js.
+Commit: 18cc67e.
+
+Status: Complete and pushed, live-verified the backend is up. Could
+NOT live-verify the actual end-to-end flow (a real GitHub identity
+with MFA enabled attempting to remove its PIN, both the correct-code
+success path and the lockout-after-wrong-codes path) - needs a real
+authenticated session with MFA enrolled, which this sandboxed
+environment doesn't have. The no-MFA-enabled no-op path (PIN removal
+working exactly as before) is the simpler case and lower-risk to have
+gotten wrong. Recommend the user test with their own MFA-enabled
+account: attempt Remove PIN, confirm the code prompt appears, enter a
+wrong code once or twice to confirm the error message, then a correct
+code to confirm it actually removes the PIN.
