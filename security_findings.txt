@@ -5286,3 +5286,60 @@ have. Recommend testing by pointing an environment's CD Workflow Name
 at any workflow (in this repo or another connected one) that has a
 real Render deploy-hook, wrangler-action, ECS, or Azure Web App step,
 and confirming it's picked up without clicking "Detect from Pipeline."
+
+--------------------------------------------------
+ROUND 41 FOLLOW-UP - REAL BUG: THE NEW AUTO-DETECT FALLBACK COULD TAKE
+DOWN THE ENTIRE ENVIRONMENTS LIST
+--------------------------------------------------
+Date: 2026-08-17
+Trigger: user reported the Dashboard's Environments card now showed
+"No environments configured yet" (screenshots: Render confirming
+commit 2e8c803 was live, and the Dashboard genuinely empty) right
+after Round 41 deployed - previously it always showed the 4 rows
+(API/Admin API/PMSCore API/Security API), even when "Not configured".
+
+Root cause: BuildSummaryAsync's new auto-detect fallback (Round 41)
+made List()/GetDetail() call GetWorkflowsArrayAsync() -> GitHubApi
+Service.GetWorkflows() unconditionally on every request - a live
+GitHub API call that, before this round, only ever ran on an admin's
+occasional manual "Detect from Pipeline" click, never as part of the
+base Dashboard poll. That call had no try/catch around it. Any failure
+there (rate limiting from the new 30s-polling frequency, a transient
+GitHub hiccup, a token/permission issue) threw out of the whole List()
+action, turning a 200 with real data into an unhandled 500 - and
+deployment-ui's getEnvironmentsService.getEnvironments() already
+catches ANY error and silently returns [] (a deliberate, pre-existing
+design for exactly this kind of transient failure), which is what
+rendered as "No environments configured yet" instead of a visible
+error. A genuinely optional enhancement (the auto-detected fallback
+target) was wired in a way that could break the base feature it was
+only meant to supplement.
+
+Fix: GetWorkflowsArrayAsync() now wraps its GetWorkflows() call in its
+own try/catch and returns null on any failure, exactly matching
+TryDetectAsync's existing "quiet best-effort, never surfaces an error"
+contract for this same fallback. A failed workflow-list fetch now just
+means no auto-detected target is shown for that request - the
+definitions, latest run, and commit data (everything that worked
+before Round 41) are entirely unaffected. This also improves
+DetectTarget's own behavior in the same failure case: a friendly 404
+("No workflow named X found") instead of an unhandled 500, which was
+already a latent, pre-existing gap in that action (it never had a
+try/catch around this same call either, just far less likely to be
+hit given how rarely it used to run).
+
+Verification performed:
+  - `dotnet build` (isolated output dir): 0 errors, same 3 pre-existing
+    unrelated warnings.
+  - Live check against the deployed Render backend after the push:
+    /api/bootstrap healthy (HTTP 200) on the first check. Could NOT
+    live-verify that the Environments list itself is populated again
+    (needs the user's own authenticated session/token, which this
+    sandboxed environment doesn't have) - asked the user to refresh
+    the Dashboard and confirm.
+
+Files changed: src/DeploymentAPI/Controllers/EnvironmentsController.cs.
+Commit: 70bfc46.
+
+Status: Fix complete and pushed. Awaiting the user's confirmation that
+the Environments card is populated again after this deploy rolls out.
