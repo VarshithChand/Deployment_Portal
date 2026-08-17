@@ -4902,3 +4902,84 @@ new field is populated consistently by both endpoints that read it).
 The actual granted-user experience needs the user's own second-identity
 test to confirm end-to-end, flagged above rather than claimed as
 tested.
+
+ROUND 38 - NEW FEATURE: CREATE ISSUE, PLUS A SECOND INSTANCE OF ROUND 37'S
+UNREACHABILITY BUG
+==================================================
+Date: 2026-08-17
+Trigger: user asked for an option to create GitHub issues from the
+portal.
+
+What was built:
+  - GitHubApiService.CreateIssueAsync(title, body, labels) - POSTs to
+    the connected repo's real /issues endpoint, same HttpClientHelper/
+    _auth.CreateClient() pattern every other GitHub-mutating call in
+    this file already uses (modeled directly on ApprovePullRequestAsync/
+    MergePullRequestAsync).
+  - PullRequestsController: new POST issues action, gated identically
+    to Approve/Merge (AdminGate.DenyUnlessAdminAsync with the
+    "pullRequests" page grant) - filing an issue is a lighter action
+    than approving/merging, but it's still a real, visible write to the
+    connected repo, so it stays behind the same authorization rather
+    than being open to anyone with a token.
+  - Frontend: a "Create Issue" card (title/body/comma-separated labels)
+    added to the Pull Requests page, reusing the exact toast/form
+    patterns already established elsewhere in this app.
+
+Found and fixed while placing this (not something the user reported
+separately, but a real blocker for the new feature to work for anyone
+who isn't the single full-portal-admin): the ENTIRE Pull Requests page
+was only reachable by someone with GitHub-native repo-admin permission
+(canApproveReleases, resolved live from the connected token's actual
+GitHub repository permissions via GET /repos/{owner}/{repo}) - correct
+for Approve/Merge, which genuinely require that on GitHub's own side
+(GitHub itself won't accept a review/merge without it), but Create
+Issue has no such GitHub-side requirement at all and is gated purely by
+this app's own admin/page-grant system. Without a separate check, a
+portal-side "pullRequests" grantee (or even a full portal admin,
+depending on their actual GitHub repo role) lacking GitHub-native repo-
+admin rights would have been bounced to Dashboard before ever reaching
+the new button - the same class of bug fixed in Round 37 for Code
+Quality/Services, just gated by a different signal here
+(canApproveReleases, a live GitHub permission check, instead of
+isAdminSession, this app's own allowlist flag).
+
+Fix: added hasPortalPrAuthority (isAdminSession ||
+grantedPages.includes("pullRequests")) alongside the existing
+canApproveReleases check. The page's redirect guard and top-level
+loading gate now let someone through if they have EITHER form of
+authority; within the page, Approve/Merge (and the PR list/History
+section) still require canApproveReleases specifically (a real GitHub
+constraint, left untouched), while Create Issue is gated only by
+hasPortalPrAuthority (this app's own authorization, matching what the
+backend endpoint it calls actually checks).
+
+Verification performed:
+  - `dotnet build` (isolated output dir): 0 errors, same 2 pre-existing
+    unrelated warnings as every prior round.
+  - `npm run lint` / `npm run build`: clean, no new warnings. Manually
+    re-read the resulting JSX after the conditional-wrapping edit to
+    confirm every fragment/div opened has a matching close (the build
+    succeeding already confirms this, but worth double-checking by eye
+    given how much the existing render tree was restructured).
+  - Live check against the deployed Render backend: an initial smoke
+    test of POST api/pull-requests/issues returned 404 - traced to the
+    redeploy still being in progress at that exact moment, not a real
+    routing bug. Retested once the deploy finished: correctly 403
+    ("Admin login required to create an issue") for an unauthenticated
+    session, confirming the endpoint is live and the AdminGate check is
+    wired correctly.
+
+Files changed: src/DeploymentAPI/Controllers/PullRequestsController.cs,
+DTOs/IssueDto.cs (new), Services/GitHubApiService.cs;
+deployment-ui/src/pages/PullRequests.jsx,
+services/pullRequestsService.js.
+Commit: 7b0af70.
+
+Status: Complete and pushed, live-verified (endpoint gating confirmed
+correct after the deploy finished). Could NOT live-verify the actual
+happy path (a real admin filing a real issue and seeing it appear on
+GitHub) or the fixed reachability for a page-scoped-only grantee -
+both need a real GitHub PAT/identity this sandboxed session doesn't
+have, same standing limitation as every GitHub-mutating feature this
+whole engagement. Recommend the user try it directly once deployed.
