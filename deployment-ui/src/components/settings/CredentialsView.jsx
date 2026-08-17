@@ -5,6 +5,7 @@ import GitHubAccessSection from "./GitHubAccessSection";
 import AwsLoginSection from "./credentials/AwsLoginSection";
 import AzureLoginSection from "./credentials/AzureLoginSection";
 import GcpLoginSection from "./credentials/GcpLoginSection";
+import PaasLoginSection from "./credentials/PaasLoginSection";
 import ApiKeySection from "./credentials/ApiKeySection";
 import SecurityPinSection from "./credentials/SecurityPinSection";
 import CredentialPinGate from "./credentials/CredentialPinGate";
@@ -19,15 +20,23 @@ const MODES = [
     { key: "sonarqube", label: "SonarQube" },
     { key: "docker", label: "Docker" },
     { key: "oauth", label: "GitHub OAuth" },
-    { key: "ai", label: "AI Assistant" }
+    { key: "ai", label: "AI Assistant" },
+    { key: "render", label: "Render" },
+    { key: "cloudflare", label: "Cloudflare" },
+    { key: "netlify", label: "Netlify" },
+    { key: "vercel", label: "Vercel" }
 ];
 
 // Every provider key CredentialPinGate can gate - matches the backend's
 // CredentialGate.AllProviders exactly (github/aws/azure/gcp/apikey/
-// docker/github-oauth/sonar/ai). One successful unlock now grants all of
-// them there, so the frontend mirrors that here instead of only marking
-// whichever single tab prompted for the PIN.
-const ALL_CREDENTIAL_PROVIDERS = ["github", "aws", "azure", "gcp", "apikey", "docker", "github-oauth", "sonar", "ai"];
+// docker/github-oauth/sonar/ai/render/cloudflare/netlify/vercel). One
+// successful unlock now grants all of them there, so the frontend mirrors
+// that here instead of only marking whichever single tab prompted for the
+// PIN.
+const ALL_CREDENTIAL_PROVIDERS = [
+    "github", "aws", "azure", "gcp", "apikey", "docker", "github-oauth", "sonar", "ai",
+    "render", "cloudflare", "netlify", "vercel"
+];
 
 // A convenience picker, not a restriction — GEMINI_MODEL is still whatever
 // string ends up saved (see SettingsService.SaveAiAssistantAsync), so
@@ -169,7 +178,9 @@ export default function CredentialsView({
                 GitHub, AWS, and Azure below are yours alone — kept for your own browser
                 session, isolated from every other user of this portal. GCP is stored the
                 same way, for future use, and your API Key is scoped the same way too.
-                SonarQube, Docker, and OAuth are shared by the whole portal instead.
+                Render, Cloudflare, Netlify, and Vercel are the same — see them live on
+                the Hosting Providers page once connected. SonarQube, Docker, and OAuth
+                are shared by the whole portal instead.
             </p>
 
             <div className="button-row" style={{ marginBottom: "20px" }}>
@@ -259,6 +270,30 @@ export default function CredentialsView({
             {mode === "gcp" && (
                 <CredentialPinGate provider="gcp" unlocked={unlockedProviders.has("gcp")} onUnlocked={markAllUnlocked}>
                     <GcpLoginSection onCleared={() => removeUnlocked("gcp")} />
+                </CredentialPinGate>
+            )}
+
+            {mode === "render" && (
+                <CredentialPinGate provider="render" unlocked={unlockedProviders.has("render")} onUnlocked={markAllUnlocked}>
+                    <PaasLoginSection provider="render" label="Render" onCleared={() => removeUnlocked("render")} />
+                </CredentialPinGate>
+            )}
+
+            {mode === "cloudflare" && (
+                <CredentialPinGate provider="cloudflare" unlocked={unlockedProviders.has("cloudflare")} onUnlocked={markAllUnlocked}>
+                    <PaasLoginSection provider="cloudflare" label="Cloudflare" hasAccountId onCleared={() => removeUnlocked("cloudflare")} />
+                </CredentialPinGate>
+            )}
+
+            {mode === "netlify" && (
+                <CredentialPinGate provider="netlify" unlocked={unlockedProviders.has("netlify")} onUnlocked={markAllUnlocked}>
+                    <PaasLoginSection provider="netlify" label="Netlify" onCleared={() => removeUnlocked("netlify")} />
+                </CredentialPinGate>
+            )}
+
+            {mode === "vercel" && (
+                <CredentialPinGate provider="vercel" unlocked={unlockedProviders.has("vercel")} onUnlocked={markAllUnlocked}>
+                    <PaasLoginSection provider="vercel" label="Vercel" onCleared={() => removeUnlocked("vercel")} />
                 </CredentialPinGate>
             )}
 

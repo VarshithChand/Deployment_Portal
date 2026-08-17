@@ -1,36 +1,87 @@
+import { useEffect, useState } from "react";
+
 import PageLayout from "../components/layout/PageLayout";
 import PaasProviderCard from "../components/paas/PaasProviderCard";
+import LoadingSpinner from "../components/LoadingSpinner";
+import useNavigation from "../hooks/useNavigation";
+import { getPaasStatus } from "../services/paasService";
 
 const PROVIDERS = [
-    { key: "render", label: "Render", hasAccountId: false, helpText: "Backend hosting — web services, background workers, cron jobs." },
-    { key: "cloudflare", label: "Cloudflare Pages", hasAccountId: true, helpText: "Frontend hosting — Pages projects and Worker scripts. Needs an API Token plus your Account ID." },
-    { key: "netlify", label: "Netlify", hasAccountId: false, helpText: "Frontend hosting — sites and their deploy status." },
-    { key: "vercel", label: "Vercel", hasAccountId: false, helpText: "Frontend hosting — projects and their production deployment status." }
+    { key: "render", label: "Render" },
+    { key: "cloudflare", label: "Cloudflare Pages" },
+    { key: "netlify", label: "Netlify" },
+    { key: "vercel", label: "Vercel" }
 ];
 
 // Session-scoped, exactly like the Cloud Services page's AWS/Azure
-// credentials (see PortalIdentity) — every token here is kept only for
-// this browser, never portal-wide, cleared on sign-out. Read-only: this
-// page never modifies anything in your Render/Cloudflare/Netlify/Vercel
-// account, it only shows what's already there.
+// credentials (see PortalIdentity) — read-only status here; connecting/
+// editing/clearing a provider lives on Settings > Credentials (see
+// PaasLoginSection). Only shows a card for a provider that's actually
+// configured, rather than four cards with empty connect forms.
 export default function PaasHosting() {
+
+    const { setTab } = useNavigation();
+
+    const [configured, setConfigured] = useState([]);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+
+        Promise.all(PROVIDERS.map((p) => getPaasStatus(p.key).catch(() => null))).then((results) => {
+
+            setConfigured(PROVIDERS.filter((p, i) => results[i]?.configured));
+            setLoading(false);
+
+        });
+
+    }, []);
+
+    if (loading) {
+        return <LoadingSpinner />;
+    }
 
     return (
 
         <PageLayout title="Hosting Providers">
 
-            <p className="field-hint" style={{ marginBottom: "18px" }}>
-                Connect your own Render, Cloudflare, Netlify, or Vercel account to see what's
-                actually deployed under it. Tokens are kept only for this browser's session.
-            </p>
+            {configured.length === 0 ? (
 
-            {PROVIDERS.map((p) => (
+                <div className="card">
 
-                <div key={p.key} style={{ marginBottom: "18px" }}>
-                    <PaasProviderCard provider={p.key} label={p.label} hasAccountId={p.hasAccountId} helpText={p.helpText} />
+                    <p className="empty-state" style={{ textAlign: "left" }}>
+                        No hosting providers connected yet. Connect Render, Cloudflare, Netlify,
+                        or Vercel from{" "}
+                        <a href="#" onClick={(e) => { e.preventDefault(); setTab("settings"); }}>
+                            Settings → Credentials
+                        </a>
+                        {" "}to see what's actually deployed under each account.
+                    </p>
+
                 </div>
 
-            ))}
+            ) : (
+
+                <>
+
+                <p className="field-hint" style={{ marginBottom: "18px" }}>
+                    What's actually deployed under your connected accounts. Manage connections
+                    from{" "}
+                    <a href="#" onClick={(e) => { e.preventDefault(); setTab("settings"); }}>
+                        Settings → Credentials
+                    </a>.
+                </p>
+
+                {configured.map((p) => (
+
+                    <div key={p.key} style={{ marginBottom: "18px" }}>
+                        <PaasProviderCard provider={p.key} label={p.label} />
+                    </div>
+
+                ))}
+
+                </>
+
+            )}
 
         </PageLayout>
 
