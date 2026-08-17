@@ -6574,3 +6574,102 @@ confirm Settings > Database still shows Connected after this change,
 and separately confirm row browsing/table creation still work end to
 end (higher-risk paths this round touched: insert/update/delete/create
 table, none of which could be exercised live here).
+
+==================================================
+ROUND 48 FOLLOW-UP 7 - SPLIT DATABASE CONNECTIONS: HOSTING PROVIDERS
+DASHBOARD VS SETTINGS > DATABASE MANAGEMENT ARE NOW FULLY INDEPENDENT
+==================================================
+Date: 2026-08-17
+Trigger: user pointed out that Settings > Database Management and the
+Hosting Providers dashboard's Database tab were sharing ONE connection
+(follow-up 6 had wired both to the same root["PortalDatabaseConnection"])
+and asked for them to be separate: "i should only connect the hosting
+db from here [Credentials > Database]... move the superadmin db
+connection there [Settings > Database's own sub-page]... when i clear
+any credentials that should be remove the connection to that belonging
+page" - i.e. two independent credentials, each connected from the page
+it actually belongs to, with independent clear/lifecycle.
+
+Backend: root["PortalDatabaseConnection"] (unchanged storage key) now
+powers ONLY the Hosting Providers -> Database tab, connected exclusively
+from Settings > Credentials > Database exactly as before. New root
+["PortalManagementDatabaseConnection"] powers ONLY Settings > Database's
+own table browser/editor (DatabaseController - see follow-up 6),
+connected directly on that page via a brand-new connection card.
+SettingsService's Get/Save/Clear methods for both are now built on one
+shared, storage-key-parametrized private implementation rather than
+two hand-copies, so the "clear one, the other is untouched" guarantee
+is structural (different keys entirely), not just a promise. Added 6
+new endpoints to DatabaseController mirroring HostingObservabilityController's
+existing ones (GET/POST connection, POST connection/fields, DELETE
+connection, GET connection/render-databases, POST connection/
+render-databases/{id}/connect) - same Render-picker-or-manual-paste
+UX, same server-side-only connection-string handling, just pointed at
+the new storage key. DatabaseController gained a PaasProviderService
+dependency to support its own Render picker (reusing the exact same
+GetRenderDatabasesAsync/GetRenderDatabaseConnectionStringAsync from
+follow-up 3/4, and the same shared portal-wide Render API token -
+that credential itself is genuinely common infrastructure between both
+features, only the two DATABASE targets are separate).
+
+Also de-duplicated a masked-connection helper that was about to become
+a third copy-paste: added SettingsService.BuildMaskedConnection
+(internal static) and pointed both controllers at it instead of each
+keeping their own copy.
+
+Frontend: extracted the whole "Render live picker + manual Fields/
+Connection-String" form (previously only living in Credentials'
+DatabaseConnectionSection.jsx) into a new shared, service-agnostic
+components/database/DatabaseConnectionForm.jsx, taking every service
+call as a prop. Two now-thin wrapper components supply their own
+service functions and copy: credentials/DatabaseConnectionSection.jsx
+(hostingObservabilityService, unchanged behavior) and a new settings/
+DatabaseConnectionSection.jsx (new databaseService.js functions),
+the latter rendered directly inside Settings > Database's own page
+(DatabaseView.jsx), above the health card, with an onChanged callback
+so connecting/clearing there immediately re-pulls health/schemas/
+tables/overview instead of needing a manual reload.
+
+One direct consequence worth flagging plainly: since
+PortalManagementDatabaseConnection is a brand-new storage key that has
+never been set, Settings > Database Management will show "Not
+connected" again immediately after this deploy, even though it showed
+Connected a moment ago (follow-up 6 borrowed the Hosting Providers
+connection for it, which the user has now asked to stop) - this is the
+intended behavior of the split, not a regression, but will look like
+one at first glance. The Hosting Providers dashboard's own Database
+tab is unaffected and keeps showing the already-connected Render
+database.
+
+Verification performed:
+  - `dotnet build` (isolated output dir): 0 errors, only pre-existing
+    unrelated warnings.
+  - `npm run lint` in deployment-ui/: caught and fixed one new
+    exhaustive-deps warning (getStatus now arrives as a prop rather
+    than a stable top-level import) with the same eslint-disable
+    convention already used elsewhere in this codebase for the
+    identical situation - clean afterward.
+  - `npm run build` in deployment-ui/: succeeded.
+  - Live check against the deployed Render backend after the push:
+    /api/bootstrap healthy (HTTP 200).
+
+Files changed: src/DeploymentAPI/Services/SettingsService.cs,
+src/DeploymentAPI/Controllers/HostingObservabilityController.cs,
+src/DeploymentAPI/Controllers/DatabaseController.cs,
+deployment-ui/src/services/databaseService.js,
+deployment-ui/src/components/database/DatabaseConnectionForm.jsx (new),
+deployment-ui/src/components/settings/DatabaseConnectionSection.jsx (new),
+deployment-ui/src/components/settings/credentials/DatabaseConnectionSection.jsx,
+deployment-ui/src/components/settings/DatabaseView.jsx.
+Commit: 71ff37f.
+
+Status: Complete and pushed, live-verified the backend is up. Could
+NOT live-verify the two connections' independence against real
+credentials in this sandboxed session (no real super-admin session
+available here) - only that the storage keys are structurally distinct
+and every code path resolves the correct one for its own controller.
+Recommend @VarshithChand: (1) reconnect Settings > Database's own
+connection now that it's separate (expected to show disconnected right
+after this deploy, per the note above), (2) confirm clearing that one
+leaves the Hosting Providers dashboard's Database tab still connected,
+and vice versa.
