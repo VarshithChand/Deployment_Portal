@@ -7057,3 +7057,125 @@ this very fix - after that, the same class of issue should self-heal
 automatically on every future deploy. Recommend @VarshithChand hard-
 refresh the tab currently showing the error once, then confirm future
 deploys no longer produce a stuck crash screen.
+
+==================================================
+ROUND 49 - FEATURE: CONTAINER REGISTRY HUB, PHASE 1 (AWS ECR / AZURE
+ACR / GCP ARTIFACT REGISTRY)
+==================================================
+Date: 2026-08-17
+Trigger: user shared a "Container Registry" reference graphic (AWS ECR,
+Azure ACR, GCP Artifact Registry, Docker Hub, GHCR, GitLab Registry,
+JFrog Artifactory, Harbor, Nexus) and asked for one hub page with all
+of these as sub-pages, each enabling automatically once the relevant
+credentials exist - cloud credentials (AWS/Azure/GCP) enabling
+ECR/ACR/Artifact Registry, and separate registry-specific credentials
+(GHCR, Docker Hub, JFrog, etc.) enabling their own tiles.
+
+Given the size (9 providers, 6 of them needing a brand-new credential
+model AND a brand-new API integration with zero existing code to build
+on), entered Plan Mode and confirmed scope directly with the user via
+two clarifying questions before writing any code:
+  1. Phasing: build the 3 cloud-native registries now (ECR/ACR/Artifact
+     Registry - they reuse credentials this app already has); the 6
+     standalone registries (Docker Hub/GHCR/GitLab/JFrog/Harbor/Nexus)
+     are a later fast-follow, since each needs real new work with no
+     precedent anywhere in this codebase.
+  2. Credential scope for that eventual fast-follow: portal-wide/shared
+     (matches how the existing-but-unused Docker Registry credential
+     already works, and fits how teams actually use one shared image
+     registry) - recorded now so it isn't re-litigated later.
+
+New "Container Registry" page/nav item, deliberately kept SEPARATE from
+the existing "Docker" nav item (which is Docker Engine management -
+containers/images/volumes on the host, via DockerController/
+DockerApiService - a completely different concept from a container
+registry). Learned from this session's own earlier paasHosting mistake:
+added the new tab key to NavigationContext's TABS whitelist in the SAME
+change that added the sidebar entry, rather than as a separate fix later.
+
+AWS ECR: pure reuse - the hub's ECR tile calls the exact same
+CloudServiceManagementService/CloudServicesController methods the
+existing Cloud Services page's ECR management already uses. Zero
+backend changes for this provider.
+
+Azure ACR: new integration, no Azure SDK dependency added (this app's
+Azure calls have always been raw HttpClient, not a vendor SDK, matching
+its own PaaS-provider integrations) - lists registries via Azure
+Resource Manager, then repositories/tags via ACR's own two-step AAD ->
+ACR OAuth token exchange (an AAD access_token exchanged at
+/oauth2/exchange for an ACR refresh_token, exchanged again at
+/oauth2/token for a repository-scoped access token) against the
+registry's own Docker Registry V2 + ACR extension APIs.
+UserAzureCredentials/AzureCredentialsUpdateDto gained an additive
+SubscriptionId field (ARM has no "default subscription" the way an AWS
+key implies a region) - existing Azure Web App status panel is
+unaffected since it already gets its subscription from the Environment
+definition, not the credential. CloudStatusService.GetAzureAccessTokenAsync
+(previously private) is now internal so this new code can reuse the
+exact same AAD client-credentials exchange instead of duplicating it.
+
+GCP Artifact Registry: new integration, and the first feature in this
+entire portal to actually authenticate with a GCP service account (its
+own DTO comment had said "no feature in this portal reads GCP
+credentials yet" until now) - a from-scratch service-account JWT-bearer
+OAuth2 flow: parses the pasted service account JSON for client_email/
+private_key, builds and RSA-signs a JWT assertion, exchanges it at
+Google's token endpoint, then calls Artifact Registry's REST API.
+UserGcpCredentials/GcpCredentialsUpdateDto gained an additive Location
+field (repositories are location-scoped, e.g. "us-central1").
+
+Docker Hub, GHCR, GitLab Registry, JFrog Artifactory, Harbor, and Nexus
+are shown on the hub as real, visibly "Coming soon" tiles (not hidden) -
+explicitly not built this round, per the confirmed phasing above.
+
+Both new providers are self-service and session-scoped, same posture as
+ECR/Cloud Services already use (no AdminGate - the credential itself,
+plus the real provider's own permission check, is the auth boundary).
+Every new query is wrapped so a bad credential, a missing Subscription
+ID/Location, or the provider simply hiccuping comes back as a friendly
+Configured/Error response rather than a 500 - same contract every other
+Cloud Services/PaaS integration in this app already follows.
+
+Verification performed:
+  - `dotnet build` (isolated output dir, 3 times across the round as
+    pieces landed): 0 errors, only pre-existing unrelated warnings.
+  - `npm run lint` in deployment-ui/: no new warnings/errors.
+  - `npm run build` in deployment-ui/: succeeded - new ContainerRegistry
+    chunk built and code-split as expected, confirming the lazy route
+    wiring is correct.
+  - Live check against the deployed Render backend after the push:
+    /api/bootstrap healthy (HTTP 200).
+
+Files changed: src/DeploymentAPI/DTOs/CloudCredentialsDto.cs,
+src/DeploymentAPI/Services/CloudStatusService.cs,
+src/DeploymentAPI/Services/CloudServiceManagementService.cs,
+src/DeploymentAPI/Services/SettingsService.cs,
+src/DeploymentAPI/Controllers/SettingsController.cs,
+src/DeploymentAPI/Controllers/CloudServicesController.cs,
+deployment-ui/src/components/settings/credentials/AzureLoginSection.jsx,
+deployment-ui/src/components/settings/credentials/GcpLoginSection.jsx,
+deployment-ui/src/services/containerRegistryService.js (new),
+deployment-ui/src/components/containerRegistry/{EcrView,AcrView,
+ArtifactRegistryView}.jsx (new), deployment-ui/src/pages/
+ContainerRegistry.jsx (new), deployment-ui/src/components/layout/
+{SidebarIcons,Sidebar}.jsx, deployment-ui/src/context/NavigationContext.jsx,
+deployment-ui/src/App.jsx.
+Commit: 156e326.
+
+Status: Complete and pushed, live-verified the backend is up. Could NOT
+live-verify ACR or Artifact Registry against real Azure/GCP accounts in
+this sandboxed session (no real credentials available here) - flagged
+explicitly, both in the approved plan and in code comments on the two
+new integrations, as the least-certain parts of this round: ACR's exact
+ARM registry-list JSON field names and its /acr/v1/{repo}/_tags
+extension API response shape are unverified, and GCP's JWT-signing flow
+(PEM parsing of the private key, the assertion's exp/iat claims) is
+the single most novel piece of code in this whole round, with zero
+prior precedent anywhere in this codebase to lean on. ECR itself is a
+pure reuse of already-working, already-verified code - no new risk
+there. Recommend @VarshithChand connect real Azure credentials
+(including a Subscription ID) and real GCP credentials (including a
+Location) and browse both ACR and Artifact Registry end to end once
+deployed - this is very likely to need at least one follow-up fix once
+real response shapes are seen, the same posture already taken with this
+session's Render Metrics API integration.
