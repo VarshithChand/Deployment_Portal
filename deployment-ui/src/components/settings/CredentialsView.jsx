@@ -7,6 +7,7 @@ import AzureLoginSection from "./credentials/AzureLoginSection";
 import GcpLoginSection from "./credentials/GcpLoginSection";
 import PaasLoginSection from "./credentials/PaasLoginSection";
 import MyConnectedAccounts from "./credentials/MyConnectedAccounts";
+import DashboardRoleSection from "./credentials/DashboardRoleSection";
 import ApiKeySection from "./credentials/ApiKeySection";
 import SecurityPinSection from "./credentials/SecurityPinSection";
 import CredentialPinGate from "./credentials/CredentialPinGate";
@@ -127,7 +128,7 @@ export default function CredentialsView({
 }) {
 
     const [mode, setMode] = useState("github");
-    const { pinConfigured } = useAuth();
+    const { pinConfigured, isSuperAdminSession } = useAuth();
 
     // "At a glance" status per tab, shown as a small checkmark on the
     // button-row below so you can see what's already connected without
@@ -343,6 +344,7 @@ export default function CredentialsView({
                 <CredentialPinGate provider="render" unlocked={unlockedProviders.has("render")} onUnlocked={markAllUnlocked}>
                     <PaasLoginSection provider="render" label="Render" onCleared={() => removeUnlocked("render")} />
                     <MyConnectedAccounts provider="render" label="Render" configured={configuredByMode.render} />
+                    {isSuperAdminSession && <DashboardRoleSection provider="render" label="Render" hasAccountId={false} />}
                 </CredentialPinGate>
             )}
 
@@ -350,6 +352,7 @@ export default function CredentialsView({
                 <CredentialPinGate provider="cloudflare" unlocked={unlockedProviders.has("cloudflare")} onUnlocked={markAllUnlocked}>
                     <PaasLoginSection provider="cloudflare" label="Cloudflare" hasAccountId onCleared={() => removeUnlocked("cloudflare")} />
                     <MyConnectedAccounts provider="cloudflare" label="Cloudflare Pages" configured={configuredByMode.cloudflare} />
+                    {isSuperAdminSession && <DashboardRoleSection provider="cloudflare" label="Cloudflare Pages" hasAccountId={true} />}
                 </CredentialPinGate>
             )}
 
@@ -357,6 +360,7 @@ export default function CredentialsView({
                 <CredentialPinGate provider="netlify" unlocked={unlockedProviders.has("netlify")} onUnlocked={markAllUnlocked}>
                     <PaasLoginSection provider="netlify" label="Netlify" onCleared={() => removeUnlocked("netlify")} />
                     <MyConnectedAccounts provider="netlify" label="Netlify" configured={configuredByMode.netlify} />
+                    {isSuperAdminSession && <DashboardRoleSection provider="netlify" label="Netlify" hasAccountId={false} />}
                 </CredentialPinGate>
             )}
 
@@ -364,6 +368,7 @@ export default function CredentialsView({
                 <CredentialPinGate provider="vercel" unlocked={unlockedProviders.has("vercel")} onUnlocked={markAllUnlocked}>
                     <PaasLoginSection provider="vercel" label="Vercel" onCleared={() => removeUnlocked("vercel")} />
                     <MyConnectedAccounts provider="vercel" label="Vercel" configured={configuredByMode.vercel} />
+                    {isSuperAdminSession && <DashboardRoleSection provider="vercel" label="Vercel" hasAccountId={false} />}
                 </CredentialPinGate>
             )}
 
