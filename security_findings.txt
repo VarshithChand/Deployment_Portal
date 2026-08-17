@@ -7408,3 +7408,114 @@ API integration from scratch. With this round, 7 of the original 9
 providers from the reference image are live: AWS ECR, Azure ACR, GCP
 Artifact Registry, Docker Hub, GHCR, GitLab Registry, and JFrog
 Artifactory.
+
+==================================================
+ROUND 52 - FEATURE: CONTAINER REGISTRY HUB, HARBOR + NEXUS (ALL 9
+PROVIDERS NOW LIVE)
+==================================================
+Date: 2026-08-17
+Trigger: "give those two also" - the final two providers from the
+original reference image (Harbor, Nexus), completing the Container
+Registry hub started across Rounds 49-51. Same confirmed scope as every
+provider built so far: portal-wide/shared credential, one admin
+connects each once, every visitor then browses the same repositories.
+
+Both Harbor and Nexus are almost always self-hosted with no fixed host
+(same posture as JFrog/GitLab), and both authenticate with a plain
+username + password (Basic auth) rather than a bearer token - unlike
+every prior provider in this hub, this is the first pair whose
+credential shapes are actually IDENTICAL to each other (HostUrl,
+Username, Password), so - unlike GitLab/JFrog, which each got their own
+bespoke shape and form - Harbor and Nexus share one generic credential
+DTO (PortalHostCredentials), one generic SettingsService storage method
+set keyed by provider (GetPortalHostCredentialsAsync(provider)/Save/
+Clear), and one shared frontend form component
+(HostCredentialLoginSection.jsx) rather than two near-identical bespoke
+ones - the same "one generic shape for several near-identical providers"
+reasoning UserPaasCredentials(Token, AccountId) already uses for Render/
+Cloudflare/Netlify/Vercel.
+
+Harbor: uses Harbor's own documented REST API v2.0 (Basic auth - a
+regular Harbor user or a robot account's username+CLI-secret both work
+as the same username/password pair). Three levels, same shape as ACR/
+JFrog: projects -> repositories -> artifacts (Harbor's name for a pushed
+image digest, which can carry multiple tags at once). Hit one real,
+documented Harbor-specific quirk: the artifacts endpoint needs the
+repository name (already stripped of its "{project}/" prefix) with any
+remaining "/" characters DOUBLE-URL-encoded ("/" -> literal "%2F" ->
+escaped again into "%252F") - Harbor's own workaround for repository
+names that are themselves nested paths. Implemented by replacing "/"
+with the literal text "%2F" before a single Uri.EscapeDataString pass,
+so the "%" itself gets escaped into "%25" and produces exactly "%252F".
+
+Nexus (Sonatype Nexus Repository 3): no registry-specific listing
+endpoint at all - Nexus's REST API only exposes a generic Components API
+that works identically across every package format it stores (npm, PyPI,
+docker, etc.), so a docker image pushed to Nexus is just a "component"
+with format=docker under whichever docker-format repository holds it.
+"Images" on the hub's browse view means the distinct component names a
+docker-format repository's components group into; "tags" means each of
+that name's component versions. Only the first page of components is
+fetched per call (no continuationToken paging loop) - a real limitation
+for a heavily-populated repository, explicitly not fixed in this pass,
+consistent with this session's other single-page-only integrations
+(Docker Hub/GHCR's page_size=100 single fetch, etc.).
+
+New Settings -> Credentials tabs ("Harbor", "Nexus"), both rendering the
+same HostCredentialLoginSection.jsx component with different label/
+placeholder/help-text props, both gated behind the same admin-only +
+screen-lock-PIN posture every other shared credential in this app uses.
+Both tiles on the Container Registry hub now auto-enable exactly like
+every other provider. With this round, all 9 providers from the original
+reference image are live: AWS ECR, Azure ACR, GCP Artifact Registry,
+Docker Hub, GHCR, GitLab Registry, JFrog Artifactory, Harbor, and Nexus -
+the Container Registry hub feature (started in Round 49) is now feature-
+complete against its original scope.
+
+Verification performed:
+  - `dotnet build` (isolated output dir): 0 errors, only pre-existing
+    unrelated warnings.
+  - `npm run lint` in deployment-ui/: no new warnings beyond the same
+    pre-existing-pattern react-hooks/exhaustive-deps warning already
+    flagged in Rounds 50-51.
+  - `npm run build` in deployment-ui/: succeeded, ContainerRegistry
+    chunk rebuilt with both new provider views bundled in (now 45.9kB,
+    up from 34.9kB after Round 51 - expected growth from 2 more 3-level
+    browse views).
+  - Live check against the deployed Render backend after the push:
+    /api/bootstrap healthy (HTTP 200).
+
+Files changed: src/DeploymentAPI/DTOs/ContainerRegistryDtos.cs
+(PortalHostCredentials + Harbor/Nexus repo/image/tag DTOs),
+src/DeploymentAPI/Services/SettingsService.cs
+(GetPortalHostCredentialsAsync/Save/Clear, keyed by provider),
+src/DeploymentAPI/Services/ContainerRegistryService.cs (Harbor + Nexus
+sections), src/DeploymentAPI/Controllers/ContainerRegistryController.cs
+(Harbor/Nexus status/save/clear/browse routes),
+src/DeploymentAPI/Helpers/CredentialGate.cs (added harbor/nexus),
+deployment-ui/src/services/containerRegistryService.js,
+deployment-ui/src/components/settings/credentials/
+HostCredentialLoginSection.jsx (new, shared by both providers),
+deployment-ui/src/components/settings/CredentialsView.jsx,
+deployment-ui/src/components/containerRegistry/{HarborView,
+NexusView}.jsx (new), deployment-ui/src/pages/ContainerRegistry.jsx.
+Commit: 0a656c1.
+
+Status: Complete, pushed, live-verified the backend is up. Could NOT
+live-verify Harbor or Nexus against real instances in this sandboxed
+session (no real credentials available here) - same standing limitation
+as every other registry integration built across Rounds 49-52. Harbor's
+double-URL-encoding workaround and Nexus's component-grouping logic are
+the least-certain parts of this round; both follow real, documented API
+contracts (not guessed), but neither has been exercised against a live
+instance. Recommend @VarshithChand connect a real Harbor instance
+(user or robot account) and a real Nexus instance (Settings ->
+Credentials -> Harbor / Nexus) and browse both end to end once deployed
+- likely to need at least one follow-up fix once real response shapes
+are seen, the same posture taken for every other unverified live-API
+integration this session.
+
+With Harbor and Nexus, the Container Registry hub is now feature-
+complete against its original 9-provider scope. No further registries
+are planned unless the user requests one not on the original reference
+image.
