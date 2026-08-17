@@ -28,7 +28,24 @@ public static class MfaGate
         // proceeds with whatever was given either way, same as before this
         // feature existed - a genuinely bad token still fails elsewhere
         // (rejected at preview, or simply doesn't work once saved).
-        if (string.IsNullOrWhiteSpace(login) || !await settings.IsMfaEnabledAsync(login))
+        if (string.IsNullOrWhiteSpace(login))
+            return null;
+
+        return await DenyUnlessCodeVerifiedAsync(controller, settings, notifications, login, mfaCode, recoveryCode);
+    }
+
+    // Same verify/lockout logic as DenyUnlessVerifiedAsync above, but
+    // against an ALREADY-RESOLVED login - for actions gating the CURRENT
+    // session's own identity rather than a token about to be saved (e.g.
+    // removing the screen-lock PIN, see SettingsController.ClearMyPin).
+    // A no-op (returns null, action proceeds) whenever that login doesn't
+    // have MFA enabled at all - same "rides on top of an existing,
+    // optional protection" posture every MFA gate in this app already has.
+    public static async Task<IActionResult?> DenyUnlessCodeVerifiedAsync(
+        ControllerBase controller, SettingsService settings, NotificationService notifications,
+        string login, string? code, string? recoveryCode)
+    {
+        if (!await settings.IsMfaEnabledAsync(login))
             return null;
 
         var lockout = await MfaLockoutPolicy.CheckAsync(settings, login);
@@ -43,7 +60,7 @@ public static class MfaGate
             });
         }
 
-        var hasCode = !string.IsNullOrWhiteSpace(mfaCode);
+        var hasCode = !string.IsNullOrWhiteSpace(code);
         var hasRecoveryCode = !string.IsNullOrWhiteSpace(recoveryCode);
 
         if (!hasCode && !hasRecoveryCode)
@@ -57,7 +74,7 @@ public static class MfaGate
 
         var valid = hasRecoveryCode
             ? await settings.VerifyMfaRecoveryCodeAsync(login, recoveryCode!)
-            : await settings.VerifyMfaCodeAsync(login, mfaCode!);
+            : await settings.VerifyMfaCodeAsync(login, code!);
 
         if (valid)
         {

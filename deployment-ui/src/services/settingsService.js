@@ -156,8 +156,12 @@ export const saveMyPin = async (pin) => {
     return response.data;
 };
 
-export const clearMyPin = async () => {
-    const response = await settingsApi.delete("/me/pin");
+// code/recoveryCode are only actually required when this session's GitHub
+// identity has MFA enabled (see MfaGate.DenyUnlessCodeVerifiedAsync on the
+// backend) - omit both on the first attempt; a 403 with code
+// "MFA_REQUIRED" means try again with one of them.
+export const clearMyPin = async ({ code, recoveryCode } = {}) => {
+    const response = await settingsApi.delete("/me/pin", { data: { code, recoveryCode } });
     return response.data;
 };
 

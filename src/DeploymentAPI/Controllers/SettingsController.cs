@@ -521,9 +521,22 @@ public class SettingsController : ControllerBase
         return Ok(new { Configured = true });
     }
 
+    // Removing the PIN turns off both what it protects (the Credentials
+    // tabs' unlock gate, and the "lock instead of wipe" idle behavior) -
+    // significant enough that, when this session's GitHub identity has MFA
+    // enabled, we require a fresh MFA code before it takes effect, same as
+    // disabling MFA itself already requires (see MfaController.Disable).
+    // A no-op gate when MFA isn't enabled at all - removing the PIN then
+    // works exactly as it always did.
     [HttpDelete("me/pin")]
-    public async Task<IActionResult> ClearMyPin()
+    public async Task<IActionResult> ClearMyPin(MfaCodeRequestDto request)
     {
+        var login = await _githubAuth.GetAuthenticatedLoginAsync();
+
+        if (!string.IsNullOrWhiteSpace(login)
+            && await MfaGate.DenyUnlessCodeVerifiedAsync(this, _settings, _notifications, login, request?.Code, request?.RecoveryCode) is IActionResult denied)
+            return denied;
+
         var key = PortalIdentity.GetOrCreateKey(HttpContext);
         await _settings.ClearPinAsync(key);
         _activity.ClearFailedPinAttempts(key);

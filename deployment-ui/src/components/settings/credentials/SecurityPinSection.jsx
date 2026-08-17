@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 
 import useToast from "../../../hooks/useToast";
 import useAuth from "../../../hooks/useAuth";
+import useLockoutCountdown from "../../../hooks/useLockoutCountdown";
 import { getMyPinStatus, saveMyPin, clearMyPin } from "../../../services/settingsService";
 
 const EMPTY_FORM = { pin: "", confirmPin: "" };
@@ -21,6 +22,21 @@ export default function SecurityPinSection() {
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [form, setForm] = useState(EMPTY_FORM);
+
+    // Removing the PIN also turns off idle-timeout protection for your
+    // saved credentials (see the copy below), so - when this session's
+    // GitHub identity has MFA enabled - the backend requires a fresh code
+    // before it takes effect (same requirement disabling MFA itself
+    // already has). The first click tries with no code; a 403
+    // "MFA_REQUIRED" is what reveals this inline form rather than
+    // showing it unconditionally, since most sessions won't have MFA
+    // enabled at all and the field would just be noise.
+    const [showRemoveMfa, setShowRemoveMfa] = useState(false);
+    const [removeCode, setRemoveCode] = useState("");
+    const [removeRecoveryCode, setRemoveRecoveryCode] = useState("");
+    const [removing, setRemoving] = useState(false);
+    const [lockedUntilUtc, setLockedUntilUtc] = useState(null);
+    const { isLocked, formatted: lockoutFormatted } = useLockoutCountdown(lockedUntilUtc);
 
     function refresh() {
 
@@ -73,23 +89,55 @@ export default function SecurityPinSection() {
 
     }
 
-    async function handleClear() {
+    async function handleClear(e) {
+
+        e?.preventDefault();
+        setRemoving(true);
 
         try {
 
-            await clearMyPin();
+            await clearMyPin({ code: removeCode, recoveryCode: removeRecoveryCode });
+
             toast.show("Screen-lock PIN removed — the 10-minute idle prompt will clear your credentials again, same as before.", "success");
+            setShowRemoveMfa(false);
+            setRemoveCode("");
+            setRemoveRecoveryCode("");
+            setLockedUntilUtc(null);
             refresh();
             refreshOauthStatus();
 
         }
         catch (err) {
 
+            if (err.response?.data?.code === "MFA_REQUIRED") {
+                setShowRemoveMfa(true);
+                return;
+            }
+
             console.error(err);
-            toast.show("Unable to remove PIN.", "error");
+            setRemoveCode("");
+            setRemoveRecoveryCode("");
+
+            if (err.response?.data?.code === "MFA_LOCKED") {
+                setLockedUntilUtc(err.response.data.lockedUntilUtc);
+            }
+            else {
+                toast.show(err.response?.data?.message || "Unable to remove PIN.", "error");
+            }
+
+        }
+        finally {
+
+            setRemoving(false);
 
         }
 
+    }
+
+    function cancelRemove() {
+        setShowRemoveMfa(false);
+        setRemoveCode("");
+        setRemoveRecoveryCode("");
     }
 
     return (
@@ -150,13 +198,70 @@ export default function SecurityPinSection() {
                             {saving ? "Saving..." : status?.configured ? "Change PIN" : "Set PIN"}
                         </button>
 
-                        {status?.configured && (
+                        {status?.configured && !showRemoveMfa && (
 
-                            <button type="button" className="btn btn-danger" onClick={handleClear}>
-                                Remove PIN
+                            <button type="button" className="btn btn-danger" onClick={handleClear} disabled={removing}>
+                                {removing ? "Removing..." : "Remove PIN"}
                             </button>
 
                         )}
+
+                    </div>
+
+                </form>
+
+            )}
+
+            {showRemoveMfa && (
+
+                <form onSubmit={handleClear} style={{ marginTop: "16px" }}>
+
+                    <p className="field-hint field-hint-bad" style={{ marginTop: 0 }}>
+                        Removing the PIN also turns off idle-timeout protection for your saved
+                        credentials — enter your authenticator code to confirm.
+                    </p>
+
+                    <div className="form-group">
+                        <label>6-digit code</label>
+                        <input
+                            className="form-control"
+                            inputMode="numeric"
+                            maxLength={6}
+                            value={removeCode}
+                            onChange={(e) => setRemoveCode(e.target.value.replace(/\D/g, ""))}
+                            autoComplete="off"
+                            disabled={isLocked}
+                        />
+                    </div>
+
+                    <div className="form-group">
+                        <label>Or a recovery code</label>
+                        <input
+                            className="form-control"
+                            value={removeRecoveryCode}
+                            onChange={(e) => setRemoveRecoveryCode(e.target.value.trim())}
+                            autoComplete="off"
+                            disabled={isLocked}
+                        />
+                    </div>
+
+                    {isLocked && (
+                        <p className="field-hint field-hint-bad">Too many wrong codes — try again in {lockoutFormatted}.</p>
+                    )}
+
+                    <div className="button-row">
+
+                        <button
+                            type="submit"
+                            className="btn btn-danger"
+                            disabled={removing || isLocked || (!removeCode && !removeRecoveryCode)}
+                        >
+                            {removing ? "Removing..." : "Confirm Remove PIN"}
+                        </button>
+
+                        <button type="button" className="btn" onClick={cancelRemove} disabled={removing}>
+                            Cancel
+                        </button>
 
                     </div>
 
