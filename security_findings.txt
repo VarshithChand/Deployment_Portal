@@ -5949,3 +5949,36 @@ standing limitation as the first Round 46 pass: could NOT live-verify
 the actual MFA-enabled end-to-end flow for either action (no real
 MFA-enrolled session in this sandboxed environment) - recommend testing
 both Change PIN and Remove PIN with a real MFA-enabled account.
+
+==================================================
+ROUND 46 FOLLOW-UP 3 - REAL FINDING: PIN LOCK SCREEN'S BACKDROP WAS
+TRANSLUCENT, LEAKING PAGE CONTENT BEHIND IT
+==================================================
+Date: 2026-08-17
+Trigger: user confirmed the caret-alignment fix looked right, then
+reported still being able to see Dashboard content (repo list,
+workflow status, AWS region) through the PIN lock screen once it was
+up - clarifying their earlier "no transparency needed" note meant the
+opposite of how it was first read: they want NO transparency (a fully
+opaque lock screen), not "leave the existing translucency alone."
+
+Real gap: .pin-lock-backdrop inherited .dialog-backdrop's default
+var(--overlay-bg) - the same semi-transparent rgba (alpha .35-.75
+depending on theme) every confirm dialog already uses. Reasonable for
+a "delete this?" prompt, wrong for an actual screen lock: whatever was
+on screen (repo names, workflow results, AWS region/services) when the
+10-minute idle timeout triggered stayed visible right through it,
+undermining the point of locking the screen in the first place.
+
+Fix: .pin-lock-backdrop now sets background:var(--bg) instead of
+inheriting --overlay-bg - --bg is a solid opaque hex in every theme
+(confirmed by checking all 16 theme blocks), unlike --card-bg/
+--overlay-bg which are deliberately translucent for this app's glass-
+surface look elsewhere. Scoped to only the PIN lock screen - every
+other .dialog-backdrop-based confirm/modal dialog keeps its existing
+translucent dim, which is the right look for those.
+
+Files changed: deployment-ui/src/styles/global.css.
+Commit: b5a648b.
+
+Status: Complete and pushed. CSS-only, no backend involved.
