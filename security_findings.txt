@@ -6673,3 +6673,68 @@ connection now that it's separate (expected to show disconnected right
 after this deploy, per the note above), (2) confirm clearing that one
 leaves the Hosting Providers dashboard's Database tab still connected,
 and vice versa.
+
+==================================================
+ROUND 48 FOLLOW-UP 8 - FIX: HOSTING PROVIDERS RELOAD FELL BACK TO
+DASHBOARD, AND STALE ?view= LEAKED INTO SETTINGS
+==================================================
+Date: 2026-08-17
+Trigger: user reported "when i click on refresh in hosting providers
+page that is redirecting to the dashboard and then when i click on
+hosting providers page and then click settings it should redirect to
+the database page in settings" - two distinct navigation bugs, not
+directly caused by this round's backend work but both pre-existing
+gaps in NavigationContext.jsx exposed by the new Hosting Providers
+page now having its own real "?view=" sub-nav.
+
+Bug 1 - reload on Hosting Providers falls back to Dashboard: Sidebar's
+tab key for this page is "paasHosting" (confirmed in Sidebar.jsx), but
+NavigationContext's TABS whitelist array (used by readTabFromUrl() to
+validate the "?tab=" URL param on every mount) never had that key
+added to it - a gap that predates this whole session's Hosting
+Providers work, just never surfaced before because nothing on that
+page previously depended on surviving a reload with useful sub-state.
+Any reload while on Hosting Providers silently fell back to "dashboard".
+
+Bug 2 - stale ?view= leaks across pages: setTab() only ever did
+url.searchParams.set("tab", nextTab) - it added/overwrote "tab" but
+left every OTHER existing query param untouched. Multiple pages
+independently own a same-named "?view=" param for their own sub-nav
+(PaasHosting.jsx's Frontend/Backend/Database tabs, Settings.jsx's
+hub/credentials/database/etc, Services.jsx) with zero awareness of
+which page last wrote it. Leaving Hosting Providers on its Database
+tab (URL: ?tab=paasHosting&view=database) and then clicking Settings
+in the sidebar left "view=database" sitting in the URL after tab
+switched to "settings" - Settings.jsx's own readViewFromUrl() then
+read that leftover value, found "database" is a real entry in ITS OWN
+VIEWS array too, and landed directly on Settings > Database instead of
+the hub.
+
+Fix: added "paasHosting" to TABS. Changed setTab() to reset the URL to
+exactly "?tab=<next>" on every switch (url.search = ...) instead of
+layering onto whatever was already there - no page-owned sub-nav param
+is ever meant to survive a top-level tab change, so this is a general
+fix for the whole class of bug, not just the one reported instance
+(Services.jsx's own "?view=" and DatabaseView.jsx's "?table=" get the
+same protection going forward). goToSettingsView/goToEnvironment/
+goToCloudService are unaffected - they hand off via in-memory
+"pending*" state (set before calling setTab), never a URL param, so
+clearing the URL doesn't touch them.
+
+Verification performed:
+  - `npm run lint` in deployment-ui/: no new warnings/errors.
+  - `npm run build` in deployment-ui/: succeeded.
+  - No backend files touched this round, so no dotnet build/health
+    check needed - purely a frontend navigation fix.
+
+Files changed: deployment-ui/src/context/NavigationContext.jsx.
+Commit: 1226ab2.
+
+Status: Complete and pushed (frontend-only, picked up by the usual
+Cloudflare Workers Build on push). Could not live-click through the
+exact repro (reload on Hosting Providers, then Hosting Providers ->
+Settings) in this sandboxed session - grounded in reading the actual
+TABS array/setTab implementation and matching it precisely against
+the reported symptoms, not a guess. Recommend @VarshithChand confirm
+both: reloading while on Hosting Providers stays there, and Hosting
+Providers -> Settings now lands on the hub, not Database.
