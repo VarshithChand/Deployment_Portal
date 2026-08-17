@@ -7,17 +7,26 @@ using NpgsqlTypes;
 
 namespace DeploymentAPI.Services;
 
-// Backs Settings -> Database (see DatabaseController). Reuses the exact
-// DATABASE_URL connection string SettingsService already parses — this
-// service never touches DATABASE_URL itself, so there's only ever one place
-// that turns it into a connection string. Every query here is either a
-// read against information_schema/pg_catalog (safe, no user input in the
-// SQL text) or a mutation whose table/column identifiers have just been
-// checked against that same real metadata (or, for CREATE TABLE's brand
-// new identifiers, a strict regex) before being quoted into the SQL text —
-// values are always sent as bound parameters, never interpolated. There is
-// deliberately no path anywhere in this file that runs arbitrary,
-// caller-supplied SQL.
+// Backs Settings -> Database (see DatabaseController) and the Hosting
+// Providers -> Database tab (see HostingObservabilityController). Every
+// query here is either a read against information_schema/pg_catalog (safe,
+// no user input in the SQL text) or a mutation whose table/column
+// identifiers have just been checked against that same real metadata (or,
+// for CREATE TABLE's brand new identifiers, a strict regex) before being
+// quoted into the SQL text — values are always sent as bound parameters,
+// never interpolated. There is deliberately no path anywhere in this file
+// that runs arbitrary, caller-supplied SQL.
+//
+// _connectionString (this app's own DATABASE_URL) is only ever a fallback
+// default now, not an auto-connect: DatabaseController always resolves and
+// passes the super-admin's explicitly-connected database credential (see
+// SettingsService.GetPortalDatabaseConnectionAsync) as connectionStringOverride
+// on every call, and refuses to call at all if none is set — even the
+// super-admin has to connect a database before Settings > Database shows
+// anything, same as every other credential in this app. The Hosting
+// Providers > Database tab is the one caller that still falls back to
+// DATABASE_URL by design when nothing else is configured (its whole point
+// is monitoring this portal's own production deployment by default).
 public class DatabaseManagementService
 {
     private readonly string? _connectionString;
@@ -47,14 +56,19 @@ public class DatabaseManagementService
         _connectionString = settings.GetDatabaseConnectionString();
     }
 
+    // This app's own DATABASE_URL only - kept for the one caller that still
+    // wants that as an implicit default (HostingObservabilityController,
+    // when no explicit database connection is configured). DatabaseController
+    // never reads this property; it resolves its own explicit connection
+    // requirement independently (see DatabaseController.ResolveConnectionStringAsync).
     public bool IsConfigured => !string.IsNullOrEmpty(_connectionString);
 
-    // connectionStringOverride (optional): used only by the Hosting
-    // Observability Database tab, when an admin has pointed it at a
-    // different Postgres instance than this app's own (see
-    // SettingsService.GetPortalDatabaseConnectionAsync) - every other
-    // caller in this file (Settings > Database, the app's own inspector)
-    // always omits it and gets this app's own DATABASE_URL, unchanged.
+    // connectionStringOverride (optional): the caller's own resolved
+    // connection - DatabaseController always passes the super-admin's
+    // explicitly-connected database credential here (see
+    // SettingsService.GetPortalDatabaseConnectionAsync); omitted only by
+    // AiToolsService's Deployment Copilot tools, which still fall back to
+    // this app's own DATABASE_URL unchanged.
     private async Task<NpgsqlConnection> OpenAsync(string? connectionStringOverride = null)
     {
         var conn = new NpgsqlConnection(connectionStringOverride ?? _connectionString);
@@ -212,13 +226,13 @@ public class DatabaseManagementService
 
     // ---- Schemas / tables --------------------------------------------
 
-    public async Task<DatabaseSchemaListDto> GetSchemasAsync()
+    public async Task<DatabaseSchemaListDto> GetSchemasAsync(string? connectionStringOverride = null)
     {
         var result = new DatabaseSchemaListDto();
 
-        if (!IsConfigured) return result;
+        if (string.IsNullOrEmpty(connectionStringOverride ?? _connectionString)) return result;
 
-        await using var conn = await OpenAsync();
+        await using var conn = await OpenAsync(connectionStringOverride);
         await using var cmd = new NpgsqlCommand(
             "SELECT schema_name FROM information_schema.schemata " +
             "WHERE schema_name NOT IN ('pg_catalog','information_schema') " +
@@ -340,11 +354,11 @@ public class DatabaseManagementService
         return result;
     }
 
-    public async Task<DatabaseTableDetailDto?> GetTableDetailAsync(string schema, string table)
+    public async Task<DatabaseTableDetailDto?> GetTableDetailAsync(string schema, string table, string? connectionStringOverride = null)
     {
-        if (!IsConfigured) return null;
+        if (string.IsNullOrEmpty(connectionStringOverride ?? _connectionString)) return null;
 
-        await using var conn = await OpenAsync();
+        await using var conn = await OpenAsync(connectionStringOverride);
 
         if (!await TableExistsAsync(conn, schema, table))
             return null;
@@ -483,17 +497,17 @@ public class DatabaseManagementService
     // scoped exception to this project's otherwise client-side pagination
     // policy, since a Postgres table can be arbitrarily large) ----------
 
-    public async Task<DatabaseRowsResultDto> GetRowsAsync(string schema, string table, int page, int pageSize, string? search)
+    public async Task<DatabaseRowsResultDto> GetRowsAsync(string schema, string table, int page, int pageSize, string? search, string? connectionStringOverride = null)
     {
         var result = new DatabaseRowsResultDto { Page = page, PageSize = pageSize };
 
-        if (!IsConfigured)
+        if (string.IsNullOrEmpty(connectionStringOverride ?? _connectionString))
         {
             result.Error = "Database is not configured.";
             return result;
         }
 
-        await using var conn = await OpenAsync();
+        await using var conn = await OpenAsync(connectionStringOverride);
 
         if (!await TableExistsAsync(conn, schema, table))
         {
@@ -577,12 +591,12 @@ public class DatabaseManagementService
 
     // ---- Row mutations --------------------------------------------------
 
-    public async Task<DatabaseMutationResultDto> InsertRowAsync(DatabaseInsertRowRequestDto request)
+    public async Task<DatabaseMutationResultDto> InsertRowAsync(DatabaseInsertRowRequestDto request, string? connectionStringOverride = null)
     {
-        if (!IsConfigured) return Fail("Database is not configured.");
+        if (string.IsNullOrEmpty(connectionStringOverride ?? _connectionString)) return Fail("Database is not configured.");
         if (request.Values.Count == 0) return Fail("No values provided.");
 
-        await using var conn = await OpenAsync();
+        await using var conn = await OpenAsync(connectionStringOverride);
 
         if (!await TableExistsAsync(conn, request.Schema, request.Table))
             return Fail("Table not found.");
@@ -620,12 +634,12 @@ public class DatabaseManagementService
         }
     }
 
-    public async Task<DatabaseMutationResultDto> UpdateRowAsync(DatabaseUpdateRowRequestDto request)
+    public async Task<DatabaseMutationResultDto> UpdateRowAsync(DatabaseUpdateRowRequestDto request, string? connectionStringOverride = null)
     {
-        if (!IsConfigured) return Fail("Database is not configured.");
+        if (string.IsNullOrEmpty(connectionStringOverride ?? _connectionString)) return Fail("Database is not configured.");
         if (request.Values.Count == 0) return Fail("No values provided.");
 
-        await using var conn = await OpenAsync();
+        await using var conn = await OpenAsync(connectionStringOverride);
 
         if (!await TableExistsAsync(conn, request.Schema, request.Table))
             return Fail("Table not found.");
@@ -673,11 +687,11 @@ public class DatabaseManagementService
         }
     }
 
-    public async Task<DatabaseMutationResultDto> DeleteRowAsync(DatabaseDeleteRowRequestDto request)
+    public async Task<DatabaseMutationResultDto> DeleteRowAsync(DatabaseDeleteRowRequestDto request, string? connectionStringOverride = null)
     {
-        if (!IsConfigured) return Fail("Database is not configured.");
+        if (string.IsNullOrEmpty(connectionStringOverride ?? _connectionString)) return Fail("Database is not configured.");
 
-        await using var conn = await OpenAsync();
+        await using var conn = await OpenAsync(connectionStringOverride);
 
         if (!await TableExistsAsync(conn, request.Schema, request.Table))
             return Fail("Table not found.");
@@ -707,9 +721,9 @@ public class DatabaseManagementService
         }
     }
 
-    public async Task<DatabaseMutationResultDto> CreateTableAsync(DatabaseCreateTableRequestDto request)
+    public async Task<DatabaseMutationResultDto> CreateTableAsync(DatabaseCreateTableRequestDto request, string? connectionStringOverride = null)
     {
-        if (!IsConfigured) return Fail("Database is not configured.");
+        if (string.IsNullOrEmpty(connectionStringOverride ?? _connectionString)) return Fail("Database is not configured.");
 
         if (!IsValidNewIdentifier(request.TableName))
             return Fail("Invalid table name — use letters, numbers, and underscores, starting with a letter or underscore.");
@@ -753,7 +767,7 @@ public class DatabaseManagementService
 
         var schema = string.IsNullOrWhiteSpace(request.Schema) ? "public" : request.Schema;
 
-        await using var conn = await OpenAsync();
+        await using var conn = await OpenAsync(connectionStringOverride);
 
         if (!await SchemaExistsAsync(conn, schema))
             return Fail($"Schema '{schema}' does not exist.");
@@ -780,7 +794,12 @@ public class DatabaseManagementService
 
     // ---- Application tables / migration awareness -----------------------
 
-    public async Task<DatabaseOverviewDto> GetOverviewAsync()
+    // No "?? _connectionString" fallback here, deliberately - unlike every
+    // other method in this file, GetOverviewAsync has exactly one caller
+    // (DatabaseController), which always wants explicit-only behavior (no
+    // implicit DATABASE_URL). A null/empty override means "not connected",
+    // full stop - it never silently falls back to this app's own database.
+    public async Task<DatabaseOverviewDto> GetOverviewAsync(string? connectionStringOverride = null)
     {
         var overview = new DatabaseOverviewDto
         {
@@ -790,7 +809,7 @@ public class DatabaseManagementService
                 "so there is no migration history to report."
         };
 
-        if (!IsConfigured)
+        if (string.IsNullOrEmpty(connectionStringOverride))
         {
             foreach (var name in KnownApplicationTables)
             {
@@ -805,7 +824,7 @@ public class DatabaseManagementService
             return overview;
         }
 
-        await using var conn = await OpenAsync();
+        await using var conn = await OpenAsync(connectionStringOverride);
 
         foreach (var name in KnownApplicationTables)
         {

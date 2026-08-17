@@ -14,16 +14,33 @@ namespace DeploymentAPI.Controllers;
 // against real database metadata (or a strict regex for brand-new
 // identifiers) before it ever reaches a SQL string, and always binds values
 // as parameters. There is no "run arbitrary SQL" endpoint anywhere here.
+//
+// This page never auto-connects using this app's own DATABASE_URL, even for
+// the super-admin - it requires the same explicit database credential the
+// Hosting Providers -> Database tab can connect (see
+// SettingsService.GetPortalDatabaseConnectionAsync / Settings > Credentials
+// > Database), resolved fresh on every request and always passed explicitly
+// to DatabaseManagementService. That's a deliberate difference from the
+// Hosting Providers tab, which DOES fall back to DATABASE_URL by default -
+// this page is the admin's own database *management* console (row edit/
+// insert/delete, table creation), so it stays consistent with every other
+// credential in this app: nothing is ever implicitly connected, even for
+// the person who could technically reach it anyway.
 [ApiController]
 [Route("api/database")]
 public class DatabaseController : ControllerBase
 {
+    private const string NotConnectedMessage =
+        "Not connected — connect a database credential in Settings → Credentials → Database first.";
+
     private readonly DatabaseManagementService _db;
+    private readonly SettingsService _settings;
     private readonly ActivityLogService _log;
 
-    public DatabaseController(DatabaseManagementService db, ActivityLogService log)
+    public DatabaseController(DatabaseManagementService db, SettingsService settings, ActivityLogService log)
     {
         _db = db;
+        _settings = settings;
         _log = log;
     }
 
@@ -45,13 +62,27 @@ public class DatabaseController : ControllerBase
     private async Task<string> ResolveActorAsync() =>
         await AdminGate.ResolveCallerLoginAsync(this) ?? "unknown";
 
+    // The one place this controller ever decides what database it's
+    // talking to - the explicitly-connected portal credential, or nothing.
+    // No DATABASE_URL fallback here on purpose (see class comment).
+    private async Task<string?> ResolveConnectionStringAsync()
+    {
+        var (_, connectionString) = await _settings.GetPortalDatabaseConnectionAsync();
+        return string.IsNullOrWhiteSpace(connectionString) ? null : connectionString;
+    }
+
     [HttpGet("health")]
     public async Task<IActionResult> GetHealth()
     {
         var denied = await AdminGate.DenyUnlessSuperAdminAsync(this, "view database health");
         if (denied != null) return denied;
 
-        return Ok(await _db.GetHealthAsync());
+        var connectionString = await ResolveConnectionStringAsync();
+
+        if (connectionString == null)
+            return Ok(new DatabaseInspectionHealthDto { Connected = false, Error = NotConnectedMessage });
+
+        return Ok(await _db.GetHealthAsync(connectionString));
     }
 
     [HttpGet("schemas")]
@@ -60,7 +91,9 @@ public class DatabaseController : ControllerBase
         var denied = await AdminGate.DenyUnlessSuperAdminAsync(this, "view schemas");
         if (denied != null) return denied;
 
-        return Ok(await _db.GetSchemasAsync());
+        var connectionString = await ResolveConnectionStringAsync();
+
+        return Ok(connectionString == null ? new DatabaseSchemaListDto() : await _db.GetSchemasAsync(connectionString));
     }
 
     [HttpGet("tables")]
@@ -69,7 +102,9 @@ public class DatabaseController : ControllerBase
         var denied = await AdminGate.DenyUnlessSuperAdminAsync(this, "view tables");
         if (denied != null) return denied;
 
-        return Ok(await _db.GetTablesAsync(schema));
+        var connectionString = await ResolveConnectionStringAsync();
+
+        return Ok(connectionString == null ? new DatabaseTableListDto() : await _db.GetTablesAsync(schema, connectionString));
     }
 
     [HttpGet("overview")]
@@ -78,7 +113,9 @@ public class DatabaseController : ControllerBase
         var denied = await AdminGate.DenyUnlessSuperAdminAsync(this, "view the database overview");
         if (denied != null) return denied;
 
-        return Ok(await _db.GetOverviewAsync());
+        var connectionString = await ResolveConnectionStringAsync();
+
+        return Ok(await _db.GetOverviewAsync(connectionString));
     }
 
     [HttpGet("tables/{schema}/{table}")]
@@ -87,7 +124,12 @@ public class DatabaseController : ControllerBase
         var denied = await AdminGate.DenyUnlessSuperAdminAsync(this, "view table structure");
         if (denied != null) return denied;
 
-        var detail = await _db.GetTableDetailAsync(schema, table);
+        var connectionString = await ResolveConnectionStringAsync();
+
+        if (connectionString == null)
+            return NotFound(new { message = NotConnectedMessage });
+
+        var detail = await _db.GetTableDetailAsync(schema, table, connectionString);
         return detail == null ? NotFound(new { message = "Table not found." }) : Ok(detail);
     }
 
@@ -97,7 +139,12 @@ public class DatabaseController : ControllerBase
         var denied = await AdminGate.DenyUnlessSuperAdminAsync(this, "browse table data");
         if (denied != null) return denied;
 
-        return Ok(await _db.GetRowsAsync(schema, table, page, pageSize, search));
+        var connectionString = await ResolveConnectionStringAsync();
+
+        if (connectionString == null)
+            return Ok(new DatabaseRowsResultDto { Page = page, PageSize = pageSize, Error = NotConnectedMessage });
+
+        return Ok(await _db.GetRowsAsync(schema, table, page, pageSize, search, connectionString));
     }
 
     [HttpPost("rows")]
@@ -106,8 +153,13 @@ public class DatabaseController : ControllerBase
         var denied = await AdminGate.DenyUnlessSuperAdminAsync(this, "insert a row");
         if (denied != null) return denied;
 
+        var connectionString = await ResolveConnectionStringAsync();
+
+        if (connectionString == null)
+            return Ok(new DatabaseMutationResultDto { Success = false, Error = NotConnectedMessage });
+
         var actor = await ResolveActorAsync();
-        var result = await _db.InsertRowAsync(request);
+        var result = await _db.InsertRowAsync(request, connectionString);
 
         AppendAuditLog(actor, "Insert row", $"{request.Schema}.{request.Table}", result.Success, result.Error);
 
@@ -120,8 +172,13 @@ public class DatabaseController : ControllerBase
         var denied = await AdminGate.DenyUnlessSuperAdminAsync(this, "edit a row");
         if (denied != null) return denied;
 
+        var connectionString = await ResolveConnectionStringAsync();
+
+        if (connectionString == null)
+            return Ok(new DatabaseMutationResultDto { Success = false, Error = NotConnectedMessage });
+
         var actor = await ResolveActorAsync();
-        var result = await _db.UpdateRowAsync(request);
+        var result = await _db.UpdateRowAsync(request, connectionString);
 
         AppendAuditLog(actor, "Update row", $"{request.Schema}.{request.Table}", result.Success, result.Error);
 
@@ -134,8 +191,13 @@ public class DatabaseController : ControllerBase
         var denied = await AdminGate.DenyUnlessSuperAdminAsync(this, "delete a row");
         if (denied != null) return denied;
 
+        var connectionString = await ResolveConnectionStringAsync();
+
+        if (connectionString == null)
+            return Ok(new DatabaseMutationResultDto { Success = false, Error = NotConnectedMessage });
+
         var actor = await ResolveActorAsync();
-        var result = await _db.DeleteRowAsync(request);
+        var result = await _db.DeleteRowAsync(request, connectionString);
 
         AppendAuditLog(actor, "Delete row", $"{request.Schema}.{request.Table}", result.Success, result.Error);
 
@@ -148,8 +210,13 @@ public class DatabaseController : ControllerBase
         var denied = await AdminGate.DenyUnlessSuperAdminAsync(this, "create a table");
         if (denied != null) return denied;
 
+        var connectionString = await ResolveConnectionStringAsync();
+
+        if (connectionString == null)
+            return Ok(new DatabaseMutationResultDto { Success = false, Error = NotConnectedMessage });
+
         var actor = await ResolveActorAsync();
-        var result = await _db.CreateTableAsync(request);
+        var result = await _db.CreateTableAsync(request, connectionString);
 
         AppendAuditLog(actor, "Create table", $"{request.Schema}.{request.TableName}", result.Success, result.Error);
 

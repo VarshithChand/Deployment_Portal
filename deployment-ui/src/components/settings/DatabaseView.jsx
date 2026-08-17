@@ -5,6 +5,7 @@ import {
 } from "../../services/databaseService";
 import usePagination from "../../hooks/usePagination";
 import useToast from "../../hooks/useToast";
+import useNavigation from "../../hooks/useNavigation";
 import SearchBox from "../common/SearchBox";
 import Pagination from "../common/Pagination";
 import DatabaseTableDetail from "./DatabaseTableDetail";
@@ -36,6 +37,7 @@ function readTableFromUrl() {
 export default function DatabaseView() {
 
     const toast = useToast();
+    const { goToSettingsView } = useNavigation();
 
     const [health, setHealth] = useState(null);
     const [healthLoading, setHealthLoading] = useState(true);
@@ -221,9 +223,20 @@ export default function DatabaseView() {
 
                 ) : !health?.connected ? (
 
+                    <>
+
                     <p className="error-message">
                         {health?.error || "Unable to connect to the database."}
                     </p>
+
+                    <p className="field-hint" style={{ marginTop: "10px" }}>
+                        <a href="#" onClick={(e) => { e.preventDefault(); goToSettingsView("credentials"); }}>
+                            Go to Settings → Credentials
+                        </a>
+                        {" "}→ Database to connect one.
+                    </p>
+
+                    </>
 
                 ) : (
 
