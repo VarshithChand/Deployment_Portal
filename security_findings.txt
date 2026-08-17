@@ -6356,3 +6356,58 @@ account. If the list still comes back empty after connecting a real
 Render credential, that field-name guess is the first thing to check.
 Recommend @VarshithChand try the new "Render" tab on Settings >
 Credentials' Database section against a real Render Postgres instance.
+
+==================================================
+ROUND 48 FOLLOW-UP 4 - FIX: DATABASE TAB SHOWED "UNREACHABLE" / "UNABLE
+TO CONNECT TO THE DATABASE" AFTER CONNECTING A REAL RENDER DATABASE
+==================================================
+Date: 2026-08-17
+Trigger: user connected a real Render Postgres database via follow-up
+3's new live picker (header correctly showed "PostgreSQL — Render"),
+but the health card showed a red "Unreachable" badge and "Unable to
+connect to the database."
+
+Root cause: Render (like most managed Postgres providers - Supabase,
+Neon, Heroku) hands out connections as a
+"postgres://user:pass@host:port/dbname" URI, not Npgsql's own
+"Host=...;Username=...;Password=...;Database=...;SslMode=..." keyword
+format. This app's own DATABASE_URL already gets converted between the
+two via SettingsService.BuildConnectionString (called once, at
+startup) - but follow-up 3's new ConnectRenderDatabase action saved
+Render's raw URI straight into PortalDatabaseConnection, and follow-up
+2's manual paste field had the same gap for anyone pasting a
+postgres:// string by hand. DatabaseManagementService then handed that
+raw URI directly to `new NpgsqlConnection(...)`, which doesn't
+understand the URI form at all and fails before even attempting SSL
+negotiation - exactly the "Unable to connect" behavior reported.
+
+Fix: extracted a new NormalizeConnectionString helper on
+SettingsService (postgres://... or postgresql://... -> run through the
+existing BuildConnectionString; anything else passed through
+unchanged, in case a provider ever hands out the keyword format
+directly). Applied in TWO places: SavePortalDatabaseConnectionAsync
+(so anything saved from now on is correct) AND
+GetPortalDatabaseConnectionAsync (so the value ALREADY saved from the
+user's earlier Render connection - the raw URI that caused this bug
+report - gets converted on every read too, without needing them to
+reconnect).
+
+Verification performed:
+  - `dotnet build` (isolated output dir): 0 errors, only pre-existing
+    unrelated warnings.
+  - Live check against the deployed Render backend after the push:
+    /api/bootstrap healthy (HTTP 200).
+  - No frontend files touched this round, so no npm lint/build needed.
+
+Files changed: src/DeploymentAPI/Services/SettingsService.cs.
+Commit: bb45df5.
+
+Status: Complete and pushed, live-verified the backend is up. Could
+NOT live-verify that the already-connected Render database now
+actually reports "Connected" in this sandboxed session (no real Render
+account here) - the fix is grounded directly in this app's own
+existing, working DATABASE_URL-to-Npgsql conversion logic (same
+function, same SSL-required default), so it should resolve the exact
+symptom reported, but ask @VarshithChand to reload the Database tab
+(no reconnect needed - GetPortalDatabaseConnectionAsync now normalizes
+on every read) and confirm it shows Connected.
