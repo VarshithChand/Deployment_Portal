@@ -6738,3 +6738,79 @@ TABS array/setTab implementation and matching it precisely against
 the reported symptoms, not a guess. Recommend @VarshithChand confirm
 both: reloading while on Hosting Providers stays there, and Hosting
 Providers -> Settings now lands on the hub, not Database.
+
+==================================================
+ROUND 48 FOLLOW-UP 9 - REMOVED HOSTING PROVIDERS DATABASE TAB'S
+IMPLICIT DATABASE_URL FALLBACK TOO
+==================================================
+Date: 2026-08-17
+Trigger: user reported "even tho i had remove all the credentials for
+the credentials and Hosting Observability i had remove the target but
+the connection is displaying in the hosting providers page" -
+screenshot showed the Database tab still fully "Connected" (deployment_
+portal_db, 2 tables, live connection-pool stats) despite having
+cleared everything on Settings > Credentials > Database and the
+Hosting Observability target.
+
+Root cause: this was NOT a bug relative to Phase 1's original design -
+HostingObservabilityController.GetDatabase() was built (deliberately,
+confirmed with the user at the time) to fall back to this backend's
+own DATABASE_URL whenever no explicit connection was configured, since
+the whole premise of the dashboard was "monitor this portal's own
+production deployment by default." But every follow-up since then
+(6, 7) has pushed this app toward the opposite standard - "nothing is
+ever implicitly connected, even for the super-admin" - and this one
+tab was the last place still doing the old thing, which is exactly
+why clearing it looked like it did nothing.
+
+Fix: GetDatabase() no longer falls back to DATABASE_URL under any
+circumstance - if root["PortalDatabaseConnection"] isn't explicitly
+set, the action returns a plain "not connected" HostingDatabaseOverviewDto
+immediately, same shape/posture DatabaseController already uses for
+Settings > Database Management. Updated every comment across
+DatabaseManagementService/DatabaseController/HostingObservabilityController/
+the two DatabaseConnectionSection.jsx wrappers/HostingObservabilityConfigView.jsx/
+the hosting-observability DatabaseView.jsx that still described the
+old "falls back to DATABASE_URL by default" behavior as current -
+DatabaseManagementService's own _connectionString field is now
+documented as existing ONLY for AiToolsService's Deployment Copilot
+tools (get_database_health and its table listing), the one remaining
+caller that still omits the override and gets the implicit default -
+called out explicitly as a known, deliberate exception rather than
+left as a silent inconsistency.
+
+Caught and fixed one real syntax bug of my own while updating the UI
+copy: JSX attribute strings (attr="...") don't support backslash
+escape sequences the way JS string literals do - two of the new
+`\"not connected\"` snippets in copy I wrote broke the production
+build outright ("Invalid Unicode escape sequence"). Fixed by wrapping
+those values in {'...'} (a real JS expression) instead of a raw JSX
+attribute string, and caught it via the standard npm run build check
+before it ever reached a commit.
+
+Verification performed:
+  - `dotnet build` (isolated output dir): 0 errors, only pre-existing
+    unrelated warnings.
+  - `npm run lint` in deployment-ui/: caught the two invalid-escape
+    errors above; clean after the fix, no new warnings.
+  - `npm run build` in deployment-ui/: failed on the same two errors
+    on the first attempt, succeeded after the fix.
+  - Live check against the deployed Render backend after the push:
+    /api/bootstrap healthy (HTTP 200).
+
+Files changed: src/DeploymentAPI/Controllers/HostingObservabilityController.cs,
+src/DeploymentAPI/Services/DatabaseManagementService.cs,
+src/DeploymentAPI/Controllers/DatabaseController.cs,
+deployment-ui/src/components/settings/credentials/DatabaseConnectionSection.jsx,
+deployment-ui/src/components/settings/HostingObservabilityConfigView.jsx,
+deployment-ui/src/components/hosting-observability/DatabaseView.jsx.
+Commit: bea83bb.
+
+Status: Complete and pushed, live-verified the backend is up. Could
+NOT live-verify against a real cleared/reconnected state in this
+sandboxed session (no real super-admin session available here) - only
+that the short-circuit logic matches DatabaseController's already-
+reviewed pattern exactly. Recommend @VarshithChand confirm the
+Database tab now shows "not connected" with nothing configured, and
+that reconnecting (via either the live Render picker or manual entry)
+brings it back exactly as before.
