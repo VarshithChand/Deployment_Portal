@@ -109,6 +109,24 @@ public class PortalDatabaseConnectionUpdateDto
     public string ConnectionString { get; set; } = string.Empty;
 }
 
+// Field-by-field alternative to pasting a whole connection string -
+// mirrors exactly the Hostname/Port/Database/Username/Password fields
+// Render's own dashboard shows under a Postgres instance's "Connections"
+// panel, for anyone who'd rather copy those individually than the combined
+// URL. Always a full replace (no "blank keeps existing" here) - unlike a
+// token, these 5 fields together only ever mean something as a complete
+// set, and this app never stores them separately, only the connection
+// string they're assembled into server-side.
+public class PortalDatabaseConnectionFieldsUpdateDto
+{
+    public string ProviderLabel { get; set; } = string.Empty;
+    public string Host { get; set; } = string.Empty;
+    public int Port { get; set; } = 5432;
+    public string Database { get; set; } = string.Empty;
+    public string Username { get; set; } = string.Empty;
+    public string Password { get; set; } = string.Empty;
+}
+
 // One Render Postgres instance - a completely different resource type from
 // PaasServiceItemDto/GetRenderStatusAsync's /v1/services listing (web/
 // worker/static-site only). Render's Postgres offering has its own

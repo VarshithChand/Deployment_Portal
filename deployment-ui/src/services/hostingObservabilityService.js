@@ -66,6 +66,11 @@ export const clearDatabaseConnection = async () => {
     return response.data;
 };
 
+export const saveDatabaseConnectionFields = async (fields) => {
+    const response = await api.post("/database/connection/fields", fields);
+    return response.data;
+};
+
 export const getRenderDatabases = async () => {
     const response = await api.get("/database/render-databases");
     return response.data;

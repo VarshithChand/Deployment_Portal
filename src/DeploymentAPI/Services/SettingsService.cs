@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.RegularExpressions;
 using DeploymentAPI.DTOs;
 using Microsoft.AspNetCore.DataProtection;
 using Newtonsoft.Json.Linq;
@@ -902,19 +903,38 @@ public class SettingsService
         _log.LogInfo("Settings", "Portal-wide database connection saved.");
     }
 
+    private static readonly Regex EmbeddedPostgresUriRegex =
+        new(@"postgres(?:ql)?://\S+", RegexOptions.IgnoreCase, TimeSpan.FromSeconds(1));
+
     // Render (and most managed Postgres providers - Supabase, Neon, Heroku)
     // hand out connections as a "postgres://user:pass@host:port/dbname" URI,
     // the same shape DATABASE_URL itself always arrives in - see
     // BuildConnectionString above, reused here so a pasted string or one
     // fetched from Render's own API (see HostingObservabilityController.
-    // ConnectRenderDatabase) gets the identical treatment rather than being
-    // handed to Npgsql as a raw URI, which it doesn't understand and fails
-    // to even parse (never mind negotiate SSL). Left as-is if it's already
-    // in Npgsql's own "Host=...;Username=...;..." keyword format.
-    private static string NormalizeConnectionString(string raw) =>
-        raw.StartsWith("postgres://", StringComparison.OrdinalIgnoreCase) || raw.StartsWith("postgresql://", StringComparison.OrdinalIgnoreCase)
-            ? BuildConnectionString(raw)
-            : raw;
+    // ConnectRenderDatabase/SaveDatabaseConnectionFields) gets the identical
+    // treatment rather than being handed to Npgsql as a raw URI, which it
+    // doesn't understand and fails to even parse (never mind negotiate
+    // SSL). Also tolerates a quoted URI or one embedded in a larger pasted
+    // command (e.g. someone pasting Render's own "psql ... 'postgresql://
+    // ...'" command line instead of just the URL field) by extracting the
+    // URI substring first. Left as-is if it's already in Npgsql's own
+    // "Host=...;Username=...;..." keyword format (e.g. built from
+    // individual fields - see SaveDatabaseConnectionFields, which never
+    // routes through here with a URI in the first place).
+    private static string NormalizeConnectionString(string raw)
+    {
+        var trimmed = raw.Trim().Trim('"', '\'');
+
+        if (trimmed.StartsWith("postgres://", StringComparison.OrdinalIgnoreCase) ||
+            trimmed.StartsWith("postgresql://", StringComparison.OrdinalIgnoreCase))
+            return BuildConnectionString(trimmed);
+
+        var embedded = EmbeddedPostgresUriRegex.Match(trimmed);
+
+        return embedded.Success
+            ? BuildConnectionString(embedded.Value.Trim('"', '\''))
+            : trimmed;
+    }
 
     public async Task ClearPortalDatabaseConnectionAsync()
     {

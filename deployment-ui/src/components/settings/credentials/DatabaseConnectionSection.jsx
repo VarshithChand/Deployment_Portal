@@ -3,11 +3,12 @@ import { useEffect, useState } from "react";
 import ClearableInput from "../../common/ClearableInput";
 import useToast from "../../../hooks/useToast";
 import {
-    getDatabaseConnectionStatus, saveDatabaseConnection, clearDatabaseConnection,
+    getDatabaseConnectionStatus, saveDatabaseConnection, saveDatabaseConnectionFields, clearDatabaseConnection,
     getRenderDatabases, connectRenderDatabase, getObservabilityCredentialStatus
 } from "../../../services/hostingObservabilityService";
 
 const EMPTY_FORM = { providerLabel: "", connectionString: "" };
+const EMPTY_FIELDS = { providerLabel: "", host: "", port: "5432", database: "", username: "", password: "" };
 
 // Points the Hosting Providers dashboard's Database tab at a specific
 // Postgres instance. Two ways in, same as Frontend/Backend elsewhere on
@@ -28,6 +29,8 @@ export default function DatabaseConnectionSection() {
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [form, setForm] = useState(EMPTY_FORM);
+    const [fields, setFields] = useState(EMPTY_FIELDS);
+    const [manualMode, setManualMode] = useState("fields");
 
     const [source, setSource] = useState("render");
     const [renderCredConfigured, setRenderCredConfigured] = useState(false);
@@ -44,6 +47,7 @@ export default function DatabaseConnectionSection() {
 
             setStatus(data);
             setForm((f) => ({ ...f, providerLabel: data?.providerLabel || "" }));
+            setFields((f) => ({ ...f, providerLabel: data?.providerLabel || "" }));
             setSource(data?.configured && data.providerLabel !== "Render" ? "manual" : "render");
             setLoading(false);
 
@@ -142,6 +146,36 @@ export default function DatabaseConnectionSection() {
 
     }
 
+    async function handleSaveFields(e) {
+
+        e.preventDefault();
+        setSaving(true);
+
+        try {
+
+            await saveDatabaseConnectionFields({
+                ...fields,
+                port: parseInt(fields.port, 10) || 5432
+            });
+            toast.show("Database connection saved.", "success");
+            setFields((f) => ({ ...EMPTY_FIELDS, providerLabel: f.providerLabel }));
+            refresh();
+
+        }
+        catch (err) {
+
+            console.error(err);
+            toast.show(err.response?.data?.message || "Unable to save the database connection.", "error");
+
+        }
+        finally {
+
+            setSaving(false);
+
+        }
+
+    }
+
     async function handleClear() {
 
         try {
@@ -203,7 +237,7 @@ export default function DatabaseConnectionSection() {
                         className={`btn btn-sm ${source === "manual" ? "btn-primary" : "btn-secondary"}`}
                         onClick={() => setSource("manual")}
                     >
-                        Other (paste connection string)
+                        Other
                     </button>
 
                 </div>
@@ -271,38 +305,155 @@ export default function DatabaseConnectionSection() {
 
                 {source === "manual" && (
 
-                    <form onSubmit={handleSaveManual}>
+                    <>
 
-                        <div className="form-group">
-                            <label>Provider Name</label>
-                            <ClearableInput
-                                placeholder="e.g. CSP, AWS RDS, Supabase, Neon..."
-                                value={form.providerLabel}
-                                onChange={(e) => setForm({ ...form, providerLabel: e.target.value })}
-                                onClear={() => setForm({ ...form, providerLabel: "" })}
-                                autoComplete="off"
-                            />
-                        </div>
+                    <div className="button-row" style={{ marginBottom: "12px" }}>
 
-                        <div className="form-group">
-                            <label>Connection String</label>
-                            <ClearableInput
-                                type="password"
-                                placeholder={status?.configured ? "Leave blank to keep current connection string" : "postgresql://user:password@host:5432/dbname"}
-                                value={form.connectionString}
-                                onChange={(e) => setForm({ ...form, connectionString: e.target.value })}
-                                onClear={() => setForm({ ...form, connectionString: "" })}
-                                autoComplete="new-password"
-                            />
-                        </div>
+                        <button
+                            type="button"
+                            className={`btn btn-sm ${manualMode === "fields" ? "btn-primary" : "btn-secondary"}`}
+                            onClick={() => setManualMode("fields")}
+                        >
+                            Fields
+                        </button>
 
-                        <div className="button-row">
-                            <button type="submit" className="btn btn-primary" disabled={saving}>
-                                {saving ? "Saving..." : "Save Database Connection"}
-                            </button>
-                        </div>
+                        <button
+                            type="button"
+                            className={`btn btn-sm ${manualMode === "string" ? "btn-primary" : "btn-secondary"}`}
+                            onClick={() => setManualMode("string")}
+                        >
+                            Connection String
+                        </button>
 
-                    </form>
+                    </div>
+
+                    {manualMode === "fields" && (
+
+                        <form onSubmit={handleSaveFields}>
+
+                            <div className="form-group">
+                                <label>Provider Name</label>
+                                <ClearableInput
+                                    placeholder="e.g. CSP, AWS RDS, Supabase, Neon..."
+                                    value={fields.providerLabel}
+                                    onChange={(e) => setFields({ ...fields, providerLabel: e.target.value })}
+                                    onClear={() => setFields({ ...fields, providerLabel: "" })}
+                                    autoComplete="off"
+                                />
+                            </div>
+
+                            <div className="form-group">
+                                <label>Hostname</label>
+                                <ClearableInput
+                                    placeholder="dpg-xxxxxxxxxxxxxxxxxxxx-a"
+                                    value={fields.host}
+                                    onChange={(e) => setFields({ ...fields, host: e.target.value })}
+                                    onClear={() => setFields({ ...fields, host: "" })}
+                                    autoComplete="off"
+                                />
+                            </div>
+
+                            <div className="form-group">
+                                <label>Port</label>
+                                <ClearableInput
+                                    placeholder="5432"
+                                    value={fields.port}
+                                    onChange={(e) => setFields({ ...fields, port: e.target.value.replace(/\D/g, "") })}
+                                    onClear={() => setFields({ ...fields, port: "5432" })}
+                                    autoComplete="off"
+                                />
+                            </div>
+
+                            <div className="form-group">
+                                <label>Database</label>
+                                <ClearableInput
+                                    value={fields.database}
+                                    onChange={(e) => setFields({ ...fields, database: e.target.value })}
+                                    onClear={() => setFields({ ...fields, database: "" })}
+                                    autoComplete="off"
+                                />
+                            </div>
+
+                            <div className="form-group">
+                                <label>Username</label>
+                                <ClearableInput
+                                    value={fields.username}
+                                    onChange={(e) => setFields({ ...fields, username: e.target.value })}
+                                    onClear={() => setFields({ ...fields, username: "" })}
+                                    autoComplete="off"
+                                />
+                            </div>
+
+                            <div className="form-group">
+                                <label>Password</label>
+                                <ClearableInput
+                                    type="password"
+                                    value={fields.password}
+                                    onChange={(e) => setFields({ ...fields, password: e.target.value })}
+                                    onClear={() => setFields({ ...fields, password: "" })}
+                                    autoComplete="new-password"
+                                />
+                            </div>
+
+                            <p className="field-hint">
+                                Matches the Hostname/Port/Database/Username/Password fields shown on
+                                Render's own "Connections" panel for a database. All 5 are required —
+                                this always replaces the saved connection, never a partial update.
+                            </p>
+
+                            <div className="button-row">
+                                <button type="submit" className="btn btn-primary" disabled={saving}>
+                                    {saving ? "Saving..." : "Save Database Connection"}
+                                </button>
+                            </div>
+
+                        </form>
+
+                    )}
+
+                    {manualMode === "string" && (
+
+                        <form onSubmit={handleSaveManual}>
+
+                            <div className="form-group">
+                                <label>Provider Name</label>
+                                <ClearableInput
+                                    placeholder="e.g. CSP, AWS RDS, Supabase, Neon..."
+                                    value={form.providerLabel}
+                                    onChange={(e) => setForm({ ...form, providerLabel: e.target.value })}
+                                    onClear={() => setForm({ ...form, providerLabel: "" })}
+                                    autoComplete="off"
+                                />
+                            </div>
+
+                            <div className="form-group">
+                                <label>Connection String</label>
+                                <ClearableInput
+                                    type="password"
+                                    placeholder={status?.configured ? "Leave blank to keep current connection string" : "postgresql://user:password@host:5432/dbname"}
+                                    value={form.connectionString}
+                                    onChange={(e) => setForm({ ...form, connectionString: e.target.value })}
+                                    onClear={() => setForm({ ...form, connectionString: "" })}
+                                    autoComplete="new-password"
+                                />
+                            </div>
+
+                            <p className="field-hint">
+                                Paste the Internal or External Database URL. Render's "PSQL Command"
+                                field isn't parsed — use the Fields tab instead if that's all you have.
+                            </p>
+
+                            <div className="button-row">
+                                <button type="submit" className="btn btn-primary" disabled={saving}>
+                                    {saving ? "Saving..." : "Save Database Connection"}
+                                </button>
+                            </div>
+
+                        </form>
+
+                    )}
+
+                    </>
 
                 )}
 

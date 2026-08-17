@@ -233,6 +233,42 @@ public class HostingObservabilityController : ControllerBase
         return Ok(new { success = true });
     }
 
+    // Field-by-field alternative to pasting a whole connection string - see
+    // PortalDatabaseConnectionFieldsUpdateDto. Built via
+    // NpgsqlConnectionStringBuilder (never string-concatenated), so a
+    // password/username with special characters can't break out of its
+    // place in the resulting connection string. Same super-admin gate,
+    // same "never returned to the browser" posture as every other database
+    // credential action - the response here is success/failure only.
+    [HttpPost("database/connection/fields")]
+    public async Task<IActionResult> SaveDatabaseConnectionFields(PortalDatabaseConnectionFieldsUpdateDto request)
+    {
+        if (await AdminGate.DenyUnlessSuperAdminAsync(this, "configure the database connection") is IActionResult denied)
+            return denied;
+
+        if (string.IsNullOrWhiteSpace(request.Host) || string.IsNullOrWhiteSpace(request.Database) ||
+            string.IsNullOrWhiteSpace(request.Username) || string.IsNullOrWhiteSpace(request.Password))
+            return BadRequest(new { message = "Hostname, Database, Username, and Password are all required." });
+
+        var builder = new Npgsql.NpgsqlConnectionStringBuilder
+        {
+            Host = request.Host.Trim(),
+            Port = request.Port > 0 ? request.Port : 5432,
+            Database = request.Database.Trim(),
+            Username = request.Username.Trim(),
+            Password = request.Password,
+            SslMode = Npgsql.SslMode.Require
+        };
+
+        await _settings.SavePortalDatabaseConnectionAsync(new PortalDatabaseConnectionUpdateDto
+        {
+            ProviderLabel = request.ProviderLabel,
+            ConnectionString = builder.ConnectionString
+        });
+
+        return Ok(new { success = true });
+    }
+
     [HttpDelete("database/connection")]
     public async Task<IActionResult> ClearDatabaseConnection()
     {
