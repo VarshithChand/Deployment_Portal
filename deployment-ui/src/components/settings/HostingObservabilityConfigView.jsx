@@ -5,7 +5,8 @@ import DatabaseConnectionSection from "./credentials/DatabaseConnectionSection";
 import useToast from "../../hooks/useToast";
 import {
     getObservabilityConfig, saveObservabilityConfig,
-    getObservabilityCredentialStatus, saveObservabilityCredentials, clearObservabilityCredentials
+    getObservabilityCredentialStatus, saveObservabilityCredentials, clearObservabilityCredentials,
+    getRenderDatabases
 } from "../../services/hostingObservabilityService";
 
 const PROVIDERS = [
@@ -239,6 +240,32 @@ export default function HostingObservabilityConfigView() {
     const [targets, setTargets] = useState(EMPTY_TARGETS);
     const [statusByProvider, setStatusByProvider] = useState({});
 
+    // The "Database metrics" role's service list can't reuse
+    // statusByProvider.render (GetStatusAsync's /v1/services list) - Render
+    // Postgres instances are a completely different resource type, never
+    // returned by that call (that's why this dropdown was always empty).
+    // Fetched separately, only once a portal-wide Render credential exists.
+    const [renderDatabaseStatus, setRenderDatabaseStatus] = useState(null);
+
+    useEffect(() => {
+
+        if (!statusByProvider.render?.configured) {
+            setRenderDatabaseStatus(null);
+            return;
+        }
+
+        getRenderDatabases().then((data) => {
+
+            setRenderDatabaseStatus({
+                configured: true,
+                found: true,
+                services: (Array.isArray(data) ? data : []).map((d) => ({ id: d.id, name: `${d.name} — ${d.status}` }))
+            });
+
+        }).catch(() => setRenderDatabaseStatus(null));
+
+    }, [statusByProvider.render?.configured]);
+
     function refreshProviderStatus(provider) {
 
         getObservabilityCredentialStatus(provider)
@@ -355,7 +382,7 @@ export default function HostingObservabilityConfigView() {
                 serviceId={targets.databaseServiceId}
                 onProviderChange={(v) => updateTarget("databaseProvider", v)}
                 onServiceIdChange={(v) => updateTarget("databaseServiceId", v)}
-                status={statusByProvider[targets.databaseProvider]}
+                status={targets.databaseProvider === "render" ? renderDatabaseStatus : statusByProvider[targets.databaseProvider]}
                 allowEmpty
             />
 

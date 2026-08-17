@@ -4,7 +4,8 @@ import ClearableInput from "../../common/ClearableInput";
 import useToast from "../../../hooks/useToast";
 import {
     getObservabilityConfig, saveObservabilityConfig,
-    getObservabilityCredentialStatus, saveObservabilityCredentials, clearObservabilityCredentials
+    getObservabilityCredentialStatus, saveObservabilityCredentials, clearObservabilityCredentials,
+    getRenderDatabases
 } from "../../../services/hostingObservabilityService";
 
 const EMPTY_FORM = { token: "", accountId: "" };
@@ -67,6 +68,13 @@ export default function DashboardRoleSection({ provider, label, hasAccountId }) 
     const [saving, setSaving] = useState(false);
     const [form, setForm] = useState(EMPTY_FORM);
 
+    // The Database role's service list can't reuse `status` for Render -
+    // GetStatusAsync's /v1/services list never includes Postgres instances
+    // (a completely separate Render resource type), which is why that
+    // dropdown was always empty. Fetched separately, only for provider ===
+    // "render", once its portal-wide credential is confirmed configured.
+    const [renderDatabaseStatus, setRenderDatabaseStatus] = useState(null);
+
     function load() {
 
         setLoading(true);
@@ -79,6 +87,20 @@ export default function DashboardRoleSection({ provider, label, hasAccountId }) 
             setTargets(config.targets || {});
             setStatus(providerStatus);
             setLoading(false);
+
+            if (provider === "render" && providerStatus?.configured) {
+
+                getRenderDatabases().then((data) => {
+
+                    setRenderDatabaseStatus({
+                        configured: true,
+                        found: true,
+                        services: (Array.isArray(data) ? data : []).map((d) => ({ id: d.id, name: `${d.name} — ${d.status}` }))
+                    });
+
+                }).catch(() => setRenderDatabaseStatus(null));
+
+            }
 
         }).catch((err) => {
 
@@ -174,7 +196,6 @@ export default function DashboardRoleSection({ provider, label, hasAccountId }) 
     }
 
     const configured = !!status?.configured;
-    const hasLiveList = status?.configured && status?.found && status.services?.length > 0;
     const activeRoles = ROLES.filter((r) => targets[`${r.key}Provider`] === provider);
     const anyActive = activeRoles.length > 0;
 
@@ -197,6 +218,9 @@ export default function DashboardRoleSection({ provider, label, hasAccountId }) 
 
                 const active = targets[`${r.key}Provider`] === provider;
 
+                const effectiveStatus = r.key === "database" && provider === "render" ? renderDatabaseStatus : status;
+                const roleHasLiveList = effectiveStatus?.configured && effectiveStatus?.found && effectiveStatus.services?.length > 0;
+
                 return (
 
                     <div key={r.key} className="form-group" style={{ marginBottom: active ? "6px" : "12px" }}>
@@ -214,7 +238,7 @@ export default function DashboardRoleSection({ provider, label, hasAccountId }) 
 
                             <div style={{ marginTop: "8px", marginLeft: "24px" }}>
 
-                                {hasLiveList ? (
+                                {roleHasLiveList ? (
 
                                     <select
                                         className="form-control"
@@ -222,7 +246,7 @@ export default function DashboardRoleSection({ provider, label, hasAccountId }) 
                                         onChange={(e) => handleServiceIdChange(r.key, e.target.value)}
                                     >
                                         <option value="">Select a service…</option>
-                                        {status.services.map((s) => (
+                                        {effectiveStatus.services.map((s) => (
                                             <option key={s.id || s.name} value={s.id || s.name}>{s.name}</option>
                                         ))}
                                     </select>
@@ -238,7 +262,7 @@ export default function DashboardRoleSection({ provider, label, hasAccountId }) 
 
                                 )}
 
-                                {!hasLiveList && (
+                                {!roleHasLiveList && (
                                     <p className="field-hint">
                                         {configured
                                             ? "Unable to reach this provider with the portal-wide credential below right now."

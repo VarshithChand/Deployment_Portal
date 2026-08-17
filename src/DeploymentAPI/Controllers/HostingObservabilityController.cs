@@ -264,6 +264,55 @@ public class HostingObservabilityController : ControllerBase
         }
     }
 
+    // Live Render Postgres instances, using the portal-wide Render
+    // credential (same one the Backend role's Render option uses) - fixes
+    // the "Database metrics" role picker's Service dropdown always being
+    // empty for Render, since that picker was built on top of
+    // GetStatusAsync's /v1/services list, which never included Postgres
+    // instances to begin with (see GetRenderDatabasesAsync).
+    [HttpGet("database/render-databases")]
+    public async Task<IActionResult> GetRenderDatabases()
+    {
+        if (await AdminGate.DenyUnlessSuperAdminAsync(this, "view Render Postgres instances") is IActionResult denied)
+            return denied;
+
+        var creds = await _settings.GetPortalPaasCredentialsAsync("render");
+
+        if (!creds.IsConfigured)
+            return Ok(new List<RenderDatabaseItemDto>());
+
+        return Ok(await _paas.GetRenderDatabasesAsync(creds));
+    }
+
+    // Fetches the real connection string for one Render Postgres instance
+    // and saves it directly as the portal's database connection - the
+    // string itself is never part of this response or sent to the browser
+    // at any point, only "success" or a friendly error.
+    [HttpPost("database/render-databases/{databaseId}/connect")]
+    public async Task<IActionResult> ConnectRenderDatabase(string databaseId)
+    {
+        if (await AdminGate.DenyUnlessSuperAdminAsync(this, "connect a Render database") is IActionResult denied)
+            return denied;
+
+        var creds = await _settings.GetPortalPaasCredentialsAsync("render");
+
+        if (!creds.IsConfigured)
+            return BadRequest(new { message = "Save a portal-wide Render credential first." });
+
+        var connectionString = await _paas.GetRenderDatabaseConnectionStringAsync(creds, databaseId);
+
+        if (string.IsNullOrWhiteSpace(connectionString))
+            return BadRequest(new { message = "Unable to fetch that database's connection info from Render right now." });
+
+        await _settings.SavePortalDatabaseConnectionAsync(new PortalDatabaseConnectionUpdateDto
+        {
+            ProviderLabel = "Render",
+            ConnectionString = connectionString
+        });
+
+        return Ok(new { success = true });
+    }
+
     [HttpGet("database")]
     public async Task<IActionResult> GetDatabase([FromQuery] string range = "1h")
     {

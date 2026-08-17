@@ -153,6 +153,82 @@ public class PaasProviderService
         }
     }
 
+    // Render Postgres instances - see GetRenderStatusAsync's own note: that
+    // call only ever lists /v1/services (web/worker/static-site), which
+    // does NOT include Postgres databases - Render's Postgres offering is a
+    // separate top-level resource with its own API. Used only by the
+    // Hosting Observability Database tab's "connect via Render" flow (see
+    // HostingObservabilityController), never the generic GetStatusAsync
+    // contract, since a Postgres instance isn't a deployable "service" the
+    // same way a web service is.
+    public async Task<List<RenderDatabaseItemDto>> GetRenderDatabasesAsync(UserPaasCredentials credentials)
+    {
+        var result = new List<RenderDatabaseItemDto>();
+
+        if (!credentials.IsConfigured) return result;
+
+        try
+        {
+            var client = CreateClient(credentials.Token!);
+            var response = await client.GetAsync("https://api.render.com/v1/postgres?limit=100");
+
+            if (!response.IsSuccessStatusCode) return result;
+
+            var items = JArray.Parse(await response.Content.ReadAsStringAsync());
+
+            foreach (var entry in items)
+            {
+                // Same "{cursor, postgres:{...}}" wrapper shape as
+                // GetRenderStatusAsync's /v1/services response - fall back
+                // to the raw entry if Render ever returns it unwrapped.
+                var pg = entry["postgres"] ?? entry;
+
+                result.Add(new RenderDatabaseItemDto
+                {
+                    Id = pg["id"]?.ToString(),
+                    Name = pg["name"]?.ToString(),
+                    Status = pg["status"]?.ToString(),
+                    Region = pg["region"]?.ToString(),
+                    Plan = pg["plan"]?.ToString()
+                });
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[render:databases] {ex}");
+        }
+
+        return result;
+    }
+
+    // The actual connection string for one Render Postgres instance -
+    // fetched and used SERVER-SIDE ONLY. HostingObservabilityController's
+    // connect action saves this straight into the portal's database
+    // connection settings and never returns it to the browser at all -
+    // stronger than the manual paste path, which at least has to cross an
+    // HTTPS request once when saving.
+    public async Task<string?> GetRenderDatabaseConnectionStringAsync(UserPaasCredentials credentials, string databaseId)
+    {
+        if (!credentials.IsConfigured || string.IsNullOrWhiteSpace(databaseId)) return null;
+
+        try
+        {
+            var client = CreateClient(credentials.Token!);
+            var response = await client.GetAsync($"https://api.render.com/v1/postgres/{Uri.EscapeDataString(databaseId)}/connection-info");
+
+            if (!response.IsSuccessStatusCode) return null;
+
+            var json = JObject.Parse(await response.Content.ReadAsStringAsync());
+
+            return json["externalConnectionString"]?.ToString() ?? json["internalConnectionString"]?.ToString();
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[render:database-connection:{databaseId}] {ex}");
+            return null;
+        }
+    }
+
     private static string Label(string provider) => provider switch
     {
         "render" => "Render",

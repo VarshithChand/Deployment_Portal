@@ -65,3 +65,13 @@ export const clearDatabaseConnection = async () => {
     const response = await api.delete("/database/connection");
     return response.data;
 };
+
+export const getRenderDatabases = async () => {
+    const response = await api.get("/database/render-databases");
+    return response.data;
+};
+
+export const connectRenderDatabase = async (databaseId) => {
+    const response = await api.post(`/database/render-databases/${encodeURIComponent(databaseId)}/connect`);
+    return response.data;
+};

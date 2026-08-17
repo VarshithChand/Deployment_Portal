@@ -2,19 +2,24 @@ import { useEffect, useState } from "react";
 
 import ClearableInput from "../../common/ClearableInput";
 import useToast from "../../../hooks/useToast";
-import { getDatabaseConnectionStatus, saveDatabaseConnection, clearDatabaseConnection } from "../../../services/hostingObservabilityService";
+import {
+    getDatabaseConnectionStatus, saveDatabaseConnection, clearDatabaseConnection,
+    getRenderDatabases, connectRenderDatabase, getObservabilityCredentialStatus
+} from "../../../services/hostingObservabilityService";
 
 const EMPTY_FORM = { providerLabel: "", connectionString: "" };
 
 // Points the Hosting Providers dashboard's Database tab at a specific
-// Postgres instance, labeled with whatever actually hosts it (e.g. "CSP",
-// "AWS RDS", "Supabase", "Neon") - unlike Frontend/Backend, the database
-// isn't one of the 4 fixed PaaS providers, so this is a free-text label
-// plus a pasted connection string rather than a provider dropdown + token.
-// Leaving this unset (the default) points the dashboard at this backend's
-// own DATABASE_URL instead - the right answer for most deployments, where
-// the monitored database IS the app's own. Portal-wide, super-admin only -
-// see HostingObservabilityController's database/connection actions.
+// Postgres instance. Two ways in, same as Frontend/Backend elsewhere on
+// this page: a live picker when the provider is one this app actually
+// integrates with (Render, the only one with a Postgres product) - the
+// server fetches the real connection string itself and never returns it to
+// the browser at all - or a manual paste for anything else (an external
+// provider this app has no dedicated integration for: "CSP", AWS RDS,
+// Supabase, Neon, whatever actually hosts it). Leaving both unset keeps
+// the dashboard on this backend's own DATABASE_URL, the default. Portal-
+// wide, super-admin only - see HostingObservabilityController's
+// database/* actions.
 export default function DatabaseConnectionSection() {
 
     const toast = useToast();
@@ -24,24 +29,93 @@ export default function DatabaseConnectionSection() {
     const [saving, setSaving] = useState(false);
     const [form, setForm] = useState(EMPTY_FORM);
 
+    const [source, setSource] = useState("render");
+    const [renderCredConfigured, setRenderCredConfigured] = useState(false);
+    const [renderDatabases, setRenderDatabases] = useState([]);
+    const [renderDatabasesLoading, setRenderDatabasesLoading] = useState(false);
+    const [selectedRenderDb, setSelectedRenderDb] = useState("");
+    const [connecting, setConnecting] = useState(false);
+
     function refresh() {
 
         setLoading(true);
 
         getDatabaseConnectionStatus().then((data) => {
+
             setStatus(data);
             setForm((f) => ({ ...f, providerLabel: data?.providerLabel || "" }));
+            setSource(data?.configured && data.providerLabel !== "Render" ? "manual" : "render");
             setLoading(false);
+
         }).catch((err) => {
+
             console.error(err);
             setLoading(false);
+
         });
 
     }
 
     useEffect(refresh, []);
 
-    async function handleSave(e) {
+    useEffect(() => {
+
+        getObservabilityCredentialStatus("render")
+            .then((data) => setRenderCredConfigured(!!data?.configured))
+            .catch(() => setRenderCredConfigured(false));
+
+    }, []);
+
+    function loadRenderDatabases() {
+
+        setRenderDatabasesLoading(true);
+
+        getRenderDatabases().then((data) => {
+            setRenderDatabases(Array.isArray(data) ? data : []);
+            setRenderDatabasesLoading(false);
+        }).catch((err) => {
+            console.error(err);
+            setRenderDatabasesLoading(false);
+        });
+
+    }
+
+    useEffect(() => {
+
+        if (source === "render" && renderCredConfigured) loadRenderDatabases();
+
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [source, renderCredConfigured]);
+
+    async function handleConnectRender() {
+
+        if (!selectedRenderDb) return;
+
+        setConnecting(true);
+
+        try {
+
+            await connectRenderDatabase(selectedRenderDb);
+            toast.show("Connected to the selected Render database.", "success");
+            setSelectedRenderDb("");
+            refresh();
+
+        }
+        catch (err) {
+
+            console.error(err);
+            toast.show(err.response?.data?.message || "Unable to connect that database.", "error");
+
+        }
+        finally {
+
+            setConnecting(false);
+
+        }
+
+    }
+
+    async function handleSaveManual(e) {
 
         e.preventDefault();
         setSaving(true);
@@ -101,11 +175,9 @@ export default function DatabaseConnectionSection() {
 
             <p className="empty-state" style={{ padding: "0 0 15px", textAlign: "left" }}>
                 Points the Hosting Providers dashboard's Database tab at a specific Postgres
-                instance — paste its connection string and give it a label naming whatever
-                actually hosts it (e.g. "CSP", "AWS RDS", "Supabase", "Neon"). Leave this unset
-                and the dashboard falls back to this backend's own DATABASE_URL, its default.
-                The connection string is only ever used server-side to run read queries — never
-                sent to the browser, and never shown back once saved.
+                instance. Leave this unset and the dashboard falls back to this backend's own
+                DATABASE_URL, its default. The connection string is only ever used server-side to
+                run read queries — never sent to the browser, and never shown back once saved.
             </p>
 
             {loading ? (
@@ -114,53 +186,147 @@ export default function DatabaseConnectionSection() {
 
             ) : (
 
-                <form onSubmit={handleSave}>
+                <>
 
-                    <div className="form-group">
-                        <label>Provider Name</label>
-                        <ClearableInput
-                            placeholder="e.g. CSP, AWS RDS, Supabase, Neon..."
-                            value={form.providerLabel}
-                            onChange={(e) => setForm({ ...form, providerLabel: e.target.value })}
-                            onClear={() => setForm({ ...form, providerLabel: "" })}
-                            autoComplete="off"
-                        />
-                    </div>
+                <div className="button-row" style={{ marginBottom: "14px" }}>
 
-                    <div className="form-group">
-                        <label>Connection String</label>
-                        <ClearableInput
-                            type="password"
-                            placeholder={status?.configured ? "Leave blank to keep current connection string" : "postgresql://user:password@host:5432/dbname"}
-                            value={form.connectionString}
-                            onChange={(e) => setForm({ ...form, connectionString: e.target.value })}
-                            onClear={() => setForm({ ...form, connectionString: "" })}
-                            autoComplete="new-password"
-                        />
-                    </div>
+                    <button
+                        type="button"
+                        className={`btn btn-sm ${source === "render" ? "btn-primary" : "btn-secondary"}`}
+                        onClick={() => setSource("render")}
+                    >
+                        Render
+                    </button>
 
-                    {status?.configured && status.maskedConnection && (
-                        <p className="field-hint">
-                            Currently pointed at{" "}
-                            <span className="smoke-test-metric-mono">{status.maskedConnection}</span>
-                        </p>
-                    )}
+                    <button
+                        type="button"
+                        className={`btn btn-sm ${source === "manual" ? "btn-primary" : "btn-secondary"}`}
+                        onClick={() => setSource("manual")}
+                    >
+                        Other (paste connection string)
+                    </button>
 
-                    <div className="button-row">
+                </div>
 
-                        <button type="submit" className="btn btn-primary" disabled={saving}>
-                            {saving ? "Saving..." : "Save Database Connection"}
-                        </button>
+                {source === "render" && (
 
-                        {status?.configured && (
-                            <button type="button" className="btn btn-danger" onClick={handleClear}>
-                                Clear (use this backend's own DATABASE_URL)
-                            </button>
+                    renderCredConfigured ? (
+
+                        <>
+
+                        {renderDatabasesLoading ? (
+
+                            <p className="field-hint">Loading Render databases...</p>
+
+                        ) : renderDatabases.length === 0 ? (
+
+                            <p className="empty-state" style={{ textAlign: "left" }}>
+                                No Postgres instances found under the connected Render account.
+                            </p>
+
+                        ) : (
+
+                            <div className="form-group">
+
+                                <label>Render Database</label>
+
+                                <select
+                                    className="form-control"
+                                    value={selectedRenderDb}
+                                    onChange={(e) => setSelectedRenderDb(e.target.value)}
+                                >
+                                    <option value="">Select a database…</option>
+                                    {renderDatabases.map((d) => (
+                                        <option key={d.id} value={d.id}>{d.name} — {d.status}</option>
+                                    ))}
+                                </select>
+
+                            </div>
+
                         )}
 
+                        <div className="button-row">
+                            <button
+                                type="button"
+                                className="btn btn-primary"
+                                onClick={handleConnectRender}
+                                disabled={!selectedRenderDb || connecting}
+                            >
+                                {connecting ? "Connecting..." : "Connect"}
+                            </button>
+                        </div>
+
+                        </>
+
+                    ) : (
+
+                        <p className="field-hint">
+                            Save a portal-wide Render credential (Render tab above) first to pick
+                            from a live list of your Render Postgres databases.
+                        </p>
+
+                    )
+
+                )}
+
+                {source === "manual" && (
+
+                    <form onSubmit={handleSaveManual}>
+
+                        <div className="form-group">
+                            <label>Provider Name</label>
+                            <ClearableInput
+                                placeholder="e.g. CSP, AWS RDS, Supabase, Neon..."
+                                value={form.providerLabel}
+                                onChange={(e) => setForm({ ...form, providerLabel: e.target.value })}
+                                onClear={() => setForm({ ...form, providerLabel: "" })}
+                                autoComplete="off"
+                            />
+                        </div>
+
+                        <div className="form-group">
+                            <label>Connection String</label>
+                            <ClearableInput
+                                type="password"
+                                placeholder={status?.configured ? "Leave blank to keep current connection string" : "postgresql://user:password@host:5432/dbname"}
+                                value={form.connectionString}
+                                onChange={(e) => setForm({ ...form, connectionString: e.target.value })}
+                                onClear={() => setForm({ ...form, connectionString: "" })}
+                                autoComplete="new-password"
+                            />
+                        </div>
+
+                        <div className="button-row">
+                            <button type="submit" className="btn btn-primary" disabled={saving}>
+                                {saving ? "Saving..." : "Save Database Connection"}
+                            </button>
+                        </div>
+
+                    </form>
+
+                )}
+
+                {status?.configured && status.maskedConnection && (
+
+                    <p className="field-hint" style={{ marginTop: "12px" }}>
+                        Currently pointed at{" "}
+                        <span className="smoke-test-metric-mono">{status.maskedConnection}</span>
+                        {status.providerLabel && ` (${status.providerLabel})`}
+                    </p>
+
+                )}
+
+                {status?.configured && (
+
+                    <div className="button-row" style={{ marginTop: "8px" }}>
+                        <button type="button" className="btn btn-danger" onClick={handleClear}>
+                            Clear (use this backend's own DATABASE_URL)
+                        </button>
                     </div>
 
-                </form>
+                )}
+
+                </>
 
             )}
 

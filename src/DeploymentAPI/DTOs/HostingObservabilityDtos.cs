@@ -109,6 +109,20 @@ public class PortalDatabaseConnectionUpdateDto
     public string ConnectionString { get; set; } = string.Empty;
 }
 
+// One Render Postgres instance - a completely different resource type from
+// PaasServiceItemDto/GetRenderStatusAsync's /v1/services listing (web/
+// worker/static-site only). Render's Postgres offering has its own
+// top-level API (/v1/postgres), so it needs its own DTO rather than being
+// forced into the generic multi-provider service shape.
+public class RenderDatabaseItemDto
+{
+    public string? Id { get; set; }
+    public string? Name { get; set; }
+    public string? Status { get; set; }
+    public string? Region { get; set; }
+    public string? Plan { get; set; }
+}
+
 // pg_stat_activity-derived connection counts for this app's own database -
 // see DatabaseManagementService.GetConnectionPoolAsync.
 public class DatabaseConnectionPoolDto
