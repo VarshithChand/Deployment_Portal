@@ -1619,6 +1619,37 @@ public class GitHubApiService
         _cache.Remove($"prs-closed:{_auth.Owner}/{_auth.Repository}");
     }
 
+    public async Task<IssueDto> CreateIssueAsync(string title, string? body, List<string>? labels)
+    {
+        var client = _auth.CreateClient();
+
+        var url =
+            $"https://api.github.com/repos/{Uri.EscapeDataString(_auth.Owner)}/{Uri.EscapeDataString(_auth.Repository)}/issues";
+
+        var payload = new Dictionary<string, object?>
+        {
+            ["title"] = title,
+            ["body"] = body ?? string.Empty
+        };
+
+        if (labels is { Count: > 0 })
+            payload["labels"] = labels;
+
+        var json = System.Text.Json.JsonSerializer.Serialize(payload);
+
+        var responseBody = await HttpClientHelper.PostAsync(
+            client, url, new StringContent(json, Encoding.UTF8, "application/json"));
+
+        var created = JObject.Parse(responseBody);
+
+        return new IssueDto
+        {
+            Number = created["number"]?.Value<int>() ?? 0,
+            Title = created["title"]?.ToString() ?? title,
+            HtmlUrl = created["html_url"]?.ToString() ?? string.Empty
+        };
+    }
+
     // x["user"] cast through JObject first, same reasoning as
     // GetRecentCommitsAsync's "author" field — a PR's author is JSON null
     // (a JValue, not an absent key or a C# null) for a deleted/ghost

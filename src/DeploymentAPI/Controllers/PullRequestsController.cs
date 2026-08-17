@@ -1,3 +1,4 @@
+using DeploymentAPI.DTOs;
 using DeploymentAPI.Helpers;
 using DeploymentAPI.Services;
 using Microsoft.AspNetCore.Mvc;
@@ -76,5 +77,29 @@ public class PullRequestsController : ControllerBase
         _log.LogInfo("Pull Requests", $"Merged PR #{number}.");
 
         return Ok(await _github.GetOpenPullRequestsAsync(forceRefresh: true));
+    }
+
+    // Reuses the "pullRequests" page grant (same as Approve/Merge above) -
+    // filing an issue is a lighter-weight action than either of those, but
+    // it's still a real, visible write to the connected repo, so it stays
+    // behind the same gate rather than being open to anyone with a token.
+    [HttpPost("issues")]
+    public async Task<IActionResult> CreateIssue(CreateIssueRequestDto request)
+    {
+        if (await AdminGate.DenyUnlessAdminAsync(this, _settings, "create an issue", "pullRequests") is IActionResult denied)
+            return denied;
+
+        if (string.IsNullOrWhiteSpace(request.Title))
+            return BadRequest(new { message = "A title is required." });
+
+        var labels = request.Labels
+            ?.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .ToList();
+
+        var issue = await _github.CreateIssueAsync(request.Title.Trim(), request.Body, labels);
+
+        _log.LogInfo("Pull Requests", $"Created issue #{issue.Number}: {issue.Title}");
+
+        return Ok(issue);
     }
 }

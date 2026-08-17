@@ -7,7 +7,8 @@ import {
     getPullRequestHistory,
     getRecentCommits,
     approvePullRequest,
-    mergePullRequest
+    mergePullRequest,
+    createIssue
 } from "../services/pullRequestsService";
 import useAuth from "../hooks/useAuth";
 import useNavigation from "../hooks/useNavigation";
@@ -21,10 +22,19 @@ import HistorySection from "../components/pullRequests/HistorySection";
 
 export default function PullRequests() {
 
-    const { githubTokenConfigured, githubRepoConfigured, tokenOwner, canApproveReleases } = useAuth();
+    const { githubTokenConfigured, githubRepoConfigured, tokenOwner, canApproveReleases, isAdminSession, grantedPages } = useAuth();
     const { setTab } = useNavigation();
     const toast = useToast();
     const { confirm, dialog } = useConfirm();
+
+    // Filing an issue is gated by THIS app's own admin/page-grant system
+    // (see AdminGate's pageKey check), not GitHub's native repo permission
+    // the way Approve/Merge legitimately are (GitHub itself won't let a
+    // review through without repo admin rights, so canApproveReleases is
+    // the right signal there) - a separate check so a portal-side grantee
+    // isn't bounced away from this page before ever reaching a feature
+    // their actual GitHub permissions have nothing to do with.
+    const hasPortalPrAuthority = isAdminSession || grantedPages.includes("pullRequests");
 
     const [open, setOpen] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -34,6 +44,11 @@ export default function PullRequests() {
     const [history, setHistory] = useState([]);
     const [commits, setCommits] = useState([]);
     const [loadingHistory, setLoadingHistory] = useState(false);
+
+    const [issueTitle, setIssueTitle] = useState("");
+    const [issueBody, setIssueBody] = useState("");
+    const [issueLabels, setIssueLabels] = useState("");
+    const [creatingIssue, setCreatingIssue] = useState(false);
 
     async function load() {
 
@@ -76,15 +91,19 @@ export default function PullRequests() {
     // See Approvals.jsx's identical effect for why githubRepoConfigured is
     // required too - without a repo picked, canApproveReleases is
     // correctly false but that's "pick a repo" territory, not "no approve
-    // rights on this repo".
+    // rights on this repo". Also lets through anyone with portal-side
+    // pullRequests authority even without GitHub-native repo permission -
+    // they won't see the Approve/Merge section below (that still requires
+    // canApproveReleases, a real GitHub constraint), but they can reach
+    // Create Issue, which isn't gated by that at all.
     useEffect(() => {
 
-        if (githubTokenConfigured && githubRepoConfigured && tokenOwner && !canApproveReleases) {
+        if (githubTokenConfigured && githubRepoConfigured && tokenOwner && !canApproveReleases && !hasPortalPrAuthority) {
             setTab("dashboard");
         }
 
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [githubTokenConfigured, githubRepoConfigured, tokenOwner, canApproveReleases]);
+    }, [githubTokenConfigured, githubRepoConfigured, tokenOwner, canApproveReleases, hasPortalPrAuthority]);
 
     async function loadHistory() {
 
@@ -187,6 +206,46 @@ export default function PullRequests() {
 
     const resolvingAccess = githubTokenConfigured && !tokenOwner;
 
+    async function handleCreateIssue(e) {
+
+        e.preventDefault();
+
+        if (!issueTitle.trim()) {
+            toast.show("A title is required.", "error");
+            return;
+        }
+
+        try {
+
+            setCreatingIssue(true);
+
+            const response = await createIssue(issueTitle.trim(), issueBody.trim(), issueLabels.trim());
+            const issue = response.data;
+
+            toast.show(
+                <>Created <a href={issue.htmlUrl} target="_blank" rel="noreferrer">issue #{issue.number}</a>.</>,
+                "success"
+            );
+
+            setIssueTitle("");
+            setIssueBody("");
+            setIssueLabels("");
+
+        }
+        catch (err) {
+
+            console.error(err);
+            toast.show(err.response?.data?.message || "Failed to create the issue.", "error");
+
+        }
+        finally {
+
+            setCreatingIssue(false);
+
+        }
+
+    }
+
     const {
         page: historyPage,
         setPage: setHistoryPage,
@@ -207,7 +266,7 @@ export default function PullRequests() {
         endIndex: commitsEndIndex
     } = usePagination(commits, 10);
 
-    if (loading || resolvingAccess || (githubTokenConfigured && githubRepoConfigured && !canApproveReleases)) {
+    if (loading || resolvingAccess || (githubTokenConfigured && githubRepoConfigured && !canApproveReleases && !hasPortalPrAuthority)) {
         return <LoadingSpinner />;
     }
 
@@ -236,6 +295,66 @@ export default function PullRequests() {
             ) : (
 
                 <RequireRepoSelected>
+
+                <>
+
+                {hasPortalPrAuthority && (
+
+                    <div className="card">
+
+                        <h2 className="card-title">Create Issue</h2>
+
+                        <form onSubmit={handleCreateIssue}>
+
+                            <div className="form-group">
+                                <label htmlFor="issue-title">Title</label>
+                                <input
+                                    id="issue-title"
+                                    type="text"
+                                    className="form-control"
+                                    placeholder="Short summary of the issue"
+                                    value={issueTitle}
+                                    onChange={(e) => setIssueTitle(e.target.value)}
+                                    autoComplete="off"
+                                />
+                            </div>
+
+                            <div className="form-group">
+                                <label htmlFor="issue-body">Description</label>
+                                <textarea
+                                    id="issue-body"
+                                    className="form-control"
+                                    rows={4}
+                                    placeholder="What's the issue? Steps to reproduce, expected vs. actual, etc."
+                                    value={issueBody}
+                                    onChange={(e) => setIssueBody(e.target.value)}
+                                />
+                            </div>
+
+                            <div className="form-group">
+                                <label htmlFor="issue-labels">Labels (comma-separated, optional)</label>
+                                <input
+                                    id="issue-labels"
+                                    type="text"
+                                    className="form-control"
+                                    placeholder="bug, high-priority"
+                                    value={issueLabels}
+                                    onChange={(e) => setIssueLabels(e.target.value)}
+                                    autoComplete="off"
+                                />
+                            </div>
+
+                            <button type="submit" className="btn btn-primary" disabled={creatingIssue || !issueTitle.trim()}>
+                                {creatingIssue ? "Creating..." : "Create Issue"}
+                            </button>
+
+                        </form>
+
+                    </div>
+
+                )}
+
+                {canApproveReleases && (
 
                 <>
 
@@ -337,6 +456,10 @@ export default function PullRequests() {
                         commitsEndIndex={commitsEndIndex}
                         setCommitsPage={setCommitsPage}
                     />
+
+                )}
+
+                </>
 
                 )}
 
