@@ -184,10 +184,24 @@ public class EnvironmentsController : ControllerBase
         return Ok(detected);
     }
 
+    // List()/GetDetail() now call this on every request (to power the
+    // auto-detect fallback below) where before it only ran on an admin's
+    // occasional manual "Detect from Pipeline" click — a failure here
+    // (rate limit, transient GitHub hiccup, token issue) must never take
+    // down the base environment list/detail response that worked fine
+    // without it; null just means no auto-detected target this time,
+    // exactly like TryDetectAsync's own quiet-failure contract below.
     private async Task<JArray?> GetWorkflowsArrayAsync()
     {
-        var workflowsJson = await _github.GetWorkflows();
-        return JObject.Parse(workflowsJson)["workflows"] as JArray;
+        try
+        {
+            var workflowsJson = await _github.GetWorkflows();
+            return JObject.Parse(workflowsJson)["workflows"] as JArray;
+        }
+        catch
+        {
+            return null;
+        }
     }
 
     private static string? ResolveWorkflowPath(JArray? workflows, string workflowName)
