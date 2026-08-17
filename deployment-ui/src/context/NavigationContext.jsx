@@ -2,7 +2,7 @@ import { createContext, useCallback, useEffect, useState } from "react";
 
 import { getSidebarAccess } from "../services/settingsService";
 
-const TABS = ["dashboard", "deploy", "approvals", "pullRequests", "storage", "analytics", "timeline", "history", "environments", "templates", "cloudServices", "services", "docker", "codeQuality", "settings"];
+const TABS = ["dashboard", "deploy", "approvals", "pullRequests", "storage", "analytics", "timeline", "history", "environments", "templates", "cloudServices", "services", "paasHosting", "docker", "codeQuality", "settings"];
 
 // Read the starting tab from the URL so a hard reload (or a bookmarked/
 // shared link) lands back on the same page instead of always resetting
@@ -71,9 +71,18 @@ export default function NavigationProvider({ children }) {
 
         setTabState(nextTab);
 
+        // A full reset, not just setting "tab" on top of whatever's already
+        // there - several pages own a same-named "view" (or "table") query
+        // param for their own internal sub-nav (PaasHosting.jsx, Settings.jsx,
+        // Services.jsx, DatabaseView.jsx), read independently on mount with
+        // no idea which page last wrote it. Leaving a stale "view=database"
+        // in the URL after switching FROM Hosting Providers TO Settings, for
+        // example, made Settings misread it as its own view selector and
+        // land on its Database sub-page instead of the hub. No page-owned
+        // param is ever meant to survive a top-level tab switch, so this
+        // clears everything except the new tab itself.
         const url = new URL(window.location.href);
-
-        url.searchParams.set("tab", nextTab);
+        url.search = `?tab=${encodeURIComponent(nextTab)}`;
 
         // replaceState, not pushState — switching tabs shouldn't pile up
         // browser history entries, it should just make the current page
