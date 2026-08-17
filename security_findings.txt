@@ -6066,3 +6066,135 @@ second GitHub identity/token with that specific permission level
 connected to a real repo, same standing limitation as Round 40's
 identical Deploy change. Recommend @vvarshithchand try creating a
 branch directly to confirm.
+
+==================================================
+ROUND 48 - FEATURE: HOSTING PROVIDERS REDESIGNED INTO A FRONTEND/
+BACKEND/DATABASE OBSERVABILITY DASHBOARD (PHASE 1)
+==================================================
+Date: 2026-08-17
+Trigger: user provided a 29-section formal specification asking for the
+existing self-service "Hosting Providers" page to be redesigned into a
+3-tab (Frontend/Backend/Database) dashboard monitoring THIS portal's
+own real production deployment (its actual Cloudflare Worker, Render
+service, and Postgres) - not per-visitor personal accounts, which is
+what the page did before. Two scope questions were confirmed with the
+user up front: (1) the monitoring target is the portal's own fixed
+deployment, requiring a new portal-wide (not session-scoped) credential
+store, restricted to the single super-admin identity; (2) this Phase 1
+pass covers the 3-tab restructure/real status/DB health/endpoint
+inventory/CPU-memory charts/connection maps, while brand-new
+request-level telemetry (a traffic panel, live per-endpoint response
+times) is explicitly deferred to a later fast-follow, since nothing in
+this app tracks per-request counts/status/latency today.
+
+New portal-wide credential/config store (SettingsService): separate
+from the existing session-scoped UserPaasCredentials (untouched, still
+serves the self-service flow) - root["PortalPaasCredentials"][provider]
+and root["PortalDeploymentTargets"], set once by the super-admin via a
+new Settings > Hosting Observability page, read identically by every
+visitor of the new dashboard.
+
+New backend surface, every action gated AdminGate.
+DenyUnlessSuperAdminAsync (same posture as Database Management/Security
+Testing Lab): HostingObservabilityController (api/observability) -
+config get/save, portal-credential save/clear/status per role,
+frontend/backend/database overview endpoints, endpoint inventory. Every
+provider call is delegated to the EXISTING PaasProviderService/
+DatabaseManagementService - no provider-calling logic duplicated.
+CommitSha is returned; CommitMessage never is, matching the spec's
+"commit ID only" requirement.
+
+New backend logic: DatabaseManagementService.GetConnectionPoolAsync - a
+new pg_stat_activity-based query (active/idle/total connections, plus
+max_connections from pg_settings), scoped to this app's own database
+via datname = current_database(). PaasProviderService.
+GetServiceMetricsAsync gained an optional range parameter (default 1h,
+same as before) so the dashboard's 15m/1h/6h/24h/7d selector can vary
+Render's metrics window - the existing PaasController call site keeps
+compiling unchanged. EndpointDiscovery.cs pulls the route-reflection
+logic already used by SecurityTestingController.GetDiscoveredRoutes
+into a shared static helper, reused by the new endpoint-inventory
+action without duplicating or touching the original.
+
+New frontend: PaasHosting.jsx now owns its own "?view=frontend|backend|
+database" sub-nav (replaceState, same pattern as Settings.jsx/
+Services.jsx), gated on isSuperAdminSession - non-super-admins see an
+explanatory empty state pointing at their own Settings > Credentials
+connections instead. Three new view components (FrontendView/
+BackendView/DatabaseView under components/hosting-observability/) with
+a shared RangeSelector and a non-data-driven ConnectionMap diagram. A
+new LineChart.jsx (components/charts/) for CPU/Memory time series,
+modeled directly on the existing BarChart.jsx's hand-rolled-SVG
+conventions (no charting library introduced) - one axis per chart (CPU
+and Memory render as two side-by-side charts, never one dual-axis
+chart). The old self-service provider cards moved to Settings >
+Credentials (new MyConnectedAccounts.jsx, rendered right under each
+PaasLoginSection) rather than disappearing or becoming a 4th tab - they
+reuse PaasProviderCard.jsx/paasService.js completely unchanged, only
+their caller moved. New Settings > Hosting Observability admin page
+(HostingObservabilityConfigView.jsx, also super-admin gated) to connect
+the 4 providers' portal-wide credentials and pick which provider/
+service fills each of the 3 dashboard roles, with a live service picker
+mirroring EnvironmentsAdminView's existing picker-or-fallback shape.
+
+Every "never fabricate" requirement is honored structurally rather than
+by convention: every DTO already carries Configured/Found/Error, so a
+missing/unreachable provider always renders a real tri-state or the
+spec's literal fallback text ("Metric unavailable from this database
+provider.", "CPU/memory metrics are not exposed by this hosting
+provider for this resource.") instead of ever inventing a number.
+
+Deliberately deferred to a fast-follow (not in this round): a new
+request-counting/latency middleware and the "Frontend -> Backend
+request traffic" panel it would power; live per-endpoint health-check
+pinging and response-time columns on the endpoint inventory (which
+ships in this round as a route list only).
+
+Verification performed:
+  - dotnet build (isolated output dir, twice - once after the backend
+    changes, once again after the full frontend+backend set): 0 errors,
+    only pre-existing unrelated warnings (NU1510, ASPDEPR005).
+  - npm run lint in deployment-ui/: no new warnings/errors in any of
+    the new or changed files (only pre-existing Fast-Refresh warnings
+    in unrelated files).
+  - npm run build in deployment-ui/: succeeded, new chunks
+    (hostingObservabilityService, PaasHosting, Settings) built clean.
+  - Live check against the deployed Render backend after the push:
+    /api/bootstrap healthy (HTTP 200) on the first check.
+
+Files changed: src/DeploymentAPI/DTOs/HostingObservabilityDtos.cs (new),
+src/DeploymentAPI/Helpers/EndpointDiscovery.cs (new),
+src/DeploymentAPI/Controllers/HostingObservabilityController.cs (new),
+src/DeploymentAPI/Services/SettingsService.cs,
+src/DeploymentAPI/Services/DatabaseManagementService.cs,
+src/DeploymentAPI/Services/PaasProviderService.cs,
+deployment-ui/src/api/observabilityApi.js (new),
+deployment-ui/src/services/hostingObservabilityService.js (new),
+deployment-ui/src/pages/PaasHosting.jsx,
+deployment-ui/src/pages/Settings.jsx,
+deployment-ui/src/constants/settingsViews.js,
+deployment-ui/src/components/hosting-observability/{FrontendView,
+BackendView,DatabaseView,RangeSelector,ConnectionMap}.jsx (new),
+deployment-ui/src/components/charts/LineChart.jsx (new),
+deployment-ui/src/components/settings/HostingObservabilityConfigView.jsx
+(new), deployment-ui/src/components/settings/SettingsHubView.jsx,
+deployment-ui/src/components/settings/CredentialsView.jsx,
+deployment-ui/src/components/settings/credentials/
+MyConnectedAccounts.jsx (new), deployment-ui/src/styles/global.css.
+Commit: b7f95e8.
+
+Status: Complete and pushed, live-verified the backend is up. Could NOT
+live-verify the actual new feature end-to-end in this sandboxed
+session: no real Super-Admin GitHub session exists here (AdminGate's
+SuperAdminLogin is a single hardcoded identity), so every new gated
+endpoint could only be confirmed to compile and return 403 for an
+unauthorized caller, not to serve real data for an authorized one. No
+real portal-wide Render/Cloudflare/Netlify/Vercel credential could be
+saved and round-tripped through the live DataProtector. Render's actual
+Metrics API behavior for the 15m/6h/24h/7d windows (vs. the
+previously-only-tested 1h) is unverified. The new pg_stat_activity
+query's real numeric output couldn't be checked against a live
+connection pool - only that the SQL is valid Postgres and the C#
+compiles. Recommend @VarshithChand configure real portal-wide
+credentials in Settings > Hosting Observability and click through all 3
+tabs (light + dark theme) once deployed.
