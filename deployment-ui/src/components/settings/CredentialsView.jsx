@@ -15,6 +15,7 @@ import CredentialPinGate from "./credentials/CredentialPinGate";
 import PortalRegistryLoginSection from "./credentials/PortalRegistryLoginSection";
 import GitLabRegistryLoginSection from "./credentials/GitLabRegistryLoginSection";
 import JfrogLoginSection from "./credentials/JfrogLoginSection";
+import HostCredentialLoginSection from "./credentials/HostCredentialLoginSection";
 import useAuth from "../../hooks/useAuth";
 import { getMyAwsSettings, getMyAzureSettings, getMyGcpSettings } from "../../services/settingsService";
 import { getMyApiKeys } from "../../services/securityService";
@@ -22,7 +23,7 @@ import { getPaasStatus } from "../../services/paasService";
 import {
     getDockerHubStatus, saveDockerHubCredentials, clearDockerHubCredentials,
     getGhcrStatus, saveGhcrCredentials, clearGhcrCredentials,
-    getGitLabRegistryStatus, getJfrogStatus
+    getGitLabRegistryStatus, getJfrogStatus, getHostRegistryStatus
 } from "../../services/containerRegistryService";
 
 const MODES = [
@@ -38,6 +39,8 @@ const MODES = [
     { key: "ghcr", label: "GHCR" },
     { key: "gitlab-registry", label: "GitLab Registry" },
     { key: "jfrog", label: "JFrog" },
+    { key: "harbor", label: "Harbor" },
+    { key: "nexus", label: "Nexus" },
     { key: "oauth", label: "GitHub OAuth" },
     { key: "ai", label: "AI Assistant" },
     { key: "render", label: "Render" },
@@ -55,7 +58,8 @@ const MODES = [
 // PIN.
 const ALL_CREDENTIAL_PROVIDERS = [
     "github", "aws", "azure", "gcp", "apikey", "docker", "github-oauth", "sonar", "ai",
-    "render", "cloudflare", "netlify", "vercel", "dockerhub", "ghcr", "gitlab-registry", "jfrog"
+    "render", "cloudflare", "netlify", "vercel", "dockerhub", "ghcr", "gitlab-registry", "jfrog",
+    "harbor", "nexus"
 ];
 
 // A convenience picker, not a restriction — GEMINI_MODEL is still whatever
@@ -166,8 +170,10 @@ export default function CredentialsView({
             getDockerHubStatus().catch(() => null),
             getGhcrStatus().catch(() => null),
             getGitLabRegistryStatus().catch(() => null),
-            getJfrogStatus().catch(() => null)
-        ]).then(([aws, azure, gcp, apiKeysRes, render, cloudflare, netlify, vercel, dockerhub, ghcr, gitlabRegistry, jfrog]) => {
+            getJfrogStatus().catch(() => null),
+            getHostRegistryStatus("harbor").catch(() => null),
+            getHostRegistryStatus("nexus").catch(() => null)
+        ]).then(([aws, azure, gcp, apiKeysRes, render, cloudflare, netlify, vercel, dockerhub, ghcr, gitlabRegistry, jfrog, harbor, nexus]) => {
 
             const activeKeyCount = Array.isArray(apiKeysRes?.data)
                 ? apiKeysRes.data.filter((k) => !k.revoked).length
@@ -185,7 +191,9 @@ export default function CredentialsView({
                 dockerhub: dockerhub?.configured,
                 ghcr: ghcr?.configured,
                 "gitlab-registry": gitlabRegistry?.configured,
-                jfrog: jfrog?.configured
+                jfrog: jfrog?.configured,
+                harbor: harbor?.configured,
+                nexus: nexus?.configured
             });
 
         });
@@ -533,6 +541,36 @@ export default function CredentialsView({
 
             <CredentialPinGate provider="jfrog" unlocked={unlockedProviders.has("jfrog")} onUnlocked={markAllUnlocked}>
                 <JfrogLoginSection onCleared={() => removeUnlocked("jfrog")} />
+            </CredentialPinGate>
+
+            )}
+
+            {mode === "harbor" && (
+
+            <CredentialPinGate provider="harbor" unlocked={unlockedProviders.has("harbor")} onUnlocked={markAllUnlocked}>
+                <HostCredentialLoginSection
+                    provider="harbor"
+                    label="Harbor"
+                    hostPlaceholder="https://harbor.mycompany.com"
+                    passwordLabel="Password (or robot account secret)"
+                    helpText="Powers the Container Registry hub's Harbor tab — your Harbor instance's URL and a user (or robot account) with read access to its projects."
+                    onCleared={() => removeUnlocked("harbor")}
+                />
+            </CredentialPinGate>
+
+            )}
+
+            {mode === "nexus" && (
+
+            <CredentialPinGate provider="nexus" unlocked={unlockedProviders.has("nexus")} onUnlocked={markAllUnlocked}>
+                <HostCredentialLoginSection
+                    provider="nexus"
+                    label="Nexus"
+                    hostPlaceholder="https://nexus.mycompany.com"
+                    passwordLabel="Password"
+                    helpText="Powers the Container Registry hub's Nexus tab — your Nexus Repository instance's URL and a user with read access to its docker-format repositories."
+                    onCleared={() => removeUnlocked("nexus")}
+                />
             </CredentialPinGate>
 
             )}

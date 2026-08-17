@@ -492,4 +492,264 @@ public class ContainerRegistryService
 
         return result;
     }
+
+    // ================= Harbor =================
+    //
+    // Harbor's own documented REST API v2.0, Basic auth (a Harbor user or a
+    // robot account's username + CLI secret both work as a plain username/
+    // password pair) - almost always self-hosted, same HostUrl-required
+    // posture as JFrog. Three levels, same shape as ACR/JFrog: projects ->
+    // repositories -> artifacts (Harbor's name for a pushed image digest,
+    // each carrying its own tags).
+    //
+    // One real Harbor-specific quirk, not a guess: a repository's "name" as
+    // returned by the repositories list is "{project}/{repo}", and the
+    // artifacts endpoint wants just "{repo}" with every "/" it might still
+    // contain double-URL-encoded (literal "%2F" becomes "%252F") - Harbor's
+    // own documented workaround for repository names that are themselves
+    // nested paths (e.g. "library/nginx/sub"). Handled below by replacing
+    // "/" with the literal text "%2F" before the one UrlEscape pass, so
+    // that "%" itself gets escaped to "%25" and produces "%252F".
+
+    private static readonly HttpClient HarborHttpClient = new();
+
+    private static async Task<string> GetHarborAsync(string hostUrl, string username, string password, string path)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Get, $"{hostUrl}/api/v2.0{path}");
+        request.Headers.Authorization = new AuthenticationHeaderValue(
+            "Basic", Convert.ToBase64String(Encoding.UTF8.GetBytes($"{username}:{password}")));
+
+        var response = await HarborHttpClient.SendAsync(request);
+        await HttpClientHelper.EnsureSuccessAsync(response);
+
+        return await response.Content.ReadAsStringAsync();
+    }
+
+    public async Task<HarborProjectListDto> GetHarborProjectsAsync(PortalHostCredentials credentials)
+    {
+        var result = new HarborProjectListDto { Configured = credentials.IsConfigured };
+
+        if (!credentials.IsConfigured)
+            return result;
+
+        try
+        {
+            var json = await GetHarborAsync(credentials.HostUrl!, credentials.Username!, credentials.Password!, "/projects?page_size=100");
+            var projects = JArray.Parse(json);
+
+            result.Projects = projects.Select(p => new HarborProjectDto
+            {
+                Name = p["name"]?.ToString() ?? string.Empty,
+                RepoCount = p["repo_count"]?.ToObject<int>() ?? 0,
+                CreatedAt = DateTime.TryParse(p["creation_time"]?.ToString(), out var created) ? created : null
+            }).ToList();
+        }
+        catch (Exception ex)
+        {
+            result.Error = CloudErrorSanitizer.Describe(ex, "Harbor", "project list");
+        }
+
+        return result;
+    }
+
+    public async Task<HarborRepositoryListDto> GetHarborRepositoriesAsync(PortalHostCredentials credentials, string projectName)
+    {
+        var result = new HarborRepositoryListDto { Configured = credentials.IsConfigured };
+
+        if (!credentials.IsConfigured)
+            return result;
+
+        try
+        {
+            var path = $"/projects/{Uri.EscapeDataString(projectName)}/repositories?page_size=100";
+            var json = await GetHarborAsync(credentials.HostUrl!, credentials.Username!, credentials.Password!, path);
+            var repos = JArray.Parse(json);
+
+            result.Repositories = repos.Select(r => new HarborRepositoryDto
+            {
+                Name = r["name"]?.ToString() ?? string.Empty,
+                ArtifactCount = r["artifact_count"]?.ToObject<int>() ?? 0,
+                PullCount = r["pull_count"]?.ToObject<int>() ?? 0,
+                UpdatedAt = DateTime.TryParse(r["update_time"]?.ToString(), out var updated) ? updated : null
+            }).ToList();
+        }
+        catch (Exception ex)
+        {
+            result.Error = CloudErrorSanitizer.Describe(ex, "Harbor", "repository list");
+        }
+
+        return result;
+    }
+
+    public async Task<HarborArtifactListDto> GetHarborArtifactsAsync(PortalHostCredentials credentials, string projectName, string repositoryName)
+    {
+        var result = new HarborArtifactListDto { Configured = credentials.IsConfigured };
+
+        if (!credentials.IsConfigured)
+            return result;
+
+        try
+        {
+            // repositoryName arrives as the bare repo name (already stripped
+            // of the "{project}/" prefix by the caller) - see the section
+            // comment above for the double-encoding this endpoint needs.
+            var encodedRepo = Uri.EscapeDataString(repositoryName.Replace("/", "%2F"));
+            var path = $"/projects/{Uri.EscapeDataString(projectName)}/repositories/{encodedRepo}/artifacts?page_size=100";
+            var json = await GetHarborAsync(credentials.HostUrl!, credentials.Username!, credentials.Password!, path);
+            var artifacts = JArray.Parse(json);
+
+            result.Images = artifacts.SelectMany(a =>
+            {
+                var tags = a["tags"] as JArray;
+                var digest = a["digest"]?.ToString();
+                var size = a["size"]?.ToObject<long?>();
+                var pushTime = DateTime.TryParse(a["push_time"]?.ToString(), out var pushed) ? pushed : (DateTime?)null;
+
+                if (tags == null || tags.Count == 0)
+                {
+                    return new[] { new HarborArtifactDto { Tag = "(untagged)", Digest = digest, SizeBytes = size, PushedAt = pushTime } };
+                }
+
+                return tags.Select(t => new HarborArtifactDto
+                {
+                    Tag = t["name"]?.ToString() ?? string.Empty,
+                    Digest = digest,
+                    SizeBytes = size,
+                    PushedAt = DateTime.TryParse(t["push_time"]?.ToString(), out var tagPushed) ? tagPushed : pushTime
+                });
+            })
+            .OrderByDescending(i => i.PushedAt)
+            .ToList();
+        }
+        catch (Exception ex)
+        {
+            result.Error = CloudErrorSanitizer.Describe(ex, "Harbor", "artifact list");
+        }
+
+        return result;
+    }
+
+    // ================= Nexus (Sonatype Nexus Repository) =================
+    //
+    // Nexus 3's own generic REST API v1 (service/rest/v1/...) - Basic auth,
+    // almost always self-hosted. No registry-specific listing endpoint at
+    // all: a docker image pushed to Nexus is just a "component" under
+    // whichever docker-format repository holds it, indistinguishable at
+    // the API level from any other package format Nexus stores - so
+    // "images" here means the distinct component names within a
+    // docker-format repository, and "tags" means each of that name's
+    // component versions. Only the first page of components is fetched
+    // (no continuationToken paging loop) - a real limitation for a
+    // heavily-populated repository, not fixed in this pass, same posture
+    // as this session's other single-page-only integrations.
+
+    private static readonly HttpClient NexusHttpClient = new();
+
+    private static async Task<string> GetNexusAsync(string hostUrl, string username, string password, string path)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Get, $"{hostUrl}/service/rest/v1{path}");
+        request.Headers.Authorization = new AuthenticationHeaderValue(
+            "Basic", Convert.ToBase64String(Encoding.UTF8.GetBytes($"{username}:{password}")));
+
+        var response = await NexusHttpClient.SendAsync(request);
+        await HttpClientHelper.EnsureSuccessAsync(response);
+
+        return await response.Content.ReadAsStringAsync();
+    }
+
+    public async Task<NexusRepositoryListDto> GetNexusRepositoriesAsync(PortalHostCredentials credentials)
+    {
+        var result = new NexusRepositoryListDto { Configured = credentials.IsConfigured };
+
+        if (!credentials.IsConfigured)
+            return result;
+
+        try
+        {
+            var json = await GetNexusAsync(credentials.HostUrl!, credentials.Username!, credentials.Password!, "/repositories");
+            var repos = JArray.Parse(json);
+
+            result.Repositories = repos
+                .Where(r => string.Equals(r["format"]?.ToString(), "docker", StringComparison.OrdinalIgnoreCase))
+                .Select(r => new NexusRepositoryDto
+                {
+                    Name = r["name"]?.ToString() ?? string.Empty,
+                    Type = r["type"]?.ToString() ?? string.Empty
+                })
+                .ToList();
+        }
+        catch (Exception ex)
+        {
+            result.Error = CloudErrorSanitizer.Describe(ex, "Nexus", "repository list");
+        }
+
+        return result;
+    }
+
+    public async Task<NexusImageListDto> GetNexusImagesAsync(PortalHostCredentials credentials, string repositoryName)
+    {
+        var result = new NexusImageListDto { Configured = credentials.IsConfigured };
+
+        if (!credentials.IsConfigured)
+            return result;
+
+        try
+        {
+            var json = await GetNexusAsync(credentials.HostUrl!, credentials.Username!, credentials.Password!,
+                $"/components?repository={Uri.EscapeDataString(repositoryName)}");
+
+            var items = JObject.Parse(json)["items"] as JArray ?? new JArray();
+
+            result.Images = items
+                .Select(c => c["name"]?.ToString())
+                .Where(n => !string.IsNullOrWhiteSpace(n))
+                .Distinct()
+                .Select(n => new NexusImageDto { Name = n! })
+                .ToList();
+        }
+        catch (Exception ex)
+        {
+            result.Error = CloudErrorSanitizer.Describe(ex, "Nexus", "component list");
+        }
+
+        return result;
+    }
+
+    public async Task<NexusTagListDto> GetNexusTagsAsync(PortalHostCredentials credentials, string repositoryName, string imageName)
+    {
+        var result = new NexusTagListDto { Configured = credentials.IsConfigured };
+
+        if (!credentials.IsConfigured)
+            return result;
+
+        try
+        {
+            var json = await GetNexusAsync(credentials.HostUrl!, credentials.Username!, credentials.Password!,
+                $"/components?repository={Uri.EscapeDataString(repositoryName)}");
+
+            var items = JObject.Parse(json)["items"] as JArray ?? new JArray();
+
+            result.Images = items
+                .Where(c => string.Equals(c["name"]?.ToString(), imageName, StringComparison.Ordinal))
+                .Select(c =>
+                {
+                    var firstAsset = (c["assets"] as JArray)?.FirstOrDefault();
+
+                    return new NexusTagDto
+                    {
+                        Tag = c["version"]?.ToString() ?? string.Empty,
+                        Digest = firstAsset?["checksum"]?["sha256"]?.ToString(),
+                        PushedAt = DateTime.TryParse(firstAsset?["lastModified"]?.ToString(), out var modified) ? modified : null
+                    };
+                })
+                .OrderByDescending(i => i.PushedAt)
+                .ToList();
+        }
+        catch (Exception ex)
+        {
+            result.Error = CloudErrorSanitizer.Describe(ex, "Nexus", "component version list");
+        }
+
+        return result;
+    }
 }

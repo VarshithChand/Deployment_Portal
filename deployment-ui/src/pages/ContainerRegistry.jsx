@@ -9,23 +9,23 @@ import DockerHubView from "../components/containerRegistry/DockerHubView";
 import GhcrView from "../components/containerRegistry/GhcrView";
 import GitLabRegistryView from "../components/containerRegistry/GitLabRegistryView";
 import JfrogView from "../components/containerRegistry/JfrogView";
+import HarborView from "../components/containerRegistry/HarborView";
+import NexusView from "../components/containerRegistry/NexusView";
 import useNavigation from "../hooks/useNavigation";
 import { getMyAwsSettings, getMyAzureSettings, getMyGcpSettings } from "../services/settingsService";
 import {
-    getDockerHubStatus, getGhcrStatus, getGitLabRegistryStatus, getJfrogStatus
+    getDockerHubStatus, getGhcrStatus, getGitLabRegistryStatus, getJfrogStatus, getHostRegistryStatus
 } from "../services/containerRegistryService";
 
-const VIEWS = ["ecr", "acr", "artifactRegistry", "dockerHub", "ghcr", "gitlabRegistry", "jfrog"];
+const VIEWS = ["ecr", "acr", "artifactRegistry", "dockerHub", "ghcr", "gitlabRegistry", "jfrog", "harbor", "nexus"];
 
-// The 3 cloud-native registries auto-enable from credentials this portal
-// already has (AWS/Azure/GCP - see each provider's own Settings →
-// Credentials tab). Docker Hub and GHCR auto-enable from a portal-wide
-// shared credential instead (see Settings → Credentials → Docker Hub/GHCR)
-// - one admin connects each once, every visitor then sees the same
-// repositories/packages. The remaining 4 are shown so the whole picture is
-// visible at a glance, but aren't built yet - a later fast-follow, each
-// needing its own brand-new credential model and API integration from
-// scratch (confirmed scope decision, see the plan this feature shipped from).
+// All 9 providers from the original reference image are now live. The 3
+// cloud-native registries auto-enable from credentials this portal already
+// has (AWS/Azure/GCP - see each provider's own Settings → Credentials tab).
+// The other 6 (Docker Hub, GHCR, GitLab Registry, JFrog, Harbor, Nexus)
+// each auto-enable from their own portal-wide shared credential instead
+// (see Settings → Credentials) - one admin connects each once, every
+// visitor then sees the same repositories/packages.
 const PROVIDERS = [
     { key: "ecr", label: "AWS ECR", credentialKey: "aws", credentialLabel: "AWS", view: "ecr" },
     { key: "acr", label: "Azure ACR", credentialKey: "azure", credentialLabel: "Azure", view: "acr" },
@@ -34,8 +34,8 @@ const PROVIDERS = [
     { key: "ghcr", label: "GHCR", credentialKey: "ghcr", credentialLabel: "GHCR", view: "ghcr", portalWide: true },
     { key: "gitlabRegistry", label: "GitLab Registry", credentialKey: "gitlabRegistry", credentialLabel: "GitLab Registry", view: "gitlabRegistry", portalWide: true },
     { key: "jfrog", label: "JFrog Artifactory", credentialKey: "jfrog", credentialLabel: "JFrog", view: "jfrog", portalWide: true },
-    { key: "harbor", label: "Harbor", comingSoon: true },
-    { key: "nexus", label: "Nexus", comingSoon: true }
+    { key: "harbor", label: "Harbor", credentialKey: "harbor", credentialLabel: "Harbor", view: "harbor", portalWide: true },
+    { key: "nexus", label: "Nexus", credentialKey: "nexus", credentialLabel: "Nexus", view: "nexus", portalWide: true }
 ];
 
 function readViewFromUrl() {
@@ -88,8 +88,10 @@ export default function ContainerRegistry() {
             getDockerHubStatus().catch(() => null),
             getGhcrStatus().catch(() => null),
             getGitLabRegistryStatus().catch(() => null),
-            getJfrogStatus().catch(() => null)
-        ]).then(([aws, azure, gcp, dockerhub, ghcr, gitlabRegistry, jfrog]) => {
+            getJfrogStatus().catch(() => null),
+            getHostRegistryStatus("harbor").catch(() => null),
+            getHostRegistryStatus("nexus").catch(() => null)
+        ]).then(([aws, azure, gcp, dockerhub, ghcr, gitlabRegistry, jfrog, harbor, nexus]) => {
 
             setStatus({
                 aws: !!aws?.configured,
@@ -98,7 +100,9 @@ export default function ContainerRegistry() {
                 dockerhub: !!dockerhub?.configured,
                 ghcr: !!ghcr?.configured,
                 gitlabRegistry: !!gitlabRegistry?.configured,
-                jfrog: !!jfrog?.configured
+                jfrog: !!jfrog?.configured,
+                harbor: !!harbor?.configured,
+                nexus: !!nexus?.configured
             });
             setLoading(false);
 
@@ -134,6 +138,8 @@ export default function ContainerRegistry() {
                 {view === "ghcr" && <GhcrView />}
                 {view === "gitlabRegistry" && <GitLabRegistryView />}
                 {view === "jfrog" && <JfrogView />}
+                {view === "harbor" && <HarborView />}
+                {view === "nexus" && <NexusView />}
 
             </PageLayout>
 
@@ -150,9 +156,8 @@ export default function ContainerRegistry() {
                 Artifact Registry connect using your own AWS/Azure/GCP credentials from{" "}
                 <a href="#" onClick={(e) => { e.preventDefault(); setTab("settings"); }}>Settings → Credentials</a> —
                 nothing new to set up if you already use those for Cloud Services or Environments.
-                Docker Hub, GHCR, GitLab Registry, and JFrog Artifactory each connect using
-                one shared credential an admin sets up once for the whole portal. Harbor and
-                Nexus are on the way.
+                Docker Hub, GHCR, GitLab Registry, JFrog Artifactory, Harbor, and Nexus each
+                connect using one shared credential an admin sets up once for the whole portal.
             </p>
 
             <div className="settings-hub">

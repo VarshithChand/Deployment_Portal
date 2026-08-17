@@ -1019,6 +1019,59 @@ public class SettingsService
         }
     }
 
+    // Harbor and Nexus - both self-hosted, both authenticate with a plain
+    // (HostUrl, Username, Password) Basic-auth triple - see
+    // PortalHostCredentials' own comment for why that one shape covers
+    // both rather than two near-identical dedicated stores. provider is
+    // "harbor" or "nexus". Storage:
+    // root["PortalHostCredentials"][provider] = { HostUrl, Username, Password }.
+    public async Task<PortalHostCredentials> GetPortalHostCredentialsAsync(string provider)
+    {
+        var root = await ReadRootAsync();
+        var entry = (root["PortalHostCredentials"] as JObject)?[provider] as JObject;
+
+        return new PortalHostCredentials(
+            entry?["HostUrl"]?.ToString(),
+            entry?["Username"]?.ToString(),
+            Unprotect(entry?["Password"]?.ToString()));
+    }
+
+    // Blank fields keep whatever was already saved - see SavePortalPaasCredentialsAsync.
+    public async Task SavePortalHostCredentialsAsync(string provider, HostCredentialsUpdateDto update)
+    {
+        var root = await ReadRootAsync();
+        var providers = root["PortalHostCredentials"] as JObject ?? new JObject();
+        var entry = providers[provider] as JObject ?? new JObject();
+
+        if (!string.IsNullOrWhiteSpace(update.HostUrl))
+            entry["HostUrl"] = update.HostUrl.Trim().TrimEnd('/');
+
+        if (!string.IsNullOrWhiteSpace(update.Username))
+            entry["Username"] = update.Username.Trim();
+
+        if (!string.IsNullOrWhiteSpace(update.Password))
+            entry["Password"] = Protect(update.Password.Trim());
+
+        providers[provider] = entry;
+        root["PortalHostCredentials"] = providers;
+        await WriteRootAsync(root);
+
+        _log.LogInfo("Settings", $"Portal-wide host credentials saved ({provider}).");
+    }
+
+    public async Task ClearPortalHostCredentialsAsync(string provider)
+    {
+        var root = await ReadRootAsync();
+
+        if (root["PortalHostCredentials"] is JObject providers && providers[provider] != null)
+        {
+            providers.Remove(provider);
+            await WriteRootAsync(root);
+
+            _log.LogInfo("Settings", $"Portal-wide host credentials cleared ({provider}).");
+        }
+    }
+
     // Which provider+service fills each of the Hosting Observability
     // dashboard's 3 roles - see PortalDeploymentTargetsDto. One object, not
     // per-provider, since there's exactly one Frontend/Backend/(optional)

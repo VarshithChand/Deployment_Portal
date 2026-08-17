@@ -37,6 +37,15 @@ public class ContainerRegistryController : ControllerBase
             ? null
             : new NotFoundObjectResult(new { message = $"Unknown registry \"{provider}\"." });
 
+    // Harbor/Nexus share PortalHostCredentials' generic (HostUrl, Username,
+    // Password) shape - see its own comment - so their status/save/clear
+    // routes stay generic-by-provider like Docker Hub/GHCR's above, just
+    // against a different credential DTO.
+    private static IActionResult? ValidateHostProvider(string provider) =>
+        provider is "harbor" or "nexus"
+            ? null
+            : new NotFoundObjectResult(new { message = $"Unknown registry \"{provider}\"." });
+
     // ---- Credential status/save/clear -----------------------------------
 
     [HttpGet("{provider}/status")]
@@ -264,5 +273,109 @@ public class ContainerRegistryController : ControllerBase
     {
         var creds = await _settings.GetPortalJfrogCredentialsAsync();
         return Ok(await _registry.GetJfrogTagsAsync(creds, repositoryKey, imageName));
+    }
+
+    // ---- Harbor/Nexus: credential status/save/clear --------------------
+
+    [HttpGet("{provider}/host-status")]
+    public async Task<IActionResult> GetHostStatus(string provider)
+    {
+        if (ValidateHostProvider(provider) is IActionResult invalid)
+            return invalid;
+
+        var creds = await _settings.GetPortalHostCredentialsAsync(provider);
+
+        return Ok(new HostCredentialStatusDto
+        {
+            Configured = creds.IsConfigured,
+            HostUrl = creds.HostUrl ?? string.Empty,
+            Username = creds.Username ?? string.Empty
+        });
+    }
+
+    [HttpPost("{provider}/host")]
+    public async Task<IActionResult> SaveHostCredentials(string provider, HostCredentialsUpdateDto request)
+    {
+        if (ValidateHostProvider(provider) is IActionResult invalid)
+            return invalid;
+
+        if (await AdminGate.DenyUnlessAdminAsync(this, _settings, "change settings") is IActionResult denied)
+            return denied;
+
+        if (await CredentialGate.DenyUnlessUnlockedAsync(this, _settings, _activity, provider) is IActionResult locked)
+            return locked;
+
+        var existing = await _settings.GetPortalHostCredentialsAsync(provider);
+        var effectiveHostUrl = string.IsNullOrWhiteSpace(request.HostUrl) ? existing.HostUrl : request.HostUrl;
+
+        if (string.IsNullOrWhiteSpace(effectiveHostUrl))
+            return BadRequest(new { message = "A host URL is required." });
+
+        await _settings.SavePortalHostCredentialsAsync(provider, request);
+
+        return Ok(new { configured = true });
+    }
+
+    [HttpDelete("{provider}/host")]
+    public async Task<IActionResult> ClearHostCredentials(string provider)
+    {
+        if (ValidateHostProvider(provider) is IActionResult invalid)
+            return invalid;
+
+        if (await AdminGate.DenyUnlessAdminAsync(this, _settings, "change settings") is IActionResult denied)
+            return denied;
+
+        if (await CredentialGate.DenyUnlessUnlockedAsync(this, _settings, _activity, provider) is IActionResult locked)
+            return locked;
+
+        await _settings.ClearPortalHostCredentialsAsync(provider);
+
+        return Ok(new { success = true });
+    }
+
+    // ---- Harbor browse ---------------------------------------------------
+
+    [HttpGet("harbor/projects")]
+    public async Task<IActionResult> GetHarborProjects()
+    {
+        var creds = await _settings.GetPortalHostCredentialsAsync("harbor");
+        return Ok(await _registry.GetHarborProjectsAsync(creds));
+    }
+
+    [HttpGet("harbor/projects/{projectName}/repositories")]
+    public async Task<IActionResult> GetHarborRepositories(string projectName)
+    {
+        var creds = await _settings.GetPortalHostCredentialsAsync("harbor");
+        return Ok(await _registry.GetHarborRepositoriesAsync(creds, projectName));
+    }
+
+    [HttpGet("harbor/projects/{projectName}/repositories/{repositoryName}/artifacts")]
+    public async Task<IActionResult> GetHarborArtifacts(string projectName, string repositoryName)
+    {
+        var creds = await _settings.GetPortalHostCredentialsAsync("harbor");
+        return Ok(await _registry.GetHarborArtifactsAsync(creds, projectName, repositoryName));
+    }
+
+    // ---- Nexus browse ------------------------------------------------------
+
+    [HttpGet("nexus/repositories")]
+    public async Task<IActionResult> GetNexusRepositories()
+    {
+        var creds = await _settings.GetPortalHostCredentialsAsync("nexus");
+        return Ok(await _registry.GetNexusRepositoriesAsync(creds));
+    }
+
+    [HttpGet("nexus/repositories/{repositoryName}/images")]
+    public async Task<IActionResult> GetNexusImages(string repositoryName)
+    {
+        var creds = await _settings.GetPortalHostCredentialsAsync("nexus");
+        return Ok(await _registry.GetNexusImagesAsync(creds, repositoryName));
+    }
+
+    [HttpGet("nexus/repositories/{repositoryName}/images/{imageName}/tags")]
+    public async Task<IActionResult> GetNexusTags(string repositoryName, string imageName)
+    {
+        var creds = await _settings.GetPortalHostCredentialsAsync("nexus");
+        return Ok(await _registry.GetNexusTagsAsync(creds, repositoryName, imageName));
     }
 }

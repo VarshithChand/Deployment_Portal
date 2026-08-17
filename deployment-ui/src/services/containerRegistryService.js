@@ -151,3 +151,58 @@ export const getJfrogTags = async (repositoryKey, imageName) => {
     );
     return response.data;
 };
+
+// Harbor and Nexus - portal-wide, shared credential, both using the same
+// generic {hostUrl, username, password} shape (see HostCredentialsUpdateDto)
+// since both are self-hosted, Basic-auth registries - status/save/clear
+// routes take a provider ("harbor" | "nexus") the same way Docker Hub/GHCR's
+// do above.
+
+export const getHostRegistryStatus = async (provider) => {
+    const response = await registryApi.get(`/${provider}/host-status`);
+    return response.data;
+};
+
+export const saveHostRegistryCredentials = async (provider, payload) => {
+    const response = await registryApi.post(`/${provider}/host`, payload);
+    return response.data;
+};
+
+export const clearHostRegistryCredentials = async (provider) => {
+    const response = await registryApi.delete(`/${provider}/host`);
+    return response.data;
+};
+
+export const getHarborProjects = async () => {
+    const response = await registryApi.get("/harbor/projects");
+    return response.data;
+};
+
+export const getHarborRepositories = async (projectName) => {
+    const response = await registryApi.get(`/harbor/projects/${encodeURIComponent(projectName)}/repositories`);
+    return response.data;
+};
+
+export const getHarborArtifacts = async (projectName, repositoryName) => {
+    const response = await registryApi.get(
+        `/harbor/projects/${encodeURIComponent(projectName)}/repositories/${encodeURIComponent(repositoryName)}/artifacts`
+    );
+    return response.data;
+};
+
+export const getNexusRepositories = async () => {
+    const response = await registryApi.get("/nexus/repositories");
+    return response.data;
+};
+
+export const getNexusImages = async (repositoryName) => {
+    const response = await registryApi.get(`/nexus/repositories/${encodeURIComponent(repositoryName)}/images`);
+    return response.data;
+};
+
+export const getNexusTags = async (repositoryName, imageName) => {
+    const response = await registryApi.get(
+        `/nexus/repositories/${encodeURIComponent(repositoryName)}/images/${encodeURIComponent(imageName)}/tags`
+    );
+    return response.data;
+};

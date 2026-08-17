@@ -200,3 +200,116 @@ public class JfrogTagListDto
     public string? Error { get; set; }
     public List<JfrogTagDto> Images { get; set; } = new();
 }
+
+// ============================================================
+// Harbor and Nexus - the final two providers from the original reference
+// image. Both are almost always self-hosted (no fixed host, like JFrog),
+// and both authenticate with a plain username + password/token pair (Basic
+// auth) rather than a single bearer token - so both share one dedicated
+// credential shape (HostUrl, Username, Password) and, on the frontend, one
+// shared login form component rather than two near-identical bespoke ones
+// (see HostCredentialLoginSection.jsx) - the same "one generic shape for
+// several near-identical providers" reasoning UserPaasCredentials(Token,
+// AccountId) already uses for Render/Cloudflare/Netlify/Vercel.
+
+public record PortalHostCredentials(string? HostUrl, string? Username, string? Password)
+{
+    public bool IsConfigured => !string.IsNullOrWhiteSpace(HostUrl) && !string.IsNullOrWhiteSpace(Username) && !string.IsNullOrWhiteSpace(Password);
+}
+
+public class HostCredentialsUpdateDto
+{
+    public string HostUrl { get; set; } = string.Empty;
+    public string Username { get; set; } = string.Empty;
+    public string Password { get; set; } = string.Empty;
+}
+
+public class HostCredentialStatusDto
+{
+    public bool Configured { get; set; }
+    public string HostUrl { get; set; } = string.Empty;
+    public string Username { get; set; } = string.Empty;
+}
+
+public class HarborProjectDto
+{
+    public string Name { get; set; } = string.Empty;
+    public int RepoCount { get; set; }
+    public DateTime? CreatedAt { get; set; }
+}
+
+public class HarborProjectListDto
+{
+    public bool Configured { get; set; }
+    public string? Error { get; set; }
+    public List<HarborProjectDto> Projects { get; set; } = new();
+}
+
+public class HarborRepositoryDto
+{
+    public string Name { get; set; } = string.Empty;
+    public int ArtifactCount { get; set; }
+    public int PullCount { get; set; }
+    public DateTime? UpdatedAt { get; set; }
+}
+
+public class HarborRepositoryListDto
+{
+    public bool Configured { get; set; }
+    public string? Error { get; set; }
+    public List<HarborRepositoryDto> Repositories { get; set; } = new();
+}
+
+public class HarborArtifactDto
+{
+    public string Tag { get; set; } = string.Empty;
+    public string? Digest { get; set; }
+    public long? SizeBytes { get; set; }
+    public DateTime? PushedAt { get; set; }
+}
+
+public class HarborArtifactListDto
+{
+    public bool Configured { get; set; }
+    public string? Error { get; set; }
+    public List<HarborArtifactDto> Images { get; set; } = new();
+}
+
+public class NexusRepositoryDto
+{
+    public string Name { get; set; } = string.Empty;
+    public string Type { get; set; } = string.Empty;
+}
+
+public class NexusRepositoryListDto
+{
+    public bool Configured { get; set; }
+    public string? Error { get; set; }
+    public List<NexusRepositoryDto> Repositories { get; set; } = new();
+}
+
+public class NexusImageDto
+{
+    public string Name { get; set; } = string.Empty;
+}
+
+public class NexusImageListDto
+{
+    public bool Configured { get; set; }
+    public string? Error { get; set; }
+    public List<NexusImageDto> Images { get; set; } = new();
+}
+
+public class NexusTagDto
+{
+    public string Tag { get; set; } = string.Empty;
+    public string? Digest { get; set; }
+    public DateTime? PushedAt { get; set; }
+}
+
+public class NexusTagListDto
+{
+    public bool Configured { get; set; }
+    public string? Error { get; set; }
+    public List<NexusTagDto> Images { get; set; } = new();
+}
