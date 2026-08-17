@@ -4301,10 +4301,18 @@ textarea{
 /* PinLockScreen — the "fake logout" PeriodicSignOutMonitor shows once a
    screen-lock PIN is set, instead of wiping credentials. Above the
    blocked-overlay (an admin action) since a self-lock can legitimately
-   stack on top of whatever else was on screen and needs to win. */
+   stack on top of whatever else was on screen and needs to win.
+   Deliberately fully opaque (--bg, not --overlay-bg's translucent rgba
+   every other .dialog-backdrop uses) - this is a real screen LOCK, not a
+   confirm-dialog dim, so whatever repos/workflows/cloud data was on
+   screen when it triggered shouldn't stay visible behind it. --bg is a
+   solid hex in every theme (no alpha channel), unlike --card-bg/
+   --overlay-bg, which are intentionally translucent for the glass look. */
 .pin-lock-backdrop{
 
     z-index:1450;
+
+    background:var(--bg);
 
 }
 
