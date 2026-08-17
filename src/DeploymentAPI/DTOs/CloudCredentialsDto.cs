@@ -145,6 +145,17 @@ public class CloudStatusDto
     public string? AzureDefaultHostname { get; set; }
 
     public DateTime? AzureLastModifiedUtc { get; set; }
+
+    // Render/Cloudflare/Netlify/Vercel — the matched service from this
+    // visitor's own connected account (see EnvironmentsController.
+    // GetCloudStatus), when Configured/Found are both true and a service
+    // matching this environment's saved target id was located.
+    public PaasServiceItemDto? PaasService { get; set; }
+
+    // Metric series for that same matched service — always an empty list
+    // (never null) for providers/services with nothing to show, per
+    // PaasProviderService.GetServiceMetricsAsync's contract.
+    public List<PaasMetricSeriesDto> Metrics { get; set; } = new();
 }
 
 public class EcrImageDto

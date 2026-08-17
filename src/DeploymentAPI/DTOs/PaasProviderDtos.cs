@@ -39,6 +39,14 @@ public class PaasServiceItemDto
 {
     public string Name { get; set; } = string.Empty;
 
+    // The provider's own real identifier, when it has one distinct from
+    // Name — populated for Render (a "srv-..." id, needed by its Metrics
+    // API's "resource=" param, which does NOT accept a display name) and
+    // left null for Cloudflare/Netlify/Vercel, which don't have a short id
+    // separate from name in the same way. GetCloudStatus below matches by
+    // Id when present, falling back to Name.
+    public string? Id { get; set; }
+
     // e.g. "web_service"/"static_site"/"background_worker" (Render),
     // "pages_project"/"worker" (Cloudflare), "site" (Netlify), "project"
     // (Vercel) — surfaced as-is so the frontend can show a small type
@@ -77,4 +85,41 @@ public class PaasProviderStatusDto
     public string? AccountLabel { get; set; }
 
     public List<PaasServiceItemDto> Services { get; set; } = new();
+}
+
+// One metric's data points for one service — CPU%, memory bytes, whatever
+// that provider's API actually exposes. Deliberately generic (same "loose
+// shape over four near-identical DTOs" reasoning as PaasServiceItemDto
+// above) since Render exposes two series (CPU/Memory) and Cloudflare/
+// Netlify/Vercel currently expose none at all - see
+// PaasProviderService.GetServiceMetricsAsync for why (not every provider
+// has a comparable "load" API, and this isn't guessed at).
+public class PaasMetricSeriesDto
+{
+    public string Name { get; set; } = string.Empty;
+
+    public string Unit { get; set; } = string.Empty;
+
+    public List<PaasMetricPointDto> Points { get; set; } = new();
+}
+
+public class PaasMetricPointDto
+{
+    public DateTime Timestamp { get; set; }
+
+    public double Value { get; set; }
+}
+
+// Wrapper so a metrics call can carry its own Found/Error independent of
+// the service-listing call it's paired with in GetCloudStatus - a service
+// can be found (it's in .Services) while its metrics call still fails
+// independently (a different endpoint, sometimes a different permission
+// requirement).
+public class PaasServiceMetricsDto
+{
+    public bool Found { get; set; }
+
+    public string? Error { get; set; }
+
+    public List<PaasMetricSeriesDto> Series { get; set; } = new();
 }

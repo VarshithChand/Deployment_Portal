@@ -10,11 +10,13 @@ public class EnvironmentDefinitionDto
 
     public string WorkflowName { get; set; } = string.Empty;
 
-    // "aws" | "azure" | "render" | "cloudflare" | "none" — "none" until an
-    // admin explicitly sets one, or until DeploymentTargetDetector finds
-    // real evidence in WorkflowName's own YAML (see EnvironmentsController.
-    // BuildSummaryAsync) - either way, nothing here is hand-typed-and-
-    // trusted without a way to check it against the real pipeline.
+    // "aws" | "azure" | "render" | "cloudflare" | "netlify" | "vercel" |
+    // "none" — "none" until an admin explicitly sets one, or until
+    // DeploymentTargetDetector finds real evidence in WorkflowName's own
+    // YAML (see EnvironmentsController.BuildSummaryAsync). Netlify/Vercel
+    // are never auto-detected (DeploymentTargetDetector only recognizes
+    // aws/azure/render/cloudflare evidence) - admin-picked or hand-typed
+    // only.
     public string CloudProvider { get; set; } = "none";
 
     // AWS target — only meaningful when CloudProvider == "aws".
@@ -40,6 +42,12 @@ public class EnvironmentDefinitionDto
     public string? CloudflareAccountId { get; set; }
 
     public string? CloudflareProjectName { get; set; }
+
+    // Netlify target — only meaningful when CloudProvider == "netlify".
+    public string? NetlifySiteId { get; set; }
+
+    // Vercel target — only meaningful when CloudProvider == "vercel".
+    public string? VercelProjectId { get; set; }
 }
 
 public class EnvironmentDefinitionsUpdateDto

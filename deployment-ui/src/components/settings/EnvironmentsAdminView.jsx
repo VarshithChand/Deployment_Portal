@@ -1,7 +1,10 @@
 import { useEffect, useState } from "react";
 
 import { getEnvironments, saveEnvironments, detectDeploymentTarget } from "../../services/environmentsService";
+import { getPaasStatus } from "../../services/paasService";
+import { PROVIDER_LABEL } from "../environments/CloudProviderBadge";
 import useToast from "../../hooks/useToast";
+import useNavigation from "../../hooks/useNavigation";
 
 const EMPTY_ENVIRONMENT = {
     name: "",
@@ -16,8 +19,73 @@ const EMPTY_ENVIRONMENT = {
     azureWebAppName: "",
     renderServiceId: "",
     cloudflareAccountId: "",
-    cloudflareProjectName: ""
+    cloudflareProjectName: "",
+    netlifySiteId: "",
+    vercelProjectId: ""
 };
+
+// The four Hosting Providers - matches PaasHosting.jsx's own provider set.
+const PAAS_PROVIDERS = ["render", "cloudflare", "netlify", "vercel"];
+
+// One environment's target-id field for a PaaS provider - a live <select>
+// of the CURRENT admin's own connected services when available (see
+// paasStatusByIndex below), falling back to a plain text input (so
+// someone can still type an id they know even without connecting that
+// provider themselves in this session). Pulled out since this same
+// picker-or-fallback shape is needed for all four providers.
+function PaasServiceIdField({ index, provider, field, label, placeholder, env, isAdmin, updateField, paasStatus, setTab }) {
+
+    const hasLiveList = paasStatus?.configured && paasStatus?.found && paasStatus.services?.length > 0;
+
+    return (
+
+        <div className="form-group">
+
+            <label>{label}</label>
+
+            {hasLiveList ? (
+
+                <select
+                    className="form-control"
+                    value={env[field] || ""}
+                    onChange={(e) => updateField(index, field, e.target.value)}
+                    disabled={!isAdmin}
+                >
+                    <option value="">Select a service…</option>
+                    {paasStatus.services.map((s) => (
+                        <option key={s.id || s.name} value={s.id || s.name}>{s.name}</option>
+                    ))}
+                </select>
+
+            ) : (
+
+                <input
+                    className="form-control"
+                    placeholder={placeholder}
+                    value={env[field] || ""}
+                    onChange={(e) => updateField(index, field, e.target.value)}
+                    disabled={!isAdmin}
+                />
+
+            )}
+
+            {isAdmin && !hasLiveList && (
+
+                <p className="field-hint">
+                    Connect your own {PROVIDER_LABEL[provider]} account in{" "}
+                    <a href="#" onClick={(e) => { e.preventDefault(); setTab("settings"); }}>
+                        Settings → Credentials
+                    </a>
+                    {" "}to pick from a live list instead of typing an id.
+                </p>
+
+            )}
+
+        </div>
+
+    );
+
+}
 
 // Visible to every visitor (the same data the Dashboard card already
 // shows everyone) — editing is what's restricted. Non-admins get every
@@ -32,12 +100,17 @@ const EMPTY_ENVIRONMENT = {
 export default function EnvironmentsAdminView({ isAdmin }) {
 
     const toast = useToast();
+    const { setTab } = useNavigation();
 
     const [environments, setEnvironments] = useState([]);
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [detectingIndex, setDetectingIndex] = useState(null);
     const [evidenceByIndex, setEvidenceByIndex] = useState({});
+
+    // The current admin's own connected Hosting Provider services, keyed
+    // "{rowIndex}:{provider}" - powers PaasServiceIdField's live picker.
+    const [paasStatusByIndex, setPaasStatusByIndex] = useState({});
 
     useEffect(() => {
 
@@ -49,6 +122,32 @@ export default function EnvironmentsAdminView({ isAdmin }) {
         });
 
     }, []);
+
+    // Fetches this admin's own connected-service list for any row whose
+    // CloudProvider is one of the four PaaS providers and hasn't been
+    // fetched yet - keyed on the joined provider list (not `environments`
+    // itself) so typing in an unrelated field on some other row doesn't
+    // re-trigger this.
+    useEffect(() => {
+
+        if (!isAdmin) return;
+
+        environments.forEach((env, index) => {
+
+            const provider = env.cloudProvider;
+            const key = `${index}:${provider}`;
+
+            if (!PAAS_PROVIDERS.includes(provider) || paasStatusByIndex[key] !== undefined)
+                return;
+
+            getPaasStatus(provider)
+                .then((result) => setPaasStatusByIndex((current) => ({ ...current, [key]: result })))
+                .catch(() => setPaasStatusByIndex((current) => ({ ...current, [key]: null })));
+
+        });
+
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [environments.map((e) => e.cloudProvider).join(","), isAdmin]);
 
     function updateField(index, field, value) {
 
@@ -176,12 +275,12 @@ export default function EnvironmentsAdminView({ isAdmin }) {
             <p className="empty-state" style={{ padding: "0 0 15px", textAlign: "left" }}>
                 Each environment tracks one CD/release workflow's latest run for its commit and
                 artifacts. Its cloud target is detected automatically by reading that workflow's
-                own YAML (AWS ECS/ECR, Azure Web App, Render, or Cloudflare) whenever nothing has
-                been explicitly set below — "Detect from Pipeline" fills these fields in for you,
-                or type them by hand if detection can't find enough evidence. Whoever opens an AWS
-                or Azure environment then enters their own cloud credentials to see live status
-                (Render and Cloudflare targets are detected and shown, but don't have live status
-                monitoring yet).
+                own YAML (AWS ECS/ECR, Azure Web App, Render, or Cloudflare — Netlify and Vercel
+                are never auto-detected) whenever nothing has been explicitly set below — "Detect
+                from Pipeline" fills these fields in for you, or pick/type them by hand. Whoever
+                opens this environment's detail page then connects their own credentials (AWS/
+                Azure right there, Render/Cloudflare/Netlify/Vercel via Settings → Credentials) to
+                see live status — and, for Render specifically, real CPU/memory load.
                 {!isAdmin && " Only admins can change this list."}
             </p>
 
@@ -270,6 +369,8 @@ export default function EnvironmentsAdminView({ isAdmin }) {
                             <option value="azure">Azure Web App</option>
                             <option value="render">Render</option>
                             <option value="cloudflare">Cloudflare</option>
+                            <option value="netlify">Netlify</option>
+                            <option value="vercel">Vercel</option>
                         </select>
                     </div>
 
@@ -362,16 +463,18 @@ export default function EnvironmentsAdminView({ isAdmin }) {
 
                     {env.cloudProvider === "render" && (
 
-                        <div className="form-group">
-                            <label>Render Service ID</label>
-                            <input
-                                className="form-control"
-                                placeholder="srv-xxxxxxxxxxxxxxxxxxxx"
-                                value={env.renderServiceId || ""}
-                                onChange={(e) => updateField(index, "renderServiceId", e.target.value)}
-                                disabled={!isAdmin}
-                            />
-                        </div>
+                        <PaasServiceIdField
+                            index={index}
+                            provider="render"
+                            field="renderServiceId"
+                            label="Render Service"
+                            placeholder="srv-xxxxxxxxxxxxxxxxxxxx"
+                            env={env}
+                            isAdmin={isAdmin}
+                            updateField={updateField}
+                            paasStatus={paasStatusByIndex[`${index}:render`]}
+                            setTab={setTab}
+                        />
 
                     )}
 
@@ -379,6 +482,11 @@ export default function EnvironmentsAdminView({ isAdmin }) {
 
                         <>
 
+                        {/* This is the ADMIN's OWN Cloudflare Account ID (from their
+                            Settings → Credentials connection, needed just to fetch the
+                            live picker below) - not necessarily the same account this
+                            environment's Cloudflare Project actually lives under, so it
+                            stays a plain field rather than being folded into the picker. */}
                         <div className="form-group">
                             <label>Cloudflare Account ID</label>
                             <input
@@ -389,17 +497,54 @@ export default function EnvironmentsAdminView({ isAdmin }) {
                             />
                         </div>
 
-                        <div className="form-group">
-                            <label>Cloudflare Project Name</label>
-                            <input
-                                className="form-control"
-                                value={env.cloudflareProjectName || ""}
-                                onChange={(e) => updateField(index, "cloudflareProjectName", e.target.value)}
-                                disabled={!isAdmin}
-                            />
-                        </div>
+                        <PaasServiceIdField
+                            index={index}
+                            provider="cloudflare"
+                            field="cloudflareProjectName"
+                            label="Cloudflare Project"
+                            placeholder="my-pages-project"
+                            env={env}
+                            isAdmin={isAdmin}
+                            updateField={updateField}
+                            paasStatus={paasStatusByIndex[`${index}:cloudflare`]}
+                            setTab={setTab}
+                        />
 
                         </>
+
+                    )}
+
+                    {env.cloudProvider === "netlify" && (
+
+                        <PaasServiceIdField
+                            index={index}
+                            provider="netlify"
+                            field="netlifySiteId"
+                            label="Netlify Site"
+                            placeholder="my-site-name"
+                            env={env}
+                            isAdmin={isAdmin}
+                            updateField={updateField}
+                            paasStatus={paasStatusByIndex[`${index}:netlify`]}
+                            setTab={setTab}
+                        />
+
+                    )}
+
+                    {env.cloudProvider === "vercel" && (
+
+                        <PaasServiceIdField
+                            index={index}
+                            provider="vercel"
+                            field="vercelProjectId"
+                            label="Vercel Project"
+                            placeholder="my-project-name"
+                            env={env}
+                            isAdmin={isAdmin}
+                            updateField={updateField}
+                            paasStatus={paasStatusByIndex[`${index}:vercel`]}
+                            setTab={setTab}
+                        />
 
                     )}
 

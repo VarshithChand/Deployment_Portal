@@ -221,6 +221,8 @@ export default function EnvironmentDetailView({ name, onBack }) {
                     renderServiceId={detail.renderServiceId}
                     cloudflareAccountId={detail.cloudflareAccountId}
                     cloudflareProjectName={detail.cloudflareProjectName}
+                    netlifySiteId={detail.netlifySiteId}
+                    vercelProjectId={detail.vercelProjectId}
                     autoDetected={detail.autoDetected}
                     detectionEvidence={detail.detectionEvidence}
                 />

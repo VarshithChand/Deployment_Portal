@@ -51,6 +51,99 @@ public class PaasProviderService
         }
     }
 
+    // Usage/load metrics for ONE already-identified service, used by
+    // EnvironmentsController.GetCloudStatus once it has matched an
+    // Environment's saved target against this session's connected
+    // account. Only Render has a real per-resource "load" API among these
+    // four - Cloudflare's equivalent needs its GraphQL Analytics API
+    // (a materially different request shape than every plain GET call in
+    // this file, and mostly Workers-oriented, not Pages-project-oriented,
+    // so not worth the complexity jump for one metric on one provider
+    // right now), and Netlify/Vercel are static/edge hosting with only
+    // account-level build-minute/bandwidth usage, not a per-project "load"
+    // concept at all. Cloudflare/Netlify/Vercel deliberately return an
+    // empty series list here - not a gap, a scope decision.
+    public async Task<PaasServiceMetricsDto> GetServiceMetricsAsync(string provider, UserPaasCredentials credentials, string serviceId)
+    {
+        var result = new PaasServiceMetricsDto();
+
+        if (!credentials.IsConfigured || string.IsNullOrWhiteSpace(serviceId))
+            return result;
+
+        try
+        {
+            return provider switch
+            {
+                "render" => await GetRenderMetricsAsync(credentials, serviceId, result),
+                _ => result
+            };
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[{provider}:metrics] {ex}");
+            result.Error = $"Unable to load metrics from {Label(provider)} right now.";
+            return result;
+        }
+    }
+
+    // Render's Metrics API - GET /v1/metrics/{cpu|memory}?resource={id}.
+    // Exact response field names here are the least-certain part of this
+    // integration (this endpoint is far less central/documented than
+    // Render's core Services API) - each of the two calls is independently
+    // wrapped so a wrong field name or an unsupported plan tier degrades
+    // that ONE series to "not shown" rather than failing the whole thing.
+    private async Task<PaasServiceMetricsDto> GetRenderMetricsAsync(UserPaasCredentials credentials, string serviceId, PaasServiceMetricsDto result)
+    {
+        var client = CreateClient(credentials.Token!);
+        var since = Uri.EscapeDataString(DateTime.UtcNow.AddHours(-1).ToString("o"));
+        var resource = Uri.EscapeDataString(serviceId);
+
+        await TryAddRenderSeriesAsync(client, "cpu", "%", resource, since, result);
+        await TryAddRenderSeriesAsync(client, "memory", "bytes", resource, since, result);
+
+        result.Found = result.Series.Count > 0;
+
+        if (!result.Found)
+            result.Error ??= "No metrics available for this service right now.";
+
+        return result;
+    }
+
+    private static async Task TryAddRenderSeriesAsync(HttpClient client, string metric, string unit, string resource, string since, PaasServiceMetricsDto result)
+    {
+        try
+        {
+            var response = await client.GetAsync($"https://api.render.com/v1/metrics/{metric}?resource={resource}&startTime={since}");
+
+            if (!response.IsSuccessStatusCode)
+                return;
+
+            var body = await response.Content.ReadAsStringAsync();
+            var points = JArray.Parse(body);
+
+            var series = new PaasMetricSeriesDto { Name = metric, Unit = unit };
+
+            foreach (var point in points)
+            {
+                var timestamp = point["timestamp"]?.ToString() ?? point["time"]?.ToString();
+                var value = point["value"];
+
+                if (timestamp != null && value != null && DateTime.TryParse(timestamp, out var parsedTime))
+                    series.Points.Add(new PaasMetricPointDto { Timestamp = parsedTime, Value = value.Value<double>() });
+            }
+
+            if (series.Points.Count > 0)
+                result.Series.Add(series);
+        }
+        catch (Exception ex)
+        {
+            // One series failing (unsupported plan tier, an unexpected
+            // response shape) shouldn't blank the other - see this
+            // method's own caller.
+            Console.Error.WriteLine($"[render:metrics:{metric}] {ex}");
+        }
+    }
+
     private static string Label(string provider) => provider switch
     {
         "render" => "Render",
@@ -114,6 +207,9 @@ public class PaasProviderService
             return new PaasServiceItemDto
             {
                 Name = svc?["name"]?.ToString() ?? string.Empty,
+                // The real "srv-..." id - GetServiceMetricsAsync's Render
+                // call needs this, not the display name.
+                Id = svc?["id"]?.ToString(),
                 Type = svc?["type"]?.ToString(),
                 Status = suspended == "suspended" ? "suspended" : "live",
                 Url = svc?["serviceDetails"]?["url"]?.ToString(),

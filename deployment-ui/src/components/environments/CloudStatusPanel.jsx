@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 
 import formatBytes from "../../utils/formatBytes";
 import useToast from "../../hooks/useToast";
+import useNavigation from "../../hooks/useNavigation";
 import { getEnvironmentCloudStatus } from "../../services/environmentsService";
 import { PROVIDER_LABEL } from "./CloudProviderBadge";
 import {
@@ -12,20 +13,24 @@ import {
 const EMPTY_AWS_FORM = { accessKeyId: "", secretAccessKey: "", region: "" };
 const EMPTY_AZURE_FORM = { tenantId: "", clientId: "", clientSecret: "" };
 
-// The live AWS ECS/ECR or Azure Web App panel on an environment's detail
-// view. Credentials are entered here once per browser session (see
-// PortalIdentity/UserAwsCredentials on the backend) — never portal-wide,
-// never sent anywhere except this backend's own AWS/Azure calls made on
-// your behalf. Render/Cloudflare targets are detected and shown (see
-// renderServiceId/cloudflareAccountId/cloudflareProjectName) but have no
-// live-status integration yet - see EnvironmentsController.GetCloudStatus.
+const PAAS_PROVIDERS = ["render", "cloudflare", "netlify", "vercel"];
+
+// The live AWS ECS/ECR, Azure Web App, or Render/Cloudflare/Netlify/Vercel
+// panel on an environment's detail view. AWS/Azure credentials are entered
+// right here per browser session (see PortalIdentity/UserAwsCredentials on
+// the backend); Render/Cloudflare/Netlify/Vercel credentials live on
+// Settings → Credentials instead (see PaasLoginSection) - either way,
+// never portal-wide, never sent anywhere except this backend's own calls
+// made on your behalf.
 export default function CloudStatusPanel({
     environmentName, cloudProvider,
     renderServiceId, cloudflareAccountId, cloudflareProjectName,
+    netlifySiteId, vercelProjectId,
     autoDetected, detectionEvidence
 }) {
 
     const toast = useToast();
+    const { setTab } = useNavigation();
 
     const [status, setStatus] = useState(null);
     const [loading, setLoading] = useState(true);
@@ -67,9 +72,10 @@ export default function CloudStatusPanel({
                 </h2>
 
                 <p className="empty-state">
-                    No AWS, Azure, Render, or Cloudflare target configured for this environment
-                    yet — set one in Settings → Environments, or add a deploy step to
-                    "{environmentName}"'s workflow and it'll be detected automatically.
+                    No AWS, Azure, Render, Cloudflare, Netlify, or Vercel target configured for
+                    this environment yet — set one in Settings → Environments, or (for AWS/Azure/
+                    Render/Cloudflare) add a deploy step to "{environmentName}"'s workflow and
+                    it'll be detected automatically.
                 </p>
 
             </div>
@@ -78,7 +84,14 @@ export default function CloudStatusPanel({
 
     }
 
-    if (cloudProvider === "render" || cloudProvider === "cloudflare") {
+    if (PAAS_PROVIDERS.includes(cloudProvider)) {
+
+        const targetId = {
+            render: renderServiceId,
+            cloudflare: cloudflareProjectName,
+            netlify: netlifySiteId,
+            vercel: vercelProjectId
+        }[cloudProvider];
 
         return (
 
@@ -88,31 +101,104 @@ export default function CloudStatusPanel({
                     Cloud Status — {PROVIDER_LABEL[cloudProvider]}
                 </h2>
 
-                <p className="empty-state" style={{ textAlign: "left" }}>
-                    {autoDetected ? "Detected from this environment's pipeline. " : ""}
-                    Live status monitoring isn't available for {PROVIDER_LABEL[cloudProvider]} yet
-                    — this is what the pipeline was found to deploy to.
-                </p>
-
-                {cloudProvider === "render" && renderServiceId && (
-                    <div className="info-row">
-                        <span>Render Service ID</span>
-                        <strong className="smoke-test-metric-mono">{renderServiceId}</strong>
-                    </div>
-                )}
-
-                {cloudProvider === "cloudflare" && cloudflareProjectName && (
-                    <div className="info-row">
-                        <span>Cloudflare Project</span>
-                        <strong className="smoke-test-metric-mono">{cloudflareProjectName}</strong>
-                    </div>
-                )}
-
                 {cloudProvider === "cloudflare" && cloudflareAccountId && (
                     <div className="info-row">
-                        <span>Cloudflare Account ID</span>
+                        <span>Configured Cloudflare Account ID</span>
                         <strong className="smoke-test-metric-mono">{cloudflareAccountId}</strong>
                     </div>
+                )}
+
+                {loading && (
+                    <p className="empty-state">Checking...</p>
+                )}
+
+                {!loading && !status?.configured && (
+
+                    <p className="empty-state" style={{ textAlign: "left" }}>
+                        Connect your own {PROVIDER_LABEL[cloudProvider]} account in{" "}
+                        <a href="#" onClick={(e) => { e.preventDefault(); setTab("settings"); }}>
+                            Settings → Credentials
+                        </a>
+                        {" "}to see this environment's live status.
+                    </p>
+
+                )}
+
+                {!loading && status?.configured && !status.found && (
+                    <p className="error-message">{status.error || `Unable to reach ${PROVIDER_LABEL[cloudProvider]}.`}</p>
+                )}
+
+                {!loading && status?.configured && status.found && status.paasService && (
+
+                    <>
+
+                    <div className="info-row">
+                        <span>Name</span>
+                        <strong>{status.paasService.name}</strong>
+                    </div>
+
+                    <div className="info-row">
+                        <span>Type</span>
+                        <strong>{status.paasService.type || "—"}</strong>
+                    </div>
+
+                    <div className="info-row">
+                        <span>Status</span>
+                        <strong>{status.paasService.status || "—"}</strong>
+                    </div>
+
+                    {status.paasService.url && (
+                        <div className="info-row">
+                            <span>URL</span>
+                            <strong>
+                                <a href={status.paasService.url} target="_blank" rel="noreferrer">{status.paasService.url}</a>
+                            </strong>
+                        </div>
+                    )}
+
+                    <div className="info-row">
+                        <span>Updated</span>
+                        <strong>{status.paasService.updatedAt ? new Date(status.paasService.updatedAt).toLocaleString() : "—"}</strong>
+                    </div>
+
+                    {status.metrics?.length > 0 ? (
+
+                        status.metrics.map((series) => (
+
+                            <div key={series.name} style={{ marginTop: "12px" }}>
+
+                                <p className="field-hint">{series.name} ({series.unit})</p>
+
+                                <ul className="field-hint" style={{ paddingLeft: "18px" }}>
+                                    {series.points.slice(-5).map((p, i) => (
+                                        <li key={i}>{new Date(p.timestamp).toLocaleTimeString()}: {p.value}</li>
+                                    ))}
+                                </ul>
+
+                            </div>
+
+                        ))
+
+                    ) : (
+
+                        <p className="field-hint" style={{ marginTop: "12px" }}>
+                            Usage metrics aren't available for {PROVIDER_LABEL[cloudProvider]} yet.
+                        </p>
+
+                    )}
+
+                    </>
+
+                )}
+
+                {!targetId && (
+                    <p className="field-hint" style={{ marginTop: "12px" }}>
+                        No target configured yet — set one in Settings → Environments.
+                    </p>
+                )}
+
+                {autoDetected && (
+                    <p className="field-hint" style={{ marginTop: "12px" }}>Detected from this environment's pipeline.</p>
                 )}
 
                 {detectionEvidence?.length > 0 && (

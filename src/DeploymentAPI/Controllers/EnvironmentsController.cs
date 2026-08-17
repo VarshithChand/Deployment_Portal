@@ -18,12 +18,14 @@ public class EnvironmentsController : ControllerBase
     private readonly SettingsService _settings;
     private readonly GitHubApiService _github;
     private readonly CloudStatusService _cloud;
+    private readonly PaasProviderService _paas;
 
-    public EnvironmentsController(SettingsService settings, GitHubApiService github, CloudStatusService cloud)
+    public EnvironmentsController(SettingsService settings, GitHubApiService github, CloudStatusService cloud, PaasProviderService paas)
     {
         _settings = settings;
         _github = github;
         _cloud = cloud;
+        _paas = paas;
     }
 
     [HttpGet]
@@ -80,6 +82,8 @@ public class EnvironmentsController : ControllerBase
             RenderServiceId = summary.RenderServiceId,
             CloudflareAccountId = summary.CloudflareAccountId,
             CloudflareProjectName = summary.CloudflareProjectName,
+            NetlifySiteId = summary.NetlifySiteId,
+            VercelProjectId = summary.VercelProjectId,
             LatestRunId = summary.LatestRunId,
             CommitSha = summary.CommitSha,
             CommitMessage = summary.CommitMessage,
@@ -147,15 +151,69 @@ public class EnvironmentsController : ControllerBase
             return Ok(status);
         }
 
-        // Render/Cloudflare are detected/displayed (see BuildSummaryAsync
-        // below) but have no live-status integration yet — no session-
-        // scoped credential type exists for either the way GetUserAws/
-        // AzureCredentialsAsync do, so there's nothing to call here. Report
-        // the real provider (not "none") so the frontend can say "detected,
-        // but live status isn't available for this provider" instead of
-        // "not configured", which would be inaccurate.
-        if (definition.CloudProvider == "render" || definition.CloudProvider == "cloudflare")
-            return Ok(new CloudStatusDto { Provider = definition.CloudProvider, Configured = false });
+        // Render/Cloudflare/Netlify/Vercel — resolved against THIS visitor's
+        // own connected Hosting Provider account (see PaasProviderService/
+        // UserPaasCredentials), the same "global resource id + per-visitor
+        // session credential" pattern AWS/Azure already use above. Configured
+        // reflects whether this visitor has connected that provider at all
+        // (not whether the environment has a target configured - that's
+        // definition.RenderServiceId etc, always global); a connected
+        // provider whose account doesn't contain the saved target is a
+        // distinct, clearer error than "not connected".
+        if (definition.CloudProvider is "render" or "cloudflare" or "netlify" or "vercel")
+        {
+            var provider = definition.CloudProvider;
+            var creds = await _settings.GetUserPaasCredentialsAsync(provider, key);
+
+            if (!creds.IsConfigured)
+                return Ok(new CloudStatusDto { Provider = provider, Configured = false });
+
+            var paasStatus = await _paas.GetStatusAsync(provider, creds);
+
+            if (!paasStatus.Found)
+            {
+                return Ok(new CloudStatusDto
+                {
+                    Provider = provider,
+                    Configured = true,
+                    Found = false,
+                    Error = paasStatus.Error ?? $"Unable to reach {provider} right now."
+                });
+            }
+
+            var wantedId = provider switch
+            {
+                "render" => definition.RenderServiceId,
+                "cloudflare" => definition.CloudflareProjectName,
+                "netlify" => definition.NetlifySiteId,
+                "vercel" => definition.VercelProjectId,
+                _ => null
+            };
+
+            var matched = paasStatus.Services.FirstOrDefault(s =>
+                string.Equals(s.Id, wantedId, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(s.Name, wantedId, StringComparison.OrdinalIgnoreCase));
+
+            if (matched == null)
+            {
+                return Ok(new CloudStatusDto
+                {
+                    Provider = provider,
+                    Configured = true,
+                    Found = false,
+                    Error = string.IsNullOrWhiteSpace(wantedId)
+                        ? "No target service configured for this environment yet."
+                        : $"\"{wantedId}\" wasn't found under your connected {provider} account."
+                });
+            }
+
+            var result = new CloudStatusDto { Provider = provider, Configured = true, Found = true, PaasService = matched };
+
+            var metrics = await _paas.GetServiceMetricsAsync(provider, creds, matched.Id ?? matched.Name);
+            result.Metrics = metrics.Series;
+
+            return Ok(result);
+        }
 
         return Ok(new CloudStatusDto { Provider = "none", Configured = false });
     }
@@ -268,6 +326,8 @@ public class EnvironmentsController : ControllerBase
             RenderServiceId = def.RenderServiceId,
             CloudflareAccountId = def.CloudflareAccountId,
             CloudflareProjectName = def.CloudflareProjectName,
+            NetlifySiteId = def.NetlifySiteId,
+            VercelProjectId = def.VercelProjectId,
 
             LatestRunId = latestRun?.Id,
             CommitSha = latestRun?.CommitSha,
