@@ -13,13 +13,16 @@ import ApiKeySection from "./credentials/ApiKeySection";
 import SecurityPinSection from "./credentials/SecurityPinSection";
 import CredentialPinGate from "./credentials/CredentialPinGate";
 import PortalRegistryLoginSection from "./credentials/PortalRegistryLoginSection";
+import GitLabRegistryLoginSection from "./credentials/GitLabRegistryLoginSection";
+import JfrogLoginSection from "./credentials/JfrogLoginSection";
 import useAuth from "../../hooks/useAuth";
 import { getMyAwsSettings, getMyAzureSettings, getMyGcpSettings } from "../../services/settingsService";
 import { getMyApiKeys } from "../../services/securityService";
 import { getPaasStatus } from "../../services/paasService";
 import {
     getDockerHubStatus, saveDockerHubCredentials, clearDockerHubCredentials,
-    getGhcrStatus, saveGhcrCredentials, clearGhcrCredentials
+    getGhcrStatus, saveGhcrCredentials, clearGhcrCredentials,
+    getGitLabRegistryStatus, getJfrogStatus
 } from "../../services/containerRegistryService";
 
 const MODES = [
@@ -33,6 +36,8 @@ const MODES = [
     { key: "docker", label: "Docker" },
     { key: "dockerhub", label: "Docker Hub" },
     { key: "ghcr", label: "GHCR" },
+    { key: "gitlab-registry", label: "GitLab Registry" },
+    { key: "jfrog", label: "JFrog" },
     { key: "oauth", label: "GitHub OAuth" },
     { key: "ai", label: "AI Assistant" },
     { key: "render", label: "Render" },
@@ -50,7 +55,7 @@ const MODES = [
 // PIN.
 const ALL_CREDENTIAL_PROVIDERS = [
     "github", "aws", "azure", "gcp", "apikey", "docker", "github-oauth", "sonar", "ai",
-    "render", "cloudflare", "netlify", "vercel", "dockerhub", "ghcr"
+    "render", "cloudflare", "netlify", "vercel", "dockerhub", "ghcr", "gitlab-registry", "jfrog"
 ];
 
 // A convenience picker, not a restriction — GEMINI_MODEL is still whatever
@@ -159,8 +164,10 @@ export default function CredentialsView({
             getPaasStatus("netlify").catch(() => null),
             getPaasStatus("vercel").catch(() => null),
             getDockerHubStatus().catch(() => null),
-            getGhcrStatus().catch(() => null)
-        ]).then(([aws, azure, gcp, apiKeysRes, render, cloudflare, netlify, vercel, dockerhub, ghcr]) => {
+            getGhcrStatus().catch(() => null),
+            getGitLabRegistryStatus().catch(() => null),
+            getJfrogStatus().catch(() => null)
+        ]).then(([aws, azure, gcp, apiKeysRes, render, cloudflare, netlify, vercel, dockerhub, ghcr, gitlabRegistry, jfrog]) => {
 
             const activeKeyCount = Array.isArray(apiKeysRes?.data)
                 ? apiKeysRes.data.filter((k) => !k.revoked).length
@@ -176,7 +183,9 @@ export default function CredentialsView({
                 netlify: netlify?.configured,
                 vercel: vercel?.configured,
                 dockerhub: dockerhub?.configured,
-                ghcr: ghcr?.configured
+                ghcr: ghcr?.configured,
+                "gitlab-registry": gitlabRegistry?.configured,
+                jfrog: jfrog?.configured
             });
 
         });
@@ -508,6 +517,22 @@ export default function CredentialsView({
                     clearFn={clearGhcrCredentials}
                     onCleared={() => removeUnlocked("ghcr")}
                 />
+            </CredentialPinGate>
+
+            )}
+
+            {mode === "gitlab-registry" && (
+
+            <CredentialPinGate provider="gitlab-registry" unlocked={unlockedProviders.has("gitlab-registry")} onUnlocked={markAllUnlocked}>
+                <GitLabRegistryLoginSection onCleared={() => removeUnlocked("gitlab-registry")} />
+            </CredentialPinGate>
+
+            )}
+
+            {mode === "jfrog" && (
+
+            <CredentialPinGate provider="jfrog" unlocked={unlockedProviders.has("jfrog")} onUnlocked={markAllUnlocked}>
+                <JfrogLoginSection onCleared={() => removeUnlocked("jfrog")} />
             </CredentialPinGate>
 
             )}

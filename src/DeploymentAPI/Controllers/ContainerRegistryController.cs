@@ -125,4 +125,144 @@ public class ContainerRegistryController : ControllerBase
         var creds = await _settings.GetPortalContainerRegistryCredentialsAsync("ghcr");
         return Ok(await _registry.GetGhcrVersionsAsync(creds, packageName));
     }
+
+    // ---- GitLab Registry: credential status/save/clear ---------------------
+    //
+    // Its own routes, not the generic {provider} ones above - the request
+    // body (HostUrl, ProjectId, Token) doesn't fit PaasCredentialsUpdateDto's
+    // (Token, AccountId) shape, see ContainerRegistryDtos.cs's own comment.
+
+    [HttpGet("gitlab-registry/status")]
+    public async Task<IActionResult> GetGitLabRegistryStatus()
+    {
+        var creds = await _settings.GetPortalGitLabRegistryCredentialsAsync();
+
+        return Ok(new GitLabRegistryStatusDto
+        {
+            Configured = creds.IsConfigured,
+            HostUrl = creds.HostUrl ?? string.Empty,
+            ProjectId = creds.ProjectId ?? string.Empty
+        });
+    }
+
+    [HttpPost("gitlab-registry")]
+    public async Task<IActionResult> SaveGitLabRegistryCredentials(GitLabRegistryCredentialsUpdateDto request)
+    {
+        if (await AdminGate.DenyUnlessAdminAsync(this, _settings, "change settings") is IActionResult denied)
+            return denied;
+
+        if (await CredentialGate.DenyUnlessUnlockedAsync(this, _settings, _activity, "gitlab-registry") is IActionResult locked)
+            return locked;
+
+        var existing = await _settings.GetPortalGitLabRegistryCredentialsAsync();
+        var effectiveProjectId = string.IsNullOrWhiteSpace(request.ProjectId) ? existing.ProjectId : request.ProjectId;
+
+        if (string.IsNullOrWhiteSpace(effectiveProjectId))
+            return BadRequest(new { message = "A Project ID (or path) is required." });
+
+        await _settings.SavePortalGitLabRegistryCredentialsAsync(request);
+
+        return Ok(new { configured = true });
+    }
+
+    [HttpDelete("gitlab-registry")]
+    public async Task<IActionResult> ClearGitLabRegistryCredentials()
+    {
+        if (await AdminGate.DenyUnlessAdminAsync(this, _settings, "change settings") is IActionResult denied)
+            return denied;
+
+        if (await CredentialGate.DenyUnlessUnlockedAsync(this, _settings, _activity, "gitlab-registry") is IActionResult locked)
+            return locked;
+
+        await _settings.ClearPortalGitLabRegistryCredentialsAsync();
+
+        return Ok(new { success = true });
+    }
+
+    // ---- GitLab Registry: browse --------------------------------------------
+
+    [HttpGet("gitlab-registry/repositories")]
+    public async Task<IActionResult> GetGitLabRepositories()
+    {
+        var creds = await _settings.GetPortalGitLabRegistryCredentialsAsync();
+        return Ok(await _registry.GetGitLabRepositoriesAsync(creds));
+    }
+
+    [HttpGet("gitlab-registry/repositories/{repositoryId}/tags")]
+    public async Task<IActionResult> GetGitLabTags(string repositoryId)
+    {
+        var creds = await _settings.GetPortalGitLabRegistryCredentialsAsync();
+        return Ok(await _registry.GetGitLabTagsAsync(creds, repositoryId));
+    }
+
+    // ---- JFrog Artifactory: credential status/save/clear --------------------
+
+    [HttpGet("jfrog/status")]
+    public async Task<IActionResult> GetJfrogStatus()
+    {
+        var creds = await _settings.GetPortalJfrogCredentialsAsync();
+
+        return Ok(new JfrogStatusDto
+        {
+            Configured = creds.IsConfigured,
+            HostUrl = creds.HostUrl ?? string.Empty
+        });
+    }
+
+    [HttpPost("jfrog")]
+    public async Task<IActionResult> SaveJfrogCredentials(JfrogCredentialsUpdateDto request)
+    {
+        if (await AdminGate.DenyUnlessAdminAsync(this, _settings, "change settings") is IActionResult denied)
+            return denied;
+
+        if (await CredentialGate.DenyUnlessUnlockedAsync(this, _settings, _activity, "jfrog") is IActionResult locked)
+            return locked;
+
+        var existing = await _settings.GetPortalJfrogCredentialsAsync();
+        var effectiveHostUrl = string.IsNullOrWhiteSpace(request.HostUrl) ? existing.HostUrl : request.HostUrl;
+
+        if (string.IsNullOrWhiteSpace(effectiveHostUrl))
+            return BadRequest(new { message = "A host URL is required." });
+
+        await _settings.SavePortalJfrogCredentialsAsync(request);
+
+        return Ok(new { configured = true });
+    }
+
+    [HttpDelete("jfrog")]
+    public async Task<IActionResult> ClearJfrogCredentials()
+    {
+        if (await AdminGate.DenyUnlessAdminAsync(this, _settings, "change settings") is IActionResult denied)
+            return denied;
+
+        if (await CredentialGate.DenyUnlessUnlockedAsync(this, _settings, _activity, "jfrog") is IActionResult locked)
+            return locked;
+
+        await _settings.ClearPortalJfrogCredentialsAsync();
+
+        return Ok(new { success = true });
+    }
+
+    // ---- JFrog Artifactory: browse -------------------------------------------
+
+    [HttpGet("jfrog/repositories")]
+    public async Task<IActionResult> GetJfrogRepositories()
+    {
+        var creds = await _settings.GetPortalJfrogCredentialsAsync();
+        return Ok(await _registry.GetJfrogRepositoriesAsync(creds));
+    }
+
+    [HttpGet("jfrog/repositories/{repositoryKey}/images")]
+    public async Task<IActionResult> GetJfrogImages(string repositoryKey)
+    {
+        var creds = await _settings.GetPortalJfrogCredentialsAsync();
+        return Ok(await _registry.GetJfrogImagesAsync(creds, repositoryKey));
+    }
+
+    [HttpGet("jfrog/repositories/{repositoryKey}/images/{imageName}/tags")]
+    public async Task<IActionResult> GetJfrogTags(string repositoryKey, string imageName)
+    {
+        var creds = await _settings.GetPortalJfrogCredentialsAsync();
+        return Ok(await _registry.GetJfrogTagsAsync(creds, repositoryKey, imageName));
+    }
 }

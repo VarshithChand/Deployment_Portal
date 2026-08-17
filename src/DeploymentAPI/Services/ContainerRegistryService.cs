@@ -257,4 +257,239 @@ public class ContainerRegistryService
 
         return result;
     }
+
+    // ================= GitLab Container Registry =================
+    //
+    // GitLab's own documented REST API v4 - PRIVATE-TOKEN header (GitLab's
+    // own convention, not Bearer), scoped to one project's registry (a
+    // GitLab instance has no single "list every registry I can see" call
+    // the way Docker Hub/GHCR do - see PortalGitLabRegistryCredentials'
+    // ProjectId field). Self-hosted-friendly: HostUrl defaults to
+    // gitlab.com but is fully configurable. The list-tags endpoint only
+    // returns bare names; a per-tag detail call is needed for digest/size/
+    // date, mirrored on ACR's own per-repo tag-count best-effort pattern
+    // below - one tag's detail failing doesn't blank the whole table, but
+    // for a repository with many tags this is N+1 requests, a real
+    // performance tradeoff against a self-hosted or heavily-tagged project,
+    // not fixed in this pass.
+
+    private static readonly HttpClient GitLabHttpClient = new();
+
+    private static async Task<string> GetGitLabAsync(string hostUrl, string token, string path)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Get, $"{hostUrl}/api/v4{path}");
+        request.Headers.Add("PRIVATE-TOKEN", token);
+
+        var response = await GitLabHttpClient.SendAsync(request);
+        await HttpClientHelper.EnsureSuccessAsync(response);
+
+        return await response.Content.ReadAsStringAsync();
+    }
+
+    public async Task<GitLabRegistryRepositoryListDto> GetGitLabRepositoriesAsync(PortalGitLabRegistryCredentials credentials)
+    {
+        var result = new GitLabRegistryRepositoryListDto { Configured = credentials.IsConfigured };
+
+        if (!credentials.IsConfigured)
+            return result;
+
+        try
+        {
+            var path = $"/projects/{Uri.EscapeDataString(credentials.ProjectId!)}/registry/repositories?tags_count=true&per_page=100";
+            var json = await GetGitLabAsync(credentials.HostUrl!, credentials.Token!, path);
+
+            var repos = JArray.Parse(json);
+
+            result.Repositories = repos.Select(r => new GitLabRegistryRepositoryDto
+            {
+                Id = r["id"]?.ToString() ?? string.Empty,
+                Name = string.IsNullOrWhiteSpace(r["name"]?.ToString()) ? "(default)" : r["name"]!.ToString(),
+                Path = r["path"]?.ToString() ?? string.Empty,
+                TagsCount = r["tags_count"]?.ToObject<int>() ?? 0,
+                CreatedAt = DateTime.TryParse(r["created_at"]?.ToString(), out var created) ? created : null
+            }).ToList();
+        }
+        catch (Exception ex)
+        {
+            result.Error = CloudErrorSanitizer.Describe(ex, "GitLab", "registry repository list");
+        }
+
+        return result;
+    }
+
+    public async Task<GitLabRegistryTagListDto> GetGitLabTagsAsync(PortalGitLabRegistryCredentials credentials, string repositoryId)
+    {
+        var result = new GitLabRegistryTagListDto { Configured = credentials.IsConfigured };
+
+        if (!credentials.IsConfigured)
+            return result;
+
+        try
+        {
+            var listPath = $"/projects/{Uri.EscapeDataString(credentials.ProjectId!)}/registry/repositories/{Uri.EscapeDataString(repositoryId)}/tags?per_page=100";
+            var json = await GetGitLabAsync(credentials.HostUrl!, credentials.Token!, listPath);
+
+            var tagNames = JArray.Parse(json).Select(t => t["name"]?.ToString()).Where(n => !string.IsNullOrWhiteSpace(n)).ToList();
+
+            foreach (var name in tagNames)
+            {
+                var entry = new GitLabRegistryTagDto { Tag = name! };
+
+                try
+                {
+                    var detailPath = $"/projects/{Uri.EscapeDataString(credentials.ProjectId!)}/registry/repositories/{Uri.EscapeDataString(repositoryId)}/tags/{Uri.EscapeDataString(name!)}";
+                    var detailJson = JObject.Parse(await GetGitLabAsync(credentials.HostUrl!, credentials.Token!, detailPath));
+
+                    entry.Digest = detailJson["digest"]?.ToString();
+                    entry.SizeBytes = detailJson["total_size"]?.ToObject<long?>();
+                    entry.PushedAt = DateTime.TryParse(detailJson["created_at"]?.ToString(), out var created) ? created : null;
+                }
+                catch
+                {
+                    // leave Digest/SizeBytes/PushedAt blank - see the section
+                    // comment on why this is a per-tag call, not part of the list.
+                }
+
+                result.Images.Add(entry);
+            }
+
+            result.Images = result.Images.OrderByDescending(i => i.PushedAt).ToList();
+        }
+        catch (Exception ex)
+        {
+            result.Error = CloudErrorSanitizer.Describe(ex, "GitLab", "registry tag list");
+        }
+
+        return result;
+    }
+
+    // ================= JFrog Artifactory =================
+    //
+    // No fixed host (every Artifactory instance is its own domain - see
+    // PortalJfrogCredentials' HostUrl field), Bearer access token auth
+    // (JFrog's modern recommended scheme). Repositories come from
+    // Artifactory's own REST API; images/tags within a docker-type
+    // repository come from the Docker Registry HTTP API V2 endpoints
+    // Artifactory proxies at /api/docker/{repoKey}/v2/... - the same base
+    // spec ACR's /v2/_catalog and /v2/{repo}/tags/list calls use, which
+    // means (like ACR's own base-spec fallback) tag names come back with no
+    // digest. A per-tag HEAD on the v2 manifest endpoint recovers the
+    // digest from the Docker-Content-Digest response header - a real,
+    // documented technique, not guessed - wrapped the same best-effort way
+    // GitLab's per-tag detail call above is, so one tag's HEAD failing
+    // doesn't blank the whole table.
+
+    private static readonly HttpClient JfrogHttpClient = new();
+
+    private static async Task<string> GetJfrogAsync(string hostUrl, string token, string path)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Get, $"{hostUrl}{path}");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        var response = await JfrogHttpClient.SendAsync(request);
+        await HttpClientHelper.EnsureSuccessAsync(response);
+
+        return await response.Content.ReadAsStringAsync();
+    }
+
+    public async Task<JfrogRepositoryListDto> GetJfrogRepositoriesAsync(PortalJfrogCredentials credentials)
+    {
+        var result = new JfrogRepositoryListDto { Configured = credentials.IsConfigured };
+
+        if (!credentials.IsConfigured)
+            return result;
+
+        try
+        {
+            var json = await GetJfrogAsync(credentials.HostUrl!, credentials.Token!, "/api/repositories?type=local&packageType=docker");
+            var repos = JArray.Parse(json);
+
+            result.Repositories = repos.Select(r => new JfrogRepositoryDto
+            {
+                Key = r["key"]?.ToString() ?? string.Empty,
+                PackageType = r["packageType"]?.ToString() ?? string.Empty,
+                Description = r["description"]?.ToString() ?? string.Empty
+            }).ToList();
+        }
+        catch (Exception ex)
+        {
+            result.Error = CloudErrorSanitizer.Describe(ex, "JFrog", "repository list");
+        }
+
+        return result;
+    }
+
+    public async Task<JfrogImageListDto> GetJfrogImagesAsync(PortalJfrogCredentials credentials, string repositoryKey)
+    {
+        var result = new JfrogImageListDto { Configured = credentials.IsConfigured };
+
+        if (!credentials.IsConfigured)
+            return result;
+
+        try
+        {
+            var json = await GetJfrogAsync(credentials.HostUrl!, credentials.Token!, $"/api/docker/{Uri.EscapeDataString(repositoryKey)}/v2/_catalog");
+            var names = JObject.Parse(json)["repositories"] as JArray ?? new JArray();
+
+            result.Images = names.Select(n => new JfrogImageDto { Name = n.ToString() }).ToList();
+        }
+        catch (Exception ex)
+        {
+            result.Error = CloudErrorSanitizer.Describe(ex, "JFrog", "image list");
+        }
+
+        return result;
+    }
+
+    public async Task<JfrogTagListDto> GetJfrogTagsAsync(PortalJfrogCredentials credentials, string repositoryKey, string imageName)
+    {
+        var result = new JfrogTagListDto { Configured = credentials.IsConfigured };
+
+        if (!credentials.IsConfigured)
+            return result;
+
+        try
+        {
+            var listJson = await GetJfrogAsync(credentials.HostUrl!, credentials.Token!,
+                $"/api/docker/{Uri.EscapeDataString(repositoryKey)}/v2/{Uri.EscapeDataString(imageName)}/tags/list");
+
+            var tagNames = (JObject.Parse(listJson)["tags"] as JArray)?
+                .Select(t => t.ToString())
+                .Where(t => !string.IsNullOrWhiteSpace(t))
+                .ToList() ?? new List<string>();
+
+            foreach (var tag in tagNames)
+            {
+                var entry = new JfrogTagDto { Tag = tag };
+
+                try
+                {
+                    using var request = new HttpRequestMessage(
+                        HttpMethod.Head,
+                        $"{credentials.HostUrl}/api/docker/{Uri.EscapeDataString(repositoryKey)}/v2/{Uri.EscapeDataString(imageName)}/manifests/{Uri.EscapeDataString(tag)}");
+
+                    request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", credentials.Token);
+                    request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/vnd.docker.distribution.manifest.v2+json"));
+
+                    var response = await JfrogHttpClient.SendAsync(request);
+
+                    if (response.IsSuccessStatusCode && response.Headers.TryGetValues("Docker-Content-Digest", out var digestValues))
+                        entry.Digest = digestValues.FirstOrDefault();
+                }
+                catch
+                {
+                    // leave Digest blank - see the section comment on why
+                    // this is a best-effort per-tag HEAD, not part of the list.
+                }
+
+                result.Images.Add(entry);
+            }
+        }
+        catch (Exception ex)
+        {
+            result.Error = CloudErrorSanitizer.Describe(ex, "JFrog", "tag list");
+        }
+
+        return result;
+    }
 }

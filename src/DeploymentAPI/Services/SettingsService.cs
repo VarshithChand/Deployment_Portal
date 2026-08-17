@@ -925,6 +925,100 @@ public class SettingsService
         }
     }
 
+    // GitLab Container Registry - its own dedicated shape/store (HostUrl,
+    // ProjectId, Token), not PortalContainerRegistryCredentials's generic
+    // (Token, AccountId) pair - see ContainerRegistryDtos.cs's own comment
+    // on why. Same portal-wide, regular-AdminGate posture as Docker Hub/GHCR
+    // above. Storage: flat root["PortalGitLabRegistryCredentials"] = {...}.
+    public async Task<PortalGitLabRegistryCredentials> GetPortalGitLabRegistryCredentialsAsync()
+    {
+        var root = await ReadRootAsync();
+        var node = root["PortalGitLabRegistryCredentials"] as JObject;
+
+        return new PortalGitLabRegistryCredentials(
+            node?["HostUrl"]?.ToString(),
+            node?["ProjectId"]?.ToString(),
+            Unprotect(node?["Token"]?.ToString()));
+    }
+
+    // Blank fields keep whatever was already saved - see SavePortalPaasCredentialsAsync.
+    public async Task SavePortalGitLabRegistryCredentialsAsync(GitLabRegistryCredentialsUpdateDto update)
+    {
+        var root = await ReadRootAsync();
+        var node = root["PortalGitLabRegistryCredentials"] as JObject ?? new JObject();
+
+        if (!string.IsNullOrWhiteSpace(update.HostUrl))
+            node["HostUrl"] = update.HostUrl.Trim().TrimEnd('/');
+
+        if (!string.IsNullOrWhiteSpace(update.ProjectId))
+            node["ProjectId"] = update.ProjectId.Trim();
+
+        if (!string.IsNullOrWhiteSpace(update.Token))
+            node["Token"] = Protect(update.Token.Trim());
+
+        root["PortalGitLabRegistryCredentials"] = node;
+        await WriteRootAsync(root);
+
+        _log.LogInfo("Settings", "Portal-wide GitLab Registry credentials saved.");
+    }
+
+    public async Task ClearPortalGitLabRegistryCredentialsAsync()
+    {
+        var root = await ReadRootAsync();
+
+        if (root["PortalGitLabRegistryCredentials"] != null)
+        {
+            root.Remove("PortalGitLabRegistryCredentials");
+            await WriteRootAsync(root);
+
+            _log.LogInfo("Settings", "Portal-wide GitLab Registry credentials cleared.");
+        }
+    }
+
+    // JFrog Artifactory - same reasoning as GitLab Registry above, its own
+    // dedicated shape/store (HostUrl, Token) since every Artifactory
+    // instance is its own domain, unlike Docker Hub/GHCR's fixed hosts.
+    // Storage: flat root["PortalJfrogCredentials"] = {...}.
+    public async Task<PortalJfrogCredentials> GetPortalJfrogCredentialsAsync()
+    {
+        var root = await ReadRootAsync();
+        var node = root["PortalJfrogCredentials"] as JObject;
+
+        return new PortalJfrogCredentials(
+            node?["HostUrl"]?.ToString(),
+            Unprotect(node?["Token"]?.ToString()));
+    }
+
+    public async Task SavePortalJfrogCredentialsAsync(JfrogCredentialsUpdateDto update)
+    {
+        var root = await ReadRootAsync();
+        var node = root["PortalJfrogCredentials"] as JObject ?? new JObject();
+
+        if (!string.IsNullOrWhiteSpace(update.HostUrl))
+            node["HostUrl"] = update.HostUrl.Trim().TrimEnd('/');
+
+        if (!string.IsNullOrWhiteSpace(update.Token))
+            node["Token"] = Protect(update.Token.Trim());
+
+        root["PortalJfrogCredentials"] = node;
+        await WriteRootAsync(root);
+
+        _log.LogInfo("Settings", "Portal-wide JFrog credentials saved.");
+    }
+
+    public async Task ClearPortalJfrogCredentialsAsync()
+    {
+        var root = await ReadRootAsync();
+
+        if (root["PortalJfrogCredentials"] != null)
+        {
+            root.Remove("PortalJfrogCredentials");
+            await WriteRootAsync(root);
+
+            _log.LogInfo("Settings", "Portal-wide JFrog credentials cleared.");
+        }
+    }
+
     // Which provider+service fills each of the Hosting Observability
     // dashboard's 3 roles - see PortalDeploymentTargetsDto. One object, not
     // per-provider, since there's exactly one Frontend/Backend/(optional)

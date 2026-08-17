@@ -86,3 +86,68 @@ export const getGhcrVersions = async (packageName) => {
     const response = await registryApi.get(`/ghcr/packages/${encodeURIComponent(packageName)}/versions`);
     return response.data;
 };
+
+// GitLab Container Registry - portal-wide, shared credential, but its own
+// dedicated shape (HostUrl, ProjectId, Token) rather than the generic
+// {accountId, token} pair Docker Hub/GHCR use above - see
+// ContainerRegistryDtos.cs's own comment on why.
+
+export const getGitLabRegistryStatus = async () => {
+    const response = await registryApi.get("/gitlab-registry/status");
+    return response.data;
+};
+
+export const saveGitLabRegistryCredentials = async (payload) => {
+    const response = await registryApi.post("/gitlab-registry", payload);
+    return response.data;
+};
+
+export const clearGitLabRegistryCredentials = async () => {
+    const response = await registryApi.delete("/gitlab-registry");
+    return response.data;
+};
+
+export const getGitLabRepositories = async () => {
+    const response = await registryApi.get("/gitlab-registry/repositories");
+    return response.data;
+};
+
+export const getGitLabTags = async (repositoryId) => {
+    const response = await registryApi.get(`/gitlab-registry/repositories/${encodeURIComponent(repositoryId)}/tags`);
+    return response.data;
+};
+
+// JFrog Artifactory - portal-wide, shared credential, its own dedicated
+// shape (HostUrl, Token) - every Artifactory instance is its own domain.
+
+export const getJfrogStatus = async () => {
+    const response = await registryApi.get("/jfrog/status");
+    return response.data;
+};
+
+export const saveJfrogCredentials = async (payload) => {
+    const response = await registryApi.post("/jfrog", payload);
+    return response.data;
+};
+
+export const clearJfrogCredentials = async () => {
+    const response = await registryApi.delete("/jfrog");
+    return response.data;
+};
+
+export const getJfrogRepositories = async () => {
+    const response = await registryApi.get("/jfrog/repositories");
+    return response.data;
+};
+
+export const getJfrogImages = async (repositoryKey) => {
+    const response = await registryApi.get(`/jfrog/repositories/${encodeURIComponent(repositoryKey)}/images`);
+    return response.data;
+};
+
+export const getJfrogTags = async (repositoryKey, imageName) => {
+    const response = await registryApi.get(
+        `/jfrog/repositories/${encodeURIComponent(repositoryKey)}/images/${encodeURIComponent(imageName)}/tags`
+    );
+    return response.data;
+};
