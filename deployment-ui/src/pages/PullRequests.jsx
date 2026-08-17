@@ -8,7 +8,10 @@ import {
     getRecentCommits,
     approvePullRequest,
     mergePullRequest,
-    createIssue
+    createIssue,
+    getIssueMilestones,
+    getIssueProjects,
+    getIssueAssignableUsers
 } from "../services/pullRequestsService";
 import useAuth from "../hooks/useAuth";
 import useNavigation from "../hooks/useNavigation";
@@ -49,6 +52,27 @@ export default function PullRequests() {
     const [issueBody, setIssueBody] = useState("");
     const [issueLabels, setIssueLabels] = useState("");
     const [creatingIssue, setCreatingIssue] = useState(false);
+
+    const [milestones, setMilestones] = useState([]);
+    const [projects, setProjects] = useState([]);
+    const [assignableUsers, setAssignableUsers] = useState([]);
+    const [issueAssignees, setIssueAssignees] = useState(new Set());
+    const [issueMilestone, setIssueMilestone] = useState("");
+    const [issueProjectId, setIssueProjectId] = useState("");
+
+    function toggleIssueAssignee(login) {
+
+        setIssueAssignees((prev) => {
+            const next = new Set(prev);
+            if (next.has(login)) {
+                next.delete(login);
+            } else {
+                next.add(login);
+            }
+            return next;
+        });
+
+    }
 
     async function load() {
 
@@ -206,6 +230,40 @@ export default function PullRequests() {
 
     const resolvingAccess = githubTokenConfigured && !tokenOwner;
 
+    // Loaded once the Create Issue card becomes reachable, same pattern
+    // loadHistory() below uses for its own on-demand data.
+    useEffect(() => {
+
+        if (!hasPortalPrAuthority || !githubTokenConfigured || !githubRepoConfigured) {
+            return;
+        }
+
+        (async () => {
+
+            try {
+
+                const [milestonesRes, projectsRes, usersRes] = await Promise.all([
+                    getIssueMilestones(),
+                    getIssueProjects(),
+                    getIssueAssignableUsers()
+                ]);
+
+                setMilestones(Array.isArray(milestonesRes.data) ? milestonesRes.data : []);
+                setProjects(Array.isArray(projectsRes.data) ? projectsRes.data : []);
+                setAssignableUsers(Array.isArray(usersRes.data) ? usersRes.data : []);
+
+            }
+            catch (err) {
+
+                console.error(err);
+
+            }
+
+        })();
+
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [hasPortalPrAuthority, githubTokenConfigured, githubRepoConfigured]);
+
     async function handleCreateIssue(e) {
 
         e.preventDefault();
@@ -219,7 +277,14 @@ export default function PullRequests() {
 
             setCreatingIssue(true);
 
-            const response = await createIssue(issueTitle.trim(), issueBody.trim(), issueLabels.trim());
+            const response = await createIssue(
+                issueTitle.trim(),
+                issueBody.trim(),
+                issueLabels.trim(),
+                Array.from(issueAssignees).join(","),
+                issueMilestone ? Number(issueMilestone) : null,
+                issueProjectId || null
+            );
             const issue = response.data;
 
             toast.show(
@@ -227,9 +292,16 @@ export default function PullRequests() {
                 "success"
             );
 
+            if (issue.projectWarning) {
+                toast.show(issue.projectWarning, "error");
+            }
+
             setIssueTitle("");
             setIssueBody("");
             setIssueLabels("");
+            setIssueAssignees(new Set());
+            setIssueMilestone("");
+            setIssueProjectId("");
 
         }
         catch (err) {
@@ -343,6 +415,69 @@ export default function PullRequests() {
                                     autoComplete="off"
                                 />
                             </div>
+
+                            {assignableUsers.length > 0 && (
+
+                                <div className="form-group">
+                                    <label>Assignees (optional)</label>
+                                    <div className="checkbox-list">
+
+                                        {assignableUsers.map((user) => (
+
+                                            <label key={user.login} className="checkbox-list-item">
+
+                                                <input
+                                                    type="checkbox"
+                                                    checked={issueAssignees.has(user.login)}
+                                                    onChange={() => toggleIssueAssignee(user.login)}
+                                                />
+                                                {" "}
+                                                {user.avatarUrl && <img src={user.avatarUrl} alt="" className="access-user-avatar" />}
+                                                {" "}
+                                                {user.login}
+
+                                            </label>
+
+                                        ))}
+
+                                    </div>
+                                </div>
+
+                            )}
+
+                            <div className="form-group">
+                                <label htmlFor="issue-milestone">Milestone (optional)</label>
+                                <select
+                                    id="issue-milestone"
+                                    className="form-control"
+                                    value={issueMilestone}
+                                    onChange={(e) => setIssueMilestone(e.target.value)}
+                                >
+                                    <option value="">None</option>
+                                    {milestones.map((m) => (
+                                        <option key={m.number} value={m.number}>{m.title}</option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            {projects.length > 0 && (
+
+                                <div className="form-group">
+                                    <label htmlFor="issue-project">Project (optional)</label>
+                                    <select
+                                        id="issue-project"
+                                        className="form-control"
+                                        value={issueProjectId}
+                                        onChange={(e) => setIssueProjectId(e.target.value)}
+                                    >
+                                        <option value="">None</option>
+                                        {projects.map((p) => (
+                                            <option key={p.id} value={p.id}>{p.title}</option>
+                                        ))}
+                                    </select>
+                                </div>
+
+                            )}
 
                             <button type="submit" className="btn btn-primary" disabled={creatingIssue || !issueTitle.trim()}>
                                 {creatingIssue ? "Creating..." : "Create Issue"}

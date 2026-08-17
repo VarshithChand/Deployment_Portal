@@ -1619,7 +1619,7 @@ public class GitHubApiService
         _cache.Remove($"prs-closed:{_auth.Owner}/{_auth.Repository}");
     }
 
-    public async Task<IssueDto> CreateIssueAsync(string title, string? body, List<string>? labels)
+    public async Task<IssueDto> CreateIssueAsync(string title, string? body, List<string>? labels, List<string>? assignees, int? milestone)
     {
         var client = _auth.CreateClient();
 
@@ -1635,6 +1635,16 @@ public class GitHubApiService
         if (labels is { Count: > 0 })
             payload["labels"] = labels;
 
+        // Both accepted directly by the same create-issue call - GitHub's
+        // REST Issues API has always supported these two fields, unlike
+        // Projects (v2), which has no REST surface at all (see
+        // GetProjectsAsync/AddIssueToProjectAsync below).
+        if (assignees is { Count: > 0 })
+            payload["assignees"] = assignees;
+
+        if (milestone.HasValue)
+            payload["milestone"] = milestone.Value;
+
         var json = System.Text.Json.JsonSerializer.Serialize(payload);
 
         var responseBody = await HttpClientHelper.PostAsync(
@@ -1646,8 +1656,114 @@ public class GitHubApiService
         {
             Number = created["number"]?.Value<int>() ?? 0,
             Title = created["title"]?.ToString() ?? title,
-            HtmlUrl = created["html_url"]?.ToString() ?? string.Empty
+            HtmlUrl = created["html_url"]?.ToString() ?? string.Empty,
+            NodeId = created["node_id"]?.ToString()
         };
+    }
+
+    public Task<List<MilestoneDto>> GetMilestonesAsync(bool forceRefresh = false) =>
+        GetCachedAsync($"milestones:{_auth.Owner}/{_auth.Repository}", async () =>
+        {
+            var client = _auth.CreateClient();
+
+            var url =
+                $"https://api.github.com/repos/{Uri.EscapeDataString(_auth.Owner)}/{Uri.EscapeDataString(_auth.Repository)}/milestones?state=open";
+
+            var json = await HttpClientHelper.GetAsync(client, url);
+            var array = JArray.Parse(json);
+
+            return array.Select(m => new MilestoneDto
+            {
+                Number = m["number"]?.Value<int>() ?? 0,
+                Title = m["title"]?.ToString() ?? string.Empty
+            }).ToList();
+        }, forceRefresh);
+
+    //===========================================================
+    // Projects (v2) — GitHub's current "Projects" experience has NO REST
+    // API at all; reading a repo's linked projects and adding an issue to
+    // one both require GraphQL. This is the only thing in this app that
+    // does, so it's a small, self-contained addition rather than a new
+    // service - see PostGraphQLAsync for why this can't reuse
+    // HttpClientHelper's REST-only error handling.
+    //===========================================================
+
+    // GraphQL signals failure differently than REST: the HTTP response is
+    // still 200 OK, and the failure lives in a top-level "errors" array
+    // instead of the status code - HttpClientHelper.EnsureSuccessAsync
+    // would see this as a success. Thrown as a plain HttpRequestException
+    // either way so callers can keep using the same try/catch shape as
+    // every other GitHub call in this file.
+    private async Task<JObject> PostGraphQLAsync(string query, object variables)
+    {
+        var client = _auth.CreateClient();
+
+        var payload = System.Text.Json.JsonSerializer.Serialize(new { query, variables });
+
+        var response = await client.PostAsync(
+            "https://api.github.com/graphql", new StringContent(payload, Encoding.UTF8, "application/json"));
+
+        await HttpClientHelper.EnsureSuccessAsync(response);
+
+        var body = JObject.Parse(await response.Content.ReadAsStringAsync());
+
+        if (body["errors"] is JArray { Count: > 0 } errors)
+        {
+            var messages = errors.Select(e => e["message"]?.ToString() ?? e.ToString());
+            var joined = string.Join(" ", messages);
+
+            // The exact wording GitHub uses when a classic token is
+            // missing the "project" scope, or a fine-grained token wasn't
+            // granted Projects access - surfaced as its own clear
+            // instruction rather than a raw GraphQL error string, since
+            // it's by far the most likely reason this ever fails.
+            var friendly = joined.Contains("does not have permission", StringComparison.OrdinalIgnoreCase)
+                || joined.Contains("scope", StringComparison.OrdinalIgnoreCase)
+                ? "Your GitHub token doesn't have permission to access Projects - add the \"project\" scope " +
+                  "(classic token) or Projects access (fine-grained token) and reconnect."
+                : joined;
+
+            throw new HttpRequestException(friendly);
+        }
+
+        return body["data"] as JObject ?? new JObject();
+    }
+
+    public async Task<List<ProjectDto>> GetProjectsAsync()
+    {
+        const string query = """
+            query($owner: String!, $repo: String!) {
+              repository(owner: $owner, name: $repo) {
+                projectsV2(first: 20) {
+                  nodes { id title number }
+                }
+              }
+            }
+            """;
+
+        var data = await PostGraphQLAsync(query, new { owner = _auth.Owner, repo = _auth.Repository });
+
+        var nodes = data["repository"]?["projectsV2"]?["nodes"] as JArray ?? new JArray();
+
+        return nodes.Select(n => new ProjectDto
+        {
+            Id = n["id"]?.ToString() ?? string.Empty,
+            Title = n["title"]?.ToString() ?? string.Empty,
+            Number = n["number"]?.Value<int>() ?? 0
+        }).Where(p => !string.IsNullOrEmpty(p.Id)).ToList();
+    }
+
+    public async Task AddIssueToProjectAsync(string projectId, string issueNodeId)
+    {
+        const string mutation = """
+            mutation($project: ID!, $content: ID!) {
+              addProjectV2ItemById(input: { projectId: $project, contentId: $content }) {
+                item { id }
+              }
+            }
+            """;
+
+        await PostGraphQLAsync(mutation, new { project = projectId, content = issueNodeId });
     }
 
     // x["user"] cast through JObject first, same reasoning as

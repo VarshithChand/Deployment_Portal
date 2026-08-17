@@ -96,10 +96,68 @@ public class PullRequestsController : ControllerBase
             ?.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             .ToList();
 
-        var issue = await _github.CreateIssueAsync(request.Title.Trim(), request.Body, labels);
+        var assignees = request.Assignees
+            ?.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .ToList();
+
+        var issue = await _github.CreateIssueAsync(request.Title.Trim(), request.Body, labels, assignees, request.Milestone);
 
         _log.LogInfo("Pull Requests", $"Created issue #{issue.Number}: {issue.Title}");
 
+        // Best-effort - the issue above already exists on GitHub by this
+        // point, so a failure here (most commonly: the connected token
+        // lacks the "project" scope) must never look like the whole
+        // operation failed. Surfaced as a warning on the same response
+        // instead of throwing.
+        if (!string.IsNullOrWhiteSpace(request.ProjectId) && !string.IsNullOrEmpty(issue.NodeId))
+        {
+            try
+            {
+                await _github.AddIssueToProjectAsync(request.ProjectId, issue.NodeId);
+            }
+            catch (Exception ex)
+            {
+                issue.ProjectWarning = $"Issue created, but couldn't add it to the project: {ex.Message}";
+            }
+        }
+
         return Ok(issue);
+    }
+
+    // Gated identically to CreateIssue above (same "pullRequests" page
+    // grant) - none of these lists are useful to anyone who couldn't file
+    // an issue anyway.
+    [HttpGet("issues/milestones")]
+    public async Task<IActionResult> GetIssueMilestones()
+    {
+        if (await AdminGate.DenyUnlessAdminAsync(this, _settings, "view milestones", "pullRequests") is IActionResult denied)
+            return denied;
+
+        return Ok(await _github.GetMilestonesAsync());
+    }
+
+    [HttpGet("issues/projects")]
+    public async Task<IActionResult> GetIssueProjects()
+    {
+        if (await AdminGate.DenyUnlessAdminAsync(this, _settings, "view projects", "pullRequests") is IActionResult denied)
+            return denied;
+
+        return Ok(await _github.GetProjectsAsync());
+    }
+
+    [HttpGet("issues/assignable-users")]
+    public async Task<IActionResult> GetIssueAssignableUsers()
+    {
+        if (await AdminGate.DenyUnlessAdminAsync(this, _settings, "view assignable users", "pullRequests") is IActionResult denied)
+            return denied;
+
+        var entries = await _github.GetAccessEntriesAsync();
+
+        var assignable = entries
+            .Where(e => e.Status == "active")
+            .Select(e => new AssignableUserDto { Login = e.Login, AvatarUrl = e.AvatarUrl })
+            .ToList();
+
+        return Ok(assignable);
     }
 }
