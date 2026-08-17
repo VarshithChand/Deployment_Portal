@@ -4,9 +4,7 @@ import { getFrontendOverview } from "../../services/hostingObservabilityService"
 import LoadingSpinner from "../LoadingSpinner";
 import LineChart from "../charts/LineChart";
 import RangeSelector from "./RangeSelector";
-import ConnectionMap from "./ConnectionMap";
-
-const PROVIDER_LABEL = { render: "Render", cloudflare: "Cloudflare Pages", netlify: "Netlify", vercel: "Vercel" };
+import { PROVIDER_LABEL } from "../../constants/paasProviders";
 
 // Frontend tab of the Hosting Providers observability dashboard - the
 // portal's own configured frontend deployment target (see
@@ -160,20 +158,6 @@ export default function FrontendView() {
             </div>
 
         )}
-
-        <div className="card" style={{ marginTop: "18px" }}>
-
-            <h2 className="card-title">Connections</h2>
-
-            <ConnectionMap
-                nodes={[
-                    { label: "Frontend", sub: providerLabel },
-                    { label: "Backend", sub: "This portal's API" },
-                    { label: "Database", sub: "PostgreSQL" }
-                ]}
-            />
-
-        </div>
 
         </>
 

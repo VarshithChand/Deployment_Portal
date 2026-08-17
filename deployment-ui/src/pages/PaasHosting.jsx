@@ -1,6 +1,7 @@
 import { useCallback, useState } from "react";
 
 import PageLayout from "../components/layout/PageLayout";
+import ArchitectureFlow from "../components/hosting-observability/ArchitectureFlow";
 import FrontendView from "../components/hosting-observability/FrontendView";
 import BackendView from "../components/hosting-observability/BackendView";
 import HostingDatabaseView from "../components/hosting-observability/DatabaseView";
@@ -79,6 +80,8 @@ export default function PaasHosting() {
     return (
 
         <PageLayout title="Hosting Providers">
+
+            <ArchitectureFlow />
 
             <div className="button-row" style={{ marginBottom: "18px" }}>
 

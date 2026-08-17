@@ -4,7 +4,6 @@ import { getDatabaseOverview } from "../../services/hostingObservabilityService"
 import LoadingSpinner from "../LoadingSpinner";
 import LineChart from "../charts/LineChart";
 import RangeSelector from "./RangeSelector";
-import ConnectionMap from "./ConnectionMap";
 import usePagination from "../../hooks/usePagination";
 import Pagination from "../common/Pagination";
 
@@ -271,19 +270,6 @@ export default function HostingDatabaseView() {
                 </>
 
             )}
-
-        </div>
-
-        <div className="card" style={{ marginTop: "18px" }}>
-
-            <h2 className="card-title">Connections</h2>
-
-            <ConnectionMap
-                nodes={[
-                    { label: "Database", sub: "PostgreSQL" },
-                    { label: "Backend", sub: "This portal's API" }
-                ]}
-            />
 
         </div>
 

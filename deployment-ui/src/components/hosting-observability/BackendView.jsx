@@ -4,11 +4,9 @@ import { getBackendOverview, getEndpointInventory, getDatabaseOverview } from ".
 import LoadingSpinner from "../LoadingSpinner";
 import LineChart from "../charts/LineChart";
 import RangeSelector from "./RangeSelector";
-import ConnectionMap from "./ConnectionMap";
 import usePagination from "../../hooks/usePagination";
 import Pagination from "../common/Pagination";
-
-const PROVIDER_LABEL = { render: "Render", cloudflare: "Cloudflare Pages", netlify: "Netlify", vercel: "Vercel" };
+import { PROVIDER_LABEL } from "../../constants/paasProviders";
 
 // Backend tab - mirrors FrontendView's shape (same overview contract, see
 // HostingObservabilityController.GetBackend), plus this tab's own two
@@ -259,20 +257,6 @@ export default function BackendView() {
             ) : (
                 <p className="field-hint">Loading...</p>
             )}
-
-        </div>
-
-        <div className="card" style={{ marginTop: "18px" }}>
-
-            <h2 className="card-title">Connections</h2>
-
-            <ConnectionMap
-                nodes={[
-                    { label: "Frontend", sub: "This portal's UI" },
-                    { label: "Backend", sub: providerLabel },
-                    { label: "Database", sub: "PostgreSQL" }
-                ]}
-            />
 
         </div>
 
