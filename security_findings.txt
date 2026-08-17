@@ -4983,3 +4983,107 @@ GitHub) or the fixed reachability for a page-scoped-only grantee -
 both need a real GitHub PAT/identity this sandboxed session doesn't
 have, same standing limitation as every GitHub-mutating feature this
 whole engagement. Recommend the user try it directly once deployed.
+
+==================================================
+ROUND 39 - NEW FEATURE: CREATE ISSUE NOW SUPPORTS ASSIGNEES, MILESTONE,
+AND PROJECTS (v2)
+==================================================
+Date: 2026-08-17
+Trigger: user showed a screenshot of GitHub's own issue sidebar
+(Assignees/Labels/Projects/Milestone) and asked why the portal's Create
+Issue form (Round 38) didn't have those options. When asked to scope it,
+explicitly chose the full set - Assignees + Milestone + Projects - over
+the simpler subsets offered, including the harder GraphQL-based
+Projects integration.
+
+What was built:
+  - Assignees and Milestone: no new GitHub call needed for either -
+    GitHub's REST "create an issue" endpoint already accepts both
+    directly in the same POST this app already makes.
+    GitHubApiService.CreateIssueAsync extended to accept
+    List<string>? assignees and int? milestone, added straight into
+    the existing payload dictionary. Assignable users are sourced from
+    the existing GetAccessEntriesAsync() (already backs the Access
+    Levels page), filtered to Status == "active".
+    GetMilestonesAsync() added (GET /repos/{owner}/{repo}/milestones?
+    state=open), same GetCachedAsync/HttpClientHelper.GetAsync pattern
+    every other read in this file uses.
+  - Projects (v2): a real scope increase - GitHub's current "Projects"
+    experience has NO REST API at all; reading a repo's linked
+    projects and adding an issue to one both require GraphQL, which
+    nothing in this codebase called before this round (confirmed zero
+    prior GraphQL usage anywhere in src/DeploymentAPI). Added one
+    small private PostGraphQLAsync(query, variables) helper on
+    GitHubApiService (same _auth.CreateClient() bearer token works
+    unchanged for GraphQL) built on top of GetProjectsAsync()
+    (projectsV2 query) and AddIssueToProjectAsync(projectId,
+    issueNodeId) (the addProjectV2ItemById mutation).
+  - GraphQL error handling: unlike REST, GitHub's GraphQL endpoint
+    returns HTTP 200 even on failure, with a top-level "errors" array
+    in the body - HttpClientHelper's existing REST-only status-code
+    error handling doesn't see this. PostGraphQLAsync checks for that
+    array explicitly and throws a plain HttpRequestException, with a
+    specifically friendly message when the failure looks like a
+    missing "project" OAuth scope (the single most likely real-world
+    failure here, since no token connected to this portal before now
+    ever needed that scope).
+  - Adding an issue to a project is deliberately best-effort and
+    ordered AFTER issue creation, never before or gating it: the
+    PullRequestsController's CreateIssue action wraps
+    AddIssueToProjectAsync in its own try/catch and, on failure,
+    returns the already-created issue with a new ProjectWarning string
+    explaining what happened - never rolls back or fails the whole
+    request just because the project link didn't take.
+  - CreateIssueRequestDto gained Assignees (comma-separated string,
+    same convention as the existing Labels field), Milestone (int?),
+    ProjectId (string?, a GraphQL node ID - NOT a REST-style numeric
+    ID, since classic Projects and ProjectsV2 use entirely different
+    ID schemes). IssueDto gained NodeId (captured from the REST
+    response's node_id field, needed only as input to the projects
+    mutation, never otherwise exposed) and ProjectWarning.
+  - Three new GET endpoints on PullRequestsController, gated
+    identically to the existing CreateIssue/Approve/Merge actions
+    (AdminGate.DenyUnlessAdminAsync + the "pullRequests" page grant):
+    issues/milestones, issues/projects, issues/assignable-users.
+  - Frontend: Create Issue card on the Pull Requests page now loads
+    all three lists once it becomes visible (Promise.all, mirroring
+    the existing loadHistory() pattern on the same page) and renders
+    an assignees checkbox list (matching the checkbox-list-item
+    styling already used for branch-restriction pickers on Approvals),
+    a Milestone <select>, and - only when the repo actually has linked
+    projects - a Project <select>. On a successful create, if the
+    response includes projectWarning, a second, separate toast surfaces
+    it distinctly from the main "issue created" success toast.
+
+Verification performed:
+  - `dotnet build` (isolated output dir): 0 errors, same pre-existing
+    unrelated warnings as every prior round (NU1510, one ASPDEPR005).
+  - `npm run lint`: no new warnings (same pre-existing only-export-
+    components warnings unrelated to this change).
+  - `npm run build`: clean.
+  - Live checks against the deployed Render backend after the push:
+    /api/bootstrap healthy (HTTP 200) once the redeploy completed, and
+    all three new endpoints (issues/milestones, issues/projects,
+    issues/assignable-users) correctly returned 403 for an
+    unauthenticated/unauthorized caller, confirming the AdminGate check
+    is live and wired the same as the existing CreateIssue action.
+
+Files changed: src/DeploymentAPI/Controllers/PullRequestsController.cs,
+DTOs/IssueDto.cs, Services/GitHubApiService.cs;
+deployment-ui/src/pages/PullRequests.jsx,
+services/pullRequestsService.js.
+Commit: cc5e39d.
+
+Status: Complete and pushed, live-verified for endpoint gating. Could
+NOT live-verify the actual happy paths - a real admin assigning real
+collaborators, picking a real milestone, or successfully linking an
+issue to a real ProjectsV2 board - since all three need a real GitHub
+PAT/identity connected to a real repo, which this sandboxed session
+doesn't have. The Projects success path additionally needs that token
+to carry the "project" OAuth scope specifically, which most tokens
+connected to this portal so far will NOT already have (nothing needed
+it before this round) - this session cannot arrange or verify that
+scope either way. Recommend the user test with a token that has the
+"project" scope to confirm the success path, and separately with one
+that doesn't to confirm the graceful "couldn't add it to the project"
+warning message reads as expected.
