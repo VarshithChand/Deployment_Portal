@@ -25,7 +25,7 @@ public static class CredentialGate
     public static readonly IReadOnlyList<string> AllProviders = new[]
     {
         "github", "aws", "azure", "gcp", "apikey", "docker", "github-oauth", "sonar", "ai",
-        "render", "cloudflare", "netlify", "vercel"
+        "render", "cloudflare", "netlify", "vercel", "dockerhub", "ghcr"
     };
 
     public static async Task<IActionResult?> DenyUnlessUnlockedAsync(

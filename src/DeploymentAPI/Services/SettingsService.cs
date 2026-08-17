@@ -867,6 +867,64 @@ public class SettingsService
         }
     }
 
+    // Portal-wide credentials for the Container Registry hub's two shared
+    // standalone registries (Docker Hub, GHCR) - see the reasoning in the
+    // Container Registry plan: one admin connects each once, every visitor
+    // then browses the same repositories/packages. Deliberately a SEPARATE
+    // JSON node from PortalPaasCredentials above, even though it reuses that
+    // same (Token, AccountId) shape - PortalPaasCredentials is gated by
+    // DenyUnlessSuperAdminAsync everywhere it's used (Hosting Observability's
+    // higher bar), while these two are gated by the regular
+    // AdminGate.DenyUnlessAdminAsync, the same bar the existing generic
+    // "Docker" registry credential (SaveDockerAsync) already uses. Keeping
+    // them in one shared node would mean two different authorization levels
+    // silently coexisting under an identical key shape - confusing for
+    // whoever reads this next. provider is "dockerhub" or "ghcr". Storage:
+    // root["PortalContainerRegistryCredentials"][provider] = { Token, AccountId }
+    // - AccountId holds the registry/GitHub username, Token holds the PAT.
+    public async Task<UserPaasCredentials> GetPortalContainerRegistryCredentialsAsync(string provider)
+    {
+        var root = await ReadRootAsync();
+        var entry = (root["PortalContainerRegistryCredentials"] as JObject)?[provider] as JObject;
+
+        return new UserPaasCredentials(
+            Unprotect(entry?["Token"]?.ToString()),
+            entry?["AccountId"]?.ToString());
+    }
+
+    // Blank fields keep whatever was already saved - see SavePortalPaasCredentialsAsync.
+    public async Task SavePortalContainerRegistryCredentialsAsync(string provider, PaasCredentialsUpdateDto update)
+    {
+        var root = await ReadRootAsync();
+        var providers = root["PortalContainerRegistryCredentials"] as JObject ?? new JObject();
+        var entry = providers[provider] as JObject ?? new JObject();
+
+        if (!string.IsNullOrWhiteSpace(update.Token))
+            entry["Token"] = Protect(update.Token.Trim());
+
+        if (!string.IsNullOrWhiteSpace(update.AccountId))
+            entry["AccountId"] = update.AccountId.Trim();
+
+        providers[provider] = entry;
+        root["PortalContainerRegistryCredentials"] = providers;
+        await WriteRootAsync(root);
+
+        _log.LogInfo("Settings", $"Portal-wide container registry credentials saved ({provider}).");
+    }
+
+    public async Task ClearPortalContainerRegistryCredentialsAsync(string provider)
+    {
+        var root = await ReadRootAsync();
+
+        if (root["PortalContainerRegistryCredentials"] is JObject providers && providers[provider] != null)
+        {
+            providers.Remove(provider);
+            await WriteRootAsync(root);
+
+            _log.LogInfo("Settings", $"Portal-wide container registry credentials cleared ({provider}).");
+        }
+    }
+
     // Which provider+service fills each of the Hosting Observability
     // dashboard's 3 roles - see PortalDeploymentTargetsDto. One object, not
     // per-provider, since there's exactly one Frontend/Backend/(optional)

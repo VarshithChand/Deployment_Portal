@@ -12,10 +12,15 @@ import DatabaseConnectionSection from "./credentials/DatabaseConnectionSection";
 import ApiKeySection from "./credentials/ApiKeySection";
 import SecurityPinSection from "./credentials/SecurityPinSection";
 import CredentialPinGate from "./credentials/CredentialPinGate";
+import PortalRegistryLoginSection from "./credentials/PortalRegistryLoginSection";
 import useAuth from "../../hooks/useAuth";
 import { getMyAwsSettings, getMyAzureSettings, getMyGcpSettings } from "../../services/settingsService";
 import { getMyApiKeys } from "../../services/securityService";
 import { getPaasStatus } from "../../services/paasService";
+import {
+    getDockerHubStatus, saveDockerHubCredentials, clearDockerHubCredentials,
+    getGhcrStatus, saveGhcrCredentials, clearGhcrCredentials
+} from "../../services/containerRegistryService";
 
 const MODES = [
     { key: "github", label: "GitHub" },
@@ -26,6 +31,8 @@ const MODES = [
     { key: "screenlock", label: "Screen Lock" },
     { key: "sonarqube", label: "SonarQube" },
     { key: "docker", label: "Docker" },
+    { key: "dockerhub", label: "Docker Hub" },
+    { key: "ghcr", label: "GHCR" },
     { key: "oauth", label: "GitHub OAuth" },
     { key: "ai", label: "AI Assistant" },
     { key: "render", label: "Render" },
@@ -43,7 +50,7 @@ const MODES = [
 // PIN.
 const ALL_CREDENTIAL_PROVIDERS = [
     "github", "aws", "azure", "gcp", "apikey", "docker", "github-oauth", "sonar", "ai",
-    "render", "cloudflare", "netlify", "vercel"
+    "render", "cloudflare", "netlify", "vercel", "dockerhub", "ghcr"
 ];
 
 // A convenience picker, not a restriction — GEMINI_MODEL is still whatever
@@ -150,8 +157,10 @@ export default function CredentialsView({
             getPaasStatus("render").catch(() => null),
             getPaasStatus("cloudflare").catch(() => null),
             getPaasStatus("netlify").catch(() => null),
-            getPaasStatus("vercel").catch(() => null)
-        ]).then(([aws, azure, gcp, apiKeysRes, render, cloudflare, netlify, vercel]) => {
+            getPaasStatus("vercel").catch(() => null),
+            getDockerHubStatus().catch(() => null),
+            getGhcrStatus().catch(() => null)
+        ]).then(([aws, azure, gcp, apiKeysRes, render, cloudflare, netlify, vercel, dockerhub, ghcr]) => {
 
             const activeKeyCount = Array.isArray(apiKeysRes?.data)
                 ? apiKeysRes.data.filter((k) => !k.revoked).length
@@ -165,7 +174,9 @@ export default function CredentialsView({
                 render: render?.configured,
                 cloudflare: cloudflare?.configured,
                 netlify: netlify?.configured,
-                vercel: vercel?.configured
+                vercel: vercel?.configured,
+                dockerhub: dockerhub?.configured,
+                ghcr: ghcr?.configured
             });
 
         });
@@ -463,6 +474,40 @@ export default function CredentialsView({
 
             </div>
 
+            </CredentialPinGate>
+
+            )}
+
+            {mode === "dockerhub" && (
+
+            <CredentialPinGate provider="dockerhub" unlocked={unlockedProviders.has("dockerhub")} onUnlocked={markAllUnlocked}>
+                <PortalRegistryLoginSection
+                    label="Docker Hub"
+                    usernameLabel="Docker Hub Username"
+                    tokenLabel="Personal Access Token"
+                    helpText="Powers the Container Registry hub's Docker Hub tab — a Docker Hub username and a Personal Access Token (Account Settings → Security on hub.docker.com) with at least read access."
+                    statusFn={getDockerHubStatus}
+                    saveFn={saveDockerHubCredentials}
+                    clearFn={clearDockerHubCredentials}
+                    onCleared={() => removeUnlocked("dockerhub")}
+                />
+            </CredentialPinGate>
+
+            )}
+
+            {mode === "ghcr" && (
+
+            <CredentialPinGate provider="ghcr" unlocked={unlockedProviders.has("ghcr")} onUnlocked={markAllUnlocked}>
+                <PortalRegistryLoginSection
+                    label="GHCR"
+                    usernameLabel="GitHub Username"
+                    tokenLabel="Personal Access Token"
+                    helpText="Powers the Container Registry hub's GHCR tab — your GitHub username and a Personal Access Token with the read:packages scope. Lists packages owned by the token's own account; organization-owned packages aren't covered yet."
+                    statusFn={getGhcrStatus}
+                    saveFn={saveGhcrCredentials}
+                    clearFn={clearGhcrCredentials}
+                    onCleared={() => removeUnlocked("ghcr")}
+                />
             </CredentialPinGate>
 
             )}

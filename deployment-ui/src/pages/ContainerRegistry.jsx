@@ -5,23 +5,29 @@ import LoadingSpinner from "../components/LoadingSpinner";
 import EcrView from "../components/containerRegistry/EcrView";
 import AcrView from "../components/containerRegistry/AcrView";
 import ArtifactRegistryView from "../components/containerRegistry/ArtifactRegistryView";
+import DockerHubView from "../components/containerRegistry/DockerHubView";
+import GhcrView from "../components/containerRegistry/GhcrView";
 import useNavigation from "../hooks/useNavigation";
 import { getMyAwsSettings, getMyAzureSettings, getMyGcpSettings } from "../services/settingsService";
+import { getDockerHubStatus, getGhcrStatus } from "../services/containerRegistryService";
 
-const VIEWS = ["ecr", "acr", "artifactRegistry"];
+const VIEWS = ["ecr", "acr", "artifactRegistry", "dockerHub", "ghcr"];
 
 // The 3 cloud-native registries auto-enable from credentials this portal
 // already has (AWS/Azure/GCP - see each provider's own Settings →
-// Credentials tab); the other 6 are shown so the whole picture is visible
-// at a glance, but aren't built yet - Phase 2 fast-follow, each needing
-// its own brand-new credential model and API integration from scratch
-// (confirmed scope decision, see the plan this feature shipped from).
+// Credentials tab). Docker Hub and GHCR auto-enable from a portal-wide
+// shared credential instead (see Settings → Credentials → Docker Hub/GHCR)
+// - one admin connects each once, every visitor then sees the same
+// repositories/packages. The remaining 4 are shown so the whole picture is
+// visible at a glance, but aren't built yet - a later fast-follow, each
+// needing its own brand-new credential model and API integration from
+// scratch (confirmed scope decision, see the plan this feature shipped from).
 const PROVIDERS = [
     { key: "ecr", label: "AWS ECR", credentialKey: "aws", credentialLabel: "AWS", view: "ecr" },
     { key: "acr", label: "Azure ACR", credentialKey: "azure", credentialLabel: "Azure", view: "acr" },
     { key: "artifactRegistry", label: "Artifact Registry", credentialKey: "gcp", credentialLabel: "GCP", view: "artifactRegistry" },
-    { key: "dockerHub", label: "Docker Hub", comingSoon: true },
-    { key: "ghcr", label: "GHCR", comingSoon: true },
+    { key: "dockerHub", label: "Docker Hub", credentialKey: "dockerhub", credentialLabel: "Docker Hub", view: "dockerHub", portalWide: true },
+    { key: "ghcr", label: "GHCR", credentialKey: "ghcr", credentialLabel: "GHCR", view: "ghcr", portalWide: true },
     { key: "gitlabRegistry", label: "GitLab Registry", comingSoon: true },
     { key: "jfrog", label: "JFrog Artifactory", comingSoon: true },
     { key: "harbor", label: "Harbor", comingSoon: true },
@@ -74,10 +80,18 @@ export default function ContainerRegistry() {
         Promise.all([
             getMyAwsSettings().catch(() => null),
             getMyAzureSettings().catch(() => null),
-            getMyGcpSettings().catch(() => null)
-        ]).then(([aws, azure, gcp]) => {
+            getMyGcpSettings().catch(() => null),
+            getDockerHubStatus().catch(() => null),
+            getGhcrStatus().catch(() => null)
+        ]).then(([aws, azure, gcp, dockerhub, ghcr]) => {
 
-            setStatus({ aws: !!aws?.configured, azure: !!azure?.configured, gcp: !!gcp?.configured });
+            setStatus({
+                aws: !!aws?.configured,
+                azure: !!azure?.configured,
+                gcp: !!gcp?.configured,
+                dockerhub: !!dockerhub?.configured,
+                ghcr: !!ghcr?.configured
+            });
             setLoading(false);
 
         });
@@ -108,6 +122,8 @@ export default function ContainerRegistry() {
                 {view === "ecr" && <EcrView />}
                 {view === "acr" && <AcrView />}
                 {view === "artifactRegistry" && <ArtifactRegistryView />}
+                {view === "dockerHub" && <DockerHubView />}
+                {view === "ghcr" && <GhcrView />}
 
             </PageLayout>
 
@@ -124,7 +140,8 @@ export default function ContainerRegistry() {
                 Artifact Registry connect using your own AWS/Azure/GCP credentials from{" "}
                 <a href="#" onClick={(e) => { e.preventDefault(); setTab("settings"); }}>Settings → Credentials</a> —
                 nothing new to set up if you already use those for Cloud Services or Environments.
-                Docker Hub, GHCR, GitLab Registry, JFrog, Harbor, and Nexus are on the way.
+                Docker Hub and GHCR connect using one shared credential an admin sets up
+                once for the whole portal. GitLab Registry, JFrog, Harbor, and Nexus are on the way.
             </p>
 
             <div className="settings-hub">
@@ -160,8 +177,12 @@ export default function ContainerRegistry() {
                                 {p.comingSoon
                                     ? "Not built yet — coming in a later update."
                                     : configured
-                                        ? `Browse repositories and images using your connected ${p.credentialLabel} credentials.`
-                                        : `Connect your ${p.credentialLabel} credentials in Settings → Credentials to enable this.`}
+                                        ? p.portalWide
+                                            ? "Browse repositories using this portal's shared credential."
+                                            : `Browse repositories and images using your connected ${p.credentialLabel} credentials.`
+                                        : p.portalWide
+                                            ? `An admin needs to connect ${p.credentialLabel} in Settings → Credentials to enable this for everyone.`
+                                            : `Connect your ${p.credentialLabel} credentials in Settings → Credentials to enable this.`}
                             </p>
                         </button>
 

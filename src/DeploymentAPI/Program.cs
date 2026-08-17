@@ -206,6 +206,11 @@ builder.Services.AddSingleton<PaasProviderService>();
 // Same statelessness as CloudStatusService above - every credential is
 // passed in per-call.
 builder.Services.AddSingleton<CloudServiceManagementService>();
+// Docker Hub/GHCR browsing for the Container Registry hub - same
+// statelessness as CloudServiceManagementService above (credential passed
+// in per-call, its two shared HttpClients never carry per-caller state on
+// themselves - see ContainerRegistryService's own comment on that).
+builder.Services.AddSingleton<ContainerRegistryService>();
 // Its only state is IMemoryCache-backed pending sign-ins, already a
 // Singleton itself - safe to share the same way.
 builder.Services.AddSingleton<AwsSsoService>();
