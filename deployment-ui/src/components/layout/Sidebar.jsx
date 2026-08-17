@@ -21,6 +21,7 @@ import {
     SettingsIcon,
     GitHubGroupIcon,
     CloudServicesIcon,
+    HostingProvidersIcon,
     ChevronIcon,
     SunIcon,
     MoonIcon,
@@ -69,6 +70,12 @@ export const TABS = [
     // user management + audit log); "Cloud Services" also matches this
     // page's own <h1> title (see pages/CloudServices.jsx).
     { key: "cloudServices", label: "Cloud Services", Icon: CloudServicesIcon },
+    // Session-scoped Render/Cloudflare/Netlify/Vercel connections (see
+    // pages/PaasHosting.jsx) - same open, self-service posture as Cloud
+    // Services above: not in GATED_TABS/ADMIN_ONLY_TABS below, and not in
+    // SettingsService.GrantablePageKeys, since this is the visitor's own
+    // account credential, not a portal-admin-gated feature.
+    { key: "paasHosting", label: "Hosting Providers", Icon: HostingProvidersIcon },
     { key: "services", label: "Services", Icon: ServicesIcon },
     { key: "docker", label: "Docker", Icon: DockerIcon },
     { key: "codeQuality", label: "Code Quality", Icon: CodeQualityIcon },

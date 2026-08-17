@@ -727,6 +727,61 @@ public class SettingsService
         }
     }
 
+    // Render/Cloudflare/Netlify/Vercel credentials, one visitor at a time -
+    // same isolation as UserAwsCredentials/UserAzureCredentials above, and
+    // (unlike those two, which need a record type per provider because AWS
+    // and Azure's actual field sets genuinely differ) ONE generic method
+    // set parameterized by `provider`, since all four PaaS providers store
+    // the exact same two fields (a bearer token, and Cloudflare's account
+    // id). Storage layout: root["UserPaasCredentials"][provider][key] =
+    // { Token, AccountId }.
+    public async Task<UserPaasCredentials> GetUserPaasCredentialsAsync(string provider, string key)
+    {
+        var root = await ReadRootAsync();
+        var entry = ((root["UserPaasCredentials"] as JObject)?[provider] as JObject)?[key] as JObject;
+
+        return new UserPaasCredentials(
+            Unprotect(entry?["Token"]?.ToString()),
+            entry?["AccountId"]?.ToString());
+    }
+
+    // Blank fields keep whatever was already saved - see SaveUserAwsCredentialsAsync.
+    public async Task SaveUserPaasCredentialsAsync(string provider, string key, PaasCredentialsUpdateDto update)
+    {
+        var root = await ReadRootAsync();
+        var providers = root["UserPaasCredentials"] as JObject ?? new JObject();
+        var users = providers[provider] as JObject ?? new JObject();
+        var entry = users[key] as JObject ?? new JObject();
+
+        if (!string.IsNullOrWhiteSpace(update.Token))
+            entry["Token"] = Protect(update.Token.Trim());
+
+        if (!string.IsNullOrWhiteSpace(update.AccountId))
+            entry["AccountId"] = update.AccountId.Trim();
+
+        users[key] = entry;
+        providers[provider] = users;
+        root["UserPaasCredentials"] = providers;
+        await WriteRootAsync(root);
+
+        _log.LogInfo("Settings", $"{provider} credentials saved for a session.");
+    }
+
+    public async Task ClearUserPaasCredentialsAsync(string provider, string key)
+    {
+        var root = await ReadRootAsync();
+
+        if (root["UserPaasCredentials"] is JObject providers
+            && providers[provider] is JObject users
+            && users[key] != null)
+        {
+            users.Remove(key);
+            await WriteRootAsync(root);
+
+            _log.LogInfo("Settings", $"{provider} credentials cleared for a session.");
+        }
+    }
+
     public async Task<SettingsViewDto> SaveDockerAsync(DockerSettingsUpdateDto update)
     {
         var root = await ReadRootAsync();

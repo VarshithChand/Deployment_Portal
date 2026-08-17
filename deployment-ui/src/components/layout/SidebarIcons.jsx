@@ -255,6 +255,18 @@ export function CloudServicesIcon() {
     );
 }
 
+// Two connected nodes — reads as "connect an account," distinct from
+// CloudServicesIcon's cloud silhouette.
+export function HostingProvidersIcon() {
+    return (
+        <svg {...common}>
+            <rect x="2" y="7" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.4" />
+            <rect x="11" y="7" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.4" />
+            <line x1="7" y1="9.5" x2="11" y2="9.5" stroke="currentColor" strokeWidth="1.4" />
+        </svg>
+    );
+}
+
 export function ChevronIcon({ direction = "left" }) {
     return (
         <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true"

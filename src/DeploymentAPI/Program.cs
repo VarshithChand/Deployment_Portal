@@ -140,6 +140,14 @@ builder.Services.AddHttpClient("SecurityTestingScan")
         AllowAutoRedirect = false
     });
 
+// Used only by PaasProviderService - the four provider API base URLs
+// (api.render.com, api.cloudflare.com, api.netlify.com, api.vercel.com)
+// are fixed literals, not user-supplied input, so this doesn't need the
+// AllowAutoRedirect=false SSRF guard ExternalHealthCheck/SecurityTestingScan
+// use above for arbitrary user-entered hostnames - a plain named client
+// for connection pooling is enough.
+builder.Services.AddHttpClient("PaasProviders");
+
 builder.Services.AddMemoryCache();
 
 //
@@ -192,6 +200,9 @@ builder.Services.AddScoped<PipelineExplanationService>();
 // same reuse rationale as DockerApiService) — every AWS/Azure credential
 // it uses is passed in per-call, never held on the instance itself.
 builder.Services.AddSingleton<CloudStatusService>();
+// Same statelessness as CloudStatusService above - every Render/Cloudflare/
+// Netlify/Vercel token it uses is passed in per-call.
+builder.Services.AddSingleton<PaasProviderService>();
 // Same statelessness as CloudStatusService above - every credential is
 // passed in per-call.
 builder.Services.AddSingleton<CloudServiceManagementService>();
