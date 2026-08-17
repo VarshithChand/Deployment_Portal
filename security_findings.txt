@@ -5687,3 +5687,107 @@ Name (rather than a separate id) is reliably unique per account.
 Recommend the user test the admin picker and a real Environment's
 Cloud Status panel with Render connected first (the one provider with
 real metrics), then Cloudflare/Netlify/Vercel for the status-only path.
+
+==================================================
+ROUND 44 FOLLOW-UP - CLOUDFLARE WORKERS BUILD FAILURE (NOT AN APP BUG)
+==================================================
+Date: 2026-08-17
+Trigger: user reported the Credentials page still showed only the
+original 10 tabs (no Render/Cloudflare/Netlify/Vercel) despite Rounds
+43-44 being pushed - the paragraph text shown was also the pre-Round-43
+wording, confirming the LIVE frontend predated those pushes.
+
+Root cause: unrelated to any code in this repo. This app's frontend is
+hosted on Cloudflare Workers with build/deploy managed by Cloudflare
+itself (Git-connected auto-build, not a GitHub Actions step) - and that
+Cloudflare Workers Build was failing with "The build token selected for
+this build has been deleted or rolled and cannot be used for this
+build." Traced to the user having correctly rotated a live-exposed
+Cloudflare credential earlier in this session (per the standing SECRET
+FOUND protocol) - the token they rotated was the same one Cloudflare
+Workers Builds used to authenticate the build itself, so the security-
+correct rotation had the side effect of breaking the build pipeline.
+Fixed by the user selecting a fresh, valid token in the Worker's Build
+configuration > API token setting and retrying - confirmed working
+immediately after (the user's next screenshot showed Render and
+Cloudflare Pages both genuinely "Connected" with real live data).
+
+No files changed - this was entirely a Cloudflare dashboard
+configuration fix, not an application bug. Documented here only so the
+cause (a security-motivated token rotation breaking an unrelated CI
+dependency on that same token) is on record for anyone investigating a
+similar "why did the site stop deploying" question later.
+
+==================================================
+ROUND 45 - CREDENTIALS AT-A-GLANCE SUMMARY, COMMIT/BUILD INFO AND
+RENDER CPU/MEMORY ON HOSTING PROVIDER CARDS
+==================================================
+Date: 2026-08-17
+Trigger: two follow-up requests after confirming Round 44 was live: (1)
+be able to see which credentials/API keys are already configured
+without clicking into each Settings > Credentials tab; (2) show each
+Hosting Provider service's last build/commit, plus CPU/RAM usage and
+capacity, directly on the Hosting Providers page itself (not only when
+an Environment happens to be linked to it, per Round 44).
+
+What was built:
+  - CredentialsView.jsx: each of the 13 tab buttons (GitHub through
+    Vercel) now shows a small checkmark badge when that credential is
+    already configured/connected - reuses the props Settings.jsx
+    already passes down for GitHub/Docker/SonarQube/OAuth/AI Assistant/
+    Screen Lock (pinConfigured via useAuth), and adds one lightweight
+    on-mount Promise.all fetch (AWS/Azure/GCP settings, active API key
+    count, all four PaaS providers' status) for everything else -
+    genuinely a "some are already known, cheaply add the rest" merge,
+    not a duplicate fetch of anything already available.
+  - PaasServiceItemDto gained CommitSha/CommitMessage/Plan, populated
+    per provider from whatever each one's own API already exposes (per
+    this session's established "no forced uniform shape" pattern):
+    Cloudflare Pages' latest_deployment.deployment_trigger.metadata
+    (already being fetched, just wasn't read before), Netlify's
+    published_deploy.commit_ref/title, Vercel's
+    latestDeployments[0].meta.githubCommitSha/githubCommitMessage (all
+    three: no new HTTP call, just reading more of an existing
+    response). Render needed a genuinely new per-service call (GET
+    /v1/services/{id}/deploys?limit=1, wrapped so one service's
+    commit-fetch failure never blocks the others or the rest of the
+    listing) since its /v1/services response doesn't carry commit info
+    at all; Render's plan/instance-type also added from the same
+    listing call, no extra request.
+  - New PaasController endpoint, GET api/paas/{provider}/services/
+    {serviceId}/metrics - reuses Round 44's GetServiceMetricsAsync
+    directly against this session's OWN connected credential, with no
+    Environment involved at all (Round 44's use of that same method
+    stays intact and unchanged, scoped through an Environment's saved
+    target instead).
+  - PaasProviderCard.jsx: added a Commit column (all four providers)
+    and, Render-only, Plan and Load columns - Load is fetched lazily
+    per Render service once the listing arrives (not blocking the rest
+    of the card), showing the latest CPU/memory reading or "…" while
+    pending.
+
+Verification performed:
+  - `dotnet build` (isolated output dir): 0 errors, same 3 pre-existing
+    unrelated warnings.
+  - `npm run lint` / `npm run build`: clean, no new warnings.
+  - Live check against the deployed Render backend after the push:
+    /api/bootstrap healthy (HTTP 200).
+
+Files changed: src/DeploymentAPI/Controllers/PaasController.cs,
+DTOs/PaasProviderDtos.cs, Services/PaasProviderService.cs;
+deployment-ui/src/components/paas/PaasProviderCard.jsx,
+components/settings/CredentialsView.jsx, services/paasService.js.
+Commit: 8ddc7d8.
+
+Status: Complete and pushed, live-verified the backend is up. Could
+NOT live-verify the actual new field values against real accounts (no
+tokens in this sandboxed session, same standing limitation as every
+prior PaaS round) - the Render per-service commit call and the
+Cloudflare/Netlify/Vercel field paths (deployment_trigger.metadata,
+published_deploy.commit_ref/title, meta.githubCommitSha/
+githubCommitMessage) are implemented from each provider's public API
+shape as precisely as possible, but haven't been exercised against a
+live response. Worth noting the Render commit fetch is one extra API
+call per service shown (N+1) - acceptable for a typical handful of
+services on a personal account page, but would be worth revisiting if
+someone connects an account with many Render services.
