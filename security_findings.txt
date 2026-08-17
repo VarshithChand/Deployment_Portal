@@ -7301,3 +7301,110 @@ Still deliberately NOT built (unchanged from Round 49's confirmed scope):
 GitLab Registry, JFrog Artifactory, Harbor, Nexus - shown on the hub as
 visible "Coming soon" tiles, each still needing its own new credential
 model and API integration from scratch.
+
+==================================================
+ROUND 51 - FEATURE: CONTAINER REGISTRY HUB, GITLAB REGISTRY + JFROG
+ARTIFACTORY
+==================================================
+Date: 2026-08-17
+Trigger: immediate follow-up to Round 50 (Docker Hub/GHCR) - "now do it
+for these two", pointing at a screenshot of the hub's remaining "GitLab
+Registry" and "JFrog Artifactory" Coming-soon tiles. Same confirmed
+scope as every registry built so far: portal-wide/shared credential,
+one admin connects each once, every visitor then browses the same
+repositories.
+
+Neither provider fits Docker Hub/GHCR's generic (username, token) shape,
+so each got its own dedicated credential shape/storage instead of being
+forced into PortalContainerRegistryCredentials - the same reasoning that
+store was itself kept separate from Hosting Observability's
+PortalPaasCredentials in Round 50: a shape that doesn't fit is a sign to
+add a new one, not to overload an existing one with an extra convention-
+only field.
+
+GitLab Container Registry: GitLab has no "list every registry I can see"
+call - the registry is scoped to one project, so the credential needs a
+Host URL (self-hosted-friendly, defaults to gitlab.com), a Project ID or
+path, and a Personal Access Token (read_registry or read_api scope).
+Auth uses GitLab's own PRIVATE-TOKEN header convention, not Bearer.
+GitLab's tag-list endpoint only returns bare names; digest/size/date
+need a per-tag detail call, wrapped best-effort (one tag's detail
+failing doesn't blank the whole table) - flagged as a real N+1-requests
+performance tradeoff for a heavily-tagged repository, not fixed in this
+pass, same honesty-over-guessing posture as every other unverified
+integration this session.
+
+JFrog Artifactory: every Artifactory instance is its own domain, so the
+credential is just a Host URL + a Bearer Access Token (JFrog's modern
+recommended auth). Repositories come from Artifactory's own REST API
+(api/repositories, filtered to local docker-type repos); images and tags
+within a repository are proxied through the base Docker Registry HTTP
+API V2 spec (the same one ACR's own /v2/_catalog and /v2/{repo}/
+tags/list calls speak) - which means, like ACR's own base-spec
+limitation, tag names come back with no digest by default. Recovered the
+digest via a per-tag HEAD request on the v2 manifest endpoint, reading
+the Docker-Content-Digest response header - a real, documented
+technique, not guessed - wrapped the same best-effort way GitLab's
+per-tag detail call is.
+
+New Settings -> Credentials tabs ("GitLab Registry", "JFrog"), each its
+own bespoke form component (GitLabRegistryLoginSection.jsx,
+JfrogLoginSection.jsx) rather than reusing Round 50's generic
+PortalRegistryLoginSection.jsx, since the field sets genuinely differ
+(3 fields with a Host-URL-with-a-real-default for GitLab, 2 fields with
+no sensible default for JFrog) - both still gated behind the same
+admin-only + screen-lock-PIN posture every other shared credential in
+this app uses. Both tiles on the Container Registry hub now auto-enable
+exactly like every other provider, reading their own portal-wide status
+endpoints.
+
+Verification performed:
+  - `dotnet build` (isolated output dir): 0 errors, only pre-existing
+    unrelated warnings.
+  - `npm run lint` in deployment-ui/: no new warnings beyond the same
+    pre-existing-pattern react-hooks/exhaustive-deps warning already
+    flagged in Round 50 (shared across every self-fetching credential
+    section in this codebase).
+  - `npm run build` in deployment-ui/: succeeded, ContainerRegistry
+    chunk rebuilt with both new provider views bundled in.
+  - Live check against the deployed Render backend after the push:
+    /api/bootstrap healthy (HTTP 200).
+
+Files changed: src/DeploymentAPI/DTOs/ContainerRegistryDtos.cs (GitLab/
+JFrog credential/status/repo/image/tag DTOs), src/DeploymentAPI/Services/
+SettingsService.cs (GetPortalGitLabRegistryCredentialsAsync/
+GetPortalJfrogCredentialsAsync + Save/Clear pairs),
+src/DeploymentAPI/Services/ContainerRegistryService.cs (GitLab + JFrog
+sections), src/DeploymentAPI/Controllers/ContainerRegistryController.cs
+(GitLab/JFrog status/save/clear/browse routes),
+src/DeploymentAPI/Helpers/CredentialGate.cs (added gitlab-registry/
+jfrog), deployment-ui/src/services/containerRegistryService.js,
+deployment-ui/src/components/settings/credentials/
+{GitLabRegistryLoginSection,JfrogLoginSection}.jsx (new),
+deployment-ui/src/components/settings/CredentialsView.jsx,
+deployment-ui/src/components/containerRegistry/
+{GitLabRegistryView,JfrogView}.jsx (new),
+deployment-ui/src/pages/ContainerRegistry.jsx.
+Commit: 8e57857.
+
+Status: Complete, pushed, live-verified the backend is up. Could NOT
+live-verify GitLab Registry or JFrog against real accounts/instances in
+this sandboxed session (no real credentials available here) - same
+standing limitation as every other registry integration built across
+Rounds 49-51. GitLab's per-tag detail response shape and JFrog's
+manifest-HEAD digest recovery are the least-certain parts of this round;
+both follow real, documented API contracts (not guessed), but neither
+has been exercised against a live instance. Recommend @VarshithChand
+connect a real GitLab Personal Access Token + project and a real
+Artifactory instance + Access Token (Settings -> Credentials -> GitLab
+Registry / JFrog) and browse both end to end once deployed - likely to
+need at least one follow-up fix once real response shapes are seen, the
+same posture taken for every other unverified live-API integration this
+session.
+
+Still deliberately NOT built: Harbor, Nexus - shown on the hub as visible
+"Coming soon" tiles, each still needing its own new credential model and
+API integration from scratch. With this round, 7 of the original 9
+providers from the reference image are live: AWS ECR, Azure ACR, GCP
+Artifact Registry, Docker Hub, GHCR, GitLab Registry, and JFrog
+Artifactory.
