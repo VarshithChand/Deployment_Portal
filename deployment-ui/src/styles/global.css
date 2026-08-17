@@ -4331,6 +4331,21 @@ textarea{
 
 }
 
+/* While empty, the "PIN" placeholder sits behind the caret with the same
+   .5em letter-spacing/center-alignment as real typed digits get above -
+   spread across a 3-letter word and a centered empty field, that put the
+   blinking caret nowhere near where "P I N" visually starts, reading as
+   broken alignment. Left-aligned with no extra spacing only for this
+   empty state fixes that; the spaced-out "OTP" look still applies the
+   moment there's real content, via the rule above. */
+.auth-page-field input.pin-lock-input:placeholder-shown{
+
+    text-align:left;
+
+    letter-spacing:normal;
+
+}
+
 .yaml-viewer{
 
     background:var(--code-bg, #0d1117);
