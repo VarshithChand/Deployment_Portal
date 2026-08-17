@@ -6485,3 +6485,92 @@ already-working DATABASE_URL conversion logic exactly. Recommend
 @VarshithChand try the Fields tab against the same Render database
 already connected in follow-up 3/4 and confirm it still shows
 Connected.
+
+==================================================
+ROUND 48 FOLLOW-UP 6 - SETTINGS > DATABASE MANAGEMENT NOW REQUIRES AN
+EXPLICIT DATABASE CONNECTION TOO (EVEN FOR THE SUPER-ADMIN)
+==================================================
+Date: 2026-08-17
+Trigger: user shared a screenshot of Settings > Database (the original,
+pre-existing DB inspector/table-editor page - unrelated to this
+round's Hosting Providers work) already showing "Connected" with no
+connect step at all, and said even the super-admin should have to
+connect the db with credentials. Confirmed via AskUserQuestion before
+touching this separate, mature feature: yes, extend the same explicit-
+connect requirement there too, not just the new dashboard.
+
+Root cause of the "just works" behavior: DatabaseManagementService's
+constructor always resolved this app's own DATABASE_URL once at
+startup and every DatabaseController action used it implicitly - there
+was never a credential-connect step for this page at all, for anyone.
+
+Fix: DatabaseController now resolves the explicitly-connected portal
+database credential (the SAME PortalDatabaseConnection this session
+already wired up for Settings > Credentials > Database / the Hosting
+Providers > Database tab) fresh on every request via a new
+ResolveConnectionStringAsync helper, and passes it explicitly to every
+DatabaseManagementService call - GetHealth, GetSchemas, GetTables,
+GetOverview, GetTableDetail, GetRows, InsertRow, UpdateRow, DeleteRow,
+CreateTable. When nothing is connected, every action returns a clear
+"Not connected — connect a database credential in Settings →
+Credentials → Database first." response instead of ever touching a
+database - no silent DATABASE_URL fallback anywhere in this
+controller anymore, for any action, including the super-admin.
+DatabaseManagementService's remaining methods (GetSchemasAsync,
+GetTableDetailAsync, GetRowsAsync, InsertRowAsync, UpdateRowAsync,
+DeleteRowAsync, CreateTableAsync) gained the same optional
+connectionStringOverride parameter GetHealthAsync/GetTablesAsync
+already had from earlier this round - all still default to
+DATABASE_URL when the parameter is omitted, so the Hosting Providers ->
+Database tab's own "falls back to DATABASE_URL by default" behavior
+(a deliberate, separate design choice from this same round, not
+touched by this fix) keeps working exactly as before.
+
+Caught one real bug in my own pass before shipping: GetOverviewAsync
+was the one action that didn't short-circuit in the controller before
+calling the service, so passing a null connection string would have
+silently re-triggered the service's own "?? DATABASE_URL" fallback
+internally and defeated the whole point for that one endpoint. Since
+GetOverviewAsync has exactly one caller total (this controller),
+removed its DATABASE_URL fallback entirely rather than adding another
+controller-side short-circuit, which is the more robust fix (the
+service itself can no longer silently reconnect for that endpoint,
+regardless of how it's called in the future).
+
+Explicitly NOT changed: AiToolsService's Deployment Copilot database
+tools (get_database_health and its table-listing tool) still read
+DATABASE_URL automatically - out of scope of what was asked (a
+separate AI chat surface, already isSuperAdmin-gated), flagged to the
+user rather than silently left inconsistent.
+
+Also added a "Go to Settings → Credentials → Database" link to the
+Settings > Database page's now-more-common "not connected" state
+(reusing NavigationContext's existing goToSettingsView helper).
+
+Verification performed:
+  - `dotnet build` (isolated output dir, twice - once after the
+    service changes, once after the controller rewrite): 0 errors,
+    only pre-existing unrelated warnings.
+  - `npm run lint` in deployment-ui/: no new warnings/errors.
+  - `npm run build` in deployment-ui/: succeeded.
+  - Live check against the deployed Render backend after the push:
+    /api/bootstrap healthy (HTTP 200).
+
+Files changed: src/DeploymentAPI/Services/DatabaseManagementService.cs,
+src/DeploymentAPI/Controllers/DatabaseController.cs,
+deployment-ui/src/components/settings/DatabaseView.jsx.
+Commit: e96e7be.
+
+Status: Complete and pushed, live-verified the backend is up. Could
+NOT live-verify against a real super-admin session in this sandboxed
+session (no real GitHub identity matching AdminGate.SuperAdminLogin
+available here) - only that every action compiles and the short-
+circuit logic is structurally correct on inspection. Since the user
+already connected a real Render database via follow-up 3-5's picker,
+Settings > Database should now show that SAME connection immediately
+(both pages share the one PortalDatabaseConnection) rather than
+needing a second, separate connect step - recommend @VarshithChand
+confirm Settings > Database still shows Connected after this change,
+and separately confirm row browsing/table creation still work end to
+end (higher-risk paths this round touched: insert/update/delete/create
+table, none of which could be exercised live here).
