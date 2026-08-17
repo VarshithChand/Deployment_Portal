@@ -5893,3 +5893,59 @@ Files changed: deployment-ui/src/styles/global.css.
 Commit: ef67981.
 
 Status: Complete and pushed. CSS-only, no backend involved.
+
+==================================================
+ROUND 46 FOLLOW-UP 2 - REAL FINDING: SETTING/CHANGING THE PIN HAD NO
+MFA REQUIREMENT EITHER; DROPPED THE RECOVERY-CODE FALLBACK
+==================================================
+Date: 2026-08-17
+Trigger: after confirming Remove PIN's new MFA gate worked, user asked
+for the same requirement on Change PIN, and that neither flow show a
+recovery-code option.
+
+Second real gap in the same area: the first pass of Round 46 only
+gated REMOVING the PIN behind MFA - SETTING or CHANGING it had no such
+requirement at all. Someone with a moment of access to an unattended,
+signed-in browser could just as easily overwrite the PIN with one of
+their own choosing, sidestepping the whole point of the Round 46 fix
+(the PIN protects the Credentials tabs and idle-timeout behavior - a
+swapped-in PIN defeats that just as completely as a removed one).
+
+Fix:
+  - SettingsController: factored the login-resolve + MfaGate call
+    (previously only in ClearMyPin) into a shared
+    DenyUnlessPinActionVerifiedAsync helper, now called from BOTH
+    SaveMyPin and ClearMyPin - a no-op when the caller's GitHub
+    identity has no MFA enabled, same posture as before.
+  - Recovery-code fallback deliberately removed from both flows (was
+    present on Remove PIN only, per the first Round 46 pass) - per
+    explicit request: unlike Disable MFA, setting/changing/removing a
+    PIN isn't a "lost my phone" last-resort action, so a live 6-digit
+    code is required outright with no backup path. SecurityPinUpdateDto
+    gained a Code field (no RecoveryCode); ClearMyPin still technically
+    accepts MfaCodeRequestDto server-side (harmless, unused) but the
+    frontend never sends a recovery code for either action now.
+  - SecurityPinSection.jsx restructured around one `mfaAction` state
+    ("save" | "remove" | null) so only one MFA prompt is ever showing
+    at a time, sharing the same lockout countdown between both flows -
+    Change PIN's form fields stay editable while its code prompt is up
+    (in case the code entry fails and they want to adjust the PIN
+    too), Remove PIN's are disabled (nothing to edit there).
+
+Verification performed:
+  - `dotnet build` (isolated output dir): 0 errors, same 3
+    pre-existing unrelated warnings.
+  - `npm run lint` / `npm run build`: clean, no new warnings.
+  - Live check against the deployed Render backend after the push:
+    /api/bootstrap healthy (HTTP 200).
+
+Files changed: src/DeploymentAPI/Controllers/SettingsController.cs,
+DTOs/SecurityPinUpdateDto.cs; deployment-ui/src/components/settings/
+credentials/SecurityPinSection.jsx, services/settingsService.js.
+Commit: d34a022.
+
+Status: Complete and pushed, live-verified the backend is up. Same
+standing limitation as the first Round 46 pass: could NOT live-verify
+the actual MFA-enabled end-to-end flow for either action (no real
+MFA-enrolled session in this sandboxed environment) - recommend testing
+both Change PIN and Remove PIN with a real MFA-enabled account.
