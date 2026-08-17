@@ -22,19 +22,19 @@ export default function SecurityPinSection() {
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [form, setForm] = useState(EMPTY_FORM);
-
-    // Removing the PIN also turns off idle-timeout protection for your
-    // saved credentials (see the copy below), so - when this session's
-    // GitHub identity has MFA enabled - the backend requires a fresh code
-    // before it takes effect (same requirement disabling MFA itself
-    // already has). The first click tries with no code; a 403
-    // "MFA_REQUIRED" is what reveals this inline form rather than
-    // showing it unconditionally, since most sessions won't have MFA
-    // enabled at all and the field would just be noise.
-    const [showRemoveMfa, setShowRemoveMfa] = useState(false);
-    const [removeCode, setRemoveCode] = useState("");
-    const [removeRecoveryCode, setRemoveRecoveryCode] = useState("");
     const [removing, setRemoving] = useState(false);
+
+    // Setting/changing AND removing the PIN both require a fresh MFA code
+    // when this session's GitHub identity has MFA enabled (a no-op
+    // otherwise - see SettingsController.DenyUnlessPinActionVerifiedAsync).
+    // Deliberately no recovery-code field on either - unlike Disable MFA,
+    // neither of these is a "lost my phone, last resort" action, so a live
+    // code is required outright. `mfaAction` tracks WHICH action is
+    // currently waiting on a code ("save" | "remove" | null) since only
+    // one can be in flight at a time; the lockout itself is shared between
+    // them (same per-login cooldown either way).
+    const [mfaAction, setMfaAction] = useState(null);
+    const [mfaCode, setMfaCode] = useState("");
     const [lockedUntilUtc, setLockedUntilUtc] = useState(null);
     const { isLocked, formatted: lockoutFormatted } = useLockoutCountdown(lockedUntilUtc);
 
@@ -49,6 +49,22 @@ export default function SecurityPinSection() {
     }
 
     useEffect(refresh, []);
+
+    function cancelMfa() {
+        setMfaAction(null);
+        setMfaCode("");
+    }
+
+    function handleMfaError(err) {
+
+        if (err.response?.data?.code === "MFA_LOCKED") {
+            setLockedUntilUtc(err.response.data.lockedUntilUtc);
+            return true;
+        }
+
+        return false;
+
+    }
 
     async function handleSave(e) {
 
@@ -68,17 +84,29 @@ export default function SecurityPinSection() {
 
         try {
 
-            await saveMyPin(form.pin);
+            await saveMyPin(form.pin, mfaCode);
+
             toast.show("Screen-lock PIN saved — the 10-minute idle prompt will lock instead of clearing your credentials.", "success");
             setForm(EMPTY_FORM);
+            cancelMfa();
+            setLockedUntilUtc(null);
             refresh();
             refreshOauthStatus();
 
         }
         catch (err) {
 
+            if (err.response?.data?.code === "MFA_REQUIRED") {
+                setMfaAction("save");
+                return;
+            }
+
             console.error(err);
-            toast.show(err.response?.data?.message || "Unable to save PIN.", "error");
+            setMfaCode("");
+
+            if (!handleMfaError(err)) {
+                toast.show(err.response?.data?.message || "Unable to save PIN.", "error");
+            }
 
         }
         finally {
@@ -96,12 +124,10 @@ export default function SecurityPinSection() {
 
         try {
 
-            await clearMyPin({ code: removeCode, recoveryCode: removeRecoveryCode });
+            await clearMyPin(mfaCode);
 
             toast.show("Screen-lock PIN removed — the 10-minute idle prompt will clear your credentials again, same as before.", "success");
-            setShowRemoveMfa(false);
-            setRemoveCode("");
-            setRemoveRecoveryCode("");
+            cancelMfa();
             setLockedUntilUtc(null);
             refresh();
             refreshOauthStatus();
@@ -110,18 +136,14 @@ export default function SecurityPinSection() {
         catch (err) {
 
             if (err.response?.data?.code === "MFA_REQUIRED") {
-                setShowRemoveMfa(true);
+                setMfaAction("remove");
                 return;
             }
 
             console.error(err);
-            setRemoveCode("");
-            setRemoveRecoveryCode("");
+            setMfaCode("");
 
-            if (err.response?.data?.code === "MFA_LOCKED") {
-                setLockedUntilUtc(err.response.data.lockedUntilUtc);
-            }
-            else {
+            if (!handleMfaError(err)) {
                 toast.show(err.response?.data?.message || "Unable to remove PIN.", "error");
             }
 
@@ -132,12 +154,6 @@ export default function SecurityPinSection() {
 
         }
 
-    }
-
-    function cancelRemove() {
-        setShowRemoveMfa(false);
-        setRemoveCode("");
-        setRemoveRecoveryCode("");
     }
 
     return (
@@ -164,7 +180,7 @@ export default function SecurityPinSection() {
 
             ) : (
 
-                <form onSubmit={handleSave}>
+                <form onSubmit={mfaAction === "remove" ? handleClear : handleSave}>
 
                     <div className="form-group">
                         <label>{status?.configured ? "New PIN" : "PIN"} (4–8 digits)</label>
@@ -176,6 +192,7 @@ export default function SecurityPinSection() {
                             value={form.pin}
                             onChange={(e) => setForm({ ...form, pin: e.target.value.replace(/\D/g, "") })}
                             autoComplete="new-password"
+                            disabled={mfaAction === "remove"}
                         />
                     </div>
 
@@ -189,79 +206,76 @@ export default function SecurityPinSection() {
                             value={form.confirmPin}
                             onChange={(e) => setForm({ ...form, confirmPin: e.target.value.replace(/\D/g, "") })}
                             autoComplete="new-password"
+                            disabled={mfaAction === "remove"}
                         />
                     </div>
 
-                    <div className="button-row">
+                    {mfaAction && (
 
-                        <button type="submit" className="btn btn-primary" disabled={saving}>
-                            {saving ? "Saving..." : status?.configured ? "Change PIN" : "Set PIN"}
-                        </button>
+                        <div className="form-group">
 
-                        {status?.configured && !showRemoveMfa && (
+                            <label>6-digit authenticator code</label>
+                            <input
+                                className="form-control"
+                                inputMode="numeric"
+                                maxLength={6}
+                                value={mfaCode}
+                                onChange={(e) => setMfaCode(e.target.value.replace(/\D/g, ""))}
+                                autoComplete="off"
+                                autoFocus
+                                disabled={isLocked}
+                            />
 
-                            <button type="button" className="btn btn-danger" onClick={handleClear} disabled={removing}>
-                                {removing ? "Removing..." : "Remove PIN"}
-                            </button>
+                            {isLocked && (
+                                <p className="field-hint field-hint-bad">Too many wrong codes — try again in {lockoutFormatted}.</p>
+                            )}
 
-                        )}
+                        </div>
 
-                    </div>
-
-                </form>
-
-            )}
-
-            {showRemoveMfa && (
-
-                <form onSubmit={handleClear} style={{ marginTop: "16px" }}>
-
-                    <p className="field-hint field-hint-bad" style={{ marginTop: 0 }}>
-                        Removing the PIN also turns off idle-timeout protection for your saved
-                        credentials — enter your authenticator code to confirm.
-                    </p>
-
-                    <div className="form-group">
-                        <label>6-digit code</label>
-                        <input
-                            className="form-control"
-                            inputMode="numeric"
-                            maxLength={6}
-                            value={removeCode}
-                            onChange={(e) => setRemoveCode(e.target.value.replace(/\D/g, ""))}
-                            autoComplete="off"
-                            disabled={isLocked}
-                        />
-                    </div>
-
-                    <div className="form-group">
-                        <label>Or a recovery code</label>
-                        <input
-                            className="form-control"
-                            value={removeRecoveryCode}
-                            onChange={(e) => setRemoveRecoveryCode(e.target.value.trim())}
-                            autoComplete="off"
-                            disabled={isLocked}
-                        />
-                    </div>
-
-                    {isLocked && (
-                        <p className="field-hint field-hint-bad">Too many wrong codes — try again in {lockoutFormatted}.</p>
                     )}
 
                     <div className="button-row">
 
-                        <button
-                            type="submit"
-                            className="btn btn-danger"
-                            disabled={removing || isLocked || (!removeCode && !removeRecoveryCode)}
-                        >
-                            {removing ? "Removing..." : "Confirm Remove PIN"}
-                        </button>
+                        {mfaAction === "remove" ? (
 
-                        <button type="button" className="btn" onClick={cancelRemove} disabled={removing}>
-                            Cancel
-                        </button>
+                            <>
+                                <button type="submit" className="btn btn-danger" disabled={removing || isLocked || !mfaCode}>
+                                    {removing ? "Removing..." : "Confirm Remove PIN"}
+                                </button>
+                                <button type="button" className="btn" onClick={cancelMfa} disabled={removing}>
+                                    Cancel
+                                </button>
+                            </>
+
+                        ) : (
+
+                            <>
+
+                                <button
+                                    type="submit"
+                                    className="btn btn-primary"
+                                    disabled={saving || isLocked || (mfaAction === "save" && !mfaCode)}
+                                >
+                                    {saving
+                                        ? "Saving..."
+                                        : mfaAction === "save"
+                                            ? "Confirm Code"
+                                            : status?.configured ? "Change PIN" : "Set PIN"}
+                                </button>
+
+                                {mfaAction === "save" ? (
+                                    <button type="button" className="btn" onClick={cancelMfa} disabled={saving}>
+                                        Cancel
+                                    </button>
+                                ) : status?.configured && (
+                                    <button type="button" className="btn btn-danger" onClick={handleClear} disabled={removing}>
+                                        {removing ? "Removing..." : "Remove PIN"}
+                                    </button>
+                                )}
+
+                            </>
+
+                        )}
 
                     </div>
 

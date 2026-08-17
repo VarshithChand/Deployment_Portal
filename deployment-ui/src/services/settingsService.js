@@ -151,17 +151,18 @@ export const getMyPinStatus = async () => {
     return response.data;
 };
 
-export const saveMyPin = async (pin) => {
-    const response = await settingsApi.post("/me/pin", { pin });
+// code is only actually required when this session's GitHub identity has
+// MFA enabled (see MfaGate.DenyUnlessCodeVerifiedAsync on the backend) -
+// omit it on the first attempt; a 403 with code "MFA_REQUIRED" means try
+// again with one. No recovery-code fallback here by design - see
+// SecurityPinSection.jsx.
+export const saveMyPin = async (pin, code) => {
+    const response = await settingsApi.post("/me/pin", { pin, code });
     return response.data;
 };
 
-// code/recoveryCode are only actually required when this session's GitHub
-// identity has MFA enabled (see MfaGate.DenyUnlessCodeVerifiedAsync on the
-// backend) - omit both on the first attempt; a 403 with code
-// "MFA_REQUIRED" means try again with one of them.
-export const clearMyPin = async ({ code, recoveryCode } = {}) => {
-    const response = await settingsApi.delete("/me/pin", { data: { code, recoveryCode } });
+export const clearMyPin = async (code) => {
+    const response = await settingsApi.delete("/me/pin", { data: { code } });
     return response.data;
 };
 

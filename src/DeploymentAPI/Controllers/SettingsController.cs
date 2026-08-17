@@ -508,11 +508,31 @@ public class SettingsController : ControllerBase
         return Ok(new { Configured = await _settings.HasPinAsync(key) });
     }
 
+    // Shared by SaveMyPin and ClearMyPin below - both require a fresh MFA
+    // code before taking effect when this session's GitHub identity has
+    // MFA enabled (a no-op otherwise, so either action works exactly as it
+    // always did for a session with no MFA). Neither offers a recovery-
+    // code fallback here by design (see SecurityPinSection.jsx) - setting/
+    // changing/removing the PIN isn't the "lost my phone" last-resort path
+    // Disable MFA is, so a live code is required outright.
+    private async Task<IActionResult?> DenyUnlessPinActionVerifiedAsync(string? code)
+    {
+        var login = await _githubAuth.GetAuthenticatedLoginAsync();
+
+        if (string.IsNullOrWhiteSpace(login))
+            return null;
+
+        return await MfaGate.DenyUnlessCodeVerifiedAsync(this, _settings, _notifications, login, code, null);
+    }
+
     [HttpPost("me/pin")]
     public async Task<IActionResult> SaveMyPin(SecurityPinUpdateDto request)
     {
         if (string.IsNullOrWhiteSpace(request.Pin) || request.Pin.Length < 4 || request.Pin.Length > 8 || !request.Pin.All(char.IsDigit))
             return BadRequest(new { message = "PIN must be 4 to 8 digits." });
+
+        if (await DenyUnlessPinActionVerifiedAsync(request.Code) is IActionResult denied)
+            return denied;
 
         var key = PortalIdentity.GetOrCreateKey(HttpContext);
         await _settings.SetPinAsync(key, request.Pin);
@@ -526,15 +546,10 @@ public class SettingsController : ControllerBase
     // significant enough that, when this session's GitHub identity has MFA
     // enabled, we require a fresh MFA code before it takes effect, same as
     // disabling MFA itself already requires (see MfaController.Disable).
-    // A no-op gate when MFA isn't enabled at all - removing the PIN then
-    // works exactly as it always did.
     [HttpDelete("me/pin")]
     public async Task<IActionResult> ClearMyPin(MfaCodeRequestDto request)
     {
-        var login = await _githubAuth.GetAuthenticatedLoginAsync();
-
-        if (!string.IsNullOrWhiteSpace(login)
-            && await MfaGate.DenyUnlessCodeVerifiedAsync(this, _settings, _notifications, login, request?.Code, request?.RecoveryCode) is IActionResult denied)
+        if (await DenyUnlessPinActionVerifiedAsync(request?.Code) is IActionResult denied)
             return denied;
 
         var key = PortalIdentity.GetOrCreateKey(HttpContext);
