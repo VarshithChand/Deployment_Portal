@@ -872,7 +872,15 @@ public class SettingsService
         var root = await ReadRootAsync();
         var entry = root["PortalDatabaseConnection"] as JObject;
 
-        return (entry?["ProviderLabel"]?.ToString(), Unprotect(entry?["ConnectionString"]?.ToString()));
+        var stored = Unprotect(entry?["ConnectionString"]?.ToString());
+
+        // Normalized here too, not just on save - a value saved before
+        // NormalizeConnectionString existed (or by any future caller that
+        // forgets to) still self-heals on every read instead of silently
+        // failing to connect forever.
+        var connectionString = string.IsNullOrWhiteSpace(stored) ? stored : NormalizeConnectionString(stored);
+
+        return (entry?["ProviderLabel"]?.ToString(), connectionString);
     }
 
     // Blank ConnectionString keeps whatever was already saved - see
@@ -886,13 +894,27 @@ public class SettingsService
             entry["ProviderLabel"] = update.ProviderLabel.Trim();
 
         if (!string.IsNullOrWhiteSpace(update.ConnectionString))
-            entry["ConnectionString"] = Protect(update.ConnectionString.Trim());
+            entry["ConnectionString"] = Protect(NormalizeConnectionString(update.ConnectionString.Trim()));
 
         root["PortalDatabaseConnection"] = entry;
         await WriteRootAsync(root);
 
         _log.LogInfo("Settings", "Portal-wide database connection saved.");
     }
+
+    // Render (and most managed Postgres providers - Supabase, Neon, Heroku)
+    // hand out connections as a "postgres://user:pass@host:port/dbname" URI,
+    // the same shape DATABASE_URL itself always arrives in - see
+    // BuildConnectionString above, reused here so a pasted string or one
+    // fetched from Render's own API (see HostingObservabilityController.
+    // ConnectRenderDatabase) gets the identical treatment rather than being
+    // handed to Npgsql as a raw URI, which it doesn't understand and fails
+    // to even parse (never mind negotiate SSL). Left as-is if it's already
+    // in Npgsql's own "Host=...;Username=...;..." keyword format.
+    private static string NormalizeConnectionString(string raw) =>
+        raw.StartsWith("postgres://", StringComparison.OrdinalIgnoreCase) || raw.StartsWith("postgresql://", StringComparison.OrdinalIgnoreCase)
+            ? BuildConnectionString(raw)
+            : raw;
 
     public async Task ClearPortalDatabaseConnectionAsync()
     {
