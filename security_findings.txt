@@ -5982,3 +5982,31 @@ Files changed: deployment-ui/src/styles/global.css.
 Commit: b5a648b.
 
 Status: Complete and pushed. CSS-only, no backend involved.
+
+==================================================
+ROUND 46 FOLLOW-UP 4 - PIN LOCK SCREEN WASN'T CENTERED
+==================================================
+Date: 2026-08-17
+Trigger: user reported the lock screen card (now opaque per Follow-up
+3) sat off to one side instead of centered.
+
+Root cause: same bug class this codebase had already hit and fixed
+once before, for SwitchRepositoryModal (see that component's own
+createPortal comment) - CSS position:fixed's containing block becomes
+the nearest ancestor with a transform/filter/backdrop-filter/
+perspective/will-change/contain property, not the viewport, if one
+exists anywhere between the element and <body>. PinLockScreen can be
+triggered by PeriodicSignOutMonitor's idle timeout from ANY page in
+the app, so unlike a component only ever rendered in one known spot,
+there's no single ancestor chain to audit and trust stays
+transform-free forever.
+
+Fix: PinLockScreen.jsx now portals its whole backdrop+dialog straight
+to document.body via createPortal, the exact same fix already
+established for SwitchRepositoryModal - sidesteps the whole bug class
+regardless of what page/component tree it's triggered from.
+
+Files changed: deployment-ui/src/components/PinLockScreen.jsx.
+Commit: f5552ea.
+
+Status: Complete and pushed. Frontend-only, no backend involved.
