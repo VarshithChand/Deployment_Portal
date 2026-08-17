@@ -5,7 +5,7 @@ import useToast from "../../../hooks/useToast";
 import useAuth from "../../../hooks/useAuth";
 import { getMyAzureSettings, saveMyAzureSettings, clearMyAzureCredentials } from "../../../services/settingsService";
 
-const EMPTY_FORM = { tenantId: "", clientId: "", clientSecret: "" };
+const EMPTY_FORM = { tenantId: "", clientId: "", clientSecret: "", subscriptionId: "" };
 
 // See AwsLoginSection's own copy of this for the full reasoning.
 const PIN_SUGGESTION = " Tip: set a screen-lock PIN (Screen Lock tab) to keep this secured.";
@@ -113,6 +113,8 @@ export default function AzureLoginSection({ onCleared }) {
             <p className="empty-state" style={{ padding: "0 0 15px", textAlign: "left" }}>
                 Powers the Environments page's live Azure Web App status. A service
                 principal (App Registration) with read access to the Web App is enough.
+                Add a Subscription ID too if you want to browse Azure Container Registry
+                from Container Registry — Web App status alone doesn't need one.
             </p>
 
             {loading ? (
@@ -156,6 +158,18 @@ export default function AzureLoginSection({ onCleared }) {
                             onChange={(e) => setForm({ ...form, clientSecret: e.target.value })}
                             onClear={() => setForm({ ...form, clientSecret: "" })}
                             autoComplete="new-password"
+                        />
+                    </div>
+
+                    <div className="form-group">
+                        <label>Subscription ID (optional — for Azure Container Registry)</label>
+                        <ClearableInput
+                            placeholder={status?.subscriptionId ? `Leave blank to keep "${status.subscriptionId}"` : ""}
+                            value={form.subscriptionId}
+                            onChange={(e) => setForm({ ...form, subscriptionId: e.target.value })}
+                            onClear={() => setForm({ ...form, subscriptionId: "" })}
+                            autoComplete="off"
+                            name="azure-subscription-id"
                         />
                     </div>
 

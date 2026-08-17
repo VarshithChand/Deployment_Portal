@@ -79,7 +79,14 @@ public class AwsCredentialsUpdateDto
     public string MfaCode { get; set; } = string.Empty;
 }
 
-public record UserAzureCredentials(string? TenantId, string? ClientId, string? ClientSecret)
+// SubscriptionId is optional for the existing Azure Web App status panel
+// (that already gets its subscription from the Environment definition
+// itself - see EnvironmentDefinitionDto.AzureSubscriptionId), but required
+// for ACR's own registry listing (see CloudServiceManagementService.
+// GetAcrRegistriesAsync): unlike an AWS access key, which implies a region,
+// an App Registration has no "default subscription" ARM can infer - the
+// caller has to say which one to list registries under.
+public record UserAzureCredentials(string? TenantId, string? ClientId, string? ClientSecret, string? SubscriptionId = null)
 {
     public bool IsConfigured =>
         !string.IsNullOrWhiteSpace(TenantId)
@@ -94,14 +101,18 @@ public class AzureCredentialsUpdateDto
     public string ClientId { get; set; } = string.Empty;
 
     public string ClientSecret { get; set; } = string.Empty;
+
+    // Optional - only needed for ACR's registry listing, not the existing
+    // Web App status panel.
+    public string SubscriptionId { get; set; } = string.Empty;
 }
 
-// Stored for future use — no feature in this portal reads GCP credentials
-// yet (unlike AWS/Azure, which back the Environments cloud-status panel).
 // A service account key (the JSON key file's raw contents) rather than a
 // bare API key since that's what every GCP server-to-server API actually
-// authenticates with.
-public record UserGcpCredentials(string? ProjectId, string? ServiceAccountKeyJson)
+// authenticates with. Location backs Artifact Registry specifically
+// (repositories are location-scoped, e.g. "us-central1") - the first
+// feature in this portal to actually read GCP credentials.
+public record UserGcpCredentials(string? ProjectId, string? ServiceAccountKeyJson, string? Location = null)
 {
     public bool IsConfigured =>
         !string.IsNullOrWhiteSpace(ProjectId) && !string.IsNullOrWhiteSpace(ServiceAccountKeyJson);
@@ -112,6 +123,9 @@ public class GcpCredentialsUpdateDto
     public string ProjectId { get; set; } = string.Empty;
 
     public string ServiceAccountKeyJson { get; set; } = string.Empty;
+
+    // Optional - only needed for Artifact Registry.
+    public string Location { get; set; } = string.Empty;
 }
 
 // What the Environment detail view's cloud panel renders — deliberately
@@ -455,4 +469,107 @@ public class AwsMfaVerificationResult
     public string? Error { get; set; }
 
     public AwsSessionCredentials? Session { get; set; }
+}
+
+// ==================== Container Registry — ACR ====================
+// Mirrors AwsEcrRepositoryDto/AwsEcrImageDto's shapes 1:1 (see above) -
+// same Configured/Error contract, same field names where the concept
+// lines up, so the frontend's Ecr/Acr views can share as much rendering
+// logic as reasonably possible.
+
+public class AzureAcrRegistryDto
+{
+    public string Name { get; set; } = string.Empty;
+
+    // The registry's own hostname (e.g. "myregistry.azurecr.io") - what
+    // both ARM and the registry's own data-plane API address it by.
+    public string LoginServer { get; set; } = string.Empty;
+
+    public string? Sku { get; set; }
+
+    public DateTime? CreatedAt { get; set; }
+}
+
+public class AzureAcrRegistryListDto
+{
+    public bool Configured { get; set; }
+
+    public string? Error { get; set; }
+
+    public List<AzureAcrRegistryDto> Registries { get; set; } = new();
+}
+
+public class AzureAcrRepositoryDto
+{
+    public string Name { get; set; } = string.Empty;
+
+    public int TagCount { get; set; }
+}
+
+public class AzureAcrRepositoryListDto
+{
+    public bool Configured { get; set; }
+
+    public string? Error { get; set; }
+
+    public List<AzureAcrRepositoryDto> Repositories { get; set; } = new();
+}
+
+public class AzureAcrImageDto
+{
+    public string Tag { get; set; } = string.Empty;
+
+    // Null wherever ACR's catalog/tag-list API doesn't cheaply expose it
+    // for the given call - never guessed (see plan's own "verify against a
+    // live registry" note for this integration).
+    public string? Digest { get; set; }
+
+    public DateTime? PushedAt { get; set; }
+}
+
+public class AzureAcrImageListDto
+{
+    public bool Configured { get; set; }
+
+    public string? Error { get; set; }
+
+    public List<AzureAcrImageDto> Images { get; set; } = new();
+}
+
+// ============== Container Registry — GCP Artifact Registry ==============
+
+public class GcpArtifactRegistryRepositoryDto
+{
+    public string Name { get; set; } = string.Empty;
+
+    public string? Format { get; set; }
+
+    public DateTime? CreatedAt { get; set; }
+}
+
+public class GcpArtifactRegistryRepositoryListDto
+{
+    public bool Configured { get; set; }
+
+    public string? Error { get; set; }
+
+    public List<GcpArtifactRegistryRepositoryDto> Repositories { get; set; } = new();
+}
+
+public class GcpArtifactRegistryImageDto
+{
+    public string Tag { get; set; } = string.Empty;
+
+    public string? Digest { get; set; }
+
+    public DateTime? PushedAt { get; set; }
+}
+
+public class GcpArtifactRegistryImageListDto
+{
+    public bool Configured { get; set; }
+
+    public string? Error { get; set; }
+
+    public List<GcpArtifactRegistryImageDto> Images { get; set; } = new();
 }

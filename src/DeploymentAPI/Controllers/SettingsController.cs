@@ -386,7 +386,7 @@ public class SettingsController : ControllerBase
             ? await _cloud.GetAzureIdentityLabelAsync(creds)
             : null;
 
-        return Ok(new { Configured = creds.IsConfigured, IdentityLabel = identityLabel });
+        return Ok(new { Configured = creds.IsConfigured, IdentityLabel = identityLabel, SubscriptionId = creds.SubscriptionId });
     }
 
     [HttpPost("me/azure")]
@@ -439,7 +439,7 @@ public class SettingsController : ControllerBase
         // what's already stored, not a network round trip.
         var identityLabel = ExtractGcpServiceAccountEmail(creds.ServiceAccountKeyJson);
 
-        return Ok(new { Configured = creds.IsConfigured, ProjectId = creds.ProjectId, IdentityLabel = identityLabel });
+        return Ok(new { Configured = creds.IsConfigured, ProjectId = creds.ProjectId, IdentityLabel = identityLabel, Location = creds.Location });
     }
 
     private static string? ExtractGcpServiceAccountEmail(string? serviceAccountKeyJson)

@@ -5,15 +5,15 @@ import useToast from "../../../hooks/useToast";
 import useAuth from "../../../hooks/useAuth";
 import { getMyGcpSettings, saveMyGcpSettings, clearMyGcpCredentials } from "../../../services/settingsService";
 
-const EMPTY_FORM = { projectId: "", serviceAccountKeyJson: "" };
+const EMPTY_FORM = { projectId: "", serviceAccountKeyJson: "", location: "" };
 
 // See AwsLoginSection's own copy of this for the full reasoning.
 const PIN_SUGGESTION = " Tip: set a screen-lock PIN (Screen Lock tab) to keep this secured.";
 
-// Session-scoped (see PortalIdentity), same as AWS/Azure above — but
-// stored for future use only: no feature in this portal reads GCP
-// credentials yet, unlike AWS/Azure which power the Environments page's
-// live cloud status.
+// Session-scoped (see PortalIdentity), same as AWS/Azure above — powers
+// Container Registry's Artifact Registry tab (see
+// CloudServiceManagementService.GetArtifactRegistryRepositoriesAsync),
+// the first feature in this portal to actually read GCP credentials.
 export default function GcpLoginSection({ onCleared }) {
 
     const toast = useToast();
@@ -110,8 +110,9 @@ export default function GcpLoginSection({ onCleared }) {
             )}
 
             <p className="empty-state" style={{ padding: "0 0 15px", textAlign: "left" }}>
-                Stored for future use — no feature in this portal reads it yet. A service
-                account's JSON key is what every GCP server-to-server API authenticates with.
+                Powers Container Registry's Artifact Registry tab. A service account's JSON
+                key is what every GCP server-to-server API authenticates with — grant it
+                Artifact Registry Reader if you want to browse images with it.
             </p>
 
             {loading ? (
@@ -150,6 +151,18 @@ export default function GcpLoginSection({ onCleared }) {
                             onChange={(e) => setForm({ ...form, serviceAccountKeyJson: e.target.value })}
                             autoComplete="off"
                             spellCheck={false}
+                        />
+                    </div>
+
+                    <div className="form-group">
+                        <label>Location (for Artifact Registry)</label>
+                        <ClearableInput
+                            placeholder={status?.location ? `Leave blank to keep "${status.location}"` : "us-central1"}
+                            value={form.location}
+                            onChange={(e) => setForm({ ...form, location: e.target.value })}
+                            onClear={() => setForm({ ...form, location: "" })}
+                            autoComplete="off"
+                            name="gcp-location"
                         />
                     </div>
 

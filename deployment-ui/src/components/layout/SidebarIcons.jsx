@@ -267,6 +267,20 @@ export function HostingProvidersIcon() {
     );
 }
 
+// A grid of 3 boxes - "a collection of stored images", distinct from
+// DockerIcon's two-rect Engine glyph (a completely different concept -
+// see Container Registry's own page comment) and HostingProvidersIcon's
+// two-linked-boxes shape.
+export function ContainerRegistryIcon() {
+    return (
+        <svg {...common}>
+            <rect x="2" y="2" width="6" height="6" rx="1" stroke="currentColor" strokeWidth="1.4" />
+            <rect x="10" y="2" width="6" height="6" rx="1" stroke="currentColor" strokeWidth="1.4" />
+            <rect x="6" y="10" width="6" height="6" rx="1" stroke="currentColor" strokeWidth="1.4" />
+        </svg>
+    );
+}
+
 export function ChevronIcon({ direction = "left" }) {
     return (
         <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true"

@@ -22,6 +22,7 @@ import {
     GitHubGroupIcon,
     CloudServicesIcon,
     HostingProvidersIcon,
+    ContainerRegistryIcon,
     ChevronIcon,
     SunIcon,
     MoonIcon,
@@ -76,6 +77,17 @@ export const TABS = [
     // SettingsService.GrantablePageKeys, since this is the visitor's own
     // account credential, not a portal-admin-gated feature.
     { key: "paasHosting", label: "Hosting Providers", Icon: HostingProvidersIcon },
+    // A hub for browsing container image registries (AWS ECR/Azure ACR/GCP
+    // Artifact Registry now; Docker Hub/GHCR/GitLab/JFrog/Harbor/Nexus are
+    // shown but not yet built - see pages/ContainerRegistry.jsx). Kept
+    // deliberately separate from "docker" below, which is Docker *Engine*
+    // management (containers/images/volumes on the host) - a different
+    // concept from a container *registry*, and reusing that nav item would
+    // have recreated the exact naming confusion Hosting Providers' own
+    // redesign already hit once this session. Same self-service posture as
+    // Cloud Services/Hosting Providers above - each provider's own session
+    // credential is the auth boundary, not a portal admin gate.
+    { key: "containerRegistry", label: "Container Registry", Icon: ContainerRegistryIcon },
     { key: "services", label: "Services", Icon: ServicesIcon },
     { key: "docker", label: "Docker", Icon: DockerIcon },
     { key: "codeQuality", label: "Code Quality", Icon: CodeQualityIcon },

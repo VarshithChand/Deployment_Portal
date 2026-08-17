@@ -874,7 +874,10 @@ public class CloudStatusService
         return result;
     }
 
-    private static async Task<string?> GetAzureAccessTokenAsync(
+    // Internal (not private) so CloudServiceManagementService's own ACR
+    // calls can get an ARM/registry-scoped token the exact same way,
+    // rather than duplicating this OAuth client-credentials exchange.
+    internal static async Task<string?> GetAzureAccessTokenAsync(
         string tenantId, string clientId, string clientSecret, string scope = "https://management.azure.com/.default")
     {
         var url = $"https://login.microsoftonline.com/{Uri.EscapeDataString(tenantId)}/oauth2/v2.0/token";

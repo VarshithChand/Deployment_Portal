@@ -40,6 +40,7 @@ const Timeline = lazy(() => import("./pages/Timeline"));
 const TemplateTester = lazy(() => import("./pages/TemplateTester"));
 const CloudServices = lazy(() => import("./pages/CloudServices"));
 const PaasHosting = lazy(() => import("./pages/PaasHosting"));
+const ContainerRegistry = lazy(() => import("./pages/ContainerRegistry"));
 const Services = lazy(() => import("./pages/Services"));
 const Docker = lazy(() => import("./pages/Docker"));
 const CodeQuality = lazy(() => import("./pages/CodeQuality"));
@@ -221,6 +222,7 @@ function App(){
                             {tab === "templates" && <TemplateTester/>}
                             {tab === "cloudServices" && <CloudServices/>}
                             {tab === "paasHosting" && <PaasHosting/>}
+                            {tab === "containerRegistry" && <ContainerRegistry/>}
                             {tab === "services" && <Services/>}
                             {tab === "docker" && <Docker/>}
                             {tab === "codeQuality" && <CodeQuality/>}

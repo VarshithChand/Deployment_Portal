@@ -669,7 +669,8 @@ public class SettingsService
         return new UserAzureCredentials(
             entry?["TenantId"]?.ToString(),
             entry?["ClientId"]?.ToString(),
-            Unprotect(entry?["ClientSecret"]?.ToString()));
+            Unprotect(entry?["ClientSecret"]?.ToString()),
+            entry?["SubscriptionId"]?.ToString());
     }
 
     // Blank fields keep whatever was already saved - see SaveUserAwsCredentialsAsync.
@@ -687,6 +688,9 @@ public class SettingsService
 
         if (!string.IsNullOrWhiteSpace(update.ClientSecret))
             entry["ClientSecret"] = Protect(update.ClientSecret.Trim());
+
+        if (!string.IsNullOrWhiteSpace(update.SubscriptionId))
+            entry["SubscriptionId"] = update.SubscriptionId.Trim();
 
         users[key] = entry;
         root["UserAzureCredentials"] = users;
@@ -715,7 +719,8 @@ public class SettingsService
 
         return new UserGcpCredentials(
             entry?["ProjectId"]?.ToString(),
-            Unprotect(entry?["ServiceAccountKeyJson"]?.ToString()));
+            Unprotect(entry?["ServiceAccountKeyJson"]?.ToString()),
+            entry?["Location"]?.ToString());
     }
 
     // Blank fields keep whatever was already saved - see SaveUserAwsCredentialsAsync.
@@ -730,6 +735,9 @@ public class SettingsService
 
         if (!string.IsNullOrWhiteSpace(update.ServiceAccountKeyJson))
             entry["ServiceAccountKeyJson"] = Protect(update.ServiceAccountKeyJson.Trim());
+
+        if (!string.IsNullOrWhiteSpace(update.Location))
+            entry["Location"] = update.Location.Trim();
 
         users[key] = entry;
         root["UserGcpCredentials"] = users;

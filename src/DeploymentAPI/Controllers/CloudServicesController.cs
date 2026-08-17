@@ -191,6 +191,60 @@ public class CloudServicesController : ControllerBase
         return Ok(result);
     }
 
+    // ================= ACR (Azure Container Registry) =================
+    // Same self-service posture as ECR above - this session's own Azure
+    // credentials (see CloudCredentialsDto.cs's SubscriptionId field, added
+    // specifically for this) are the auth boundary, no AdminGate.
+
+    [HttpGet("acr")]
+    public async Task<IActionResult> GetAcrRegistries()
+    {
+        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var creds = await _settings.GetUserAzureCredentialsAsync(key);
+
+        return Ok(await _management.GetAcrRegistriesAsync(creds));
+    }
+
+    [HttpGet("acr/{loginServer}/repositories")]
+    public async Task<IActionResult> GetAcrRepositories(string loginServer)
+    {
+        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var creds = await _settings.GetUserAzureCredentialsAsync(key);
+
+        return Ok(await _management.GetAcrRepositoriesAsync(creds, loginServer));
+    }
+
+    [HttpGet("acr/{loginServer}/repositories/{repositoryName}/tags")]
+    public async Task<IActionResult> GetAcrTags(string loginServer, string repositoryName)
+    {
+        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var creds = await _settings.GetUserAzureCredentialsAsync(key);
+
+        return Ok(await _management.GetAcrTagsAsync(creds, loginServer, repositoryName));
+    }
+
+    // ================= GCP Artifact Registry =================
+    // Same self-service posture as ECR/ACR above - this session's own GCP
+    // credentials are the auth boundary, no AdminGate.
+
+    [HttpGet("artifactregistry")]
+    public async Task<IActionResult> GetArtifactRegistryRepositories()
+    {
+        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var creds = await _settings.GetUserGcpCredentialsAsync(key);
+
+        return Ok(await _management.GetArtifactRegistryRepositoriesAsync(creds));
+    }
+
+    [HttpGet("artifactregistry/{repositoryName}/images")]
+    public async Task<IActionResult> GetArtifactRegistryImages(string repositoryName)
+    {
+        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var creds = await _settings.GetUserGcpCredentialsAsync(key);
+
+        return Ok(await _management.GetArtifactRegistryImagesAsync(creds, repositoryName));
+    }
+
     // ================= Lambda (read-only) =================
 
     [HttpGet("lambda")]
