@@ -5164,3 +5164,125 @@ GitHub identity/token with that specific permission level connected to
 a real repo, which this sandboxed session doesn't have. Recommend
 @vvarshithchand (or another push-level collaborator) try triggering a
 deployment directly to confirm.
+
+==================================================
+ROUND 41 - NEW FEATURE: AUTO-DETECT RENDER/CLOUDFLARE DEPLOY TARGETS IN
+THE ENVIRONMENTS DASHBOARD
+==================================================
+Date: 2026-08-17
+Trigger: user pointed at the Dashboard's Environments card (API/Admin
+API/PMSCore API/Security API all showing "Not configured"/"No runs
+yet") and asked for it to properly display how each environment is
+really deploying (Render, Cloudflare, ECR->ECS, Azure App Service),
+based on analyzing the actual CD pipeline rather than requiring manual
+setup.
+
+Investigated first before writing any code, since two things changed
+what "properly displayed" could honestly mean here:
+  - The 4 environments' real workflows (Release API.yml, release-
+    admin.yml, Release PMSCore API.yml, Release Security API.yml) don't
+    deploy to any real cloud target at all - they copy build artifacts
+    into folders inside this same repo (environments/RC/AdminAPI/ etc.),
+    simulating a release process. "Not configured" is accurate for what
+    these pipelines currently do.
+  - This portal's own real hosting (Render backend, Cloudflare Workers
+    frontend) deploys with NO GitHub Actions step at all - Render's git-
+    integration auto-deploy and a local `wrangler deploy` both leave
+    zero trace in .github/workflows/*.yml, so no YAML-reading detector
+    could ever find them either.
+Presented three different possible scopes (monitor the portal's own
+Render/Cloudflare hosting live; extend auto-detection generically for
+any workflow that has a real Render/Cloudflare/AWS/Azure step; or
+rewire the 4 existing Release workflows to deploy somewhere real) -
+user chose the middle one: extend detection generically, not wire the
+current simulated pipeline to real infra or add live Render/Cloudflare
+monitoring.
+
+What was built:
+  - DeploymentTargetDetector (previously AWS ECS/ECR + Azure Web App
+    only) now also recognizes Render (a deploy-hook URL matching
+    api.render.com/deploy/srv-..., or the community render-deploy
+    GitHub Action's service-id input) and Cloudflare (cloudflare/
+    wrangler-action's accountId, cloudflare/pages-action's projectName,
+    or a raw `wrangler deploy`/`wrangler pages deploy` CLI call's
+    --project-name flag) - same two-pass structured-action-then-raw-
+    text approach already used for AWS/Azure, first match wins per
+    field.
+  - New CloudProvider values "render"/"cloudflare" throughout
+    DetectedDeploymentTargetDto, EnvironmentDefinitionDto,
+    EnvironmentSummaryDto/EnvironmentDetailDto, each with their own
+    target fields (RenderServiceId; CloudflareAccountId,
+    CloudflareProjectName).
+  - Detection is now automatic, not just an admin's on-demand "Detect
+    from Pipeline" click: EnvironmentsController.BuildSummaryAsync
+    falls back to a live read of the workflow's own YAML via
+    DeploymentTargetDetector whenever an environment's CloudProvider is
+    still "none" - so the Dashboard reflects the real pipeline without
+    requiring anyone to click a button and save. An explicit admin-
+    saved value is never overwritten by this fallback. New
+    AutoDetected/DetectionEvidence fields let the frontend show "(auto-
+    detected)" and the same evidence lines the admin editor already
+    surfaced, rather than presenting a guess as a confirmed setting.
+  - GitHubApiService.FetchFileTextAsync (the workflow-YAML fetch,
+    previously uncached) is now cached the same 20s way every other
+    GitHub read in this service already is - needed because the new
+    fallback runs on every Dashboard/Environments poll (every 30s) for
+    every environment still showing "none", not just on an admin's
+    occasional manual click.
+  - GetCloudStatus now reports Provider="render"/"cloudflare" (not
+    "none") for those targets, since no session-scoped credential type
+    exists for either yet (the way GetUserAwsCredentialsAsync/
+    GetUserAzureCredentialsAsync do) - live status monitoring for those
+    two providers was explicitly out of scope per the user's choice
+    above.
+  - Frontend: new shared CloudProviderBadge component (deduped two
+    copies of the same PROVIDER_LABEL map that had already drifted
+    apart, in Environments.jsx and EnvironmentsCard.jsx) adds Render/
+    Cloudflare labels and an "(detected)" suffix; EnvironmentsAdminView
+    gets Render/Cloudflare <select> options and manual-entry fields;
+    CloudStatusPanel gets a dedicated Render/Cloudflare branch showing
+    the detected target and evidence with an honest "live status isn't
+    available for this provider yet" message instead of misrendering
+    as Azure (the old code had no fallback branch for a third
+    provider at all).
+
+Verification performed:
+  - `dotnet build` (isolated output dir): 0 errors, same 3 pre-existing
+    unrelated warnings as every prior round.
+  - `npm run lint` / `npm run build`: clean. The new CloudProviderBadge.jsx
+    triggers the same pre-existing "only-export-components" warning
+    class Sidebar.jsx already has (exporting a constant alongside a
+    component) - not a new pattern, not a regression.
+  - Live check against the deployed Render backend after the push:
+    /api/bootstrap healthy (HTTP 200). A direct anonymous curl to GET
+    api/environments correctly returned 403 - traced this to the pre-
+    existing, unrelated mandatory-MFA enforcement middleware (Round 30;
+    api/environments isn't on its allowlist), which any fresh,
+    tokenless session hits regardless of this round's changes - not a
+    regression, just the wrong smoke-test target for an endpoint that
+    was never meant to be reachable anonymously in the first place.
+
+Files changed: src/DeploymentAPI/Controllers/EnvironmentsController.cs,
+DTOs/DetectedDeploymentTargetDto.cs, DTOs/EnvironmentDto.cs,
+Services/DeploymentTargetDetector.cs, Services/GitHubApiService.cs;
+deployment-ui/src/components/dashboard/EnvironmentsCard.jsx,
+components/environments/CloudStatusPanel.jsx,
+components/environments/EnvironmentDetailView.jsx,
+components/environments/CloudProviderBadge.jsx (new),
+components/settings/EnvironmentsAdminView.jsx, pages/Environments.jsx.
+Commit: 2e8c803.
+
+Note: GitHub reported this repository has moved to
+github.com/VarshithChand/Deployment_Portal - the push still succeeded
+via redirect, but the remote URL should be updated before it stops
+being honored.
+
+Status: Complete and pushed. Could NOT live-verify actual Render/
+Cloudflare detection against a real workflow that has such a step (this
+repo's own workflows don't - see Trigger above), nor the automatic-
+detection-on-poll behavior end-to-end with a real GitHub token, both
+needing a real authenticated session this sandboxed environment doesn't
+have. Recommend testing by pointing an environment's CD Workflow Name
+at any workflow (in this repo or another connected one) that has a
+real Render deploy-hook, wrangler-action, ECS, or Azure Web App step,
+and confirming it's picked up without clicking "Detect from Pipeline."
