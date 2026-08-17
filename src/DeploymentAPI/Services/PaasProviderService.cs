@@ -149,16 +149,20 @@ public class PaasProviderService
             return result;
         }
 
+        // Best-effort only: GET /accounts/{id} needs the "Account Settings"
+        // permission specifically, which a token minimally scoped to just
+        // Pages Read + Workers Scripts Read (the least-privilege token this
+        // feature actually needs - see PaasHosting's help text) won't have.
+        // A 403 here only means no account name to show, never that the
+        // listing calls below - which that same minimal token genuinely
+        // CAN make - should be skipped too.
         var accountResponse = await client.GetAsync($"https://api.cloudflare.com/client/v4/accounts/{accountId}");
 
-        if (!accountResponse.IsSuccessStatusCode)
+        if (accountResponse.IsSuccessStatusCode)
         {
-            result.Error = FriendlyStatus(accountResponse.StatusCode, "Cloudflare");
-            return result;
+            var account = JObject.Parse(await accountResponse.Content.ReadAsStringAsync());
+            result.AccountLabel = account["result"]?["name"]?.ToString();
         }
-
-        var account = JObject.Parse(await accountResponse.Content.ReadAsStringAsync());
-        result.AccountLabel = account["result"]?["name"]?.ToString();
 
         var items = new List<PaasServiceItemDto>();
 
