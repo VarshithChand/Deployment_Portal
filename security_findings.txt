@@ -6943,3 +6943,50 @@ ConnectionPool) already verified working in earlier rounds, not new
 backend logic. Recommend @VarshithChand confirm the flow diagram shows
 real Frontend/Backend URLs and the live DB connection count once
 deployed.
+
+==================================================
+ROUND 48 FOLLOW-UP 12 - FIX SONARQUBE S4790 FINDING (NOSONAR MARKER
+WAS MISPLACED, NOT A REAL VULNERABILITY)
+==================================================
+Date: 2026-08-17
+Trigger: user shared a SonarCloud Issues screenshot showing one open
+Critical-severity Security Vulnerability - "Use a stronger hashing
+algorithm" (rule S4790) at src/DeploymentAPI/Services/SettingsService.cs:2514.
+
+Diagnosed as a suppression-placement bug, not a real vulnerability:
+that line is `new HMACSHA1(key)` inside ComputeTotp - the MFA/TOTP
+code generator. This already had a full NOSONAR justification comment
+explaining why HMAC-SHA1 is correct here (RFC 6238/RFC 4226 mandates
+it as the PRF for TOTP; every authenticator app - Google Authenticator,
+Authy, 1Password - computes codes assuming HMAC-SHA1; switching to
+SHA-256/512 would silently desync every already-enrolled user's MFA
+with no error path for them to discover why), but the actual `NOSONAR`
+token was written into a paragraph of prose several lines ABOVE the
+flagged code, not on the exact line SonarQube's scanner checks for it.
+SonarQube's NOSONAR directive only ever suppresses issues on the
+physical line it appears on - so the marker had been present in the
+codebase this whole time without ever actually working.
+
+Fix: moved `// NOSONAR (csharpsquid:S4790) - ...` onto the actual
+`using var hmac = new HMACSHA1(key);` line itself, keeping the fuller
+explanation as a regular comment directly above for context. No
+algorithm change - HMAC-SHA1 remains correct and required here.
+
+Verification performed:
+  - `dotnet build` (isolated output dir): 0 errors, only pre-existing
+    unrelated warnings.
+  - Live check against the deployed Render backend after the push:
+    /api/bootstrap healthy (HTTP 200).
+  - No frontend files touched this round, so no npm lint/build needed.
+
+Files changed: src/DeploymentAPI/Services/SettingsService.cs.
+Commit: bc64bec.
+
+Status: Complete and pushed, live-verified the backend is up. Could
+NOT live-verify that SonarCloud's next scan actually clears the
+finding in this sandboxed session (no SonarCloud access here, and
+scans run on a schedule/CI trigger this session doesn't control) -
+the fix is grounded directly in SonarQube's own documented NOSONAR
+placement rule (same-line-only), not a guess. Recommend
+@VarshithChand confirm the issue closes after the next SonarCloud
+analysis runs.
