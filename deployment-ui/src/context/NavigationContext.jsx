@@ -27,6 +27,16 @@ export default function NavigationProvider({ children }) {
     // pendingEnvironmentName below, driven by HeaderSearch's results.
     const [pendingSettingsView, setPendingSettingsView] = useState(null);
 
+    // Which CredentialsView tab ("mode", see CredentialsView.jsx) to land on
+    // once Settings' own "credentials" view is active — same hand-off shape
+    // as pendingSettingsView above, one level deeper. Driven by the
+    // Dashboard's Quick Access card for providers that have no dedicated
+    // feature page of their own (Render/Cloudflare/Netlify/Vercel/API Key/
+    // Docker/GitHub OAuth) - the only place their own "configured" status
+    // is actually visible is this tab, so a Quick Access tile for one of
+    // them needs to land exactly here, not just on the Settings hub.
+    const [pendingCredentialMode, setPendingCredentialMode] = useState(null);
+
     // Which environment the Environments page should open straight into —
     // set when the Dashboard's Environments card is clicked, cleared once
     // the page has consumed it (see Environments.jsx), same hand-off shape
@@ -113,6 +123,17 @@ export default function NavigationProvider({ children }) {
 
     }
 
+    // Lands directly on one specific CredentialsView tab - same reasoning
+    // as goToSettingsWithRepo above, just for the Dashboard's Quick Access
+    // card jumping into a provider that only has a Settings tab, not its
+    // own page (see pendingCredentialMode's own comment).
+    function goToCredential(mode) {
+
+        setPendingCredentialMode(mode);
+        goToSettingsView("credentials");
+
+    }
+
     function goToEnvironment(name) {
 
         setPendingEnvironmentName(name);
@@ -136,6 +157,7 @@ export default function NavigationProvider({ children }) {
             value={{
                 tab, setTab, pendingRepoUrl, setPendingRepoUrl, goToSettingsWithRepo,
                 pendingSettingsView, setPendingSettingsView, goToSettingsView,
+                pendingCredentialMode, setPendingCredentialMode, goToCredential,
                 pendingEnvironmentName, setPendingEnvironmentName, goToEnvironment,
                 pendingCloudService, setPendingCloudService, goToCloudService,
                 mobileNavOpen, setMobileNavOpen,

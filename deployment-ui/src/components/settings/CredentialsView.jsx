@@ -118,6 +118,8 @@ const CUSTOM_MODEL_VALUE = "__custom__";
 // picking, say, AWS doesn't require scrolling past GitHub/Docker/OAuth/
 // Sonar/Admin first.
 export default function CredentialsView({
+    initialMode,
+    onConsumedInitialMode,
     githubTokenConfigured,
     loadingAccountRepos,
     accountRepos,
@@ -162,6 +164,22 @@ export default function CredentialsView({
 
     const [mode, setMode] = useState("github");
     const { pinConfigured, isSuperAdminSession } = useAuth();
+
+    // Jumped here from the Dashboard's Quick Access card (see
+    // NavigationContext's pendingCredentialMode/goToCredential) - lands
+    // straight on that one provider's own tab instead of always opening on
+    // "github". Consumed once then cleared server-side (well, context-side)
+    // via onConsumedInitialMode so switching tabs manually afterward isn't
+    // fought by this effect firing again.
+    useEffect(() => {
+
+        if (initialMode) {
+            setMode(initialMode);
+            onConsumedInitialMode?.();
+        }
+
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [initialMode]);
 
     // Which credential groups (Source Control/Code Quality/Container
     // Registry/Hosting Providers) are expanded - all expanded by default,

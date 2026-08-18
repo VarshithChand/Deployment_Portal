@@ -76,6 +76,7 @@ export default function Settings() {
     const {
         pendingRepoUrl, setPendingRepoUrl,
         pendingSettingsView, setPendingSettingsView,
+        pendingCredentialMode, setPendingCredentialMode,
         refreshSidebarAccess
     } = useNavigation();
 
@@ -923,6 +924,8 @@ export default function Settings() {
             {view === "credentials" && (
 
                 <CredentialsView
+                    initialMode={pendingCredentialMode}
+                    onConsumedInitialMode={() => setPendingCredentialMode(null)}
                     githubTokenConfigured={githubTokenConfigured}
                     loadingAccountRepos={loadingAccountRepos}
                     accountRepos={accountRepos}
