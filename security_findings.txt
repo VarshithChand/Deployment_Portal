@@ -9826,3 +9826,134 @@ have no page of their own - each of those seven now deep-links
 straight to its own tab in Settings → Credentials instead of just the
 Settings hub. Standing limitation, stated plainly: unverified in a
 real browser in this sandboxed session.
+
+==================================================
+ROUND 74 - FEATURE: AZURE CLOUD SERVICES CATALOG +
+LIVE INVENTORY, MATCHING AWS
+==================================================
+Date: 2026-08-19
+Trigger: verbatim ask: "now configure the azure like aws in cloud
+services." Cloud Services' Azure sub-page (pages/CloudServicesAzure.jsx)
+had been a real, honest "not built yet" placeholder since it was first
+scaffolded (Sidebar.jsx's own comment: "Only AWS has a real, built
+catalog... Azure/GCP are real, visible 'not built yet' pages") - this
+round replaces that placeholder with a real catalog + live inventory,
+matching AWS's page shape.
+
+The key difference from AWS's own implementation, and why this was
+more tractable than it might look: AWS has no single "list everything
+in this account" API, so its own inventory (GetAwsResourceInventoryAsync)
+hand-calls 7 specific service SDKs (EC2/ECR/VPC/S3/Lambda/Route53/SNS)
+plus a Resource Groups Tagging API scan for everything else. Azure
+Resource Manager, by contrast, has ONE generic endpoint -
+subscriptions/{sub}/resources - that returns every resource in a
+subscription, of every type, in one paginated call. New
+GetAzureResourceInventoryAsync (CloudStatusService.cs) uses exactly
+that: fetches an ARM-scoped AAD token via the already-existing
+GetAzureAccessTokenAsync (same client-credentials exchange
+GetAcrRegistriesAsync already uses for ACR), pages through the
+resource list (capped at 5 pages, same cap DescribeOtherResourcesAsync
+uses for AWS's own tagging-API fallback), and groups results by ARM's
+own type field (e.g. "Microsoft.Compute/virtualMachines") into one
+tile per resource type actually found - a friendly label lookup table
+covers ~27 common types, anything else falls back to the last segment
+of its ARM type string rather than a raw namespace. New
+AzureResourceInventoryDto deliberately reuses the existing
+AwsServiceGroupDto/AwsResourceItemDto shapes unchanged (Key/Label/
+Count/Items, Name/Detail) rather than declaring an Azure-named
+duplicate pair for an identical shape - noted explicitly in both
+DTOs' own comments so a future reader doesn't wonder why an "Aws"-
+named type shows up on an Azure response. New route GET
+me/azure/resources (SettingsController.cs), erroring cleanly (not a
+500) when Subscription ID isn't set - the same "No Subscription ID
+configured" message GetAcrRegistriesAsync already gives, now
+consistent across both Azure features that need one.
+
+New data/azureServiceCatalog.js: ~45 real Azure services across 12
+categories (Compute, Containers, Storage, Database, Networking,
+Security, Management, Analytics, Application Integration, AI & ML,
+Migration, IoT) - deliberately not a claimed ~100-service parity with
+AWS's catalog (AWS's own is the product of many rounds; this is a
+first real pass covering the services teams actually reach for day to
+day), each entry carrying an ARM resourceType where one single type
+applies (used for live-count matching against the new inventory) and
+a documented Azure Portal "browse by resource type" deep link
+(#blade/HubsExtension/BrowseResource/resourceType/{type}) rather than
+a guessed blade URL. Entries with no single ARM resource type (Entra
+ID, Cost Management, Azure Policy, Defender for Cloud, etc. - portal
+features, not a resource list) link to the plain Azure Portal home
+instead of a fragile guessed blade fragment.
+
+pages/CloudServicesAzure.jsx was rebuilt to the exact same shape
+CloudServicesAws.jsx already uses: "Services You're Using" (live,
+only tiles with count > 0) plus a searchable, category-filtered,
+paginated "All Azure Services" catalog grid, click-through to a
+per-service detail page. New utils/cloudServiceLiveStatus.js export,
+getLiveStatusForAzureService, is deliberately much simpler than its
+AWS sibling getLiveStatusForService - no "known fields vs. tagging-API
+Other bucket" split to bridge, just one lookup of the catalog entry's
+own resourceType against the inventory's groups.
+
+New components/cloudServices/AzureServiceDetailPage.jsx - explicitly
+does NOT attempt AWS-style real management actions (start/stop EC2,
+create/delete ECR repos, etc.). Stated plainly in its own top comment:
+only 7 of AWS's ~100 catalog entries have that depth
+(Ec2ManagementPage/EcsManagementPage/EcrManagementPage/
+LambdaManagementPage/RdsManagementPage/S3ManagementPage/
+VpcManagementPage); building equivalent real Azure Compute/Storage/SQL
+management integrations was out of scope for this round. Every Azure
+catalog entry gets a read-only resource table (same GenericResourceTable
+shape AWS's own ~90 "no dedicated page" services already fall back to)
+plus a direct "Open Azure Portal" link for anything requiring a real
+action - the same honest fallback pattern AWS's own catalog already
+established, not a new, weaker standard invented for Azure.
+
+CloudServiceCard.jsx gained one additive prop, consoleLabel (default
+unchanged: "Open AWS Console"), so the same card component serves both
+catalog grids instead of forking a near-identical copy just to change
+one string ("Open Azure Portal").
+
+Verification performed:
+  - dotnet build (isolated scratchpad output dir): 0 errors, same 2
+    pre-existing warnings every prior round has seen.
+  - npm run lint in deployment-ui/: no new warnings from any touched/
+    new file.
+  - npm run build in deployment-ui/: succeeded; the
+    CloudServicesAzure-*.js chunk grew from a placeholder's trivial
+    size to ~34kB, confirming the real catalog+detail-page code
+    bundled correctly.
+  - Live check against the deployed Render backend after the push:
+    /api/bootstrap healthy (HTTP 200).
+  - Could NOT exercise this against a real Azure subscription/App
+    Registration in this sandboxed session (same standing limitation
+    as every prior Azure round in this app) - the ARM generic resource
+    list endpoint's exact JSON shape (value/nextLink/type/name/
+    location fields) is documented and was implemented defensively
+    (missing fields degrade to blank rather than throw), but is
+    unverified against a real subscription's actual response.
+
+Files changed: src/DeploymentAPI/DTOs/CloudCredentialsDto.cs,
+src/DeploymentAPI/Services/CloudStatusService.cs,
+src/DeploymentAPI/Controllers/SettingsController.cs,
+deployment-ui/src/services/settingsService.js,
+deployment-ui/src/data/azureServiceCatalog.js (new),
+deployment-ui/src/utils/cloudServiceLiveStatus.js,
+deployment-ui/src/components/cloudServices/CloudServiceCard.jsx,
+deployment-ui/src/components/cloudServices/AzureServiceDetailPage.jsx
+(new), deployment-ui/src/pages/CloudServicesAzure.jsx,
+deployment-ui/src/components/layout/Sidebar.jsx (comment update only).
+Commit: fc5086f.
+
+Status: Complete, pushed, live-verified the backend is up. Cloud
+Services' Azure sub-page now has a real ~45-service catalog and a
+genuine account-wide live inventory (one ARM call, not a placeholder),
+matching AWS's page shape - "Services You're Using," search/category
+filtering, a paginated full catalog, and a per-service detail page.
+Standing limitation, stated plainly: real per-resource management
+actions (the depth AWS has for EC2/ECS/ECR/Lambda/RDS/S3/VPC) were
+deliberately not built for Azure in this round - every Azure service
+falls back to a read-only resource list plus a direct Azure Portal
+link, matching how ~90 of AWS's own ~100 catalog entries already
+behave. Recommend the user connect a real Azure App Registration
+(with a Subscription ID) and confirm the live inventory populates as
+expected against their actual subscription.
