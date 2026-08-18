@@ -7855,3 +7855,127 @@ purely structural/navigational, so the same standing limitation from
 last round (CodeQL's exact GitHub API response shape unverified against
 a live repo) still applies unchanged, nothing new introduced by this
 restructure.
+
+==================================================
+ROUND 56 - REFACTOR: SPLIT SONARQUBE AND SONARCLOUD INTO TWO
+INDEPENDENT CREDENTIALS/PAGES
+==================================================
+Date: 2026-08-17
+Trigger: "seperate sonarqube and sonar cloud" - reversing the "one
+combined tile" decision confirmed in Round 54 (back when this was still
+Sonar's original design: a single Host URL/token credential that could
+point at either a self-hosted SonarQube instance or sonarcloud.io).
+Interpreted as wanting two genuinely independent connections (e.g. a
+team running both a self-hosted SonarQube AND SonarCloud at once, or
+simply wanting them kept fully distinct) rather than two tiles that
+would cosmetically differ but silently share one underlying credential
+- the latter was explicitly what Round 54 had been designed to avoid,
+so a real split (not just a relabeled UI) was the only reading that
+made the request meaningful.
+
+Backend: SettingsService's Sonar storage changed from one flat
+root["Sonar"] node to root["Sonar"][provider] (provider: "sonarqube" |
+"sonarcloud") - kept "Sonar" as the same top-level JSON key so
+ClearAllAsync's existing admin full-reset (root.Remove("Sonar")) still
+correctly wipes both new credentials at once with zero changes needed
+there. SonarCloud has no user-editable Host URL at all (hardcoded to
+sonarcloud.io server-side, the one thing genuinely fixed about it);
+self-hosted SonarQube requires an explicit one with no default,
+rejected with a clear error if missing (same "no sensible default,
+required" posture as JFrog/GitLab Registry's own Host URL fields).
+SonarController gained provider-parameterized routes
+(status/overview/save/clear) replacing the old single combined
+overview/save actions; both stay gated by the exact same "codeQuality"
+admin/grant key as before the split (deliberately NOT split into two
+separately-grantable page keys - the user asked to separate the
+CREDENTIALS, not to change who can be granted access to Code Quality,
+so this was the narrower, more conservative reading). Removed the
+now-unused SonarHostUrl/SonarOrganization/SonarProjectKey/
+SonarTokenConfigured fields from the general SettingsViewDto/BuildView
+and the old generic per-section clear-by-name entry, since Sonar now
+has its own dedicated routes/DTOs - matching exactly the pattern
+already established for Docker Hub/GHCR/GitLab/JFrog/Harbor/Nexus
+across Rounds 50-52, rather than inventing a new one.
+
+Frontend: new self-contained SonarLoginSection.jsx (shared by both
+providers via a hasHostUrl prop, same "one generic component, prop-
+parameterized" approach HostCredentialLoginSection.jsx already uses for
+Harbor/Nexus) fully replaces the old Settings.jsx-prop-threaded Sonar
+form - the single largest piece of remaining "old-style" prop-drilled
+credential UI in CredentialsView.jsx, now gone. SonarView.jsx (the
+actual dashboard - quality gate, bugs, ratings) takes a provider prop
+and is otherwise unchanged, shared by both new pages. New SonarCloud.jsx
+page + sidebar entry sit alongside the existing SonarQube one (which
+keeps its original "codeQuality" tab key/route, so no other part of the
+app needed updates for it). Two new sidebar icons (SonarQubeIcon - a
+dial/gauge, renamed from the prior round's generic SonarIcon;
+SonarCloudIcon - a stroked cloud-and-checkmark, deliberately NOT reusing
+CloudServicesIcon's filled version so the two pages never look alike),
+both still following this codebase's own "primitive shapes only, no
+hand-authored curve paths" icon convention - caught and fixed one early
+draft that used an SVG arc path before finalizing, since that would
+have violated the established style unnoticed until a design review.
+
+Self-caught issue during implementation (before it ever built or
+shipped): the first draft of SonarView.jsx's provider-aware useEffect
+(`useEffect(() => { load(); }, [provider])`) triggered a genuine new
+lint warning (missing 'load' dependency) that hadn't fired on the old
+provider-less version. Wrapping `load` in useCallback([provider]) and
+depending on `[load]` instead was the correct fix, not silencing the
+warning - naively adding `load` directly to the effect's deps without
+memoizing it first would have caused an infinite render loop (a new
+`load` function identity every render re-triggering the effect every
+time), so this was worth getting right rather than reaching for the
+fastest-looking fix.
+
+Verification performed:
+  - `dotnet build` (isolated output dir, twice - once mid-change, once
+    final): 0 errors both times, only pre-existing unrelated warnings.
+  - `npm run lint` in deployment-ui/: caught the SonarView.jsx
+    exhaustive-deps regression above and fixed it properly before
+    it reached the final build - zero new warnings survived.
+  - `npm run build` in deployment-ui/: succeeded - confirmed via chunk
+    output that SonarView split out into its own shared 4.2kB chunk,
+    reused by both the SonarQube and SonarCloud page bundles.
+  - Grepped the entire frontend source tree for every old Sonar
+    prop/handler name (sonarHostUrl, sonarTokenConfigured,
+    handleSaveSonar, saveSonarSettings, etc.) after the refactor and
+    confirmed zero remaining references anywhere - no dead prop-
+    threading left behind in Settings.jsx or elsewhere.
+  - Live check against the deployed Render backend after the push:
+    /api/bootstrap healthy (HTTP 200).
+
+Files changed: src/DeploymentAPI/Services/SettingsService.cs (Sonar
+storage split, generic-section-clear entry removed, BuildView Sonar
+fields removed), src/DeploymentAPI/Controllers/SonarController.cs
+(rewritten, provider-parameterized), src/DeploymentAPI/Controllers/
+SettingsController.cs (old SaveSonar route removed),
+src/DeploymentAPI/DTOs/{SettingsViewDto,SonarSettingsUpdateDto}.cs,
+src/DeploymentAPI/Services/SonarApiService.cs,
+src/DeploymentAPI/Helpers/CredentialGate.cs (sonar -> sonarqube/
+sonarcloud), deployment-ui/src/services/{sonarService,
+settingsService}.js, deployment-ui/src/components/settings/
+credentials/SonarLoginSection.jsx (new),
+deployment-ui/src/components/settings/CredentialsView.jsx (Sonar props
+fully removed), deployment-ui/src/components/codeQuality/
+SonarView.jsx (provider prop), deployment-ui/src/pages/{CodeQuality,
+SonarCloud}.jsx, deployment-ui/src/pages/Settings.jsx (dead Sonar
+state/handlers/props removed), deployment-ui/src/components/layout/
+{Sidebar,SidebarIcons}.jsx, deployment-ui/src/App.jsx,
+deployment-ui/src/context/NavigationContext.jsx.
+Commit: a41dc24.
+
+Status: Complete, pushed, live-verified the backend is up. NO DATA
+MIGRATION was performed for whatever may already have been saved under
+the old combined root["Sonar"] shape - the new provider-keyed storage
+(root["Sonar"]["sonarqube"] / root["Sonar"]["sonarcloud"]) reads as
+unconfigured for both until re-entered, since this session has no way
+to know which of the two the old single credential was actually meant
+to represent (it was designed to be host-agnostic). Given this
+sandboxed session has never had real Sonar credentials configured
+(explicitly confirmed throughout this session's standing "no real
+credentials exist here" limitation), this is very likely a no-op in
+practice, but flagged directly rather than silently: if
+@VarshithChand had already saved a working Sonar connection before this
+round, it will need to be re-entered under whichever of the two new
+tabs (SonarQube or SonarCloud) actually matches it.
