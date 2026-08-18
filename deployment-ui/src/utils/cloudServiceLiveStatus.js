@@ -54,3 +54,23 @@ export function getLiveStatusForService(service, inventory) {
     return (inventory.other || []).find((g) => (g.key || "").toLowerCase() === otherKey);
 
 }
+
+// Azure equivalent of getLiveStatusForService above, but much simpler:
+// unlike AWS's inventory (7 direct fields + a tag-based "Other" fallback),
+// the Azure inventory (see settingsService.getMyAzureResources) is built
+// ENTIRELY from ARM's own generic resource list, grouped by resource type
+// - there's no split between "known" and "other" services to bridge, just
+// one lookup by the catalog entry's own `resourceType` (see
+// data/azureServiceCatalog.js). Entries with no resourceType (Azure AD,
+// Cost Management, Azure Policy, etc. - portal features, not a single ARM
+// resource type) simply never have live data behind them, same honest gap
+// AWS's own catalog has for services outside its reach.
+export function getLiveStatusForAzureService(service, inventory) {
+
+    if (!inventory || !inventory.configured || !service.resourceType) {
+        return undefined;
+    }
+
+    return (inventory.groups || []).find((g) => (g.key || "").toLowerCase() === service.resourceType.toLowerCase());
+
+}

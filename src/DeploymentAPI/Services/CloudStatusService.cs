@@ -946,4 +946,140 @@ public class CloudStatusService
 
     private static string AppendError(string? existing, string next) =>
         string.IsNullOrEmpty(existing) ? next : $"{existing}; {next}";
+
+    // Friendly labels for the ARM resource types this subscription is most
+    // likely to actually have - anything not listed here still gets a
+    // group (see AzureLabelFor's own fallback), just with a plainer,
+    // auto-derived label instead of a hand-written one.
+    private static readonly Dictionary<string, string> AzureResourceTypeLabels = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["microsoft.compute/virtualmachines"] = "Virtual Machines",
+        ["microsoft.compute/disks"] = "Managed Disks",
+        ["microsoft.compute/virtualmachinescalesets"] = "VM Scale Sets",
+        ["microsoft.storage/storageaccounts"] = "Storage Accounts",
+        ["microsoft.web/sites"] = "App Services",
+        ["microsoft.web/serverfarms"] = "App Service Plans",
+        ["microsoft.sql/servers"] = "SQL Servers",
+        ["microsoft.sql/servers/databases"] = "SQL Databases",
+        ["microsoft.documentdb/databaseaccounts"] = "Cosmos DB Accounts",
+        ["microsoft.dbformysql/flexibleservers"] = "Azure Database for MySQL",
+        ["microsoft.dbforpostgresql/flexibleservers"] = "Azure Database for PostgreSQL",
+        ["microsoft.cache/redis"] = "Azure Cache for Redis",
+        ["microsoft.network/virtualnetworks"] = "Virtual Networks",
+        ["microsoft.network/networksecuritygroups"] = "Network Security Groups",
+        ["microsoft.network/publicipaddresses"] = "Public IP Addresses",
+        ["microsoft.network/loadbalancers"] = "Load Balancers",
+        ["microsoft.network/applicationgateways"] = "Application Gateways",
+        ["microsoft.network/dnszones"] = "DNS Zones",
+        ["microsoft.containerregistry/registries"] = "Container Registries",
+        ["microsoft.containerservice/managedclusters"] = "AKS Clusters",
+        ["microsoft.containerinstance/containergroups"] = "Container Instances",
+        ["microsoft.keyvault/vaults"] = "Key Vaults",
+        ["microsoft.insights/components"] = "Application Insights",
+        ["microsoft.operationalinsights/workspaces"] = "Log Analytics Workspaces",
+        ["microsoft.servicebus/namespaces"] = "Service Bus Namespaces",
+        ["microsoft.eventhub/namespaces"] = "Event Hubs Namespaces",
+        ["microsoft.logic/workflows"] = "Logic Apps",
+        ["microsoft.cdn/profiles"] = "CDN Profiles"
+    };
+
+    private static string AzureLabelFor(string resourceType) =>
+        AzureResourceTypeLabels.TryGetValue(resourceType, out var label)
+            ? label
+            : resourceType.Contains('/') ? resourceType[(resourceType.LastIndexOf('/') + 1)..] : resourceType;
+
+    // Cloud Services' Azure sub-page - the Azure equivalent of
+    // GetAwsResourceInventoryAsync above, but built on ARM's own generic
+    // resource-listing endpoint (subscriptions/{sub}/resources) rather than
+    // one hand-written call per service - Azure Resource Manager already
+    // returns every resource in the subscription, of every type, in one
+    // paginated scan, so there's no AWS-style "known services + tagging API
+    // fallback" split needed here at all. Grouped by ARM's own `type` field
+    // (e.g. "Microsoft.Compute/virtualMachines") - one tile per resource
+    // type actually found, same shape the AWS inventory's "Other" bucket
+    // already uses (see DescribeOtherResourcesAsync above). Capped at 5
+    // pages, same reasoning as that method: this is a glance, not an
+    // exhaustive audit.
+    public async Task<AzureResourceInventoryDto> GetAzureResourceInventoryAsync(UserAzureCredentials credentials)
+    {
+        var result = new AzureResourceInventoryDto { Configured = credentials.IsConfigured };
+
+        if (!credentials.IsConfigured)
+            return result;
+
+        if (string.IsNullOrWhiteSpace(credentials.SubscriptionId))
+        {
+            result.Error = "No Subscription ID configured — set one in Settings → Credentials → Azure.";
+            return result;
+        }
+
+        try
+        {
+            var token = await GetAzureAccessTokenAsync(credentials.TenantId!, credentials.ClientId!, credentials.ClientSecret!);
+
+            if (token == null)
+            {
+                result.Error = "Azure sign-in failed — check the tenant, client ID, and client secret.";
+                return result;
+            }
+
+            var groups = new Dictionary<string, AwsServiceGroupDto>(StringComparer.OrdinalIgnoreCase);
+            var url = $"https://management.azure.com/subscriptions/{Uri.EscapeDataString(credentials.SubscriptionId)}/resources?api-version=2021-04-01&$top=100";
+            var pagesFetched = 0;
+
+            while (!string.IsNullOrEmpty(url) && pagesFetched < 5)
+            {
+                using var request = new HttpRequestMessage(HttpMethod.Get, url);
+                request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+
+                var response = await AzureHttpClient.SendAsync(request);
+
+                if (!response.IsSuccessStatusCode)
+                {
+                    result.Error = $"Unable to reach Azure for resource discovery ({(int)response.StatusCode}).";
+                    return result;
+                }
+
+                var json = JObject.Parse(await response.Content.ReadAsStringAsync());
+                var resources = json["value"] as JArray ?? new JArray();
+
+                foreach (var r in resources)
+                {
+                    var type = r["type"]?.ToString();
+
+                    if (string.IsNullOrWhiteSpace(type))
+                        continue;
+
+                    var key = type.ToLowerInvariant();
+
+                    if (!groups.TryGetValue(key, out var group))
+                    {
+                        group = new AwsServiceGroupDto { Key = key, Label = AzureLabelFor(key) };
+                        groups[key] = group;
+                    }
+
+                    group.Items.Add(new AwsResourceItemDto
+                    {
+                        Name = r["name"]?.ToString() ?? string.Empty,
+                        Detail = r["location"]?.ToString()
+                    });
+                    group.Count++;
+                }
+
+                url = json["nextLink"]?.ToString();
+                pagesFetched++;
+            }
+
+            foreach (var group in groups.Values)
+                group.Items = group.Items.Take(50).ToList();
+
+            result.Groups = groups.Values.OrderByDescending(g => g.Count).ToList();
+        }
+        catch (Exception ex)
+        {
+            result.Error = CloudErrorSanitizer.Describe(ex, "Azure", "resource discovery");
+        }
+
+        return result;
+    }
 }

@@ -149,15 +149,19 @@ export const TABS = [
     // catalog, not anything about this repo's pipeline. Deliberately NOT
     // called "Services" either way - the top-level "services" tab below is
     // a different, pre-existing admin feature (PAT user management + audit
-    // log). Only AWS has a real, built catalog (pages/CloudServicesAws.jsx,
-    // ~100 services, live inventory, region picker, per-service drill-down)
-    // - Azure/GCP are real, visible "not built yet" pages rather than
-    // guessed integrations, the same posture as GitLab/Bitbucket/ESLint/
-    // Pylint/Checkstyle before them. Same self-service posture as Hosting
-    // Providers below - each provider's own session credential (or, for
-    // AWS, none at all needed to browse the catalog itself) is the auth
-    // boundary, not a portal admin gate, so none of these 3 belong in
-    // ADMIN_ONLY_TABS.
+    // log). AWS (pages/CloudServicesAws.jsx, ~100 services, live inventory,
+    // region picker, per-service drill-down) and Azure (pages/
+    // CloudServicesAzure.jsx, ~45 services, live account-wide inventory via
+    // ARM's own generic resource list, per-service drill-down - see that
+    // page's own comment on why it deliberately has no per-service
+    // management actions the way AWS's EC2/ECS/ECR/Lambda/RDS/S3/VPC do)
+    // both have real, built catalogs now - GCP is still a real, visible
+    // "not built yet" page rather than a guessed integration, the same
+    // posture as GitLab/Bitbucket/ESLint/Pylint/Checkstyle. Same self-
+    // service posture as Hosting Providers below - each provider's own
+    // session credential (or, for AWS, none at all needed to browse the
+    // catalog itself) is the auth boundary, not a portal admin gate, so
+    // none of these 3 belong in ADMIN_ONLY_TABS.
     {
         key: "cloudServicesGroup",
         type: "group",

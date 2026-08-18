@@ -127,6 +127,15 @@ export const clearMyAzureCredentials = async () => {
     return response.data;
 };
 
+// Cloud Services page's Azure sub-page - the Azure equivalent of
+// getMyAwsResources above. No region param - ARM's own generic resource
+// list is already subscription-wide (see the backend's
+// GetAzureResourceInventoryAsync).
+export const getMyAzureResources = async () => {
+    const response = await settingsApi.get("/me/azure/resources");
+    return response.data;
+};
+
 // Same per-visitor isolation, for GCP — stored for future use, no feature
 // in this portal reads it yet.
 export const getMyGcpSettings = async () => {

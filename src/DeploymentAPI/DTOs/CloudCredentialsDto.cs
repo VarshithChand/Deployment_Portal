@@ -260,6 +260,25 @@ public class AwsServiceGroupDto
     public List<AwsResourceItemDto> Items { get; set; } = new();
 }
 
+// Cloud Services' Azure sub-page's own account-wide inventory - the Azure
+// equivalent of AwsResourceInventoryDto above, but built entirely
+// differently: Azure Resource Manager has ONE generic "list every resource
+// in this subscription" endpoint (unlike AWS, which needs one SDK call per
+// service plus a Resource Groups Tagging API fallback for everything
+// else), so there's no need for named per-service fields here - every
+// resource type discovered becomes its own group. Reuses AwsServiceGroupDto/
+// AwsResourceItemDto unchanged (both are already provider-agnostic Key/
+// Label/Count/Items and Name/Detail shapes) rather than declaring a
+// duplicate Azure-named pair for an identical shape.
+public class AzureResourceInventoryDto
+{
+    public bool Configured { get; set; }
+
+    public string? Error { get; set; }
+
+    public List<AwsServiceGroupDto> Groups { get; set; } = new();
+}
+
 // The Cloud Services page's EC2 detail view - unlike the Dashboard's EC2
 // tile (deliberately running-only, see DescribeEc2InstancesAsync), this
 // shows both running AND stopped so "how many are running vs stopped"

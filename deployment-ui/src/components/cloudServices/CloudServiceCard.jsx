@@ -25,7 +25,12 @@ function ServiceIconBadge({ name }) {
 // > 0. The plain catalog grid below it never passes this, since checking
 // every one of ~100 services just to render a badge nobody asked for
 // there would be wasted work.
-export default function CloudServiceCard({ service, onSelect, liveCount }) {
+//
+// consoleLabel defaults to AWS's own wording so every existing call site
+// (still all AWS today) needs no changes - Cloud Services' Azure sub-page
+// passes "Open Azure Portal →" instead, since this same card is reused
+// for its catalog grid rather than duplicated.
+export default function CloudServiceCard({ service, onSelect, liveCount, consoleLabel = "Open AWS Console →" }) {
 
     return (
 
@@ -71,7 +76,7 @@ export default function CloudServiceCard({ service, onSelect, liveCount }) {
                 className="btn btn-sm btn-primary cloud-service-card-console-link"
                 onClick={(e) => e.stopPropagation()}
             >
-                Open AWS Console →
+                {consoleLabel}
             </a>
 
         </div>

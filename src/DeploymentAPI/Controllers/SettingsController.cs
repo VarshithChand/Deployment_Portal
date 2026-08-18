@@ -389,6 +389,19 @@ public class SettingsController : ControllerBase
         return Ok(new { Configured = creds.IsConfigured, IdentityLabel = identityLabel, SubscriptionId = creds.SubscriptionId });
     }
 
+    // Cloud Services' Azure sub-page - the Azure equivalent of
+    // me/aws/resources above. No region query param needed here - unlike
+    // an AWS access key, ARM's generic resource-listing endpoint is
+    // already subscription-wide (see GetAzureResourceInventoryAsync).
+    [HttpGet("me/azure/resources")]
+    public async Task<IActionResult> GetMyAzureResources()
+    {
+        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var creds = await _settings.GetUserAzureCredentialsAsync(key);
+
+        return Ok(await _cloud.GetAzureResourceInventoryAsync(creds));
+    }
+
     [HttpPost("me/azure")]
     public async Task<IActionResult> SaveMyAzure(AzureCredentialsUpdateDto request)
     {
