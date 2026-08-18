@@ -194,6 +194,49 @@ public class AzureDevOpsService
         return result;
     }
 
+    // History page - every run across EVERY pipeline in the project,
+    // finished or in-flight (no statusFilter, unlike GetRunningBuildsAsync
+    // above which deliberately only wants inProgress for the Dashboard).
+    // Same classic Build API list endpoint, mirrors GitHub's own History
+    // page (GetWorkflowRuns: every workflow run across the whole repo, one
+    // combined feed rather than one page per workflow).
+    public async Task<AzureDevOpsHistoryListDto> GetHistoryAsync(UserPaasCredentials credentials, string project)
+    {
+        var result = new AzureDevOpsHistoryListDto { Configured = credentials.IsConfigured };
+
+        if (!credentials.IsConfigured)
+            return result;
+
+        try
+        {
+            var path = $"/{Uri.EscapeDataString(project)}/_apis/build/builds?api-version=7.1&$top=200";
+            var json = await GetDevOpsAsync(credentials.AccountId!, credentials.Token!, path);
+            var builds = JObject.Parse(json)["value"] as JArray ?? new JArray();
+
+            result.Runs = builds.Select(b => new AzureDevOpsHistoryRunDto
+            {
+                Id = b["id"]?.ToObject<int?>() ?? 0,
+                PipelineName = b["definition"]?["name"]?.ToString() ?? string.Empty,
+                BuildNumber = b["buildNumber"]?.ToString() ?? string.Empty,
+                Status = b["status"]?.ToString() ?? string.Empty,
+                Result = b["result"]?.ToString(),
+                SourceBranch = b["sourceBranch"]?.ToString()?.Replace("refs/heads/", "") ?? string.Empty,
+                RequestedFor = b["requestedFor"]?["displayName"]?.ToString() ?? string.Empty,
+                StartTime = b["startTime"]?.ToObject<DateTime?>(),
+                FinishTime = b["finishTime"]?.ToObject<DateTime?>(),
+                WebUrl = b["_links"]?["web"]?["href"]?.ToString() ?? string.Empty
+            })
+            .OrderByDescending(b => b.StartTime)
+            .ToList();
+        }
+        catch (Exception ex)
+        {
+            result.Error = CloudErrorSanitizer.Describe(ex, "Azure DevOps", "run history");
+        }
+
+        return result;
+    }
+
     // ================= Branches: repositories -> branches =================
 
     public async Task<AzureDevOpsRepositoryListDto> GetRepositoriesAsync(UserPaasCredentials credentials)
@@ -598,14 +641,20 @@ public class AzureDevOpsService
         return result;
     }
 
-    // Finds the pipeline's most recent run, then that run's artifacts, in
-    // one call - what the Build Artifacts page actually shows (no run
-    // picker). Reuses GetRunsAsync's own parsing rather than a second
-    // hand-rolled request, since "most recent run" is exactly what that
-    // method already sorts to the front.
-    public async Task<AzureDevOpsArtifactListDto> GetLatestArtifactsAsync(UserPaasCredentials credentials, string project, int pipelineId)
+    // Every recent run's own artifacts, kept as separate groups - so
+    // running the same pipeline twice shows two groups with the same
+    // artifact name, each still traceable back to its own run, instead of
+    // silently collapsing to just the latest run's set (the old
+    // GetLatestArtifactsAsync design this replaces). Reuses GetRunsAsync
+    // for the run list (already sorted newest-first) and GetArtifactsAsync
+    // per run, fetched in parallel since Azure DevOps has no "artifacts for
+    // N runs at once" endpoint. Runs with zero artifacts are dropped from
+    // the result - an empty group is nothing a caller can act on - and the
+    // scan is capped at maxRuns to keep this bounded on pipelines with a
+    // long history.
+    public async Task<AzureDevOpsArtifactHistoryListDto> GetArtifactHistoryAsync(UserPaasCredentials credentials, string project, int pipelineId, int maxRuns = 10)
     {
-        var result = new AzureDevOpsArtifactListDto { Configured = credentials.IsConfigured };
+        var result = new AzureDevOpsArtifactHistoryListDto { Configured = credentials.IsConfigured };
 
         if (!credentials.IsConfigured)
             return result;
@@ -618,20 +667,32 @@ public class AzureDevOpsService
             return result;
         }
 
-        var latest = runs.Runs.FirstOrDefault();
+        var recentRuns = runs.Runs.Take(maxRuns).ToList();
 
-        if (latest == null)
+        var artifactLists = await Task.WhenAll(
+            recentRuns.Select(r => GetArtifactsAsync(credentials, project, r.Id)));
+
+        var firstError = artifactLists.Select(a => a.Error).FirstOrDefault(e => e != null);
+        if (firstError != null)
         {
-            result.RunId = null;
+            result.Error = firstError;
             return result;
         }
 
-        var artifacts = await GetArtifactsAsync(credentials, project, latest.Id);
+        result.Runs = recentRuns
+            .Zip(artifactLists, (run, artifacts) => new AzureDevOpsArtifactRunGroupDto
+            {
+                RunId = run.Id,
+                RunName = run.Name,
+                Result = run.Result,
+                CreatedDate = run.CreatedDate,
+                WebUrl = run.WebUrl,
+                Artifacts = artifacts.Artifacts
+            })
+            .Where(g => g.Artifacts.Count > 0)
+            .ToList();
 
-        artifacts.RunId = latest.Id;
-        artifacts.RunName = latest.Name;
-
-        return artifacts;
+        return result;
     }
 
     // ================= Package Feeds: feeds -> packages -> versions =================

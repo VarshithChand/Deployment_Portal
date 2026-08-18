@@ -125,6 +125,7 @@ export const TABS = [
                     { key: "azureDevOpsDashboard", label: "Dashboard", Icon: DashboardIcon },
                     { key: "azureDevOpsBranches", label: "Branches", Icon: AzureDevOpsBranchesIcon },
                     { key: "azureDevOpsPipelines", label: "Pipelines", Icon: AzureDevOpsPipelinesIcon },
+                    { key: "azureDevOpsHistory", label: "History", Icon: HistoryIcon },
                     { key: "azureDevOpsArtifacts", label: "Build Artifacts", Icon: AzureDevOpsArtifactsIcon },
                     { key: "azureDevOpsPullRequests", label: "Pull Requests", Icon: PullRequestIcon },
                     { key: "azureDevOpsFeeds", label: "Package Feeds", Icon: AzureDevOpsFeedsIcon }

@@ -1,10 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
 
-import { getAzureDevOpsPipelines, getAzureDevOpsLatestArtifacts } from "../../services/azureDevOpsService";
+import { getAzureDevOpsPipelines, getAzureDevOpsArtifactHistory } from "../../services/azureDevOpsService";
 import ComboBox from "../common/ComboBox";
 import CopyButton from "../common/CopyButton";
+import Pagination from "../common/Pagination";
+import usePagination from "../../hooks/usePagination";
 import useAzureDevOpsProject from "../../hooks/useAzureDevOpsProject";
 import useNavigation from "../../hooks/useNavigation";
+
+const PAGE_SIZE = 10;
 
 // Same CI/CD/CI+CD name-based heuristic as AzureDevOpsPipelinesView's own
 // classifyPipeline - duplicated rather than imported, same reasoning as
@@ -29,13 +33,19 @@ function classifyPipeline(item) {
 
 }
 
+function formatDate(value) {
+    if (!value) return "—";
+    return new Date(value).toLocaleString();
+}
+
 // Read-only "everything about this one artifact" dialog - Name/Type/
-// Location/Download all in one place, plus its own copy buttons, rather
-// than making a visitor hunt across the table row for each value.
-// Rendered as a sibling of .card by the caller, not a child of it - see
-// AzureDevOpsPipelinesView's own dialog placement fix for why nesting a
-// fixed-position dialog inside .card (which has its own backdrop-filter)
-// traps it inside the card's bounds instead of the viewport.
+// Location/Download plus which run it came from, all in one place, with
+// its own copy buttons, rather than making a visitor hunt across the
+// table row for each value. Rendered as a sibling of .card by the caller,
+// not a child of it - see AzureDevOpsPipelinesView's own dialog placement
+// fix for why nesting a fixed-position dialog inside .card (which has its
+// own backdrop-filter) traps it inside the card's bounds instead of the
+// viewport.
 function ArtifactDetailDialog({ artifact, onClose }) {
 
     if (!artifact) return null;
@@ -47,6 +57,20 @@ function ArtifactDetailDialog({ artifact, onClose }) {
             <div className="dialog" role="presentation" onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
 
                 <h2>{artifact.name}</h2>
+
+                <div className="info-row">
+                    <span>From run</span>
+                    <strong>
+                        {artifact.runWebUrl ? (
+                            <a href={artifact.runWebUrl} target="_blank" rel="noreferrer">{artifact.runName || `#${artifact.runId}`}</a>
+                        ) : (artifact.runName || `#${artifact.runId}`)}
+                    </strong>
+                </div>
+
+                <div className="info-row">
+                    <span>Run date</span>
+                    <strong>{formatDate(artifact.runCreatedDate)}</strong>
+                </div>
 
                 <div className="info-row">
                     <span>Type</span>
@@ -84,11 +108,14 @@ function ArtifactDetailDialog({ artifact, onClose }) {
 }
 
 // Azure DevOps' Build Artifacts sub-page - the same CI/CD/CI+CD-tabbed,
-// search-by-name pipeline picker Pipelines itself uses, then that
-// pipeline's LATEST run's artifacts directly - no separate "pick a run"
-// step, by explicit request. Copy-name button per row; clicking a row
-// opens the full detail dialog (type, location, download URL). The
-// project itself is picked once on the Dashboard sub-page and shared via
+// search-by-name pipeline picker Pipelines itself uses, then EVERY recent
+// run's own artifacts for that pipeline, each row still tagged with the
+// run it came from. Running the same pipeline twice therefore shows two
+// separate, individually copyable rows with the same artifact name - no
+// need to open Azure DevOps' own portal to find and copy an older
+// artifact. Copy-name button per row; clicking a row opens the full
+// detail dialog (run, type, location, download URL). The project itself
+// is picked once on the Dashboard sub-page and shared via
 // AzureDevOpsProjectContext - this page no longer asks for one separately.
 export default function AzureDevOpsArtifactsView() {
 
@@ -101,7 +128,7 @@ export default function AzureDevOpsArtifactsView() {
     const [mode, setMode] = useState("CI");
     const [pipelineId, setPipelineId] = useState("");
 
-    const [artifacts, setArtifacts] = useState(null);
+    const [artifactHistory, setArtifactHistory] = useState(null);
     const [artifactsLoading, setArtifactsLoading] = useState(false);
 
     const [detailArtifact, setDetailArtifact] = useState(null);
@@ -109,7 +136,7 @@ export default function AzureDevOpsArtifactsView() {
     useEffect(() => {
 
         setPipelineId("");
-        setArtifacts(null);
+        setArtifactHistory(null);
 
         if (!project) {
             setPipelines(null);
@@ -134,25 +161,25 @@ export default function AzureDevOpsArtifactsView() {
 
         setMode(nextMode);
         setPipelineId("");
-        setArtifacts(null);
+        setArtifactHistory(null);
 
     }
 
     function handleSelectPipeline(nextId) {
 
         setPipelineId(nextId);
-        setArtifacts(null);
+        setArtifactHistory(null);
 
         if (!nextId) return;
 
         setArtifactsLoading(true);
 
-        getAzureDevOpsLatestArtifacts(project.name, Number(nextId)).then((data) => {
-            setArtifacts(data);
+        getAzureDevOpsArtifactHistory(project.name, Number(nextId)).then((data) => {
+            setArtifactHistory(data);
             setArtifactsLoading(false);
         }).catch((err) => {
             console.error(err);
-            setArtifacts({ configured: false, error: "Unable to load artifacts." });
+            setArtifactHistory({ configured: false, error: "Unable to load artifacts." });
             setArtifactsLoading(false);
         });
 
@@ -162,6 +189,31 @@ export default function AzureDevOpsArtifactsView() {
         () => (pipelines?.pipelines || []).filter((p) => classifyPipeline(p) === mode),
         [pipelines, mode]
     );
+
+    // Flattened into one row per artifact, each carrying its own run's
+    // context - the shape the table/pagination actually want, kept
+    // separate from the grouped-by-run shape the API returns.
+    const flattenedArtifacts = useMemo(() => {
+
+        const runs = artifactHistory?.runs || [];
+
+        return runs.flatMap((run) =>
+            run.artifacts.map((artifact) => ({
+                ...artifact,
+                runId: run.runId,
+                runName: run.runName,
+                runResult: run.result,
+                runCreatedDate: run.createdDate,
+                runWebUrl: run.webUrl
+            }))
+        );
+
+    }, [artifactHistory]);
+
+    const {
+        page, setPage, pageCount, pageItems,
+        totalCount, startIndex, endIndex
+    } = usePagination(flattenedArtifacts, PAGE_SIZE);
 
     if (!project) {
 
@@ -254,77 +306,93 @@ export default function AzureDevOpsArtifactsView() {
 
                     artifactsLoading ? (
 
-                        <p className="field-hint">Loading the latest artifacts...</p>
+                        <p className="field-hint">Loading artifacts from recent runs...</p>
 
-                    ) : !artifacts?.configured || artifacts.error ? (
+                    ) : !artifactHistory?.configured || artifactHistory.error ? (
 
-                        <p className="error-message">{artifacts?.error || "Unable to load artifacts."}</p>
+                        <p className="error-message">{artifactHistory?.error || "Unable to load artifacts."}</p>
 
-                    ) : !artifacts.runId ? (
+                    ) : flattenedArtifacts.length === 0 ? (
 
-                        <p className="empty-state" style={{ textAlign: "left" }}>This pipeline has no runs yet.</p>
+                        <p className="empty-state" style={{ textAlign: "left" }}>No artifacts were published by this pipeline's recent runs.</p>
 
                     ) : (
 
                         <>
 
                         <p className="field-hint">
-                            From the latest run{artifacts.runName ? ` — "${artifacts.runName}"` : ""} (#{artifacts.runId}).
+                            Every artifact from this pipeline's last {artifactHistory.runs.length} run{artifactHistory.runs.length === 1 ? "" : "s"} that published one — same-named artifacts from different runs each get their own row.
                         </p>
 
-                        {artifacts.artifacts.length === 0 ? (
+                        <div className="table-scroll">
 
-                            <p className="empty-state" style={{ textAlign: "left" }}>No artifacts were published by this run.</p>
+                            <table className="table">
 
-                        ) : (
+                                <thead>
+                                    <tr>
+                                        <th>Artifact</th>
+                                        <th>Type</th>
+                                        <th>Run</th>
+                                        <th>Run Date</th>
+                                        <th></th>
+                                    </tr>
+                                </thead>
 
-                            <div className="table-scroll">
+                                <tbody>
 
-                                <table className="table">
+                                    {pageItems.map((artifact, index) => (
 
-                                    <thead>
-                                        <tr>
-                                            <th>Artifact</th>
-                                            <th>Type</th>
-                                            <th></th>
+                                        <tr key={`${artifact.runId}-${artifact.name}-${index}`} className="table-row-clickable" onClick={() => setDetailArtifact(artifact)}>
+                                            <td>
+                                                <span style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                                                    {artifact.name}
+                                                    <CopyButton value={artifact.name} label="Copy artifact name" />
+                                                </span>
+                                            </td>
+                                            <td>{artifact.type || "—"}</td>
+                                            <td>
+                                                {artifact.runWebUrl ? (
+                                                    <a
+                                                        href={artifact.runWebUrl}
+                                                        target="_blank"
+                                                        rel="noreferrer"
+                                                        onClick={(e) => e.stopPropagation()}
+                                                    >
+                                                        {artifact.runName || `#${artifact.runId}`}
+                                                    </a>
+                                                ) : (artifact.runName || `#${artifact.runId}`)}
+                                            </td>
+                                            <td>{formatDate(artifact.runCreatedDate)}</td>
+                                            <td>
+                                                {artifact.downloadUrl && (
+                                                    <a
+                                                        href={artifact.downloadUrl}
+                                                        target="_blank"
+                                                        rel="noreferrer"
+                                                        onClick={(e) => e.stopPropagation()}
+                                                    >
+                                                        Download
+                                                    </a>
+                                                )}
+                                            </td>
                                         </tr>
-                                    </thead>
 
-                                    <tbody>
+                                    ))}
 
-                                        {artifacts.artifacts.map((artifact) => (
+                                </tbody>
 
-                                            <tr key={artifact.name} className="table-row-clickable" onClick={() => setDetailArtifact(artifact)}>
-                                                <td>
-                                                    <span style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                                                        {artifact.name}
-                                                        <CopyButton value={artifact.name} label="Copy artifact name" />
-                                                    </span>
-                                                </td>
-                                                <td>{artifact.type || "—"}</td>
-                                                <td>
-                                                    {artifact.downloadUrl && (
-                                                        <a
-                                                            href={artifact.downloadUrl}
-                                                            target="_blank"
-                                                            rel="noreferrer"
-                                                            onClick={(e) => e.stopPropagation()}
-                                                        >
-                                                            Download
-                                                        </a>
-                                                    )}
-                                                </td>
-                                            </tr>
+                            </table>
 
-                                        ))}
+                        </div>
 
-                                    </tbody>
-
-                                </table>
-
-                            </div>
-
-                        )}
+                        <Pagination
+                            page={page}
+                            pageCount={pageCount}
+                            totalCount={totalCount}
+                            startIndex={startIndex}
+                            endIndex={endIndex}
+                            onPageChange={setPage}
+                        />
 
                         </>
 

@@ -31,6 +31,13 @@ export const getAzureDevOpsRunningBuilds = async (project) => {
     return response.data;
 };
 
+// ---- History: every run across every pipeline in the project ----
+
+export const getAzureDevOpsHistory = async (project) => {
+    const response = await azureDevOpsApi.get(`/projects/${encodeURIComponent(project)}/history`);
+    return response.data;
+};
+
 // ---- Branches: repositories -> branches ----
 
 export const getAzureDevOpsRepositories = async () => {
@@ -106,10 +113,10 @@ export const runAzureDevOpsPipeline = async (project, pipelineId, branch, templa
     return response.data;
 };
 
-// ---- Build Artifacts: pipelines -> latest run's artifacts ----
+// ---- Build Artifacts: pipelines -> every recent run's own artifacts ----
 
-export const getAzureDevOpsLatestArtifacts = async (project, pipelineId) => {
-    const response = await azureDevOpsApi.get(`/projects/${encodeURIComponent(project)}/pipelines/${pipelineId}/latest-artifacts`);
+export const getAzureDevOpsArtifactHistory = async (project, pipelineId) => {
+    const response = await azureDevOpsApi.get(`/projects/${encodeURIComponent(project)}/pipelines/${pipelineId}/artifact-history`);
     return response.data;
 };
 

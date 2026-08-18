@@ -71,6 +71,38 @@ public class AzureDevOpsRunningBuildListDto
     public List<AzureDevOpsRunningBuildDto> Builds { get; set; } = new();
 }
 
+// History sub-page - every run across EVERY pipeline in the project, the
+// same classic Build API list (without the Dashboard's own
+// statusFilter=inProgress) GitHub's own History page mirrors via
+// GetWorkflowRuns (every workflow run across the whole repo, not one
+// workflow at a time). A separate DTO from AzureDevOpsRunningBuildDto
+// above rather than reusing it - Status/Result/RequestedFor are only
+// meaningful for a finished-or-in-progress history view, not the
+// Dashboard's "what's running right now" one, and overloading one type
+// with fields only some callers populate is exactly what this file
+// already avoids elsewhere (see AzureDevOpsGitActionResultDto's own
+// comment on the same principle).
+public class AzureDevOpsHistoryRunDto
+{
+    public int Id { get; set; }
+    public string PipelineName { get; set; } = string.Empty;
+    public string BuildNumber { get; set; } = string.Empty;
+    public string Status { get; set; } = string.Empty;
+    public string? Result { get; set; }
+    public string SourceBranch { get; set; } = string.Empty;
+    public string RequestedFor { get; set; } = string.Empty;
+    public DateTime? StartTime { get; set; }
+    public DateTime? FinishTime { get; set; }
+    public string WebUrl { get; set; } = string.Empty;
+}
+
+public class AzureDevOpsHistoryListDto
+{
+    public bool Configured { get; set; }
+    public string? Error { get; set; }
+    public List<AzureDevOpsHistoryRunDto> Runs { get; set; } = new();
+}
+
 // Branches page - repositories (org-wide, no project picker needed - the
 // list endpoint itself spans every project) -> branches (project-scoped,
 // using the ProjectName already carried on each repository).
@@ -283,6 +315,30 @@ public class AzureDevOpsArtifactListDto
     public int? RunId { get; set; }
     public string? RunName { get; set; }
     public List<AzureDevOpsArtifactDto> Artifacts { get; set; } = new();
+}
+
+// Build Artifacts redesign - one run's own artifact set, kept as its own
+// group rather than flattening every artifact into one list, specifically
+// so running the same pipeline twice surfaces as two separate groups with
+// the same artifact name inside each (each still traceable back to the
+// run it came from), instead of one ambiguous list where two same-named
+// artifacts would look identical. AzureDevOpsArtifactDto itself is reused
+// unchanged - only WHICH run each list belongs to is new here.
+public class AzureDevOpsArtifactRunGroupDto
+{
+    public int RunId { get; set; }
+    public string RunName { get; set; } = string.Empty;
+    public string? Result { get; set; }
+    public DateTime? CreatedDate { get; set; }
+    public string WebUrl { get; set; } = string.Empty;
+    public List<AzureDevOpsArtifactDto> Artifacts { get; set; } = new();
+}
+
+public class AzureDevOpsArtifactHistoryListDto
+{
+    public bool Configured { get; set; }
+    public string? Error { get; set; }
+    public List<AzureDevOpsArtifactRunGroupDto> Runs { get; set; } = new();
 }
 
 // Pull Requests page - project-wide (Azure DevOps' own list endpoint spans

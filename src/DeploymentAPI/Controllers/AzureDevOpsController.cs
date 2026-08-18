@@ -99,6 +99,14 @@ public class AzureDevOpsController : ControllerBase
         return Ok(await _azureDevOps.GetRunningBuildsAsync(creds, project));
     }
 
+    [HttpGet("projects/{project}/history")]
+    public async Task<IActionResult> GetHistory(string project)
+    {
+        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var creds = await _settings.GetUserPaasCredentialsAsync(Provider, key);
+        return Ok(await _azureDevOps.GetHistoryAsync(creds, project));
+    }
+
     // ---- Branches: repositories -> branches --------------------------------
 
     [HttpGet("repositories")]
@@ -203,12 +211,12 @@ public class AzureDevOpsController : ControllerBase
 
     // ---- Build Artifacts: pipelines -> latest run's artifacts --------------
 
-    [HttpGet("projects/{project}/pipelines/{pipelineId}/latest-artifacts")]
-    public async Task<IActionResult> GetLatestArtifacts(string project, int pipelineId)
+    [HttpGet("projects/{project}/pipelines/{pipelineId}/artifact-history")]
+    public async Task<IActionResult> GetArtifactHistory(string project, int pipelineId)
     {
         var key = PortalIdentity.GetOrCreateKey(HttpContext);
         var creds = await _settings.GetUserPaasCredentialsAsync(Provider, key);
-        return Ok(await _azureDevOps.GetLatestArtifactsAsync(creds, project, pipelineId));
+        return Ok(await _azureDevOps.GetArtifactHistoryAsync(creds, project, pipelineId));
     }
 
     // ---- Pull Requests: list / approve / complete --------------------------
