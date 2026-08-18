@@ -217,7 +217,8 @@ function extractGitHubJobs(doc) {
             runsOn: Array.isArray(raw["runs-on"]) ? raw["runs-on"].join(", ") : (raw["runs-on"] || ""),
             steps,
             environment: environment || null,
-            referencedParams: []
+            referencedParams: [],
+            conditions: []
         };
 
     });
@@ -249,7 +250,10 @@ function extractAzureJobs(doc, flavor, paramsMap) {
             name: doc.name || "Pipeline",
             needs: [],
             runsOn: doc.pool?.vmImage || doc.pool?.name || "",
-            steps: doc.steps.map((step, index) => ({ name: azureStepLabel(step, index) }))
+            steps: doc.steps.map((step, index) => ({ name: azureStepLabel(step, index) })),
+            environment: null,
+            referencedParams: [],
+            conditions: []
         }];
 
     }
@@ -295,11 +299,22 @@ function extractAzureJobs(doc, flavor, paramsMap) {
         const implicitNeeds = dependsOnStages.flatMap((depStage) => jobIdsByStage[depStage] || []);
         const currentStageJobIds = [];
 
+        // A stage's own "condition:" (e.g. deciding Start vs. Stop off one
+        // parameter) is extremely common and, until now, was silently
+        // ignored entirely — every stage always showed as running
+        // regardless of what a run parameter was set to. Attached to every
+        // job the stage contains, evaluated at run time by shouldSkipJob —
+        // see its own comment for why an explicit condition like this
+        // means the job's default "skip because my dependency was skipped"
+        // cascade (below, in TemplateTester's runJob) must NOT apply.
+        const stageCondition = typeof stage?.condition === "string" ? stage.condition : null;
+
         stageJobsRaw.forEach((raw) => {
 
             const job = normalizeAzureJob(raw, implicitNeeds, stageName);
 
             if (job) {
+                if (stageCondition) job.conditions.push(stageCondition);
                 jobs.push(job);
                 currentStageJobIds.push(job.id);
             }
@@ -361,7 +376,12 @@ function normalizeAzureJob(raw, implicitNeeds, stageName) {
         runsOn: raw.pool?.vmImage || raw.pool?.name || "",
         steps,
         environment: environment || null,
-        referencedParams: extractReferencedParams(raw.condition)
+        referencedParams: extractReferencedParams(raw.condition),
+        // Raw condition text (this job's own, plus its stage's — see
+        // extractAzureJobs) kept for shouldSkipJob's real evaluation at run
+        // time, distinct from referencedParams above (which only supports
+        // the simpler "skip unless this boolean was checked" case).
+        conditions: typeof raw.condition === "string" ? [raw.condition] : []
     };
 
 }
@@ -398,7 +418,8 @@ function normalizeTemplateRefJob(raw, implicitNeeds, stageName) {
         runsOn: "",
         steps: [{ name: `Template: ${raw.template} (steps not visible — defined in another file)` }],
         environment: typeof params.environmentName === "string" ? params.environmentName : null,
-        referencedParams: extractReferencedParams(raw.condition)
+        referencedParams: extractReferencedParams(raw.condition),
+        conditions: typeof raw.condition === "string" ? [raw.condition] : []
     };
 
 }
@@ -473,13 +494,26 @@ function resolveRunParameters(doc) {
 
     return doc.parameters
         .filter((param) => param && ["boolean", "string", "number"].includes(param.type))
-        .map((param) => ({
-            name: param.name,
-            displayName: param.displayName || param.name,
-            type: param.type,
-            default: param.default,
-            options: null
-        }));
+        .map((param) => {
+
+            // A "type: string" (or number) parameter with a "values:" list
+            // is Azure's own equivalent of GitHub's "type: choice" — a
+            // constrained dropdown, not free text. Remapped to "choice" so
+            // the Run dialog renders the same <select> it already does for
+            // GitHub — previously this was dropped entirely (options
+            // hardcoded to null), so an Azure choice parameter always
+            // showed as a plain text box a person could mistype.
+            const hasValues = Array.isArray(param.values) && param.values.length > 0;
+
+            return {
+                name: param.name,
+                displayName: param.displayName || param.name,
+                type: hasValues ? "choice" : param.type,
+                default: param.default,
+                options: hasValues ? param.values : null
+            };
+
+        });
 
 }
 
@@ -768,6 +802,44 @@ function evaluateCondition(conditionText, loopVar, loopItem, paramsMap) {
     }
 
     return parseValue();
+
+}
+
+// A stage/job "condition:" field uses Azure's compile-time "${{
+// parameters.x }}" substitution INSIDE a runtime condition string (e.g.
+// "eq('${{ parameters.action }}', 'START')") — a different syntax context
+// from the "${{ if ... }}:" map-key form evaluateCondition was built for,
+// which never wraps its own parameter references in "${{ }}" (everything
+// inside that block is already bare Azure expression syntax). This
+// substitutes those markers with the parameter's actual value first, so
+// the result ("eq('STOP', 'START')") becomes plain runtime-condition
+// syntax evaluateCondition can parse as an ordinary string-literal
+// comparison — exactly how Azure itself resolves parameters at queue
+// time, before the condition is ever evaluated.
+function substituteConditionParamRefs(conditionText, paramsMap) {
+
+    return conditionText.replace(/\$\{\{\s*parameters\.(\w+)\s*\}\}/g, (match, name) => {
+        return Object.prototype.hasOwnProperty.call(paramsMap, name) ? String(paramsMap[name]) : match;
+    });
+
+}
+
+// Whether a job should be skipped given the actual parameter values chosen
+// in the Run dialog — decidably false on ANY of the job's stored
+// conditions (its own "condition:" plus its stage's, if any — see
+// normalizeAzureJob/extractAzureJobs) means skip, same as a real Azure
+// pipeline would never start a stage/job whose condition evaluates false.
+// Anything undecidable (a runtime-only reference like succeeded()/
+// variables.x) or decidably true doesn't skip — the safest default for a
+// preview with no real prior-job outcomes to check against.
+export function shouldSkipJob(job, paramValues) {
+
+    if (!job.conditions || job.conditions.length === 0) return false;
+
+    return job.conditions.some((raw) => {
+        const substituted = substituteConditionParamRefs(raw, paramValues);
+        return evaluateCondition(substituted, null, null, paramValues) === false;
+    });
 
 }
 

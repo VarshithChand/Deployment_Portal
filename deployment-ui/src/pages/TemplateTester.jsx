@@ -2,7 +2,7 @@ import { useRef, useState } from "react";
 
 import PageLayout from "../components/layout/PageLayout";
 import WorkflowGraph from "../components/templateTester/WorkflowGraph";
-import { parseWorkflowYaml, tryFixIndentation } from "../utils/parseWorkflowYaml";
+import { parseWorkflowYaml, tryFixIndentation, shouldSkipJob } from "../utils/parseWorkflowYaml";
 
 const EXAMPLE_YAML = `name: Example CI/CD
 
@@ -206,8 +206,25 @@ export default function TemplateTester() {
 
         // A job downstream of a skipped/rejected dependency doesn't run
         // either — same as a real pipeline wouldn't attempt a deploy job
-        // whose build job never happened.
-        if (job.needs.some((dep) => statuses[dep] === "skipped")) {
+        // whose build job never happened. Only applies when this job has
+        // no explicit condition of its own: Azure's implicit default
+        // dependency gate is succeeded()-on-every-dependency, but setting
+        // an explicit "condition:" REPLACES that default entirely rather
+        // than combining with it — e.g. two stages each gated on which of
+        // several mutually-exclusive values a parameter has (Start vs.
+        // Stop) still both need to be independently reachable even though
+        // the pipeline's default stage order makes the second implicitly
+        // "depend on" the first.
+        if (job.conditions.length === 0 && job.needs.some((dep) => statuses[dep] === "skipped")) {
+            statuses[job.id] = "skipped";
+            setJobStates((prev) => ({ ...prev, [job.id]: { status: "skipped", stepIndex: -1 } }));
+            return;
+        }
+
+        // Azure condition gate: this job's own "condition:" and/or its
+        // stage's, evaluated against the actual values chosen in the Run
+        // dialog (see shouldSkipJob/parseWorkflowYaml.js).
+        if (shouldSkipJob(job, paramValues)) {
             statuses[job.id] = "skipped";
             setJobStates((prev) => ({ ...prev, [job.id]: { status: "skipped", stepIndex: -1 } }));
             return;
