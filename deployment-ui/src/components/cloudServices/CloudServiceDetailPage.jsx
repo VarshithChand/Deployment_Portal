@@ -13,7 +13,7 @@ import GenericServiceManagementPage from "./GenericServiceManagementPage";
 
 function buildBreadcrumbs(service, routeParams, onNavigate, onBack) {
 
-    const items = [{ label: "Cloud Services", onClick: onBack }];
+    const items = [{ label: "AWS Services", onClick: onBack }];
 
     const hasDrilldown = !!(routeParams.cluster || routeParams.repo);
 

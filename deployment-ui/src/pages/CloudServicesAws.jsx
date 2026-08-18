@@ -19,25 +19,14 @@ import CloudServiceDetailPage from "../components/cloudServices/CloudServiceDeta
 // for plain tables - this is a card grid, same shape of UI.
 const CATALOG_PAGE_SIZE = 9;
 
-// Only AWS is wired up (see section 12 of the request this page came
-// from) - Azure/GCP are listed as disabled options so adding a second
-// provider later is a data change (a new provider's services pushed into
-// awsServiceCatalog.js, or its own file) plus flipping `enabled: true`
-// here, not a rewrite of this page.
-const PROVIDERS = [
-    { key: "aws", label: "AWS", enabled: true },
-    { key: "azure", label: "Azure", enabled: false },
-    { key: "gcp", label: "GCP", enabled: false }
-];
-
-// The Cloud Services-specific slice of the URL - kept local to this page
-// (not folded into NavigationContext) since these params only ever mean
-// anything here, the same way Settings.jsx owns its own "?view=" without
-// NavigationContext needing to know what a "view" is. pushState (not
-// NavigationContext's usual replaceState for top-level tab switches) is
-// deliberate - section 32 asks for real browser back/forward through
-// catalog -> service -> cluster -> service-within-cluster, which only
-// works with real history entries.
+// Cloud Services' AWS sub-page (see Sidebar.jsx's "cloudServicesGroup" -
+// Azure/GCP are real, separate, visible "not built yet" pages instead of
+// living inside this same page behind a provider switcher, which is what
+// this page used to have before the Sidebar grew nested groups. Every
+// AWS_SERVICES entry still carries its own `provider` field (kept, not
+// stripped, in case a real Azure/GCP catalog is pushed into this same data
+// file later) - only the user-facing provider picker itself was removed,
+// since there was never more than one real option behind it.
 const SERVICE_PARAM_KEYS = ["service", "cluster", "ecsService", "repo"];
 
 function readRouteParams() {
@@ -76,11 +65,10 @@ function matchesQuery(service, query) {
 // call would improve on. Live resource data (running instances, cluster
 // task counts, etc.) is fetched separately, only once a specific service
 // page is actually open - see the individual *ManagementPage components.
-export default function CloudServices() {
+export default function CloudServicesAws() {
 
     const { pendingCloudService, setPendingCloudService } = useNavigation();
 
-    const [provider, setProvider] = useState("aws");
     const [search, setSearch] = useState("");
     const [category, setCategory] = useState("All");
     const [routeParams, setRouteParams] = useState(readRouteParams);
@@ -147,7 +135,7 @@ export default function CloudServices() {
     function navigate(next) {
 
         const url = new URL(window.location.href);
-        url.searchParams.set("tab", "cloudServices");
+        url.searchParams.set("tab", "cloudServicesAws");
 
         SERVICE_PARAM_KEYS.forEach((key) => {
 
@@ -192,13 +180,13 @@ export default function CloudServices() {
     }
 
     const providerServices = useMemo(
-        () => AWS_SERVICES.filter((s) => s.provider === provider),
-        [provider]
+        () => AWS_SERVICES.filter((s) => s.provider === "aws"),
+        []
     );
 
     const inUseServices = useMemo(() => {
 
-        if (provider !== "aws" || !inventory?.configured) {
+        if (!inventory?.configured) {
             return [];
         }
 
@@ -207,7 +195,7 @@ export default function CloudServices() {
             return status && !status.error && status.count > 0;
         });
 
-    }, [providerServices, inventory, provider]);
+    }, [providerServices, inventory]);
 
     const filtered = useMemo(() => {
 
@@ -265,7 +253,7 @@ export default function CloudServices() {
 
         return (
 
-            <PageLayout title="Cloud Services">
+            <PageLayout title="AWS Services">
 
                 <CloudServiceDetailPage
                     service={selectedService}
@@ -287,10 +275,10 @@ export default function CloudServices() {
 
     return (
 
-        <PageLayout title="Cloud Services">
+        <PageLayout title="AWS Services">
 
             <p className="field-hint" style={{ marginBottom: "18px" }}>
-                Browse and access cloud services available in your environment.
+                Browse and access AWS services available in your environment.
             </p>
 
             <div className="card">
@@ -358,27 +346,8 @@ export default function CloudServices() {
 
                 <h2 className="card-title">All AWS Services</h2>
 
-                <div className="form-group cloud-provider-select-group">
-
-                    <label htmlFor="cloud-provider-select">Cloud Provider</label>
-
-                    <select
-                        id="cloud-provider-select"
-                        className="form-control"
-                        value={provider}
-                        onChange={(e) => setProvider(e.target.value)}
-                    >
-                        {PROVIDERS.map((p) => (
-                            <option key={p.key} value={p.key} disabled={!p.enabled}>
-                                {p.label}{!p.enabled ? " (coming soon)" : ""}
-                            </option>
-                        ))}
-                    </select>
-
-                </div>
-
                 <SearchBox
-                    placeholder={`Search ${PROVIDERS.find((p) => p.key === provider)?.label || ""} services...`}
+                    placeholder="Search AWS services..."
                     value={search}
                     onChange={setSearch}
                 />

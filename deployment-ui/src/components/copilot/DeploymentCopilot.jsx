@@ -32,7 +32,7 @@ const GITHUB_CONTEXT_TABS = new Set(["deploy", "approvals", "pullRequests", "his
 
 function suggestionsForTab(tab) {
 
-    if (tab === "cloudServices") return CLOUD_SERVICES_SUGGESTIONS;
+    if (tab === "cloudServicesAws") return CLOUD_SERVICES_SUGGESTIONS;
     if (GITHUB_CONTEXT_TABS.has(tab)) return GITHUB_TAB_SUGGESTIONS;
 
     return DEFAULT_SUGGESTIONS;

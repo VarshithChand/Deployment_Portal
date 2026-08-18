@@ -32,6 +32,9 @@ import {
     AzureReposIcon,
     CodeCommitIcon,
     CloudServicesIcon,
+    AwsCloudIcon,
+    AzureCloudIcon,
+    GcpCloudIcon,
     HostingProvidersIcon,
     ContainerRegistryIcon,
     EcrIcon,
@@ -112,13 +115,30 @@ export const TABS = [
             { key: "bitbucket", label: "Bitbucket", Icon: BitbucketIcon }
         ]
     },
-    // A separate top-level page, not a GitHub sub-page - it browses AWS's
-    // own service catalog, not anything about this repo's pipeline.
-    // Deliberately NOT called "Services" either way - the top-level
-    // "services" tab below is a different, pre-existing admin feature (PAT
-    // user management + audit log); "Cloud Services" also matches this
-    // page's own <h1> title (see pages/CloudServices.jsx).
-    { key: "cloudServices", label: "Cloud Services", Icon: CloudServicesIcon },
+    // Not a GitHub sub-group - it browses each cloud provider's own service
+    // catalog, not anything about this repo's pipeline. Deliberately NOT
+    // called "Services" either way - the top-level "services" tab below is
+    // a different, pre-existing admin feature (PAT user management + audit
+    // log). Only AWS has a real, built catalog (pages/CloudServicesAws.jsx,
+    // ~100 services, live inventory, region picker, per-service drill-down)
+    // - Azure/GCP are real, visible "not built yet" pages rather than
+    // guessed integrations, the same posture as GitLab/Bitbucket/ESLint/
+    // Pylint/Checkstyle before them. Same self-service posture as Hosting
+    // Providers below - each provider's own session credential (or, for
+    // AWS, none at all needed to browse the catalog itself) is the auth
+    // boundary, not a portal admin gate, so none of these 3 belong in
+    // ADMIN_ONLY_TABS.
+    {
+        key: "cloudServicesGroup",
+        type: "group",
+        label: "Cloud Services",
+        Icon: CloudServicesIcon,
+        children: [
+            { key: "cloudServicesAws", label: "AWS", Icon: AwsCloudIcon },
+            { key: "cloudServicesAzure", label: "Azure", Icon: AzureCloudIcon },
+            { key: "cloudServicesGcp", label: "GCP", Icon: GcpCloudIcon }
+        ]
+    },
     // Session-scoped Render/Cloudflare/Netlify/Vercel connections (see
     // pages/PaasHosting.jsx) - same open, self-service posture as Cloud
     // Services above: not in GATED_TABS/ADMIN_ONLY_TABS below, and not in

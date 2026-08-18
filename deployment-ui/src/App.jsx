@@ -42,7 +42,9 @@ const AzureRepos = lazy(() => import("./pages/AzureRepos"));
 const CodeCommit = lazy(() => import("./pages/CodeCommit"));
 const GitLab = lazy(() => import("./pages/GitLab"));
 const Bitbucket = lazy(() => import("./pages/Bitbucket"));
-const CloudServices = lazy(() => import("./pages/CloudServices"));
+const CloudServicesAws = lazy(() => import("./pages/CloudServicesAws"));
+const CloudServicesAzure = lazy(() => import("./pages/CloudServicesAzure"));
+const CloudServicesGcp = lazy(() => import("./pages/CloudServicesGcp"));
 const PaasHosting = lazy(() => import("./pages/PaasHosting"));
 const Ecr = lazy(() => import("./pages/Ecr"));
 const Acr = lazy(() => import("./pages/Acr"));
@@ -241,7 +243,9 @@ function App(){
                             {tab === "codeCommit" && <CodeCommit/>}
                             {tab === "gitlab" && <GitLab/>}
                             {tab === "bitbucket" && <Bitbucket/>}
-                            {tab === "cloudServices" && <CloudServices/>}
+                            {tab === "cloudServicesAws" && <CloudServicesAws/>}
+                            {tab === "cloudServicesAzure" && <CloudServicesAzure/>}
+                            {tab === "cloudServicesGcp" && <CloudServicesGcp/>}
                             {tab === "paasHosting" && <PaasHosting/>}
                             {tab === "ecr" && <Ecr/>}
                             {tab === "acr" && <Acr/>}

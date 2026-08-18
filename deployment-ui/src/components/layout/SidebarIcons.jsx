@@ -409,6 +409,52 @@ export function CloudServicesIcon() {
     );
 }
 
+// Cloud Services' 3 providers - each a stroked cloud silhouette (same
+// circle-plus-rounded-rect-base technique SonarCloudIcon already uses, kept
+// distinct from CloudServicesIcon's own FILLED version above since that's
+// now the group header, not one specific child) with one small accent per
+// provider, echoing the same accent vocabulary this file already
+// established for Azure (triangle - see AzureReposIcon) so a visitor
+// who's seen one Azure icon recognizes the pattern in another.
+
+// AWS - a small filled square accent (a plain, provider-neutral mark since
+// AWS has no icon precedent elsewhere in this file to echo).
+export function AwsCloudIcon() {
+    return (
+        <svg {...common}>
+            <circle cx="9" cy="6.8" r="3.3" stroke="currentColor" strokeWidth="1.3" fill="none" />
+            <rect x="3.5" y="9" width="11" height="5.5" rx="2.5" stroke="currentColor" strokeWidth="1.3" fill="none" />
+            <rect x="7.3" y="10.5" width="3.4" height="3.4" fill="currentColor" />
+        </svg>
+    );
+}
+
+// Azure - a small triangle accent, same mark AzureReposIcon already uses
+// for this app's other Azure integration.
+export function AzureCloudIcon() {
+    return (
+        <svg {...common}>
+            <circle cx="9" cy="6.8" r="3.3" stroke="currentColor" strokeWidth="1.3" fill="none" />
+            <rect x="3.5" y="9" width="11" height="5.5" rx="2.5" stroke="currentColor" strokeWidth="1.3" fill="none" />
+            <polygon points="9,10.3 11.2,13.8 6.8,13.8" fill="currentColor" />
+        </svg>
+    );
+}
+
+// GCP - three small dots, an abstraction of Google's own multi-dot mark
+// (primitives only, no brand colors).
+export function GcpCloudIcon() {
+    return (
+        <svg {...common}>
+            <circle cx="9" cy="6.8" r="3.3" stroke="currentColor" strokeWidth="1.3" fill="none" />
+            <rect x="3.5" y="9" width="11" height="5.5" rx="2.5" stroke="currentColor" strokeWidth="1.3" fill="none" />
+            <circle cx="6.5" cy="11.75" r="1.1" fill="currentColor" />
+            <circle cx="9" cy="11.75" r="1.1" fill="currentColor" />
+            <circle cx="11.5" cy="11.75" r="1.1" fill="currentColor" />
+        </svg>
+    );
+}
+
 // Two connected nodes — reads as "connect an account," distinct from
 // CloudServicesIcon's cloud silhouette.
 export function HostingProvidersIcon() {

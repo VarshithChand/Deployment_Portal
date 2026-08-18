@@ -2,7 +2,7 @@ import { createContext, useCallback, useEffect, useState } from "react";
 
 import { getSidebarAccess } from "../services/settingsService";
 
-const TABS = ["dashboard", "deploy", "approvals", "pullRequests", "storage", "analytics", "timeline", "history", "environments", "templates", "azureRepos", "codeCommit", "gitlab", "bitbucket", "cloudServices", "services", "paasHosting", "ecr", "acr", "artifactRegistry", "dockerHub", "ghcr", "gitlabRegistry", "jfrog", "harbor", "nexus", "docker", "codeQuality", "sonarcloud", "codeql", "eslint", "pylint", "checkstyle", "settings"];
+const TABS = ["dashboard", "deploy", "approvals", "pullRequests", "storage", "analytics", "timeline", "history", "environments", "templates", "azureRepos", "codeCommit", "gitlab", "bitbucket", "cloudServicesAws", "cloudServicesAzure", "cloudServicesGcp", "services", "paasHosting", "ecr", "acr", "artifactRegistry", "dockerHub", "ghcr", "gitlabRegistry", "jfrog", "harbor", "nexus", "docker", "codeQuality", "sonarcloud", "codeql", "eslint", "pylint", "checkstyle", "settings"];
 
 // Read the starting tab from the URL so a hard reload (or a bookmarked/
 // shared link) lands back on the same page instead of always resetting
@@ -120,10 +120,13 @@ export default function NavigationProvider({ children }) {
 
     }
 
+    // Only AWS has a real service catalog to jump into (see Sidebar.jsx's
+    // own comment on why Azure/GCP are still "not built yet" pages) - the
+    // Dashboard's AWS Services card is the only caller of this today.
     function goToCloudService(serviceId) {
 
         setPendingCloudService(serviceId);
-        setTab("cloudServices");
+        setTab("cloudServicesAws");
 
     }
 
