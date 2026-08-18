@@ -9,13 +9,16 @@ const MAX_ATTEMPTS = 5;
 // Same padlock glyph PinLockScreen.jsx already draws for the portal-wide
 // idle lock - duplicated locally rather than imported, matching that
 // file's own precedent (a tiny hand-drawn SVG local to the one screen that
-// needs this exact look, not centralized).
+// needs this exact look, not centralized). Coordinates shifted up 1.75
+// units from a naive "rect at y=11" layout - see PinLockScreen.jsx's own
+// copy of this comment for why the glyph itself (not its container) needed
+// recentring within its 24-unit viewBox.
 function LockIcon({ size = 24 }) {
     return (
         <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden="true">
-            <rect x="5" y="11" width="14" height="9" rx="2.5" stroke="currentColor" strokeWidth="1.6" />
-            <path d="M8 11 V7.5 a4 4 0 0 1 8 0 V11" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-            <circle cx="12" cy="15.2" r="1.4" fill="currentColor" />
+            <rect x="5" y="9.25" width="14" height="9" rx="2.5" stroke="currentColor" strokeWidth="1.6" />
+            <path d="M8 9.25 V5.75 a4 4 0 0 1 8 0 V9.25" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+            <circle cx="12" cy="13.45" r="1.4" fill="currentColor" />
         </svg>
     );
 }

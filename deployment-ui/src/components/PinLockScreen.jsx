@@ -10,13 +10,18 @@ const MAX_ATTEMPTS = 5;
 // style as the rest of this app's hand-drawn icon set, just a different
 // glyph since this screen is about re-entering a lock, not a login. Used
 // both large (the top tile) and small (the field prefix, matching
-// KeyIcon's own 18px there) via the same size prop.
+// KeyIcon's own 18px there) via the same size prop. Coordinates shifted up
+// 1.75 units from a naive "rect at y=11" layout - the shackle-plus-body
+// shape's own bounding box (y 7.5 to 20) sat measurably below center in a
+// 24-unit viewBox on its own, so .pin-lock-icon's `place-items:center`
+// centered the BOX correctly while the glyph inside it still looked
+// low/off-center - this recentres the glyph itself instead.
 function LockIcon({ size = 24 }) {
     return (
         <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden="true">
-            <rect x="5" y="11" width="14" height="9" rx="2.5" stroke="currentColor" strokeWidth="1.6" />
-            <path d="M8 11 V7.5 a4 4 0 0 1 8 0 V11" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-            <circle cx="12" cy="15.2" r="1.4" fill="currentColor" />
+            <rect x="5" y="9.25" width="14" height="9" rx="2.5" stroke="currentColor" strokeWidth="1.6" />
+            <path d="M8 9.25 V5.75 a4 4 0 0 1 8 0 V9.25" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+            <circle cx="12" cy="13.45" r="1.4" fill="currentColor" />
         </svg>
     );
 }

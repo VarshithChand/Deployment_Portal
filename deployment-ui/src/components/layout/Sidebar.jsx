@@ -317,11 +317,6 @@ export default function Sidebar() {
 
     function toggleGroup(key) {
 
-        // A no-op while the rail is icon-only - there's nothing to hide
-        // that isn't already just an icon, so the toggle would silently
-        // do nothing visible and just confuse whoever clicked it.
-        if (collapsed) return;
-
         setGroupsCollapsed((prev) => {
 
             const next = { ...prev, [key]: !prev[key] };
@@ -385,11 +380,20 @@ export default function Sidebar() {
 
         const groupActive = containsActiveTab(item);
 
-        // Icon-only rail: always expanded (there's no label/indent
-        // distinction to collapse anyway - see toggleGroup). Otherwise:
-        // forced open while the active page lives inside it, so collapsing
-        // a group can never hide where you currently are.
-        const isExpanded = collapsed || groupActive || !groupsCollapsed[item.key];
+        // groupsCollapsed[key] is undefined until a visitor explicitly
+        // clicks this group's own header at least once - before that,
+        // the DEFAULT expanded state depends on the rail itself: expanded
+        // when it's the full labeled rail (nothing to hide, matches how
+        // grouping originally behaved), collapsed when it's icon-only
+        // (four nested groups now between them hold 30+ leaf pages - all
+        // of them stacking up as bare icons with no labels to tell them
+        // apart made the icon rail unusably long). Either way, a group
+        // that contains the active page is always forced open, so
+        // collapsing one can never hide where you currently are - and an
+        // explicit prior click always wins over both defaults.
+        const hasExplicitState = Object.prototype.hasOwnProperty.call(groupsCollapsed, item.key);
+        const defaultExpanded = !collapsed;
+        const isExpanded = groupActive || (hasExplicitState ? !groupsCollapsed[item.key] : defaultExpanded);
 
         return (
 
