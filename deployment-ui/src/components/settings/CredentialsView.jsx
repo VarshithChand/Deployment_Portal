@@ -464,7 +464,7 @@ export default function CredentialsView({
                     usernameLabel="Organization"
                     identityLabel="Organization"
                     tokenLabel="Personal Access Token"
-                    helpText="Powers the Source Control hub's Azure DevOps sub-pages (Branches, Pipelines, Build Artifacts, Package Feeds) — your Azure DevOps organization name and a Personal Access Token with Code (Read), Build (Read), and Packaging (Read) scopes."
+                    helpText="Powers the Source Control hub's Azure DevOps sub-pages (Branches, Pipelines, Build Artifacts, Pull Requests, Package Feeds) — your Azure DevOps organization name and a Personal Access Token with Code (Read & Write), Build (Read & Execute), Pull Request (Read & Write), and Packaging (Read) scopes. Read-only scopes are enough if you don't need to create/delete branches, run pipelines, or approve/complete pull requests."
                     statusFn={async () => {
                         const result = await getAzureDevOpsStatus();
                         return { configured: result.configured, username: result.organization };

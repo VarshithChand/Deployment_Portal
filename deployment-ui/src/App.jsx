@@ -41,6 +41,7 @@ const TemplateTester = lazy(() => import("./pages/TemplateTester"));
 const AzureDevOpsBranches = lazy(() => import("./pages/AzureDevOpsBranches"));
 const AzureDevOpsPipelines = lazy(() => import("./pages/AzureDevOpsPipelines"));
 const AzureDevOpsArtifacts = lazy(() => import("./pages/AzureDevOpsArtifacts"));
+const AzureDevOpsPullRequests = lazy(() => import("./pages/AzureDevOpsPullRequests"));
 const AzureDevOpsFeeds = lazy(() => import("./pages/AzureDevOpsFeeds"));
 const CodeCommit = lazy(() => import("./pages/CodeCommit"));
 const GitLab = lazy(() => import("./pages/GitLab"));
@@ -245,6 +246,7 @@ function App(){
                             {tab === "azureDevOpsBranches" && <AzureDevOpsBranches/>}
                             {tab === "azureDevOpsPipelines" && <AzureDevOpsPipelines/>}
                             {tab === "azureDevOpsArtifacts" && <AzureDevOpsArtifacts/>}
+                            {tab === "azureDevOpsPullRequests" && <AzureDevOpsPullRequests/>}
                             {tab === "azureDevOpsFeeds" && <AzureDevOpsFeeds/>}
                             {tab === "codeCommit" && <CodeCommit/>}
                             {tab === "gitlab" && <GitLab/>}

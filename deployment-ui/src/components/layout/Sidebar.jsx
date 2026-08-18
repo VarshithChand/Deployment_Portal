@@ -101,12 +101,18 @@ export const TABS = [
                 ]
             },
             // Azure DevOps - one Organization + PAT credential (see
-            // Settings → Credentials → Azure DevOps) powering four real,
+            // Settings → Credentials → Azure DevOps) powering five real,
             // independently-navigable sub-pages: Branches (Git repos, org-
-            // wide) plus three project-scoped ones (Pipelines' run history,
-            // Build Artifacts, and Azure Artifacts' Package Feeds - view-
-            // only, no run-trigger action). Nested the same way GitHub
-            // above is, since it's now more than one page deep.
+            // wide, create/delete included) plus four project-scoped ones
+            // (Pipelines' search-by-name run form, Build Artifacts' latest-
+            // run view, Azure Artifacts' Package Feeds, and Pull Requests'
+            // list/approve/complete). Nested the same way GitHub above is,
+            // since it's now more than one page deep. Pull Requests reuses
+            // GitHub's own PullRequestIcon rather than a new glyph - same
+            // concept, deliberately consistent iconography across
+            // providers, and it's not adjacent to GitHub's own PR item in
+            // the rail (different groups) so it doesn't repeat Round 63's
+            // "looks the same at a glance" problem.
             {
                 key: "azureDevOpsGroup",
                 type: "group",
@@ -116,6 +122,7 @@ export const TABS = [
                     { key: "azureDevOpsBranches", label: "Branches", Icon: AzureDevOpsBranchesIcon },
                     { key: "azureDevOpsPipelines", label: "Pipelines", Icon: AzureDevOpsPipelinesIcon },
                     { key: "azureDevOpsArtifacts", label: "Build Artifacts", Icon: AzureDevOpsArtifactsIcon },
+                    { key: "azureDevOpsPullRequests", label: "Pull Requests", Icon: PullRequestIcon },
                     { key: "azureDevOpsFeeds", label: "Package Feeds", Icon: AzureDevOpsFeedsIcon }
                 ]
             },

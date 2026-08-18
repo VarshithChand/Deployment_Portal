@@ -78,6 +78,34 @@ public class AzureDevOpsBranchListDto
     public List<AzureDevOpsBranchDto> Branches { get; set; } = new();
 }
 
+// Create/delete a branch - session-scoped, self-service, same posture as
+// RunPipelineAsync below (the calling session's own credential and its
+// real permission on Azure DevOps' side is the auth boundary). Both are
+// really just one Git ref update, batched the way Azure DevOps' own Refs
+// API expects: create sets oldObjectId to all-zeros ("this ref doesn't
+// exist yet") and newObjectId to the source commit to branch from; delete
+// is the mirror image (oldObjectId is the branch's current commit,
+// newObjectId is all-zeros) - the same old/new-object-id contract GitHub's
+// own Git References API uses, not something invented for this app.
+public class AzureDevOpsCreateBranchDto
+{
+    public string NewBranchName { get; set; } = string.Empty;
+    public string SourceObjectId { get; set; } = string.Empty;
+}
+
+// Generic Success/Error/Message result for the Git mutating actions below
+// (branch create/delete, PR approve/complete) - same shape as
+// AzureDevOpsRunTriggerResultDto minus the run-specific RunId field, kept
+// as its own type since "a git ref action succeeded" and "a pipeline run
+// started" are different enough concepts to warrant not overloading one
+// DTO with an unused field for whichever action didn't produce it.
+public class AzureDevOpsGitActionResultDto
+{
+    public bool Success { get; set; }
+    public string? Error { get; set; }
+    public string? Message { get; set; }
+}
+
 // Pipelines page - project -> pipeline -> run history. View-only by explicit
 // request (list pipelines and recent run status/result), no trigger action -
 // a real "start a run" flow is a separate, bigger feature with its own
@@ -95,6 +123,21 @@ public class AzureDevOpsPipelineListDto
     public bool Configured { get; set; }
     public string? Error { get; set; }
     public List<AzureDevOpsPipelineDto> Pipelines { get; set; } = new();
+}
+
+// One pipeline's own repository link - the basic list endpoint above
+// doesn't carry this (see GetPipelinesAsync's own comment), only the
+// single-pipeline GET does. Resolved on demand right before showing a
+// branch picker for that specific pipeline, not fetched for every
+// pipeline up front.
+public class AzureDevOpsPipelineDetailDto
+{
+    public bool Configured { get; set; }
+    public string? Error { get; set; }
+    public int Id { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public string? RepositoryId { get; set; }
+    public string? RepositoryName { get; set; }
 }
 
 // State is "inProgress"/"completed"/"canceling"/"unknown"; Result is only
@@ -126,7 +169,15 @@ public class AzureDevOpsRunListDto
 // CreateEcrRepositoryAsync's own comment: the credential's real permission
 // on the provider's own side is the auth boundary, not a portal-side gate).
 // Shape mirrors CloudServiceActionResultDto (Success/Error/Message), plus
-// the new run's ID so the frontend can refresh straight to it.
+// the new run's ID so the frontend can refresh straight to it. Branch is
+// optional on the request - blank runs against the pipeline's own
+// configured default branch, same as leaving it out of the request body
+// entirely would.
+public class AzureDevOpsRunPipelineRequestDto
+{
+    public string? Branch { get; set; }
+}
+
 public class AzureDevOpsRunTriggerResultDto
 {
     public bool Success { get; set; }
@@ -135,24 +186,65 @@ public class AzureDevOpsRunTriggerResultDto
     public int? RunId { get; set; }
 }
 
-// Build Artifacts page - project -> pipeline -> run -> artifacts. A
-// pipeline run's ID is the same ID the classic Build API uses internally
-// (Azure Pipelines runs on top of the Build service), so artifacts are
-// fetched via .../build/builds/{runId}/artifacts?api-version=7.1 - the only
-// endpoint that exposes them, there is no equivalent under the newer
-// Pipelines API surface.
+// Build Artifacts page - project -> pipeline -> latest run's artifacts
+// directly (no separate "pick a run" step - see GetLatestArtifactsAsync's
+// own comment on why). A pipeline run's ID is the same ID the classic
+// Build API uses internally (Azure Pipelines runs on top of the Build
+// service), so artifacts are fetched via
+// .../build/builds/{runId}/artifacts?api-version=7.1 - the only endpoint
+// that exposes them, there is no equivalent under the newer Pipelines API
+// surface. Location is the artifact's own internal container/file path
+// (Azure DevOps' "resource.data" field) - shown alongside DownloadUrl in
+// the detail view since they answer two different questions ("where do I
+// click to get this" vs. "where does Azure DevOps actually store it").
 public class AzureDevOpsArtifactDto
 {
     public string Name { get; set; } = string.Empty;
     public string Type { get; set; } = string.Empty;
     public string DownloadUrl { get; set; } = string.Empty;
+    public string Location { get; set; } = string.Empty;
 }
 
 public class AzureDevOpsArtifactListDto
 {
     public bool Configured { get; set; }
     public string? Error { get; set; }
+    public int? RunId { get; set; }
+    public string? RunName { get; set; }
     public List<AzureDevOpsArtifactDto> Artifacts { get; set; } = new();
+}
+
+// Pull Requests page - project-wide (Azure DevOps' own list endpoint spans
+// every repository in the project at once, so no separate repo picker is
+// needed the way Pipelines/Build Artifacts need a pipeline picker).
+// RepositoryId is carried per-PR since approve/complete are both
+// repo-scoped routes on Azure DevOps' side even though the list itself
+// isn't. LastMergeSourceCommitId is carried specifically so Complete can
+// send it straight back without a second fetch - Azure DevOps' own
+// complete call requires it to match the PR's current source commit
+// (optimistic concurrency, the same reason CompletePullRequestAsync
+// re-reads it fresh rather than trusting a stale value - see its own
+// comment).
+public class AzureDevOpsPullRequestDto
+{
+    public int Id { get; set; }
+    public string Title { get; set; } = string.Empty;
+    public string Description { get; set; } = string.Empty;
+    public string Status { get; set; } = string.Empty;
+    public string SourceBranch { get; set; } = string.Empty;
+    public string TargetBranch { get; set; } = string.Empty;
+    public string CreatedBy { get; set; } = string.Empty;
+    public DateTime? CreationDate { get; set; }
+    public string RepositoryId { get; set; } = string.Empty;
+    public string RepositoryName { get; set; } = string.Empty;
+    public string WebUrl { get; set; } = string.Empty;
+}
+
+public class AzureDevOpsPullRequestListDto
+{
+    public bool Configured { get; set; }
+    public string? Error { get; set; }
+    public List<AzureDevOpsPullRequestDto> PullRequests { get; set; } = new();
 }
 
 // Package Feeds page - feeds (org-wide, no project picker needed - same
