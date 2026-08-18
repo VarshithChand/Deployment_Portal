@@ -8698,3 +8698,94 @@ keyed isolation model now. Only two genuinely portal-wide settings remain
 by design: the plain Docker push credential and the GitHub OAuth app
 config, both single-instance-by-nature rather than "one user's credential
 shared with another."
+
+==================================================
+ROUND 63 - UX FIX: DISTINCT SILHOUETTE PER SIDEBAR
+ICON (CONTAINER REGISTRY / CLOUD SERVICES / SOURCE
+CONTROL FAMILIES)
+==================================================
+Date: 2026-08-18
+Trigger: screenshot of the collapsed icon-only sidebar rail. Verbatim ask:
+"i need seperate images for each and no need to keep same for all."
+
+Root-caused before touching code: SidebarIcons.jsx's own established
+pattern for these three families was "one shared base shape per group
+(a plain rounded-rect box, or a box with a vertical spine line), plus one
+small corner accent per provider" - explicitly called out in the file's
+own prior comments as a deliberate economy ("one base shape, one accent").
+At 18px in the collapsed rail, that accent is too small to register at a
+glance, so every sibling in a group reads as the same icon - worst for
+Container Registry (9 siblings, all a rounded box) and Cloud Services (3
+siblings, all a stroked cloud-blob), and present to a lesser degree in
+Source Control (SourceControlIcon/GitHubGroupIcon/AzureReposIcon/
+CodeCommitIcon all a box-with-spine).
+
+Redesigned every affected icon to its own distinct OUTER silhouette
+instead of a shared base plus accent, so no two siblings in the same group
+share a shape family:
+  - Container Registry's 9: EcrIcon -> 3 stacked widening bars (layered
+    image), AcrIcon -> diamond + filled square, ArtifactRegistryIcon ->
+    circle + center dot + trailing line (tag/label), DockerHubIcon ->
+    octagon + filled center dot, GhcrIcon -> pentagon/house + spine,
+    GitLabRegistryIcon -> hexagon + filled triangle, JfrogIcon -> large
+    triangle + two dots ("eyes"), HarborIcon -> a real anchor built from
+    lines/circles only (ring, shaft, crossbar, flared flukes) with no
+    bounding box at all, NexusIcon -> a 5-satellite hub/spoke cluster,
+    also with no bounding box.
+  - Cloud Services' 3: AwsCloudIcon keeps the cloud-blob silhouette (now
+    with a bold, actually-visible filled square instead of a tiny corner
+    one), AzureCloudIcon -> diamond + filled circle, GcpCloudIcon -> plain
+    circle + 3 dots in a triangular arrangement (no cloud-base at all).
+  - Source Control: SourceControlIcon (group header) -> a 3-satellite
+    hub/spoke glyph, AzureReposIcon -> diamond + filled triangle,
+    CodeCommitIcon -> a diagonal 3-dot chain with no bounding shape at
+    all. GitHubGroupIcon deliberately left unchanged - that exact glyph is
+    reused elsewhere in the app (SwitchRepositoryModal, HeaderSearch), so
+    changing it here would make it inconsistent with itself rather than
+    just with its siblings. GitLabIcon/BitbucketIcon were already
+    distinct, left alone.
+
+Kept one deliberate cross-group echo rather than treating "no shape may
+ever repeat anywhere" as an absolute rule: AzureReposIcon, AcrIcon, and
+AzureCloudIcon all use a diamond outline as a recognizable "this is
+Azure" signature (each with a different inner fill - triangle/square/
+circle) - the same brand-echo reasoning the file already valued before
+this round (see the original AzureCloudIcon comment). This is safe
+specifically because those three live in three different, non-adjacent
+groups (Source Control / Container Registry / Cloud Services) and can
+never render as consecutive stacked icons the way this round's actual
+complaint was about - the priority was fixing WITHIN-group repetition,
+not eliminating every long-distance shape overlap in the whole rail.
+
+Verification performed:
+  - No backend changes in this round - purely frontend SVG redesigns
+    within existing icon components, so no dotnet build was needed.
+  - `npm run lint` in deployment-ui/: no new warnings (same pre-existing
+    ones as every prior round).
+  - `npm run build` in deployment-ui/: succeeded.
+  - Manually re-verified every new shape's coordinates stay within the
+    shared 18x18 viewBox before shipping, and cross-checked the full
+    Container Registry/Cloud Services/Source Control sibling lists by hand
+    to confirm no two siblings in the same group share an outer shape
+    family - not just eyeballing the code.
+  - No browser/screenshot tool was available in this environment to
+    visually render the rail directly - verification here is limited to
+    build/lint success plus manual SVG-coordinate and shape-uniqueness
+    review, not a rendered screenshot. Flagged plainly as the one
+    unverified part of this round; worth a quick visual confirmation from
+    the user once deployed.
+  - Live check against the deployed Render backend after the push:
+    /api/bootstrap healthy (HTTP 200) - confirms the deploy pipeline
+    itself is unaffected, even though this round touched no backend code.
+
+Files changed: deployment-ui/src/components/layout/SidebarIcons.jsx.
+Commit: 9789363.
+
+Status: Complete, pushed, live-verified the backend is up. Every icon
+within the Container Registry, Cloud Services, and Source Control groups
+now has its own distinct outer silhouette rather than a shared base shape
+with a hard-to-see accent. Standing limitation: this round's fix has not
+been visually confirmed in a rendered browser (no screenshot tool
+available in this environment) - worth the user taking a quick look at
+the collapsed rail once deployed to confirm the new shapes read clearly
+at 18px, since that's ultimately a visual judgment call.
