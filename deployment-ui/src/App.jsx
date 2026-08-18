@@ -44,6 +44,7 @@ const ContainerRegistry = lazy(() => import("./pages/ContainerRegistry"));
 const Services = lazy(() => import("./pages/Services"));
 const Docker = lazy(() => import("./pages/Docker"));
 const CodeQuality = lazy(() => import("./pages/CodeQuality"));
+const SonarCloud = lazy(() => import("./pages/SonarCloud"));
 const CodeQl = lazy(() => import("./pages/CodeQl"));
 const Eslint = lazy(() => import("./pages/Eslint"));
 const Pylint = lazy(() => import("./pages/Pylint"));
@@ -53,7 +54,7 @@ const Settings = lazy(() => import("./pages/Settings"));
 // Admin-only regardless of Sidebar Access state — same guard the Sidebar
 // tabs themselves already get (see Sidebar.jsx's ADMIN_ONLY_TABS), needed
 // here too so a direct/bookmarked link can't bypass it.
-const ADMIN_ONLY_TABS = new Set(["codeQuality", "services"]);
+const ADMIN_ONLY_TABS = new Set(["codeQuality", "sonarcloud", "services"]);
 
 function App(){
 
@@ -230,6 +231,7 @@ function App(){
                             {tab === "services" && <Services/>}
                             {tab === "docker" && <Docker/>}
                             {tab === "codeQuality" && <CodeQuality/>}
+                            {tab === "sonarcloud" && <SonarCloud/>}
                             {tab === "codeql" && <CodeQl/>}
                             {tab === "eslint" && <Eslint/>}
                             {tab === "pylint" && <Pylint/>}

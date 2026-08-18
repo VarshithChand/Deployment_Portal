@@ -23,9 +23,9 @@ public class SonarApiService
         "sqale_rating", "ncloc"
     };
 
-    public async Task<SonarOverviewDto> GetOverviewAsync()
+    public async Task<SonarOverviewDto> GetOverviewAsync(string provider)
     {
-        var creds = await _settings.GetSonarCredentialsAsync();
+        var creds = await _settings.GetSonarCredentialsAsync(provider);
 
         if (!creds.IsConfigured)
             return new SonarOverviewDto { Configured = false };
@@ -91,7 +91,7 @@ public class SonarApiService
             // 404s on both calls above — surfaced as a normal, expected
             // state rather than a raw error, since it's the first thing
             // anyone configuring this will see before CI has run once.
-            Console.Error.WriteLine($"[SonarCloud] {ex}");
+            Console.Error.WriteLine($"[{provider}] {ex}");
 
             return new SonarOverviewDto
             {

@@ -18,13 +18,10 @@ public class SettingsViewDto
 
     public List<string> AdminGitHubUsernames { get; set; } = new();
 
-    public string SonarHostUrl { get; set; } = "https://sonarcloud.io";
-
-    public string SonarOrganization { get; set; } = string.Empty;
-
-    public string SonarProjectKey { get; set; } = string.Empty;
-
-    public bool SonarTokenConfigured { get; set; }
+    // SonarQube/SonarCloud are NOT here - each now has its own dedicated
+    // status endpoint (SonarController.Status) since the split into two
+    // independent credentials, matching the same pattern Docker Hub/GHCR/
+    // Harbor/Nexus already use rather than this general settings blob.
 
     // Deployment Copilot (see GeminiService/AiToolsService/AiController) —
     // AiModel is a plain configuration value (a model NAME, e.g.

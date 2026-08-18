@@ -197,10 +197,8 @@ export const saveAdminUsernames = async (payload) => {
     return response.data;
 };
 
-export const saveSonarSettings = async (payload) => {
-    const response = await settingsApi.post("/sonar", payload);
-    return response.data;
-};
+// SonarQube/SonarCloud saves live on sonarService.js now (api/sonar/
+// {provider}) - each an independent credential since the split.
 
 // Deployment Copilot's Gemini API key/model - the saved settings view
 // (getSettings) never echoes the key back, only aiApiKeyConfigured/aiModel.

@@ -16,10 +16,12 @@ import PortalRegistryLoginSection from "./credentials/PortalRegistryLoginSection
 import GitLabRegistryLoginSection from "./credentials/GitLabRegistryLoginSection";
 import JfrogLoginSection from "./credentials/JfrogLoginSection";
 import HostCredentialLoginSection from "./credentials/HostCredentialLoginSection";
+import SonarLoginSection from "./credentials/SonarLoginSection";
 import useAuth from "../../hooks/useAuth";
 import { getMyAwsSettings, getMyAzureSettings, getMyGcpSettings } from "../../services/settingsService";
 import { getMyApiKeys } from "../../services/securityService";
 import { getPaasStatus } from "../../services/paasService";
+import { getSonarStatus } from "../../services/sonarService";
 import {
     getDockerHubStatus, saveDockerHubCredentials, clearDockerHubCredentials,
     getGhcrStatus, saveGhcrCredentials, clearGhcrCredentials,
@@ -34,6 +36,7 @@ const MODES = [
     { key: "apikey", label: "API Key" },
     { key: "screenlock", label: "Screen Lock" },
     { key: "sonarqube", label: "SonarQube" },
+    { key: "sonarcloud", label: "SonarCloud" },
     { key: "docker", label: "Docker" },
     { key: "dockerhub", label: "Docker Hub" },
     { key: "ghcr", label: "GHCR" },
@@ -52,12 +55,12 @@ const MODES = [
 
 // Every provider key CredentialPinGate can gate - matches the backend's
 // CredentialGate.AllProviders exactly (github/aws/azure/gcp/apikey/
-// docker/github-oauth/sonar/ai/render/cloudflare/netlify/vercel). One
-// successful unlock now grants all of them there, so the frontend mirrors
-// that here instead of only marking whichever single tab prompted for the
-// PIN.
+// docker/github-oauth/sonarqube/sonarcloud/ai/render/cloudflare/netlify/
+// vercel/...). One successful unlock now grants all of them there, so the
+// frontend mirrors that here instead of only marking whichever single tab
+// prompted for the PIN.
 const ALL_CREDENTIAL_PROVIDERS = [
-    "github", "aws", "azure", "gcp", "apikey", "docker", "github-oauth", "sonar", "ai",
+    "github", "aws", "azure", "gcp", "apikey", "docker", "github-oauth", "sonarqube", "sonarcloud", "ai",
     "render", "cloudflare", "netlify", "vercel", "dockerhub", "ghcr", "gitlab-registry", "jfrog",
     "harbor", "nexus"
 ];
@@ -122,17 +125,6 @@ export default function CredentialsView({
     setOauthClientSecret,
     handleSaveOAuth,
     savingOAuth,
-    sonarHostUrl,
-    setSonarHostUrl,
-    sonarOrganization,
-    setSonarOrganization,
-    sonarProjectKey,
-    setSonarProjectKey,
-    sonarTokenConfigured,
-    sonarToken,
-    setSonarToken,
-    handleSaveSonar,
-    savingSonar,
     aiModel,
     setAiModel,
     aiApiKey,
@@ -151,9 +143,9 @@ export default function CredentialsView({
     // "At a glance" status per tab, shown as a small checkmark on the
     // button-row below so you can see what's already connected without
     // clicking into each tab. Undefined = not fetched yet (shows nothing
-    // rather than a wrong guess); github/docker/sonarqube/oauth/ai reuse
-    // the props Settings.jsx already fetched, everything else here gets
-    // its own lightweight fetch on mount.
+    // rather than a wrong guess); github/docker/oauth/ai reuse the props
+    // Settings.jsx already fetched, everything else here gets its own
+    // lightweight fetch on mount.
     const [remoteStatus, setRemoteStatus] = useState({});
 
     useEffect(() => {
@@ -172,8 +164,10 @@ export default function CredentialsView({
             getGitLabRegistryStatus().catch(() => null),
             getJfrogStatus().catch(() => null),
             getHostRegistryStatus("harbor").catch(() => null),
-            getHostRegistryStatus("nexus").catch(() => null)
-        ]).then(([aws, azure, gcp, apiKeysRes, render, cloudflare, netlify, vercel, dockerhub, ghcr, gitlabRegistry, jfrog, harbor, nexus]) => {
+            getHostRegistryStatus("nexus").catch(() => null),
+            getSonarStatus("sonarqube").catch(() => null),
+            getSonarStatus("sonarcloud").catch(() => null)
+        ]).then(([aws, azure, gcp, apiKeysRes, render, cloudflare, netlify, vercel, dockerhub, ghcr, gitlabRegistry, jfrog, harbor, nexus, sonarqube, sonarcloud]) => {
 
             const activeKeyCount = Array.isArray(apiKeysRes?.data)
                 ? apiKeysRes.data.filter((k) => !k.revoked).length
@@ -193,7 +187,9 @@ export default function CredentialsView({
                 "gitlab-registry": gitlabRegistry?.configured,
                 jfrog: jfrog?.configured,
                 harbor: harbor?.configured,
-                nexus: nexus?.configured
+                nexus: nexus?.configured,
+                sonarqube: sonarqube?.configured,
+                sonarcloud: sonarcloud?.configured
             });
 
         });
@@ -206,7 +202,6 @@ export default function CredentialsView({
     const configuredByMode = {
         github: githubTokenConfigured,
         docker: dockerPasswordConfigured,
-        sonarqube: sonarTokenConfigured,
         oauth: oauthClientSecretConfigured,
         ai: aiApiKeyConfigured,
         screenlock: pinConfigured,
@@ -637,86 +632,25 @@ export default function CredentialsView({
 
             {mode === "sonarqube" && (
 
-            <CredentialPinGate provider="sonar" unlocked={unlockedProviders.has("sonar")} onUnlocked={markAllUnlocked}>
-
-            <div className="settings-subsection">
-
-            <h3 className="settings-subhead">SonarQube (Code Quality)</h3>
-
-            <p className="empty-state" style={{ padding: "0 0 15px", textAlign: "left" }}>
-                Powers the Code Quality page — a SonarCloud (or self-hosted SonarQube)
-                project and a token with permission to read its analysis. The token is
-                only ever used server-side, never sent to the browser.
-            </p>
-
-            <div className="form-group">
-                <label>Host URL</label>
-                <ClearableInput
-                    placeholder="https://sonarcloud.io"
-                    value={sonarHostUrl}
-                    onChange={(e) => setSonarHostUrl(e.target.value)}
-                    onClear={() => setSonarHostUrl("https://sonarcloud.io")}
-                    autoComplete="off"
-                    name="sonar-host-url"
+            <CredentialPinGate provider="sonarqube" unlocked={unlockedProviders.has("sonarqube")} onUnlocked={markAllUnlocked}>
+                <SonarLoginSection
+                    provider="sonarqube"
+                    label="SonarQube"
+                    hasHostUrl
+                    onCleared={() => removeUnlocked("sonarqube")}
                 />
-            </div>
+            </CredentialPinGate>
 
-            <div className="form-group">
-                <label>Organization</label>
-                <ClearableInput
-                    placeholder="your-sonarcloud-org"
-                    value={sonarOrganization}
-                    onChange={(e) => setSonarOrganization(e.target.value)}
-                    onClear={() => setSonarOrganization("")}
-                    autoComplete="off"
-                    name="sonar-organization"
+            )}
+
+            {mode === "sonarcloud" && (
+
+            <CredentialPinGate provider="sonarcloud" unlocked={unlockedProviders.has("sonarcloud")} onUnlocked={markAllUnlocked}>
+                <SonarLoginSection
+                    provider="sonarcloud"
+                    label="SonarCloud"
+                    onCleared={() => removeUnlocked("sonarcloud")}
                 />
-            </div>
-
-            <div className="form-group">
-                <label>Project Key</label>
-                <ClearableInput
-                    placeholder="VarshithChand_yaml"
-                    value={sonarProjectKey}
-                    onChange={(e) => setSonarProjectKey(e.target.value)}
-                    onClear={() => setSonarProjectKey("")}
-                    autoComplete="off"
-                    name="sonar-project-key"
-                />
-            </div>
-
-            <div className="form-group">
-                <label>
-                    Token
-                    {" "}
-                    {sonarTokenConfigured && (
-                        <span className="badge badge-success">Saved</span>
-                    )}
-                </label>
-                <ClearableInput
-                    type="password"
-                    placeholder={sonarTokenConfigured ? "Leave blank to keep current token" : ""}
-                    value={sonarToken}
-                    onChange={(e) => setSonarToken(e.target.value)}
-                    onClear={() => setSonarToken("")}
-                    autoComplete="new-password"
-                />
-            </div>
-
-            <div className="button-row">
-
-                <button type="button" className="btn btn-primary" onClick={handleSaveSonar} disabled={savingSonar}>
-                    {savingSonar ? "Saving..." : "Save Sonar Settings"}
-                </button>
-
-                <button type="button" className="btn btn-danger" onClick={() => handleClearAndRelock("sonar", "Sonar token")}>
-                    Clear Token
-                </button>
-
-            </div>
-
-            </div>
-
             </CredentialPinGate>
 
             )}

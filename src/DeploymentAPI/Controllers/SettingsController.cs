@@ -715,17 +715,9 @@ public class SettingsController : ControllerBase
         return Ok(await _settings.SaveGitHubOAuthAsync(request));
     }
 
-    [HttpPost("sonar")]
-    public async Task<IActionResult> SaveSonar(SonarSettingsUpdateDto request)
-    {
-        if (await AdminGate.DenyUnlessAdminAsync(this, _settings, "change settings") is IActionResult denied)
-            return denied;
-
-        if (await CredentialGate.DenyUnlessUnlockedAsync(this, _settings, _activity, "sonar") is IActionResult locked)
-            return locked;
-
-        return Ok(await _settings.SaveSonarAsync(request));
-    }
+    // SonarQube/SonarCloud saves live on SonarController now (api/sonar/
+    // {provider}) - each an independent credential since the split, not
+    // this shared-settings-blob mechanism.
 
     // Deployment Copilot's Gemini API key/model - same admin-only, portal-
     // wide model as Sonar above. The saved view (BuildView) never echoes

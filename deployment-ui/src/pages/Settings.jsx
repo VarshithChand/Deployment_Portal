@@ -8,7 +8,6 @@ import {
     saveDockerSettings,
     saveGitHubOAuthSettings,
     saveAdminUsernames,
-    saveSonarSettings,
     saveAiSettings,
     testAiConnection,
     getPatUsers,
@@ -118,7 +117,6 @@ export default function Settings() {
     const [savingDocker, setSavingDocker] = useState(false);
     const [savingOAuth, setSavingOAuth] = useState(false);
     const [savingAdmins, setSavingAdmins] = useState(false);
-    const [savingSonar, setSavingSonar] = useState(false);
     const [signingOut, setSigningOut] = useState(false);
 
     const [githubRepoUrl, setGithubRepoUrl] = useState("");
@@ -155,12 +153,6 @@ export default function Settings() {
     const [oauthClientId, setOauthClientId] = useState("");
     const [oauthClientSecret, setOauthClientSecret] = useState("");
     const [oauthClientSecretConfigured, setOauthClientSecretConfigured] = useState(false);
-
-    const [sonarHostUrl, setSonarHostUrl] = useState("https://sonarcloud.io");
-    const [sonarOrganization, setSonarOrganization] = useState("");
-    const [sonarProjectKey, setSonarProjectKey] = useState("");
-    const [sonarToken, setSonarToken] = useState("");
-    const [sonarTokenConfigured, setSonarTokenConfigured] = useState(false);
 
     const [adminUsernamesText, setAdminUsernamesText] = useState("");
 
@@ -209,11 +201,6 @@ export default function Settings() {
             setOauthClientSecretConfigured(!!data.gitHubOAuthClientSecretConfigured);
 
             setAdminUsernamesText((data.adminGitHubUsernames || []).join(", "));
-
-            setSonarHostUrl(data.sonarHostUrl || "https://sonarcloud.io");
-            setSonarOrganization(data.sonarOrganization || "");
-            setSonarProjectKey(data.sonarProjectKey || "");
-            setSonarTokenConfigured(!!data.sonarTokenConfigured);
 
             setAiModel(data.aiModel || "");
             setAiApiKeyConfigured(!!data.aiApiKeyConfigured);
@@ -606,38 +593,6 @@ export default function Settings() {
 
     }
 
-    async function handleSaveSonar() {
-
-        try {
-
-            setSavingSonar(true);
-
-            await saveSonarSettings({
-                hostUrl: sonarHostUrl,
-                organization: sonarOrganization,
-                projectKey: sonarProjectKey,
-                token: sonarToken || null
-            });
-
-            setSonarToken("");
-            toast.show("Sonar settings saved.", "success");
-            load();
-
-        }
-        catch (err) {
-
-            console.error(err);
-            toast.show(err.response?.data?.message || "Failed to save Sonar settings.", "error");
-
-        }
-        finally {
-
-            setSavingSonar(false);
-
-        }
-
-    }
-
     async function handleSaveAi() {
 
         try {
@@ -998,17 +953,6 @@ export default function Settings() {
                     setOauthClientSecret={setOauthClientSecret}
                     handleSaveOAuth={handleSaveOAuth}
                     savingOAuth={savingOAuth}
-                    sonarHostUrl={sonarHostUrl}
-                    setSonarHostUrl={setSonarHostUrl}
-                    sonarOrganization={sonarOrganization}
-                    setSonarOrganization={setSonarOrganization}
-                    sonarProjectKey={sonarProjectKey}
-                    setSonarProjectKey={setSonarProjectKey}
-                    sonarTokenConfigured={sonarTokenConfigured}
-                    sonarToken={sonarToken}
-                    setSonarToken={setSonarToken}
-                    handleSaveSonar={handleSaveSonar}
-                    savingSonar={savingSonar}
                     aiModel={aiModel}
                     setAiModel={setAiModel}
                     aiApiKey={aiApiKey}

@@ -1254,44 +1254,78 @@ public class SettingsService
         return BuildView(root);
     }
 
-    // SonarCloud/SonarQube credentials for the Code Quality page — shared,
-    // portal-wide, same as Docker/OAuth above (there's one repo being
-    // scanned, not one per PAT user). The token is never sent to the
-    // frontend; SonarController uses it server-side to call Sonar's own Web
-    // API, the same pattern GitHub credentials already follow.
-    public async Task<SettingsViewDto> SaveSonarAsync(SonarSettingsUpdateDto update)
+    // SonarQube and SonarCloud credentials for the Code Quality page's two
+    // sidebar sub-pages — shared, portal-wide, same as Docker/OAuth above
+    // (there's one repo being scanned, not one per PAT user). Previously
+    // ONE shared credential covered both (a single Host URL could point at
+    // either) - split into two independent, separately-storable
+    // credentials per explicit user request, so a team using self-hosted
+    // SonarQube AND SonarCloud simultaneously (or just wanting them kept
+    // genuinely distinct) isn't limited to one or the other. provider is
+    // "sonarqube" or "sonarcloud". Storage: root["Sonar"][provider] =
+    // { HostUrl, Organization, ProjectKey, Token } - "Sonar" stays the same
+    // top-level JSON key as before (now nested by provider), so
+    // ClearAllAsync's existing root.Remove("Sonar") still wipes both at
+    // once with no change needed there. SonarCloud has no user-editable
+    // Host URL (always sonarcloud.io, forced server-side below) since
+    // that's the one thing that's genuinely fixed about it, unlike
+    // self-hosted SonarQube which requires one with no sensible default.
+    // The token is never sent to the frontend; SonarController uses it
+    // server-side to call Sonar's own Web API, the same pattern GitHub
+    // credentials already follow.
+    public async Task SaveSonarCredentialsAsync(string provider, SonarSettingsUpdateDto update)
     {
         var root = await ReadRootAsync();
+        var providers = root["Sonar"] as JObject ?? new JObject();
+        var sonar = providers[provider] as JObject ?? new JObject();
 
-        var sonar = root["Sonar"] as JObject ?? new JObject();
+        sonar["HostUrl"] = provider == "sonarcloud"
+            ? "https://sonarcloud.io"
+            : (string.IsNullOrWhiteSpace(update.HostUrl) ? sonar["HostUrl"]?.ToString() ?? string.Empty : update.HostUrl.TrimEnd('/'));
 
-        sonar["HostUrl"] = string.IsNullOrWhiteSpace(update.HostUrl) ? "https://sonarcloud.io" : update.HostUrl.TrimEnd('/');
-        sonar["Organization"] = update.Organization ?? string.Empty;
-        sonar["ProjectKey"] = update.ProjectKey ?? string.Empty;
+        if (!string.IsNullOrWhiteSpace(update.Organization))
+            sonar["Organization"] = update.Organization;
+
+        if (!string.IsNullOrWhiteSpace(update.ProjectKey))
+            sonar["ProjectKey"] = update.ProjectKey;
 
         if (!string.IsNullOrWhiteSpace(update.Token))
             sonar["Token"] = Protect(update.Token);
 
-        root["Sonar"] = sonar;
+        providers[provider] = sonar;
+        root["Sonar"] = providers;
 
         await WriteRootAsync(root);
 
-        _log.LogInfo("Settings", $"Sonar settings saved: {update.Organization}/{update.ProjectKey}"
+        _log.LogInfo("Settings", $"{provider} settings saved: {sonar["Organization"]}/{sonar["ProjectKey"]}"
             + (string.IsNullOrWhiteSpace(update.Token) ? "" : " (token updated)"));
-
-        return BuildView(root);
     }
 
-    public async Task<SonarCredentials> GetSonarCredentialsAsync()
+    public async Task<SonarCredentials> GetSonarCredentialsAsync(string provider)
     {
         var root = await ReadRootAsync();
-        var sonar = root["Sonar"] as JObject;
+        var sonar = (root["Sonar"] as JObject)?[provider] as JObject;
 
         return new SonarCredentials(
-            sonar?["HostUrl"]?.ToString() is string h && !string.IsNullOrWhiteSpace(h) ? h : "https://sonarcloud.io",
+            sonar?["HostUrl"]?.ToString() is string h && !string.IsNullOrWhiteSpace(h)
+                ? h
+                : (provider == "sonarcloud" ? "https://sonarcloud.io" : string.Empty),
             sonar?["Organization"]?.ToString() ?? string.Empty,
             sonar?["ProjectKey"]?.ToString() ?? string.Empty,
             Unprotect(sonar?["Token"]?.ToString()));
+    }
+
+    public async Task ClearSonarCredentialsAsync(string provider)
+    {
+        var root = await ReadRootAsync();
+
+        if (root["Sonar"] is JObject providers && providers[provider] != null)
+        {
+            providers.Remove(provider);
+            await WriteRootAsync(root);
+
+            _log.LogInfo("Settings", $"{provider} settings cleared.");
+        }
     }
 
     // Deployment Copilot's Gemini API key/model - portal-wide, shared, same
@@ -1405,12 +1439,17 @@ public class SettingsService
     // SecretField means the whole section IS the thing being cleared.
     // GitHub credentials are per-user now (see ClearUserGitHubTokenAsync)
     // and aren't part of this shared-section mechanism at all.
+    // Sonar is deliberately NOT here - SonarQube/SonarCloud each have their
+    // own dedicated Clear route now (SonarController.Clear), same as every
+    // other provider-keyed credential split out this way (Docker Hub/GHCR/
+    // Harbor/Nexus above) - this generic section-clear mechanism only
+    // still fits credentials with exactly one value, which Sonar hasn't
+    // been since the split.
     private static readonly Dictionary<string, (string SectionKey, string? SecretField)> SectionInfo = new()
     {
         ["docker"] = ("Docker", "Password"),
         ["github-oauth"] = ("GitHubOAuth", "ClientSecret"),
         ["admins"] = ("Auth", null),
-        ["sonar"] = ("Sonar", "Token"),
         ["ai"] = ("AiAssistant", "GeminiApiKey")
     };
 
@@ -2986,7 +3025,6 @@ public class SettingsService
         var docker = root["Docker"] as JObject;
         var oauth = root["GitHubOAuth"] as JObject;
         var auth = root["Auth"] as JObject;
-        var sonar = root["Sonar"] as JObject;
         var ai = root["AiAssistant"] as JObject;
 
         var admins = (auth?["AdminGitHubUsernames"] as JArray)?
@@ -3003,11 +3041,6 @@ public class SettingsService
             GitHubOAuthClientSecretConfigured = !string.IsNullOrWhiteSpace(oauth?["ClientSecret"]?.ToString()),
 
             AdminGitHubUsernames = admins,
-
-            SonarHostUrl = sonar?["HostUrl"]?.ToString() is string h && !string.IsNullOrWhiteSpace(h) ? h : "https://sonarcloud.io",
-            SonarOrganization = sonar?["Organization"]?.ToString() ?? string.Empty,
-            SonarProjectKey = sonar?["ProjectKey"]?.ToString() ?? string.Empty,
-            SonarTokenConfigured = !string.IsNullOrWhiteSpace(sonar?["Token"]?.ToString()),
 
             AiProvider = "Google Gemini",
             AiModel = ai?["Model"]?.ToString() ?? string.Empty,

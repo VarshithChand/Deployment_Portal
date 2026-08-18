@@ -18,7 +18,8 @@ import {
     ServicesIcon,
     DockerIcon,
     CodeQualityIcon,
-    SonarIcon,
+    SonarQubeIcon,
+    SonarCloudIcon,
     CodeQlIcon,
     EslintIcon,
     PylintIcon,
@@ -98,23 +99,26 @@ export const TABS = [
     // Every code-quality/static-analysis tool as its own nested sidebar
     // page, same "collapsible group" treatment as GitHub above - each
     // child is a real, independently-navigable page (own tab key, own
-    // App.jsx route), not a tile inside one shared page. "codeQuality"
-    // itself is kept as the SonarQube/SonarCloud child's own key (not the
-    // group's) specifically so the existing backend admin gate
-    // (AdminGate.DenyUnlessAdminAsync(..., "codeQuality") in
-    // SonarController) and the existing grantable-page-key list both keep
-    // working completely unchanged - only Sonar needs that gate (one
-    // shared team credential, not per-user); CodeQL reuses this session's
-    // own GitHub token as ITS auth boundary the same way Artifacts/
-    // Analytics/History do, so it stays open like they are, not grouped
-    // into the same admin-only bucket.
+    // App.jsx route), not a tile inside one shared page. SonarQube and
+    // SonarCloud are now two fully independent credentials/pages (split
+    // per explicit request - previously one shared connection covered
+    // both). "codeQuality" is kept as SonarQube's own key specifically so
+    // the existing backend admin gate (AdminGate.DenyUnlessAdminAsync(...,
+    // "codeQuality") in SonarController) and the existing grantable-page-
+    // key list both keep working unchanged for it; "sonarcloud" is a new
+    // key added to ADMIN_ONLY_TABS below (same admin-only reasoning - one
+    // shared team credential, not per-user - just now its own credential
+    // too). CodeQL reuses this session's own GitHub token as ITS auth
+    // boundary the same way Artifacts/Analytics/History do, so it stays
+    // open like they are, not grouped into the same admin-only bucket.
     {
         key: "codeQualityGroup",
         type: "group",
         label: "Code Quality",
         Icon: CodeQualityIcon,
         children: [
-            { key: "codeQuality", label: "SonarQube / SonarCloud", Icon: SonarIcon },
+            { key: "codeQuality", label: "SonarQube", Icon: SonarQubeIcon },
+            { key: "sonarcloud", label: "SonarCloud", Icon: SonarCloudIcon },
             { key: "codeql", label: "CodeQL", Icon: CodeQlIcon },
             { key: "eslint", label: "ESLint", Icon: EslintIcon },
             { key: "pylint", label: "Pylint", Icon: PylintIcon },
@@ -136,7 +140,7 @@ export const FLAT_TABS = TABS.flatMap((t) => (t.type === "group" ? t.children : 
 // admin-only for the same reason: its Users/Audit Log tabs now read the
 // real PAT-users list and activity log (see AdminUsersController/
 // SecurityAuditLogController), both already admin-gated server-side.
-export const ADMIN_ONLY_TABS = new Set(["codeQuality", "services"]);
+export const ADMIN_ONLY_TABS = new Set(["codeQuality", "sonarcloud", "services"]);
 
 const STORAGE_KEY = "sidebar-collapsed";
 const GROUP_STORAGE_KEY = "sidebar-groups-collapsed";

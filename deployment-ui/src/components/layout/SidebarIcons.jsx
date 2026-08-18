@@ -100,13 +100,29 @@ export function CodeQualityIcon() {
 // A dial with a needle (circle rim + line + small filled pivot) - reads as
 // a "quality rating gauge," distinct from CodeQualityIcon's shield-and-
 // checkmark now that shield is the Code Quality GROUP header rather than
-// this specific child.
-export function SonarIcon() {
+// this specific child. Used for self-hosted SonarQube specifically now
+// that it and SonarCloud are two separate sidebar items/credentials.
+export function SonarQubeIcon() {
     return (
         <svg {...common}>
             <circle cx="9" cy="9" r="6.5" stroke="currentColor" strokeWidth="1.4" />
             <line x1="9" y1="9" x2="12.2" y2="5.8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
             <circle cx="9" cy="9" r="1.1" fill="currentColor" />
+        </svg>
+    );
+}
+
+// A single round "bump" over a wide rounded-rect base - a simplified,
+// stroked cloud silhouette distinct from CloudServicesIcon's filled,
+// three-circle version (a different page entirely), with a small checkmark
+// on the base for "hosted quality check" - distinguishing it from
+// SonarQubeIcon's dial by silhouette alone.
+export function SonarCloudIcon() {
+    return (
+        <svg {...common}>
+            <circle cx="9" cy="6.8" r="3.3" stroke="currentColor" strokeWidth="1.3" fill="none" />
+            <rect x="3.5" y="9" width="11" height="5.5" rx="2.5" stroke="currentColor" strokeWidth="1.3" fill="none" />
+            <polyline points="6.8,11.7 8.3,13.1 11.2,10.3" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
     );
 }

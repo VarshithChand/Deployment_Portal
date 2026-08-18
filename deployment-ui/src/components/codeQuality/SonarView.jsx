@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import { getSonarOverview } from "../../services/sonarService";
 import LoadingSpinner from "../LoadingSpinner";
@@ -39,12 +39,10 @@ function RatingTile({ label, letter }) {
 
 }
 
-// SonarQube and SonarCloud are the same integration in this portal — one
-// Host URL/token form (Settings → Credentials → SonarQube) covers either a
-// self-hosted SonarQube instance or sonarcloud.io, so this is a single
-// sub-page rather than two separate ones that would secretly point at the
-// identical connection.
-export default function SonarView() {
+// SonarQube and SonarCloud are two fully independent credentials/pages now
+// (previously one shared connection covered both) - provider ("sonarqube"
+// | "sonarcloud") picks which one this instance reads/renders.
+export default function SonarView({ provider }) {
 
     const { setTab } = useNavigation();
 
@@ -52,14 +50,14 @@ export default function SonarView() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
 
-    async function load() {
+    const load = useCallback(async () => {
 
         try {
 
             setLoading(true);
             setError("");
 
-            const data = await getSonarOverview();
+            const data = await getSonarOverview(provider);
             setOverview(data);
 
         }
@@ -75,11 +73,11 @@ export default function SonarView() {
 
         }
 
-    }
+    }, [provider]);
 
     useEffect(() => {
         load();
-    }, []);
+    }, [load]);
 
     if (loading) {
         return <LoadingSpinner />;
@@ -98,8 +96,10 @@ export default function SonarView() {
                 <div className="card">
                     <h2 className="card-title">Not Configured</h2>
                     <p className="empty-state" style={{ textAlign: "left" }}>
-                        Add a Sonar project key and token in{" "}
-                        <a href="#" onClick={(e) => { e.preventDefault(); setTab("settings"); }}>Settings → Credentials → SonarQube</a>
+                        Add a project key and token in{" "}
+                        <a href="#" onClick={(e) => { e.preventDefault(); setTab("settings"); }}>
+                            Settings → Credentials → {provider === "sonarqube" ? "SonarQube" : "SonarCloud"}
+                        </a>
                         {" "}to see analysis results here.
                     </p>
                 </div>

@@ -24,7 +24,7 @@ public static class CredentialGate
     // site) so adding a future gated provider is a one-line change.
     public static readonly IReadOnlyList<string> AllProviders = new[]
     {
-        "github", "aws", "azure", "gcp", "apikey", "docker", "github-oauth", "sonar", "ai",
+        "github", "aws", "azure", "gcp", "apikey", "docker", "github-oauth", "sonarqube", "sonarcloud", "ai",
         "render", "cloudflare", "netlify", "vercel", "dockerhub", "ghcr", "gitlab-registry", "jfrog",
         "harbor", "nexus"
     };
