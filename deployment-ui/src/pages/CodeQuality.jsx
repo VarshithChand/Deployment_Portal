@@ -1,197 +1,132 @@
-import { useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 
-import { getSonarOverview } from "../services/sonarService";
-import LoadingSpinner from "../components/LoadingSpinner";
 import PageLayout from "../components/layout/PageLayout";
 import PageAdminAccessButton from "../components/common/PageAdminAccessButton";
+import SonarView from "../components/codeQuality/SonarView";
+import CodeQlView from "../components/codeQuality/CodeQlView";
 
-// A-E, mirrored from Sonar's own rating scale — its own dashboard uses the
-// same colors (A green through E red), so this stays recognizable to
-// anyone who already knows Sonar's UI.
-function ratingClass(letter) {
+const VIEWS = ["sonar", "codeql"];
 
-    switch (letter) {
-        case "A": return "badge badge-success";
-        case "B": return "badge badge-info";
-        case "C": return "badge badge-warning";
-        case "D":
-        case "E": return "badge badge-danger";
-        default: return "badge badge-secondary";
-    }
+// SonarQube and SonarCloud are the same connection in this portal (one
+// Host URL/token form covers either), so they're one combined tile rather
+// than two that would secretly point at the identical data - a confirmed
+// design decision, not an oversight (see the plan this hub shipped from).
+// CodeQL reuses the session's already-connected GitHub token, same as
+// Artifacts/Analytics/History - no separate credential to set up. ESLint/
+// Pylint/Checkstyle have no hosted API of their own to browse; showing
+// results for them would mean downloading and parsing a lint-report
+// artifact from a workflow run, which depends entirely on a repo's own CI
+// actually producing one in a known format - deliberately not built yet
+// rather than guessed at, shown here as real, visible "Coming soon" tiles.
+const PROVIDERS = [
+    { key: "sonar", label: "SonarQube / SonarCloud", view: "sonar" },
+    { key: "codeql", label: "CodeQL", view: "codeql" },
+    { key: "eslint", label: "ESLint", comingSoon: true },
+    { key: "pylint", label: "Pylint", comingSoon: true },
+    { key: "checkstyle", label: "Checkstyle", comingSoon: true }
+];
 
-}
+function readViewFromUrl() {
 
-function RatingTile({ label, letter }) {
+    const requested = new URLSearchParams(window.location.search).get("view");
 
-    return (
-
-        <div className="card dashboard-card">
-
-            <h2 className="card-title">{label}</h2>
-
-            <div className="info-row">
-                <span>Rating</span>
-                <strong><span className={ratingClass(letter)}>{letter || "—"}</span></strong>
-            </div>
-
-        </div>
-
-    );
+    return VIEWS.includes(requested) ? requested : null;
 
 }
 
+// One hub for every code-quality/static-analysis tool a team might use -
+// own "?view=" sub-nav, local replaceState, same pattern as PaasHosting.jsx/
+// Settings.jsx/Services.jsx/ContainerRegistry.jsx (siblings, not a
+// drill-down).
 export default function CodeQuality() {
 
-    const [overview, setOverview] = useState(null);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState("");
+    const [view, setViewState] = useState(readViewFromUrl);
 
-    async function load() {
+    const setView = useCallback((next) => {
 
-        try {
+        setViewState(next);
 
-            setLoading(true);
-            setError("");
+        const url = new URL(window.location.href);
 
-            const data = await getSonarOverview();
-            setOverview(data);
-
+        if (next) {
+            url.searchParams.set("view", next);
         }
-        catch (err) {
-
-            console.error(err);
-            setError(err.response?.data?.message || "Unable to reach Sonar. Check the settings below.");
-
-        }
-        finally {
-
-            setLoading(false);
-
+        else {
+            url.searchParams.delete("view");
         }
 
-    }
+        window.history.replaceState(null, "", url);
 
-    useEffect(() => {
-        load();
     }, []);
 
-    if (loading) {
-        return <LoadingSpinner />;
+    if (view) {
+
+        const provider = PROVIDERS.find((p) => p.view === view);
+
+        return (
+
+            <PageLayout
+                title="Code Quality"
+                actions={
+                    <button type="button" className="btn btn-secondary btn-sm" onClick={() => setView(null)}>
+                        ← All Tools
+                    </button>
+                }
+            >
+
+                <h2 style={{ marginTop: 0 }}>{provider?.label}</h2>
+
+                {view === "sonar" && <SonarView />}
+                {view === "codeql" && <CodeQlView />}
+
+            </PageLayout>
+
+        );
+
     }
 
     return (
 
         <PageLayout title="Code Quality" actions={<PageAdminAccessButton pageKey="codeQuality" pageLabel="Code Quality" />}>
 
-            {error && (
-                <div className="error-message">{error}</div>
-            )}
+            <p className="field-hint" style={{ marginBottom: "18px" }}>
+                Every code-quality tool this portal can reach. SonarQube/SonarCloud and CodeQL
+                connect using credentials already set up elsewhere — nothing new to configure if
+                you already use those for this repo. ESLint, Pylint, and Checkstyle are on the way.
+            </p>
 
-            {!error && overview && !overview.configured && (
+            <div className="settings-hub">
 
-                <div className="card">
-                    <h2 className="card-title">Not Configured</h2>
-                    <p className="empty-state">
-                        Add a Sonar project key and token in{" "}
-                        Settings → Credentials → Sonar (Code Quality) to see analysis
-                        results here.
-                    </p>
-                </div>
+                {PROVIDERS.map((p) => (
 
-            )}
+                    <button
+                        key={p.key}
+                        type="button"
+                        className="settings-hub-tile"
+                        disabled={!!p.comingSoon}
+                        style={p.comingSoon ? { opacity: 0.55, cursor: "not-allowed" } : undefined}
+                        onClick={() => !p.comingSoon && setView(p.view)}
+                    >
+                        <h2>
+                            {p.label}
+                            {" "}
+                            {p.comingSoon && (
+                                <span className="badge badge-secondary">Coming soon</span>
+                            )}
+                        </h2>
 
-            {!error && overview?.configured && overview.error && (
+                        <p>
+                            {p.comingSoon
+                                ? "Not built yet — coming in a later update."
+                                : p.key === "sonar"
+                                    ? "Quality gate, bugs, vulnerabilities, code smells, and ratings."
+                                    : "Open code scanning alerts from GitHub's CodeQL analysis."}
+                        </p>
+                    </button>
 
-                <div className="card">
-                    <h2 className="card-title">No Analysis Yet</h2>
-                    <p className="empty-state">{overview.error}</p>
-                    <a href={overview.dashboardUrl} target="_blank" rel="noreferrer" className="btn btn-secondary btn-sm">
-                        Open Sonar Dashboard &rarr;
-                    </a>
-                </div>
+                ))}
 
-            )}
-
-            {!error && overview?.configured && !overview.error && (
-
-                <>
-
-                <div className="card">
-
-                    <h2 className="card-title">
-                        Quality Gate
-                    </h2>
-
-                    <div className="info-row">
-
-                        <span>Status</span>
-
-                        <strong>
-                            <span className={overview.qualityGateStatus === "OK" ? "badge badge-success" : "badge badge-danger"}>
-                                {overview.qualityGateStatus === "OK" ? "Passed" : overview.qualityGateStatus}
-                            </span>
-                        </strong>
-
-                    </div>
-
-                    <div className="info-row">
-                        <span>Lines of Code</span>
-                        <strong>{overview.linesOfCode.toLocaleString()}</strong>
-                    </div>
-
-                    <div className="info-row">
-                        <span>Coverage</span>
-                        <strong>{overview.coveragePercent.toFixed(1)}%</strong>
-                    </div>
-
-                    <div className="info-row">
-                        <span>Duplicated Lines</span>
-                        <strong>{overview.duplicatedLinesPercent.toFixed(1)}%</strong>
-                    </div>
-
-                    <div className="button-row" style={{ marginTop: "15px" }}>
-                        <a href={overview.dashboardUrl} target="_blank" rel="noreferrer" className="btn btn-secondary btn-sm">
-                            Open Full Sonar Dashboard &rarr;
-                        </a>
-                    </div>
-
-                </div>
-
-                <div className="grid">
-
-                    <div className="card dashboard-card">
-                        <h2 className="card-title">Bugs</h2>
-                        <div className="info-row">
-                            <span>Open</span>
-                            <strong>{overview.bugs}</strong>
-                        </div>
-                    </div>
-
-                    <div className="card dashboard-card">
-                        <h2 className="card-title">Vulnerabilities</h2>
-                        <div className="info-row">
-                            <span>Open</span>
-                            <strong>{overview.vulnerabilities}</strong>
-                        </div>
-                    </div>
-
-                    <div className="card dashboard-card">
-                        <h2 className="card-title">Code Smells</h2>
-                        <div className="info-row">
-                            <span>Open</span>
-                            <strong>{overview.codeSmells}</strong>
-                        </div>
-                    </div>
-
-                    <RatingTile label="Reliability" letter={overview.reliabilityRating} />
-                    <RatingTile label="Security" letter={overview.securityRating} />
-                    <RatingTile label="Maintainability" letter={overview.maintainabilityRating} />
-
-                </div>
-
-                </>
-
-            )}
+            </div>
 
         </PageLayout>
 

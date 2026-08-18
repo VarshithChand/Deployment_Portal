@@ -53,6 +53,10 @@ export const getDockerImages = async () => {
     return await api.get("/docker-images");
 };
 
+export const getCodeQlAlerts = async (force = false) => {
+    return await api.get("/code-scanning-alerts", { params: force ? { force: true } : {} });
+};
+
 export const getWorkflows = async (force = false) => {
     return await api.get("/workflows", { params: force ? { force: true } : {} });
 };

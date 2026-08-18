@@ -110,6 +110,12 @@ public class GitHubController : ControllerBase
         return Ok(await _service.GetDockerImages());
     }
 
+    [HttpGet("code-scanning-alerts")]
+    public async Task<IActionResult> CodeScanningAlerts([FromQuery] bool force = false)
+    {
+        return Ok(await _service.GetCodeQlAlertsAsync(force));
+    }
+
     [HttpGet("artifacts/{id}/download")]
     public async Task<IActionResult> DownloadArtifact(long id)
     {

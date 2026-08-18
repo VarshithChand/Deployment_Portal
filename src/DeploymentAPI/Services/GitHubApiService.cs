@@ -838,6 +838,69 @@ public class GitHubApiService
         }, forceRefresh);
 
     //===========================================================
+    // CodeQL (Code Quality hub's CodeQL sub-page)
+    //===========================================================
+
+    // No separate credential - reuses this session's already-connected
+    // GitHub token, same as GetArtifacts above. GitHub returns 404 for a
+    // repo with code scanning not enabled and 403 for a token missing the
+    // security_events/repo scope this endpoint needs - both surfaced as a
+    // friendly Error rather than the generic DescribeGitHubError fallback,
+    // since "not enabled"/"missing scope" are specific, actionable states
+    // here that a raw 404/403 message wouldn't convey on their own.
+    public Task<CodeQlOverviewDto> GetCodeQlAlertsAsync(bool forceRefresh = false) =>
+        GetCachedAsync($"codeql:{_auth.Owner}/{_auth.Repository}", async () =>
+        {
+            var client = _auth.CreateClient();
+
+            var url =
+                $"https://api.github.com/repos/{Uri.EscapeDataString(_auth.Owner)}/{Uri.EscapeDataString(_auth.Repository)}" +
+                "/code-scanning/alerts?state=open&per_page=100";
+
+            var result = new CodeQlOverviewDto();
+
+            try
+            {
+                var json = await HttpClientHelper.GetAsync(client, url);
+                var alerts = JArray.Parse(json);
+
+                result.Alerts = alerts.Select(a => new CodeQlAlertDto
+                {
+                    Number = (int?)a["number"] ?? 0,
+                    RuleId = a["rule"]?["id"]?.ToString() ?? string.Empty,
+                    RuleDescription = a["rule"]?["description"]?.ToString() ?? string.Empty,
+                    Severity = a["rule"]?["severity"]?.ToString() ?? "warning",
+                    Path = a["most_recent_instance"]?["location"]?["path"]?.ToString() ?? string.Empty,
+                    Line = (int?)a["most_recent_instance"]?["location"]?["start_line"] ?? 0,
+                    HtmlUrl = a["html_url"]?.ToString() ?? string.Empty,
+                    CreatedAt = DateTime.TryParse(a["created_at"]?.ToString(), out var created) ? created : null
+                })
+                .OrderByDescending(x => x.CreatedAt)
+                .ToList();
+
+                result.ErrorCount = result.Alerts.Count(x => x.Severity == "error");
+                result.WarningCount = result.Alerts.Count(x => x.Severity == "warning");
+                result.NoteCount = result.Alerts.Count(x => x.Severity == "note");
+            }
+            catch (HttpRequestException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
+            {
+                result.Error = "Code scanning isn't enabled for this repository. Enable CodeQL analysis " +
+                    "under the repo's Settings → Code security → Code scanning to see results here.";
+            }
+            catch (HttpRequestException ex) when (ex.StatusCode == HttpStatusCode.Forbidden)
+            {
+                result.Error = "This GitHub token doesn't have permission to read code scanning alerts — " +
+                    "it needs the \"security_events\" scope (or \"repo\" for a classic token).";
+            }
+            catch (HttpRequestException ex)
+            {
+                result.Error = DescribeGitHubError(ex, "Unable to reach GitHub for code scanning alerts.");
+            }
+
+            return result;
+        }, forceRefresh);
+
+    //===========================================================
     // Latest Run For A Workflow (Deploy page — "what did this do last time?")
     //===========================================================
 
