@@ -17,6 +17,11 @@ const EMPTY_FORM = { username: "", token: "" };
 export default function PortalRegistryLoginSection({
     label,
     usernameLabel,
+    // What the saved identifier is called in the "already configured"
+    // status line below the heading (e.g. "Username" for Docker Hub/GHCR,
+    // "Organization" for Azure Repos) - defaults to usernameLabel itself so
+    // existing callers don't need to pass anything new.
+    identityLabel,
     tokenLabel,
     helpText,
     statusFn,
@@ -105,7 +110,7 @@ export default function PortalRegistryLoginSection({
 
             {!loading && status?.configured && status.username && (
                 <p className="field-hint field-hint-good">
-                    Username: <strong>{status.username}</strong>
+                    {identityLabel || usernameLabel}: <strong>{status.username}</strong>
                 </p>
             )}
 

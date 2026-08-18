@@ -38,6 +38,10 @@ const Environments = lazy(() => import("./pages/Environments"));
 const Analytics = lazy(() => import("./pages/Analytics"));
 const Timeline = lazy(() => import("./pages/Timeline"));
 const TemplateTester = lazy(() => import("./pages/TemplateTester"));
+const AzureRepos = lazy(() => import("./pages/AzureRepos"));
+const CodeCommit = lazy(() => import("./pages/CodeCommit"));
+const GitLab = lazy(() => import("./pages/GitLab"));
+const Bitbucket = lazy(() => import("./pages/Bitbucket"));
 const CloudServices = lazy(() => import("./pages/CloudServices"));
 const PaasHosting = lazy(() => import("./pages/PaasHosting"));
 const Ecr = lazy(() => import("./pages/Ecr"));
@@ -233,6 +237,10 @@ function App(){
                             {tab === "history" && <History/>}
                             {tab === "environments" && <Environments/>}
                             {tab === "templates" && <TemplateTester/>}
+                            {tab === "azureRepos" && <AzureRepos/>}
+                            {tab === "codeCommit" && <CodeCommit/>}
+                            {tab === "gitlab" && <GitLab/>}
+                            {tab === "bitbucket" && <Bitbucket/>}
                             {tab === "cloudServices" && <CloudServices/>}
                             {tab === "paasHosting" && <PaasHosting/>}
                             {tab === "ecr" && <Ecr/>}

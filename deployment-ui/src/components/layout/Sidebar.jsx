@@ -26,6 +26,11 @@ import {
     CheckstyleIcon,
     SettingsIcon,
     GitHubGroupIcon,
+    SourceControlIcon,
+    GitLabIcon,
+    BitbucketIcon,
+    AzureReposIcon,
+    CodeCommitIcon,
     CloudServicesIcon,
     HostingProvidersIcon,
     ContainerRegistryIcon,
@@ -54,29 +59,57 @@ import useToast from "../../hooks/useToast";
 // drift out of sync with what the Sidebar actually shows.
 export const GATED_TABS = new Set(["approvals", "pullRequests"]);
 
-// Everything that's really "a GitHub repo/pipeline feature" lives grouped
-// under one collapsible "GitHub" section instead of sitting flat alongside
-// Dashboard/Services/Docker/Code Quality/Settings, which aren't tied to a
-// specific repo the same way. A "group" entry is purely a Sidebar-side
+// Every source-control provider lives grouped under one collapsible
+// "Source Control" section, itself containing a NESTED "GitHub" group (its
+// own 9 pipeline/repo pages, unchanged, just one level deeper now) plus
+// GitLab/Bitbucket/Azure Repos/AWS CodeCommit as siblings - the Sidebar
+// now supports arbitrarily nested groups (see renderNavItem/filterTree/
+// flattenTabs below), a generalization of the single-level grouping GitHub
+// itself introduced first. A "group" entry is purely a Sidebar-side
 // grouping - it has no tab key of its own and never appears in App.jsx's
-// tab switch; only its children do.
+// tab switch; only leaf children (at any depth) do.
 export const TABS = [
     { key: "dashboard", label: "Dashboard", Icon: DashboardIcon },
     {
-        key: "github",
+        key: "sourceControlGroup",
         type: "group",
-        label: "GitHub",
-        Icon: GitHubGroupIcon,
+        label: "Source Control",
+        Icon: SourceControlIcon,
         children: [
-            { key: "deploy", label: "Deploy", Icon: DeployIcon },
-            { key: "approvals", label: "Approvals", Icon: ApprovalsIcon },
-            { key: "pullRequests", label: "Pull Requests", Icon: PullRequestIcon },
-            { key: "storage", label: "Artifacts & Images", Icon: StorageIcon },
-            { key: "analytics", label: "Analytics", Icon: AnalyticsIcon },
-            { key: "timeline", label: "Timeline", Icon: TimelineIcon },
-            { key: "history", label: "History", Icon: HistoryIcon },
-            { key: "environments", label: "Environments", Icon: EnvironmentsIcon },
-            { key: "templates", label: "Template Tester", Icon: TemplatesIcon }
+            {
+                key: "github",
+                type: "group",
+                label: "GitHub",
+                Icon: GitHubGroupIcon,
+                children: [
+                    { key: "deploy", label: "Deploy", Icon: DeployIcon },
+                    { key: "approvals", label: "Approvals", Icon: ApprovalsIcon },
+                    { key: "pullRequests", label: "Pull Requests", Icon: PullRequestIcon },
+                    { key: "storage", label: "Artifacts & Images", Icon: StorageIcon },
+                    { key: "analytics", label: "Analytics", Icon: AnalyticsIcon },
+                    { key: "timeline", label: "Timeline", Icon: TimelineIcon },
+                    { key: "history", label: "History", Icon: HistoryIcon },
+                    { key: "environments", label: "Environments", Icon: EnvironmentsIcon },
+                    { key: "templates", label: "Template Tester", Icon: TemplatesIcon }
+                ]
+            },
+            // Real, built pages (own session/portal credential, own
+            // browse view) - Azure Repos needs an Organization + PAT (see
+            // Settings → Credentials → Azure DevOps); AWS CodeCommit
+            // reuses this session's own AWS credentials, same as ECR does,
+            // no new credential to set up.
+            { key: "azureRepos", label: "Azure Repos", Icon: AzureReposIcon },
+            { key: "codeCommit", label: "AWS CodeCommit", Icon: CodeCommitIcon },
+            // Not built yet - neither provider's exact credential shape
+            // (GitLab: Host URL + PAT; Bitbucket: Workspace + App
+            // Password, a materially different model from either GitLab
+            // or Azure Repos) was specified, so these are real, navigable
+            // pages showing an honest "not built yet" state - same
+            // posture as Harbor/Nexus/ESLint before they were built out
+            // (see pages/GitLab.jsx/Bitbucket.jsx) - not a guessed
+            // integration, and not a disabled/unreachable sidebar entry.
+            { key: "gitlab", label: "GitLab", Icon: GitLabIcon },
+            { key: "bitbucket", label: "Bitbucket", Icon: BitbucketIcon }
         ]
     },
     // A separate top-level page, not a GitHub sub-page - it browses AWS's
@@ -161,10 +194,15 @@ export const TABS = [
     { key: "settings", label: "Settings", Icon: SettingsIcon }
 ];
 
-// Flattened view of TABS - every real page with none of the Sidebar-only
-// grouping structure - for anything that just needs "the list of pages"
-// (HeaderSearch's results) rather than how Sidebar happens to nest them.
-export const FLAT_TABS = TABS.flatMap((t) => (t.type === "group" ? t.children : [t]));
+// Flattened view of TABS - every real (leaf) page with none of the
+// Sidebar-only grouping structure, at any nesting depth - for anything
+// that just needs "the list of pages" (HeaderSearch's results) rather than
+// how Sidebar happens to nest them.
+function flattenTabs(items) {
+    return items.flatMap((t) => (t.type === "group" ? flattenTabs(t.children) : [t]));
+}
+
+export const FLAT_TABS = flattenTabs(TABS);
 
 // Admin-only, same as Settings > Sidebar Access / Activity Log — there's
 // one shared Sonar project for the whole repo (not scoped per PAT user),
@@ -223,10 +261,16 @@ export default function Sidebar() {
 
     // Groups themselves aren't gated (they're not a real tab), only their
     // children are - a group with zero visible children just disappears
-    // rather than showing an empty, useless header.
-    const visibleTabs = TABS
-        .map((t) => t.type === "group" ? { ...t, children: t.children.filter(itemVisible) } : t)
-        .filter((t) => t.type === "group" ? t.children.length > 0 : itemVisible(t));
+    // rather than showing an empty, useless header. Recursive so a group
+    // nested inside another group (Source Control > GitHub) is filtered
+    // the same way at every depth.
+    function filterTree(items) {
+        return items
+            .map((t) => t.type === "group" ? { ...t, children: filterTree(t.children) } : t)
+            .filter((t) => t.type === "group" ? t.children.length > 0 : itemVisible(t));
+    }
+
+    const visibleTabs = filterTree(TABS);
 
     function handleTabClick(key) {
 
@@ -268,8 +312,8 @@ export default function Sidebar() {
 
     }
 
-    // A single nav row - shared by top-level tabs and a group's children so
-    // the two never visually drift apart.
+    // A single nav row - shared by leaf tabs at any nesting depth so they
+    // never visually drift apart.
     function renderTabButton({ key, label, Icon }) {
 
         const locked = sidebarAccess[key] === "locked";
@@ -289,6 +333,71 @@ export default function Sidebar() {
                 </span>
                 <span className="app-sidebar-item-label">{label}</span>
             </button>
+
+        );
+
+    }
+
+    // Whether the currently active tab lives anywhere under this item -
+    // for a leaf, just an equality check; for a group, recurse into its
+    // children at any depth. Drives both the header's "active" styling and
+    // its forced-expanded state, so a group (or a group nested inside
+    // another group) can never end up collapsed while the page you're
+    // actually on lives inside it.
+    function containsActiveTab(item) {
+        return item.type === "group"
+            ? item.children.some(containsActiveTab)
+            : item.key === tab;
+    }
+
+    // One nav item, recursively - a leaf renders as a button; a group
+    // renders its own header (toggling that group's own collapse state,
+    // keyed independently per group so a nested group and its parent
+    // collapse/expand separately) plus its children rendered the same way,
+    // however deep that nesting goes. This is what makes Source Control >
+    // GitHub > Deploy/Approvals/... work as a real 3-level tree using the
+    // exact same rendering code as every 2-level group already uses.
+    function renderNavItem(item) {
+
+        if (item.type !== "group") {
+            return renderTabButton(item);
+        }
+
+        const groupActive = containsActiveTab(item);
+
+        // Icon-only rail: always expanded (there's no label/indent
+        // distinction to collapse anyway - see toggleGroup). Otherwise:
+        // forced open while the active page lives inside it, so collapsing
+        // a group can never hide where you currently are.
+        const isExpanded = collapsed || groupActive || !groupsCollapsed[item.key];
+
+        return (
+
+            <div key={item.key} className="app-sidebar-group">
+
+                <button
+                    type="button"
+                    className={`app-sidebar-item app-sidebar-group-header ${groupActive ? "group-active" : ""}`}
+                    onClick={() => toggleGroup(item.key)}
+                    title={collapsed ? item.label : undefined}
+                    aria-expanded={isExpanded}
+                >
+                    <span className="app-sidebar-item-icon">
+                        <item.Icon />
+                    </span>
+                    <span className="app-sidebar-item-label">{item.label}</span>
+                    <span className={`app-sidebar-group-chevron ${isExpanded ? "expanded" : ""}`}>
+                        <ChevronIcon direction="right" />
+                    </span>
+                </button>
+
+                {isExpanded && (
+                    <div className="app-sidebar-group-children">
+                        {item.children.map((child) => renderNavItem(child))}
+                    </div>
+                )}
+
+            </div>
 
         );
 
@@ -323,52 +432,7 @@ export default function Sidebar() {
 
                 <nav className="app-sidebar-nav">
 
-                    {visibleTabs.map((item) => {
-
-                        if (item.type !== "group") {
-                            return renderTabButton(item);
-                        }
-
-                        const groupActive = item.children.some((c) => c.key === tab);
-
-                        // Icon-only rail: always expanded (there's no label/
-                        // indent distinction to collapse anyway - see
-                        // toggleGroup). Otherwise: forced open while the
-                        // active page lives inside it, so collapsing a
-                        // group can never hide where you currently are.
-                        const isExpanded = collapsed || groupActive || !groupsCollapsed[item.key];
-
-                        return (
-
-                            <div key={item.key} className="app-sidebar-group">
-
-                                <button
-                                    type="button"
-                                    className={`app-sidebar-item app-sidebar-group-header ${groupActive ? "group-active" : ""}`}
-                                    onClick={() => toggleGroup(item.key)}
-                                    title={collapsed ? item.label : undefined}
-                                    aria-expanded={isExpanded}
-                                >
-                                    <span className="app-sidebar-item-icon">
-                                        <item.Icon />
-                                    </span>
-                                    <span className="app-sidebar-item-label">{item.label}</span>
-                                    <span className={`app-sidebar-group-chevron ${isExpanded ? "expanded" : ""}`}>
-                                        <ChevronIcon direction="right" />
-                                    </span>
-                                </button>
-
-                                {isExpanded && (
-                                    <div className="app-sidebar-group-children">
-                                        {item.children.map((child) => renderTabButton(child))}
-                                    </div>
-                                )}
-
-                            </div>
-
-                        );
-
-                    })}
+                    {visibleTabs.map((item) => renderNavItem(item))}
 
                 </nav>
 

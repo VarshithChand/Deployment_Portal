@@ -322,6 +322,78 @@ export function GitHubGroupIcon() {
     );
 }
 
+// Source Control's 5 providers - GitHub reuses its own existing
+// GitHubGroupIcon (repo-with-spine glyph) unchanged, now nested one level
+// deeper; the other 4 share PullRequestIcon's node-and-merge-line
+// vocabulary (already established as "this is a repo/branching concept" in
+// this file) with a small distinguishing accent each, same "one base
+// shape, one accent" economy as Container Registry's/Code Quality's icons.
+
+// The group header itself - a repo-spine rect (like GitHubGroupIcon) but
+// wider/plainer, reading as "any repository host" rather than GitHub
+// specifically.
+export function SourceControlIcon() {
+    return (
+        <svg {...common}>
+            <rect x="2" y="4" width="14" height="10" rx="1.5" stroke="currentColor" strokeWidth="1.4" />
+            <line x1="6" y1="4" x2="6" y2="14" stroke="currentColor" strokeWidth="1.3" />
+        </svg>
+    );
+}
+
+// Same branch-merge vocabulary as PullRequestIcon, but rotated/mirrored
+// (merging from the right instead of the left) so it doesn't read as a
+// literal duplicate.
+export function GitLabIcon() {
+    return (
+        <svg {...common}>
+            <circle cx="13" cy="4.5" r="2" stroke="currentColor" strokeWidth="1.4" />
+            <circle cx="13" cy="13.5" r="2" stroke="currentColor" strokeWidth="1.4" />
+            <line x1="13" y1="6.5" x2="13" y2="11.5" stroke="currentColor" strokeWidth="1.4" />
+            <circle cx="5" cy="13.5" r="2" stroke="currentColor" strokeWidth="1.4" />
+            <polyline points="11,4.5 5,4.5 5,11.5" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+    );
+}
+
+// A rounded rect (repo) with a small notch cut from the top-right corner -
+// distinct silhouette from GitHubGroupIcon's plain spine-rect.
+export function BitbucketIcon() {
+    return (
+        <svg {...common}>
+            <rect x="3" y="3" width="12" height="12" rx="1.6" stroke="currentColor" strokeWidth="1.4" />
+            <polygon points="10.5,3 15,3 15,7.5" fill="currentColor" />
+        </svg>
+    );
+}
+
+// A repo-spine rect (same base as GitHubGroupIcon/SourceControlIcon) with a
+// small triangular "cloud provider" accent at the bottom-right - Azure
+// Repos, keeping the same visual family Azure ACR's own icon already
+// established for this app's Azure integrations.
+export function AzureReposIcon() {
+    return (
+        <svg {...common}>
+            <rect x="3" y="3" width="12" height="12" rx="1.6" stroke="currentColor" strokeWidth="1.4" />
+            <line x1="6.5" y1="3" x2="6.5" y2="15" stroke="currentColor" strokeWidth="1.4" />
+            <polygon points="10.5,15 15,15 15,10.5" fill="currentColor" />
+        </svg>
+    );
+}
+
+// A repo-spine rect with a small "commit dot on a line" accent (a single
+// filled circle on a short line) - AWS CodeCommit.
+export function CodeCommitIcon() {
+    return (
+        <svg {...common}>
+            <rect x="3" y="3" width="12" height="12" rx="1.6" stroke="currentColor" strokeWidth="1.4" />
+            <line x1="6.5" y1="3" x2="6.5" y2="15" stroke="currentColor" strokeWidth="1.4" />
+            <line x1="9" y1="9" x2="14" y2="9" stroke="currentColor" strokeWidth="1.3" />
+            <circle cx="11.5" cy="9" r="1.6" fill="currentColor" />
+        </svg>
+    );
+}
+
 // Three overlapping filled circles capped by a rounded rect "ground line" -
 // the same filled-shapes-overlapping technique MoonIcon already uses above
 // (rather than a hand-authored curve path), reading as a simple cloud

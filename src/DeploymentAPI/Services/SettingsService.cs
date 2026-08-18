@@ -1072,6 +1072,56 @@ public class SettingsService
         }
     }
 
+    // Source Control providers (currently just Azure Repos - Organization +
+    // PAT) - reuses UserPaasCredentials(Token, AccountId)'s existing generic
+    // shape (AccountId holds the org name) rather than a new DTO, same
+    // reasoning as Docker Hub/GHCR above. provider is "azureRepos" today;
+    // future providers whose credential also happens to be a plain
+    // (identifier, secret) pair can slot into this same store. Storage:
+    // root["PortalSourceControlCredentials"][provider] = { Token, AccountId }.
+    public async Task<UserPaasCredentials> GetPortalSourceControlCredentialsAsync(string provider)
+    {
+        var root = await ReadRootAsync();
+        var entry = (root["PortalSourceControlCredentials"] as JObject)?[provider] as JObject;
+
+        return new UserPaasCredentials(
+            Unprotect(entry?["Token"]?.ToString()),
+            entry?["AccountId"]?.ToString());
+    }
+
+    // Blank fields keep whatever was already saved - see SavePortalPaasCredentialsAsync.
+    public async Task SavePortalSourceControlCredentialsAsync(string provider, PaasCredentialsUpdateDto update)
+    {
+        var root = await ReadRootAsync();
+        var providers = root["PortalSourceControlCredentials"] as JObject ?? new JObject();
+        var entry = providers[provider] as JObject ?? new JObject();
+
+        if (!string.IsNullOrWhiteSpace(update.Token))
+            entry["Token"] = Protect(update.Token.Trim());
+
+        if (!string.IsNullOrWhiteSpace(update.AccountId))
+            entry["AccountId"] = update.AccountId.Trim();
+
+        providers[provider] = entry;
+        root["PortalSourceControlCredentials"] = providers;
+        await WriteRootAsync(root);
+
+        _log.LogInfo("Settings", $"Portal-wide source control credentials saved ({provider}).");
+    }
+
+    public async Task ClearPortalSourceControlCredentialsAsync(string provider)
+    {
+        var root = await ReadRootAsync();
+
+        if (root["PortalSourceControlCredentials"] is JObject providers && providers[provider] != null)
+        {
+            providers.Remove(provider);
+            await WriteRootAsync(root);
+
+            _log.LogInfo("Settings", $"Portal-wide source control credentials cleared ({provider}).");
+        }
+    }
+
     // Which provider+service fills each of the Hosting Observability
     // dashboard's 3 roles - see PortalDeploymentTargetsDto. One object, not
     // per-provider, since there's exactly one Frontend/Backend/(optional)

@@ -27,9 +27,13 @@ import {
     getGhcrStatus, saveGhcrCredentials, clearGhcrCredentials,
     getGitLabRegistryStatus, getJfrogStatus, getHostRegistryStatus
 } from "../../services/containerRegistryService";
+import {
+    getAzureReposStatus, saveAzureReposCredentials, clearAzureReposCredentials
+} from "../../services/sourceControlService";
 
 const MODES = [
     { key: "github", label: "GitHub" },
+    { key: "azureRepos", label: "Azure Repos" },
     { key: "aws", label: "AWS" },
     { key: "azure", label: "Azure" },
     { key: "gcp", label: "GCP" },
@@ -62,7 +66,7 @@ const MODES = [
 const ALL_CREDENTIAL_PROVIDERS = [
     "github", "aws", "azure", "gcp", "apikey", "docker", "github-oauth", "sonarqube", "sonarcloud", "ai",
     "render", "cloudflare", "netlify", "vercel", "dockerhub", "ghcr", "gitlab-registry", "jfrog",
-    "harbor", "nexus"
+    "harbor", "nexus", "azureRepos"
 ];
 
 // A convenience picker, not a restriction — GEMINI_MODEL is still whatever
@@ -166,8 +170,9 @@ export default function CredentialsView({
             getHostRegistryStatus("harbor").catch(() => null),
             getHostRegistryStatus("nexus").catch(() => null),
             getSonarStatus("sonarqube").catch(() => null),
-            getSonarStatus("sonarcloud").catch(() => null)
-        ]).then(([aws, azure, gcp, apiKeysRes, render, cloudflare, netlify, vercel, dockerhub, ghcr, gitlabRegistry, jfrog, harbor, nexus, sonarqube, sonarcloud]) => {
+            getSonarStatus("sonarcloud").catch(() => null),
+            getAzureReposStatus().catch(() => null)
+        ]).then(([aws, azure, gcp, apiKeysRes, render, cloudflare, netlify, vercel, dockerhub, ghcr, gitlabRegistry, jfrog, harbor, nexus, sonarqube, sonarcloud, azureRepos]) => {
 
             const activeKeyCount = Array.isArray(apiKeysRes?.data)
                 ? apiKeysRes.data.filter((k) => !k.revoked).length
@@ -189,7 +194,8 @@ export default function CredentialsView({
                 harbor: harbor?.configured,
                 nexus: nexus?.configured,
                 sonarqube: sonarqube?.configured,
-                sonarcloud: sonarcloud?.configured
+                sonarcloud: sonarcloud?.configured,
+                azureRepos: azureRepos?.configured
             });
 
         });
@@ -344,6 +350,27 @@ export default function CredentialsView({
                     />
 
                 )
+
+            )}
+
+            {mode === "azureRepos" && (
+
+            <CredentialPinGate provider="azureRepos" unlocked={unlockedProviders.has("azureRepos")} onUnlocked={markAllUnlocked}>
+                <PortalRegistryLoginSection
+                    label="Azure Repos"
+                    usernameLabel="Organization"
+                    identityLabel="Organization"
+                    tokenLabel="Personal Access Token"
+                    helpText="Powers the Source Control hub's Azure Repos tab — your Azure DevOps organization name and a Personal Access Token with at least Code (Read) scope."
+                    statusFn={async () => {
+                        const result = await getAzureReposStatus();
+                        return { configured: result.configured, username: result.organization };
+                    }}
+                    saveFn={(payload) => saveAzureReposCredentials({ organization: payload.accountId, token: payload.token })}
+                    clearFn={clearAzureReposCredentials}
+                    onCleared={() => removeUnlocked("azureRepos")}
+                />
+            </CredentialPinGate>
 
             )}
 
