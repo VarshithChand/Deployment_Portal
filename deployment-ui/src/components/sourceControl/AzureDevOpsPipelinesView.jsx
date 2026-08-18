@@ -42,11 +42,6 @@ function classifyPipeline(item) {
 
 }
 
-// Azure DevOps run state/result as a colored badge - its own small helper
-// rather than reusing StatusBadge (that one speaks GitHub Actions'
-// queued/in_progress/success/failure vocabulary specifically) or StateBadge
-// (AWS resource states) - Azure Pipelines uses a different pair of fields
-// entirely (State while running, Result only once State is "completed").
 // Azure Pipelines' own declared parameter types that actually map onto a
 // plain input control - step/job/stage and their List variants are
 // YAML-authoring-time constructs (literal pipeline stage/job definitions)
@@ -55,6 +50,19 @@ function classifyPipeline(item) {
 // control for them.
 const RENDERABLE_PARAM_TYPES = new Set(["boolean", "string", "number"]);
 
+function formatParamLabel(name) {
+
+    return name
+        .replace(/[_-]+/g, " ")
+        .replace(/\b\w/g, (c) => c.toUpperCase());
+
+}
+
+// Azure DevOps run state/result as a colored badge - its own small helper
+// rather than reusing StatusBadge (that one speaks GitHub Actions'
+// queued/in_progress/success/failure vocabulary specifically) or StateBadge
+// (AWS resource states) - Azure Pipelines uses a different pair of fields
+// entirely (State while running, Result only once State is "completed").
 function RunStatusBadge({ state, result }) {
 
     const value = (result || state || "").toLowerCase();
@@ -73,19 +81,109 @@ function RunStatusBadge({ state, result }) {
 
 }
 
-// Azure DevOps' Pipelines sub-page - lists pipelines and recent run status/
-// history, plus a self-service "Run pipeline" action (the calling
+// Mirrors DeploymentSummary.jsx's own shape exactly (Mode/Branch/Workflow,
+// then a "Previous Run" section) so the Pipelines page reads as the same
+// pattern as GitHub's own Deploy page, just Azure DevOps-flavored -
+// Pipeline instead of Workflow, and this page's own run/parameter
+// vocabulary instead of GitHub Actions'.
+function PipelineSummary({ mode, pipelineName, branch, parameters, paramValues, latestRun }) {
+
+    return (
+
+        <div className="card">
+
+            <h2 className="card-title">Pipeline Summary</h2>
+
+            <div className="info-row">
+                <span>Mode</span>
+                <strong>
+                    <span className="badge badge-info">{mode}</span>
+                </strong>
+            </div>
+
+            <div className="info-row">
+                <span>Branch</span>
+                <strong>{branch || "-"}</strong>
+            </div>
+
+            <div className="info-row">
+                <span>Pipeline</span>
+                <strong>{pipelineName || "-"}</strong>
+            </div>
+
+            {(parameters || []).filter((p) => RENDERABLE_PARAM_TYPES.has(p.type)).map((p) => (
+
+                <div className="info-row" key={p.name}>
+                    <span>{p.displayName || formatParamLabel(p.name)}</span>
+                    <strong>
+                        {p.type === "boolean" ? (
+                            <span className={paramValues[p.name] === "true" ? "status-success" : "status-failed"}>
+                                {paramValues[p.name] === "true" ? "Enabled" : "Disabled"}
+                            </span>
+                        ) : (paramValues[p.name] || "-")}
+                    </strong>
+                </div>
+
+            ))}
+
+            {pipelineName && (
+
+                <>
+
+                <h2 className="card-title" style={{ marginTop: "20px" }}>Previous Run</h2>
+
+                {!latestRun ? (
+                    <p className="empty-state">This pipeline hasn't run yet.</p>
+                ) : (
+
+                    <>
+
+                    <div className="info-row">
+                        <span>Status</span>
+                        <strong><RunStatusBadge state={latestRun.state} result={latestRun.result} /></strong>
+                    </div>
+
+                    <div className="info-row">
+                        <span>Created</span>
+                        <strong>{latestRun.createdDate ? new Date(latestRun.createdDate).toLocaleString() : "-"}</strong>
+                    </div>
+
+                    <div className="info-row">
+                        <span>Finished</span>
+                        <strong>{latestRun.finishedDate ? new Date(latestRun.finishedDate).toLocaleString() : "-"}</strong>
+                    </div>
+
+                    {latestRun.webUrl && (
+                        <div className="info-row">
+                            <span>Link</span>
+                            <strong><a href={latestRun.webUrl} target="_blank" rel="noreferrer">Open in Azure DevOps →</a></strong>
+                        </div>
+                    )}
+
+                    </>
+
+                )}
+
+                </>
+
+            )}
+
+        </div>
+
+    );
+
+}
+
+// Azure DevOps' Pipelines sub-page - a two-panel "Pipeline Configuration" +
+// "Pipeline Summary" layout deliberately mirroring GitHub's own Deploy
+// page (DeploymentForm.jsx/DeploymentSummary.jsx - same .deploy-panel grid,
+// same live-updating summary alongside the form) rather than a bespoke
+// shape, plus a self-service "Run pipeline" action below both (the calling
 // session's own credential and its real Execute permission on Azure
 // DevOps' own side is the auth boundary, same posture as EC2/ECR mutating
 // actions elsewhere in this app - see RunPipelineAsync's own comment). The
 // project itself is picked once on the Dashboard sub-page and shared via
-// AzureDevOpsProjectContext - this page no longer asks for one separately,
-// matching how the real Azure DevOps portal's own project picker works.
-// A CI/CD/CI+CD-tabbed, search-by-name pipeline picker, an optional
-// branch picker, and that pipeline's own run history - deliberately
-// mirroring DeploymentForm.jsx's own GitHub Deploy form shape rather than
-// a folder browser, since Azure DevOps' folder structure isn't how a
-// visitor actually wants to find a specific pipeline to run.
+// AzureDevOpsProjectContext - this page no longer asks for one separately.
 export default function AzureDevOpsPipelinesView() {
 
     const { setTab } = useNavigation();
@@ -299,6 +397,8 @@ export default function AzureDevOpsPipelinesView() {
         [pipelines, mode]
     );
 
+    const selectedPipeline = modeFilteredPipelines.find((p) => String(p.id) === pipelineId);
+
     const runsList = runs?.runs || [];
     const {
         page: runsPage, setPage: setRunsPage, pageCount: runsPageCount, pageItems: runsPageItems,
@@ -325,265 +425,274 @@ export default function AzureDevOpsPipelinesView() {
 
         {dialog}
 
-        <div className="card">
+        <div className="deploy-panel">
 
-            <div className="button-row" style={{ justifyContent: "space-between", marginBottom: "12px" }}>
-                <h2 className="card-title" style={{ marginBottom: 0 }}>{project.name}</h2>
-                <a href="#" onClick={(e) => { e.preventDefault(); setTab("azureDevOpsDashboard"); }}>Change project</a>
-            </div>
+            <div className="card">
 
-            {pipelinesLoading ? (
-
-                <p className="field-hint">Loading pipelines...</p>
-
-            ) : !pipelines?.configured || pipelines.error ? (
-
-                <p className="error-message">{pipelines?.error || "Azure DevOps is not configured."}</p>
-
-            ) : (
-
-                <>
-
-                <div className="form-group">
-
-                    <label>Mode</label>
-
-                    <div className="mode-toggle">
-
-                        <button
-                            type="button"
-                            className={`mode-toggle-option ${mode === "CI" ? "active" : ""}`}
-                            onClick={() => handleModeChange("CI")}
-                        >
-                            CI
-                        </button>
-
-                        <button
-                            type="button"
-                            className={`mode-toggle-option ${mode === "CD" ? "active" : ""}`}
-                            onClick={() => handleModeChange("CD")}
-                        >
-                            CD
-                        </button>
-
-                        <button
-                            type="button"
-                            className={`mode-toggle-option ${mode === "CI+CD" ? "active" : ""}`}
-                            onClick={() => handleModeChange("CI+CD")}
-                        >
-                            CI+CD
-                        </button>
-
-                    </div>
-
+                <div className="button-row" style={{ justifyContent: "space-between" }}>
+                    <h2 className="card-title" style={{ marginBottom: 0 }}>Pipeline Configuration</h2>
+                    <a href="#" onClick={(e) => { e.preventDefault(); setTab("azureDevOpsDashboard"); }}>Change project</a>
                 </div>
 
-                <div className="form-group">
+                <p className="field-hint" style={{ marginTop: 0 }}>{project.name}</p>
 
-                    <label>Pipeline</label>
+                {pipelinesLoading ? (
 
-                    <p className="field-hint">
-                        {mode === "CI"
-                            ? "Showing pipelines that look like CI (build/test) only."
-                            : mode === "CD"
-                                ? "Showing pipelines that look like release/deploy only."
-                                : "Showing pipelines that combine CI and CD (e.g. \"Build & Release\")."}
-                    </p>
+                    <p className="field-hint">Loading pipelines...</p>
 
-                    <ComboBox
-                        options={modeFilteredPipelines.map((p) => ({ value: String(p.id), label: p.name }))}
-                        value={pipelineId}
-                        onChange={handleSelectPipeline}
-                        placeholder="Search or select a pipeline..."
-                        emptyLabel={`No ${mode} pipeline found`}
-                    />
+                ) : !pipelines?.configured || pipelines.error ? (
 
-                </div>
+                    <p className="error-message">{pipelines?.error || "Azure DevOps is not configured."}</p>
 
-                {pipelineId && (
+                ) : (
 
                     <>
 
                     <div className="form-group">
 
-                        <label>Branch</label>
+                        <label>Mode</label>
 
-                        <p className="field-hint">
-                            Optional - leave blank to run against this pipeline's own configured default branch.
-                        </p>
+                        <div className="mode-toggle">
 
-                        {branchesLoading ? (
+                            <button
+                                type="button"
+                                className={`mode-toggle-option ${mode === "CI" ? "active" : ""}`}
+                                onClick={() => handleModeChange("CI")}
+                            >
+                                CI
+                            </button>
 
-                            <p className="field-hint">Loading branches...</p>
+                            <button
+                                type="button"
+                                className={`mode-toggle-option ${mode === "CD" ? "active" : ""}`}
+                                onClick={() => handleModeChange("CD")}
+                            >
+                                CD
+                            </button>
 
-                        ) : branches?.error ? (
+                            <button
+                                type="button"
+                                className={`mode-toggle-option ${mode === "CI+CD" ? "active" : ""}`}
+                                onClick={() => handleModeChange("CI+CD")}
+                            >
+                                CI+CD
+                            </button>
 
-                            <p className="field-hint">{branches.error}</p>
-
-                        ) : (
-
-                            <ComboBox
-                                options={(branches?.branches || []).map((b) => ({ value: b.name, label: b.name }))}
-                                value={branch}
-                                onChange={setBranch}
-                                placeholder="Search or select a branch..."
-                                emptyLabel="No branch found"
-                            />
-
-                        )}
+                        </div>
 
                     </div>
 
-                    {parametersLoading ? (
+                    <div className="form-group">
 
-                        <p className="field-hint">Loading pipeline parameters...</p>
+                        <label>Branch</label>
 
-                    ) : parameters?.error ? (
+                        <ComboBox
+                            options={(branches?.branches || []).map((b) => ({ value: b.name, label: b.name }))}
+                            value={branch}
+                            onChange={setBranch}
+                            placeholder="Search or select a branch..."
+                            emptyLabel={pipelineId ? "No branch found" : "Pick a pipeline first"}
+                        />
 
-                        <p className="field-hint">{parameters.error}</p>
+                    </div>
 
-                    ) : (parameters?.parameters || []).filter((p) => RENDERABLE_PARAM_TYPES.has(p.type)).length > 0 && (
+                    <div className="form-group">
 
-                        <div className="form-group">
+                        <label>Pipeline</label>
 
-                            <label>Parameters</label>
+                        <p className="field-hint">
+                            {mode === "CI"
+                                ? "Showing pipelines that look like CI (build/test) only."
+                                : mode === "CD"
+                                    ? "Showing pipelines that look like release/deploy only."
+                                    : "Showing pipelines that combine CI and CD (e.g. \"Build & Release\")."}
+                        </p>
 
-                            <p className="field-hint">
-                                Declared by this pipeline's own YAML file, same as Azure DevOps' own "Run pipeline" dialog.
-                            </p>
+                        <ComboBox
+                            options={modeFilteredPipelines.map((p) => ({ value: String(p.id), label: p.name }))}
+                            value={pipelineId}
+                            onChange={handleSelectPipeline}
+                            placeholder="Search or select a pipeline..."
+                            emptyLabel={`No ${mode} pipeline found`}
+                        />
 
-                            {parameters.parameters.filter((p) => RENDERABLE_PARAM_TYPES.has(p.type)).map((p) => (
+                    </div>
 
-                                p.type === "boolean" ? (
+                    {pipelineId && (
 
-                                    <label key={p.name} className="checkbox-list-item" style={{ display: "block" }}>
-                                        <input
-                                            type="checkbox"
-                                            checked={paramValues[p.name] === "true"}
-                                            onChange={(e) => setParamValue(p.name, e.target.checked ? "true" : "false")}
-                                        />
-                                        &nbsp;{p.displayName || p.name}
-                                    </label>
+                        <>
 
-                                ) : p.values && p.values.length > 0 ? (
+                        {branchesLoading && <p className="field-hint">Loading branches...</p>}
+                        {branches?.error && <p className="field-hint">{branches.error}</p>}
 
-                                    <div key={p.name} style={{ marginBottom: "10px" }}>
-                                        <label style={{ display: "block" }}>{p.displayName || p.name}</label>
-                                        <ComboBox
-                                            options={p.values.map((v) => ({ value: v, label: v }))}
-                                            value={paramValues[p.name] || ""}
-                                            onChange={(value) => setParamValue(p.name, value)}
-                                            placeholder={`Search or select ${p.displayName || p.name}...`}
-                                            emptyLabel="No matching value"
-                                        />
-                                    </div>
+                        {parametersLoading ? (
 
-                                ) : (
+                            <p className="field-hint">Loading pipeline parameters...</p>
 
-                                    <div key={p.name} className="form-group" style={{ marginBottom: "10px" }}>
-                                        <label>{p.displayName || p.name}</label>
-                                        <input
-                                            type={p.type === "number" ? "number" : "text"}
-                                            className="form-control"
-                                            value={paramValues[p.name] || ""}
-                                            onChange={(e) => setParamValue(p.name, e.target.value)}
-                                        />
-                                    </div>
+                        ) : parameters?.error ? (
 
-                                )
+                            <p className="field-hint">{parameters.error}</p>
 
-                            ))}
+                        ) : (parameters?.parameters || []).filter((p) => RENDERABLE_PARAM_TYPES.has(p.type)).length > 0 && (
 
-                        </div>
+                            <div className="form-group">
+
+                                <label>Parameters</label>
+
+                                <p className="field-hint">
+                                    Declared by this pipeline's own YAML file, same as Azure DevOps' own "Run pipeline" dialog.
+                                </p>
+
+                                {parameters.parameters.filter((p) => RENDERABLE_PARAM_TYPES.has(p.type)).map((p) => (
+
+                                    p.type === "boolean" ? (
+
+                                        <label key={p.name} className="checkbox-list-item" style={{ display: "block" }}>
+                                            <input
+                                                type="checkbox"
+                                                checked={paramValues[p.name] === "true"}
+                                                onChange={(e) => setParamValue(p.name, e.target.checked ? "true" : "false")}
+                                            />
+                                            &nbsp;{p.displayName || p.name}
+                                        </label>
+
+                                    ) : p.values && p.values.length > 0 ? (
+
+                                        <div key={p.name} style={{ marginBottom: "10px" }}>
+                                            <label style={{ display: "block" }}>{p.displayName || p.name}</label>
+                                            <ComboBox
+                                                options={p.values.map((v) => ({ value: v, label: v }))}
+                                                value={paramValues[p.name] || ""}
+                                                onChange={(value) => setParamValue(p.name, value)}
+                                                placeholder={`Search or select ${p.displayName || p.name}...`}
+                                                emptyLabel="No matching value"
+                                            />
+                                        </div>
+
+                                    ) : (
+
+                                        <div key={p.name} className="form-group" style={{ marginBottom: "10px" }}>
+                                            <label>{p.displayName || p.name}</label>
+                                            <input
+                                                type={p.type === "number" ? "number" : "text"}
+                                                className="form-control"
+                                                value={paramValues[p.name] || ""}
+                                                onChange={(e) => setParamValue(p.name, e.target.value)}
+                                            />
+                                        </div>
+
+                                    )
+
+                                ))}
+
+                            </div>
+
+                        )}
+
+                        </>
 
                     )}
 
                     <button
                         type="button"
                         className="btn btn-primary"
-                        style={{ marginBottom: "20px" }}
+                        disabled={!pipelineId || running}
                         onClick={handleRunPipeline}
-                        disabled={running}
                     >
                         {running ? "Starting..." : "Run Pipeline"}
                     </button>
-
-                    <h3 className="settings-subhead">Run History</h3>
-
-                    {runsLoading ? (
-
-                        <p className="field-hint">Loading run history...</p>
-
-                    ) : !runs?.configured || runs.error ? (
-
-                        <p className="error-message">{runs?.error || "Unable to load run history."}</p>
-
-                    ) : runsList.length === 0 ? (
-
-                        <p className="empty-state" style={{ textAlign: "left" }}>No runs for this pipeline yet.</p>
-
-                    ) : (
-
-                        <>
-
-                        <div className="table-scroll">
-
-                            <table className="table">
-
-                                <thead>
-                                    <tr>
-                                        <th>Run</th>
-                                        <th>Status</th>
-                                        <th>Created</th>
-                                        <th>Finished</th>
-                                    </tr>
-                                </thead>
-
-                                <tbody>
-
-                                    {runsPageItems.map((run) => (
-
-                                        <tr key={run.id}>
-                                            <td>
-                                                {run.webUrl ? (
-                                                    <a href={run.webUrl} target="_blank" rel="noreferrer">{run.name || `#${run.id}`}</a>
-                                                ) : (run.name || `#${run.id}`)}
-                                            </td>
-                                            <td><RunStatusBadge state={run.state} result={run.result} /></td>
-                                            <td>{run.createdDate ? new Date(run.createdDate).toLocaleString() : "—"}</td>
-                                            <td>{run.finishedDate ? new Date(run.finishedDate).toLocaleString() : "—"}</td>
-                                        </tr>
-
-                                    ))}
-
-                                </tbody>
-
-                            </table>
-
-                        </div>
-
-                        <Pagination
-                            page={runsPage}
-                            pageCount={runsPageCount}
-                            totalCount={runsTotalCount}
-                            startIndex={runsStartIndex}
-                            endIndex={runsEndIndex}
-                            onPageChange={setRunsPage}
-                        />
-
-                        </>
-
-                    )}
 
                     </>
 
                 )}
 
-                </>
+            </div>
 
-            )}
+            <PipelineSummary
+                mode={mode}
+                pipelineName={selectedPipeline?.name}
+                branch={branch}
+                parameters={parameters?.parameters}
+                paramValues={paramValues}
+                latestRun={runsList[0]}
+            />
 
         </div>
+
+        {pipelineId && (
+
+            <div className="card" style={{ marginTop: "20px" }}>
+
+                <h2 className="card-title">Run History</h2>
+
+                {runsLoading ? (
+
+                    <p className="field-hint">Loading run history...</p>
+
+                ) : !runs?.configured || runs.error ? (
+
+                    <p className="error-message">{runs?.error || "Unable to load run history."}</p>
+
+                ) : runsList.length === 0 ? (
+
+                    <p className="empty-state" style={{ textAlign: "left" }}>No runs for this pipeline yet.</p>
+
+                ) : (
+
+                    <>
+
+                    <div className="table-scroll">
+
+                        <table className="table">
+
+                            <thead>
+                                <tr>
+                                    <th>Run</th>
+                                    <th>Status</th>
+                                    <th>Created</th>
+                                    <th>Finished</th>
+                                </tr>
+                            </thead>
+
+                            <tbody>
+
+                                {runsPageItems.map((run) => (
+
+                                    <tr key={run.id}>
+                                        <td>
+                                            {run.webUrl ? (
+                                                <a href={run.webUrl} target="_blank" rel="noreferrer">{run.name || `#${run.id}`}</a>
+                                            ) : (run.name || `#${run.id}`)}
+                                        </td>
+                                        <td><RunStatusBadge state={run.state} result={run.result} /></td>
+                                        <td>{run.createdDate ? new Date(run.createdDate).toLocaleString() : "—"}</td>
+                                        <td>{run.finishedDate ? new Date(run.finishedDate).toLocaleString() : "—"}</td>
+                                    </tr>
+
+                                ))}
+
+                            </tbody>
+
+                        </table>
+
+                    </div>
+
+                    <Pagination
+                        page={runsPage}
+                        pageCount={runsPageCount}
+                        totalCount={runsTotalCount}
+                        startIndex={runsStartIndex}
+                        endIndex={runsEndIndex}
+                        onPageChange={setRunsPage}
+                    />
+
+                    </>
+
+                )}
+
+            </div>
+
+        )}
 
         </>
 
