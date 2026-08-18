@@ -211,10 +211,14 @@ builder.Services.AddSingleton<CloudServiceManagementService>();
 // in per-call, its two shared HttpClients never carry per-caller state on
 // themselves - see ContainerRegistryService's own comment on that).
 builder.Services.AddSingleton<ContainerRegistryService>();
-// Source Control's Azure Repos/AWS CodeCommit sub-pages - same
-// statelessness as ContainerRegistryService/CloudServiceManagementService
-// above (every credential is passed in per-call).
+// Source Control's AWS CodeCommit sub-page - same statelessness as
+// ContainerRegistryService/CloudServiceManagementService above (every
+// credential is passed in per-call).
 builder.Services.AddSingleton<SourceControlService>();
+// Source Control's Azure DevOps sub-pages (Branches/Pipelines/Build
+// Artifacts/Package Feeds) - same statelessness as SourceControlService
+// above.
+builder.Services.AddSingleton<AzureDevOpsService>();
 // Its only state is IMemoryCache-backed pending sign-ins, already a
 // Singleton itself - safe to share the same way.
 builder.Services.AddSingleton<AwsSsoService>();

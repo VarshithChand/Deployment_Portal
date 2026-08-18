@@ -26,7 +26,7 @@ public static class CredentialGate
     {
         "github", "aws", "azure", "gcp", "apikey", "docker", "github-oauth", "sonarqube", "sonarcloud", "ai",
         "render", "cloudflare", "netlify", "vercel", "dockerhub", "ghcr", "gitlab-registry", "jfrog",
-        "harbor", "nexus", "azureRepos"
+        "harbor", "nexus", "azureDevOps"
     };
 
     public static async Task<IActionResult?> DenyUnlessUnlockedAsync(

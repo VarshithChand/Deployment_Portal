@@ -1032,11 +1032,12 @@ public class SettingsService
         }
     }
 
-    // Source Control providers (currently just Azure Repos - Organization +
-    // PAT) - reuses UserPaasCredentials(Token, AccountId)'s existing generic
-    // shape and method set directly (AccountId holds the org name), same as
-    // Docker Hub/GHCR above - callers pass provider "azureRepos" straight
-    // into GetUserPaasCredentialsAsync/SaveUserPaasCredentialsAsync/
+    // Source Control providers (currently just Azure DevOps - Organization +
+    // PAT, powering the Branches/Pipelines/Build Artifacts/Package Feeds
+    // sub-pages) - reuses UserPaasCredentials(Token, AccountId)'s existing
+    // generic shape and method set directly (AccountId holds the org name),
+    // same as Docker Hub/GHCR above - callers pass provider "azureDevOps"
+    // straight into GetUserPaasCredentialsAsync/SaveUserPaasCredentialsAsync/
     // ClearUserPaasCredentialsAsync. No dedicated methods needed here.
 
     // Which provider+service fills each of the Hosting Observability

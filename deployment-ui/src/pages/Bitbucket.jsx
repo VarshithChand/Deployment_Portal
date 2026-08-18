@@ -2,7 +2,7 @@ import PageLayout from "../components/layout/PageLayout";
 
 // Not built yet - Bitbucket needs its own credential shape (a Workspace +
 // an App Password, a materially different model from GitLab's Host-URL-
-// plus-PAT or Azure Repos' Organization-plus-PAT) that hasn't been
+// plus-PAT or Azure DevOps' Organization-plus-PAT) that hasn't been
 // specified - a real, visible placeholder rather than a guess.
 export default function Bitbucket() {
 

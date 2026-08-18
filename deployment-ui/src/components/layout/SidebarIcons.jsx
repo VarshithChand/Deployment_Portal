@@ -372,20 +372,79 @@ export function BitbucketIcon() {
     );
 }
 
-// A diamond outline with a filled triangle inside - Azure Repos. The
-// diamond is the same "this is Azure" signature Azure ACR's icon uses
-// below (AcrIcon) and Azure Cloud Services uses too (AzureCloudIcon) - a
-// deliberate, recognizable brand thread across this app's Azure
-// integrations, same reasoning the old accent-only version already had.
-// Distinct from all three by inner fill: triangle here, square on ACR,
-// circle on Cloud Services - and none of the three ever sit adjacent to
-// each other in the rail, so the shared outline doesn't repeat the "looks
-// the same at a glance" problem this round exists to fix.
-export function AzureReposIcon() {
+// A diamond outline with a filled triangle inside - the Azure DevOps group
+// header. The diamond is the same "this is Azure" signature Azure ACR's
+// icon uses (AcrIcon, in the Container Registry group) and Azure Cloud
+// Services uses too (AzureCloudIcon) - a deliberate, recognizable brand
+// thread across this app's Azure integrations. Distinct from both by inner
+// fill: triangle here, square on ACR, circle on Cloud Services - and none
+// of the three ever sit adjacent to each other in the rail, so the shared
+// outline doesn't repeat the "looks the same at a glance" problem Round 63
+// fixed. The 4 children below (Branches/Pipelines/Build Artifacts/Package
+// Feeds) each get their own fresh silhouette instead, since THOSE are
+// direct siblings that would actually stack next to each other.
+export function AzureDevOpsIcon() {
     return (
         <svg {...common}>
             <polygon points="9,1.5 16.5,9 9,16.5 1.5,9" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
             <polygon points="9,5.5 12.5,11.5 5.5,11.5" fill="currentColor" />
+        </svg>
+    );
+}
+
+// Azure DevOps' 4 sub-pages - each its own distinct silhouette, not a
+// shared base plus accent (see Round 63's own reasoning on why that
+// pattern reads as identical at 18px).
+
+// A Y-shaped fork - one trunk node splitting into two branch nodes -
+// Branches. Distinct from PullRequestIcon/GitLabIcon's own dual-node shape,
+// which MERGES two into one via a right-angle line; this one SPLITS one
+// into two via a symmetric fork.
+export function AzureDevOpsBranchesIcon() {
+    return (
+        <svg {...common}>
+            <circle cx="9" cy="15" r="1.8" fill="currentColor" />
+            <circle cx="4.5" cy="3" r="1.8" stroke="currentColor" strokeWidth="1.4" />
+            <circle cx="13.5" cy="3" r="1.8" stroke="currentColor" strokeWidth="1.4" />
+            <line x1="9" y1="13.2" x2="9" y2="9" stroke="currentColor" strokeWidth="1.3" />
+            <line x1="9" y1="9" x2="4.5" y2="4.8" stroke="currentColor" strokeWidth="1.3" />
+            <line x1="9" y1="9" x2="13.5" y2="4.8" stroke="currentColor" strokeWidth="1.3" />
+        </svg>
+    );
+}
+
+// Three small connected boxes in a row - build/test/deploy stages -
+// Pipelines. A wide, short silhouette unlike anything else in this group.
+export function AzureDevOpsPipelinesIcon() {
+    return (
+        <svg {...common}>
+            <rect x="1.5" y="7" width="4" height="4" rx="0.8" stroke="currentColor" strokeWidth="1.3" />
+            <rect x="7" y="7" width="4" height="4" rx="0.8" stroke="currentColor" strokeWidth="1.3" />
+            <rect x="12.5" y="7" width="4" height="4" rx="0.8" stroke="currentColor" strokeWidth="1.3" />
+            <line x1="5.5" y1="9" x2="7" y2="9" stroke="currentColor" strokeWidth="1.3" />
+            <line x1="11" y1="9" x2="12.5" y2="9" stroke="currentColor" strokeWidth="1.3" />
+        </svg>
+    );
+}
+
+// A box with an arrow rising out of it - "output produced by a run" -
+// Build Artifacts.
+export function AzureDevOpsArtifactsIcon() {
+    return (
+        <svg {...common}>
+            <rect x="3" y="9" width="12" height="6" rx="1" stroke="currentColor" strokeWidth="1.4" />
+            <line x1="9" y1="8" x2="9" y2="2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+            <polyline points="6,4.5 9,1.5 12,4.5" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+    );
+}
+
+// Two overlapping boxes - a stack of package versions - Package Feeds.
+export function AzureDevOpsFeedsIcon() {
+    return (
+        <svg {...common}>
+            <rect x="5" y="2" width="9" height="9" rx="1" stroke="currentColor" strokeWidth="1.3" />
+            <rect x="2" y="7" width="9" height="9" rx="1" stroke="currentColor" strokeWidth="1.3" />
         </svg>
     );
 }
@@ -440,8 +499,8 @@ export function AwsCloudIcon() {
     );
 }
 
-// Azure - a diamond outline, the same "this is Azure" signature AzureReposIcon
-// and AcrIcon use (see AzureReposIcon's own comment) - inner fill (a circle
+// Azure - a diamond outline, the same "this is Azure" signature AzureDevOpsIcon
+// and AcrIcon use (see AzureDevOpsIcon's own comment) - inner fill (a circle
 // here, vs. triangle/square on the other two) keeps this one distinct from
 // them even though none of the three are ever adjacent in the rail anyway.
 export function AzureCloudIcon() {
@@ -515,8 +574,8 @@ export function EcrIcon() {
 }
 
 // A diamond outline with a filled square inside - Azure ACR, part of the
-// same "diamond = Azure" thread as AzureReposIcon/AzureCloudIcon (see
-// AzureReposIcon's own comment), distinguished from both by its inner fill.
+// same "diamond = Azure" thread as AzureDevOpsIcon/AzureCloudIcon (see
+// AzureDevOpsIcon's own comment), distinguished from both by its inner fill.
 export function AcrIcon() {
     return (
         <svg {...common}>

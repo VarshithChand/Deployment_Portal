@@ -29,7 +29,11 @@ import {
     SourceControlIcon,
     GitLabIcon,
     BitbucketIcon,
-    AzureReposIcon,
+    AzureDevOpsIcon,
+    AzureDevOpsBranchesIcon,
+    AzureDevOpsPipelinesIcon,
+    AzureDevOpsArtifactsIcon,
+    AzureDevOpsFeedsIcon,
     CodeCommitIcon,
     CloudServicesIcon,
     AwsCloudIcon,
@@ -63,12 +67,12 @@ import useToast from "../../hooks/useToast";
 export const GATED_TABS = new Set(["approvals", "pullRequests"]);
 
 // Every source-control provider lives grouped under one collapsible
-// "Source Control" section, itself containing a NESTED "GitHub" group (its
-// own 9 pipeline/repo pages, unchanged, just one level deeper now) plus
-// GitLab/Bitbucket/Azure Repos/AWS CodeCommit as siblings - the Sidebar
-// now supports arbitrarily nested groups (see renderNavItem/filterTree/
-// flattenTabs below), a generalization of the single-level grouping GitHub
-// itself introduced first. A "group" entry is purely a Sidebar-side
+// "Source Control" section, itself containing two NESTED groups (its own
+// "GitHub" - 9 pipeline/repo pages - and "Azure DevOps" - 4 sub-pages) plus
+// GitLab/Bitbucket/AWS CodeCommit as siblings - the Sidebar supports
+// arbitrarily nested groups (see renderNavItem/filterTree/flattenTabs
+// below), a generalization of the single-level grouping GitHub itself
+// introduced first. A "group" entry is purely a Sidebar-side
 // grouping - it has no tab key of its own and never appears in App.jsx's
 // tab switch; only leaf children (at any depth) do.
 export const TABS = [
@@ -96,17 +100,32 @@ export const TABS = [
                     { key: "templates", label: "Template Tester", Icon: TemplatesIcon }
                 ]
             },
-            // Real, built pages (own session/portal credential, own
-            // browse view) - Azure Repos needs an Organization + PAT (see
-            // Settings → Credentials → Azure DevOps); AWS CodeCommit
-            // reuses this session's own AWS credentials, same as ECR does,
-            // no new credential to set up.
-            { key: "azureRepos", label: "Azure Repos", Icon: AzureReposIcon },
+            // Azure DevOps - one Organization + PAT credential (see
+            // Settings → Credentials → Azure DevOps) powering four real,
+            // independently-navigable sub-pages: Branches (Git repos, org-
+            // wide) plus three project-scoped ones (Pipelines' run history,
+            // Build Artifacts, and Azure Artifacts' Package Feeds - view-
+            // only, no run-trigger action). Nested the same way GitHub
+            // above is, since it's now more than one page deep.
+            {
+                key: "azureDevOpsGroup",
+                type: "group",
+                label: "Azure DevOps",
+                Icon: AzureDevOpsIcon,
+                children: [
+                    { key: "azureDevOpsBranches", label: "Branches", Icon: AzureDevOpsBranchesIcon },
+                    { key: "azureDevOpsPipelines", label: "Pipelines", Icon: AzureDevOpsPipelinesIcon },
+                    { key: "azureDevOpsArtifacts", label: "Build Artifacts", Icon: AzureDevOpsArtifactsIcon },
+                    { key: "azureDevOpsFeeds", label: "Package Feeds", Icon: AzureDevOpsFeedsIcon }
+                ]
+            },
+            // AWS CodeCommit reuses this session's own AWS credentials,
+            // same as ECR does, no new credential to set up.
             { key: "codeCommit", label: "AWS CodeCommit", Icon: CodeCommitIcon },
             // Not built yet - neither provider's exact credential shape
             // (GitLab: Host URL + PAT; Bitbucket: Workspace + App
             // Password, a materially different model from either GitLab
-            // or Azure Repos) was specified, so these are real, navigable
+            // or Azure DevOps) was specified, so these are real, navigable
             // pages showing an honest "not built yet" state - same
             // posture as Harbor/Nexus/ESLint before they were built out
             // (see pages/GitLab.jsx/Bitbucket.jsx) - not a guessed

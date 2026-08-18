@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 
-import { getAzureReposRepositories, getAzureReposBranches } from "../../services/sourceControlService";
+import { getAzureDevOpsRepositories, getAzureDevOpsBranches } from "../../services/azureDevOpsService";
 import usePagination from "../../hooks/usePagination";
 import Pagination from "../common/Pagination";
 import SearchBox from "../common/SearchBox";
@@ -9,11 +9,14 @@ import useNavigation from "../../hooks/useNavigation";
 
 const PAGE_SIZE = 10;
 
-// Azure Repos - two levels (repositories -> branches), against this
-// session's own credential (see PortalRegistryLoginSection in
-// Settings → Credentials → Azure Repos). Lists across the whole
-// organization (every project's repositories), not one project at a time.
-export default function AzureReposView() {
+// Azure DevOps' Branches sub-page - two levels (repositories -> branches),
+// against this session's own credential (see PortalRegistryLoginSection in
+// Settings → Credentials → Azure DevOps). Lists across the whole
+// organization (every project's repositories), not one project at a time -
+// the org-wide repository list endpoint carries each repo's own project
+// name already, so no project picker is needed here (unlike Pipelines/
+// Build Artifacts, which the Git refs API can't offer that shortcut for).
+export default function AzureDevOpsBranchesView() {
 
     const { setTab } = useNavigation();
 
@@ -29,7 +32,7 @@ export default function AzureReposView() {
 
         setLoading(true);
 
-        getAzureReposRepositories().then((data) => {
+        getAzureDevOpsRepositories().then((data) => {
             setList(data);
             setLoading(false);
         }).catch((err) => {
@@ -47,7 +50,7 @@ export default function AzureReposView() {
         setSelectedRepo(repo);
         setBranchesLoading(true);
 
-        getAzureReposBranches(repo.projectName, repo.id).then((data) => {
+        getAzureDevOpsBranches(repo.projectName, repo.id).then((data) => {
             setBranches(data);
             setBranchesLoading(false);
         }).catch((err) => {
@@ -90,7 +93,7 @@ export default function AzureReposView() {
 
                 ) : !branches?.configured || branches.error ? (
 
-                    <p className="error-message">{branches?.error || "Azure Repos is not configured."}</p>
+                    <p className="error-message">{branches?.error || "Azure DevOps is not configured."}</p>
 
                 ) : branches.branches.length === 0 ? (
 
@@ -133,7 +136,7 @@ export default function AzureReposView() {
     }
 
     if (loading) {
-        return <div className="card"><p className="empty-state">Loading Azure Repos repositories...</p></div>;
+        return <div className="card"><p className="empty-state">Loading Azure DevOps repositories...</p></div>;
     }
 
     if (!list?.configured) {
@@ -141,8 +144,8 @@ export default function AzureReposView() {
         return (
             <div className="card">
                 <p className="empty-state" style={{ textAlign: "left" }}>
-                    Connect your Azure Repos credentials in{" "}
-                    <a href="#" onClick={(e) => { e.preventDefault(); setTab("settings"); }}>Settings → Credentials → Azure Repos</a>
+                    Connect your Azure DevOps credentials in{" "}
+                    <a href="#" onClick={(e) => { e.preventDefault(); setTab("settings"); }}>Settings → Credentials → Azure DevOps</a>
                     {" "}to browse this.
                 </p>
             </div>
@@ -159,7 +162,7 @@ export default function AzureReposView() {
         <div className="card">
 
             <div className="button-row" style={{ justifyContent: "space-between", marginBottom: "12px" }}>
-                <h2 className="card-title" style={{ marginBottom: 0 }}>Azure Repos Repositories</h2>
+                <h2 className="card-title" style={{ marginBottom: 0 }}>Azure DevOps Repositories</h2>
                 <button type="button" className="btn btn-secondary btn-sm" onClick={refresh}>Refresh</button>
             </div>
 

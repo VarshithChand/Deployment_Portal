@@ -38,7 +38,10 @@ const Environments = lazy(() => import("./pages/Environments"));
 const Analytics = lazy(() => import("./pages/Analytics"));
 const Timeline = lazy(() => import("./pages/Timeline"));
 const TemplateTester = lazy(() => import("./pages/TemplateTester"));
-const AzureRepos = lazy(() => import("./pages/AzureRepos"));
+const AzureDevOpsBranches = lazy(() => import("./pages/AzureDevOpsBranches"));
+const AzureDevOpsPipelines = lazy(() => import("./pages/AzureDevOpsPipelines"));
+const AzureDevOpsArtifacts = lazy(() => import("./pages/AzureDevOpsArtifacts"));
+const AzureDevOpsFeeds = lazy(() => import("./pages/AzureDevOpsFeeds"));
 const CodeCommit = lazy(() => import("./pages/CodeCommit"));
 const GitLab = lazy(() => import("./pages/GitLab"));
 const Bitbucket = lazy(() => import("./pages/Bitbucket"));
@@ -239,7 +242,10 @@ function App(){
                             {tab === "history" && <History/>}
                             {tab === "environments" && <Environments/>}
                             {tab === "templates" && <TemplateTester/>}
-                            {tab === "azureRepos" && <AzureRepos/>}
+                            {tab === "azureDevOpsBranches" && <AzureDevOpsBranches/>}
+                            {tab === "azureDevOpsPipelines" && <AzureDevOpsPipelines/>}
+                            {tab === "azureDevOpsArtifacts" && <AzureDevOpsArtifacts/>}
+                            {tab === "azureDevOpsFeeds" && <AzureDevOpsFeeds/>}
                             {tab === "codeCommit" && <CodeCommit/>}
                             {tab === "gitlab" && <GitLab/>}
                             {tab === "bitbucket" && <Bitbucket/>}

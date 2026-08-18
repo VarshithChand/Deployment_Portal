@@ -5,14 +5,15 @@ import useToast from "../../../hooks/useToast";
 
 const EMPTY_FORM = { username: "", token: "" };
 
-// Docker Hub and GHCR's credential form (see ContainerRegistryController) -
-// session-scoped (see PortalIdentity), same isolation as AwsLoginSection/
-// AzureLoginSection/PaasLoginSection above: each visitor connects their own,
-// never shared with any other visitor of the portal. statusFn/saveFn/clearFn
-// are passed in per-provider (containerRegistryService.js) rather than this
-// component branching on a provider string itself, since the two providers'
-// username/token labels and help text differ enough to be worth spelling
-// out at the call site.
+// Docker Hub/GHCR's and Azure DevOps' credential form (see
+// ContainerRegistryController/AzureDevOpsController) - session-scoped (see
+// PortalIdentity), same isolation as AwsLoginSection/AzureLoginSection/
+// PaasLoginSection above: each visitor connects their own, never shared
+// with any other visitor of the portal. statusFn/saveFn/clearFn are passed
+// in per-provider (containerRegistryService.js/azureDevOpsService.js)
+// rather than this component branching on a provider string itself, since
+// each provider's username/token labels and help text differ enough to be
+// worth spelling out at the call site.
 export default function PortalRegistryLoginSection({
     label,
     usernameLabel,

@@ -30,12 +30,12 @@ import {
     getGitLabRegistryStatus, getJfrogStatus, getHostRegistryStatus
 } from "../../services/containerRegistryService";
 import {
-    getAzureReposStatus, saveAzureReposCredentials, clearAzureReposCredentials
-} from "../../services/sourceControlService";
+    getAzureDevOpsStatus, saveAzureDevOpsCredentials, clearAzureDevOpsCredentials
+} from "../../services/azureDevOpsService";
 
 const MODES = [
     { key: "github", label: "GitHub" },
-    { key: "azureRepos", label: "Azure Repos" },
+    { key: "azureDevOps", label: "Azure DevOps" },
     { key: "aws", label: "AWS" },
     { key: "azure", label: "Azure" },
     { key: "gcp", label: "GCP" },
@@ -68,7 +68,7 @@ const MODES = [
 const ALL_CREDENTIAL_PROVIDERS = [
     "github", "aws", "azure", "gcp", "apikey", "docker", "github-oauth", "sonarqube", "sonarcloud", "ai",
     "render", "cloudflare", "netlify", "vercel", "dockerhub", "ghcr", "gitlab-registry", "jfrog",
-    "harbor", "nexus", "azureRepos"
+    "harbor", "nexus", "azureDevOps"
 ];
 
 // Purely a display grouping for the tab bar below - mirrors the Sidebar's
@@ -82,7 +82,7 @@ const ALL_CREDENTIAL_PROVIDERS = [
 // its own internal tabs, not separate sidebar pages) but groups naturally
 // here since they're 4 separate credential forms.
 const CREDENTIAL_GROUPS = [
-    { key: "sourceControl", label: "Source Control", modes: ["github", "azureRepos"] },
+    { key: "sourceControl", label: "Source Control", modes: ["github", "azureDevOps"] },
     { key: "codeQuality", label: "Code Quality", modes: ["sonarqube", "sonarcloud"] },
     { key: "containerRegistry", label: "Container Registry", modes: ["dockerhub", "ghcr", "gitlab-registry", "jfrog", "harbor", "nexus"] },
     { key: "hostingProviders", label: "Hosting Providers", modes: ["render", "cloudflare", "netlify", "vercel"] }
@@ -206,8 +206,8 @@ export default function CredentialsView({
             getHostRegistryStatus("nexus").catch(() => null),
             getSonarStatus("sonarqube").catch(() => null),
             getSonarStatus("sonarcloud").catch(() => null),
-            getAzureReposStatus().catch(() => null)
-        ]).then(([aws, azure, gcp, apiKeysRes, render, cloudflare, netlify, vercel, dockerhub, ghcr, gitlabRegistry, jfrog, harbor, nexus, sonarqube, sonarcloud, azureRepos]) => {
+            getAzureDevOpsStatus().catch(() => null)
+        ]).then(([aws, azure, gcp, apiKeysRes, render, cloudflare, netlify, vercel, dockerhub, ghcr, gitlabRegistry, jfrog, harbor, nexus, sonarqube, sonarcloud, azureDevOps]) => {
 
             const activeKeyCount = Array.isArray(apiKeysRes?.data)
                 ? apiKeysRes.data.filter((k) => !k.revoked).length
@@ -230,7 +230,7 @@ export default function CredentialsView({
                 nexus: nexus?.configured,
                 sonarqube: sonarqube?.configured,
                 sonarcloud: sonarcloud?.configured,
-                azureRepos: azureRepos?.configured
+                azureDevOps: azureDevOps?.configured
             });
 
         });
@@ -348,7 +348,7 @@ export default function CredentialsView({
             <p className="empty-state" style={{ padding: "0 0 15px", textAlign: "left" }}>
                 Everything below is yours alone — kept for your own browser session,
                 isolated from every other visitor of this portal: GitHub, AWS, Azure, GCP,
-                your API Key, Render, Cloudflare, Netlify, Vercel, Azure Repos, Docker Hub,
+                your API Key, Render, Cloudflare, Netlify, Vercel, Azure DevOps, Docker Hub,
                 GHCR, GitLab Registry, JFrog, Harbor, Nexus, SonarQube, and SonarCloud all
                 work this way — see what's under your own connected account right below
                 once saved. (The Hosting Providers page itself shows this portal's own
@@ -456,22 +456,22 @@ export default function CredentialsView({
 
             )}
 
-            {mode === "azureRepos" && (
+            {mode === "azureDevOps" && (
 
-            <CredentialPinGate provider="azureRepos" unlocked={unlockedProviders.has("azureRepos")} onUnlocked={markAllUnlocked}>
+            <CredentialPinGate provider="azureDevOps" unlocked={unlockedProviders.has("azureDevOps")} onUnlocked={markAllUnlocked}>
                 <PortalRegistryLoginSection
-                    label="Azure Repos"
+                    label="Azure DevOps"
                     usernameLabel="Organization"
                     identityLabel="Organization"
                     tokenLabel="Personal Access Token"
-                    helpText="Powers the Source Control hub's Azure Repos tab — your Azure DevOps organization name and a Personal Access Token with at least Code (Read) scope."
+                    helpText="Powers the Source Control hub's Azure DevOps sub-pages (Branches, Pipelines, Build Artifacts, Package Feeds) — your Azure DevOps organization name and a Personal Access Token with Code (Read), Build (Read), and Packaging (Read) scopes."
                     statusFn={async () => {
-                        const result = await getAzureReposStatus();
+                        const result = await getAzureDevOpsStatus();
                         return { configured: result.configured, username: result.organization };
                     }}
-                    saveFn={(payload) => saveAzureReposCredentials({ organization: payload.accountId, token: payload.token })}
-                    clearFn={clearAzureReposCredentials}
-                    onCleared={() => removeUnlocked("azureRepos")}
+                    saveFn={(payload) => saveAzureDevOpsCredentials({ organization: payload.accountId, token: payload.token })}
+                    clearFn={clearAzureDevOpsCredentials}
+                    onCleared={() => removeUnlocked("azureDevOps")}
                 />
             </CredentialPinGate>
 
