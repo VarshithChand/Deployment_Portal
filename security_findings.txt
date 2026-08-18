@@ -9170,3 +9170,91 @@ picked, and a PR approve/complete against a real, low-stakes case
 each, since the Profile API identity resolution behind PR approval
 specifically is unverified and the single most likely thing to need a
 follow-up fix.
+
+==================================================
+ROUND 67 - FEATURE: AZURE DEVOPS DASHBOARD - SHARED
+PROJECT SELECTION + RUNNING-PIPELINES OVERVIEW
+==================================================
+Date: 2026-08-18
+Trigger: "azure devops has the dashboard page there i can pick the
+project then they reflect to the entire azure devop's pages when i
+select an project they should be enabled and on the dashboard there i
+can see the running pipelins on that project as like that desing the
+pages no need to select the project form the other pages" - the real
+Azure DevOps portal's own project picker applies everywhere at once;
+this app's version made Pipelines, Build Artifacts, and Pull Requests
+each ask for a project separately (three independent pickers for the
+same underlying selection).
+
+New Dashboard sub-page (listed first in the Azure DevOps group, ahead
+of Branches) is now where a project is actually picked - that
+selection lives in a new AzureDevOpsProjectContext (React context,
+persisted to localStorage the same way Sidebar's own collapsed/
+expanded state already is - a UI preference, not a credential or
+anything sensitive, so client-side persistence is the right amount
+here, not a server-side session field) and is read by Pipelines/Build
+Artifacts/Pull Requests instead of each fetching and rendering its own
+project list/search/pagination. Each of those three now opens with a
+"Pick a project on the Azure DevOps Dashboard first" prompt (linking
+straight there) when none is selected yet, and a "Change project" link
+back to the Dashboard once one is. Branches and Package Feeds are
+unaffected - both are already org-wide and never asked for a project
+to begin with, so there was nothing to consolidate there.
+
+Dashboard also shows the selected project's currently running
+pipelines - new GetRunningBuildsAsync, built on the classic Build
+API's statusFilter=inProgress?api-version=7.1, which returns every
+in-progress build across the WHOLE project in a single call. This is
+deliberately NOT built by iterating GetRunsAsync per pipeline (which
+would mean one request per pipeline just to find out which, if any,
+are currently running) - the classic Build API's own project-wide
+filter does that job directly, the same reasoning GetPipelineDetailAsync
+already established for reaching for the right endpoint rather than
+composing existing per-pipeline ones.
+
+Verification performed:
+  - `dotnet build` (isolated output dir): 0 errors, same pre-existing
+    warnings as every prior round.
+  - `npm run lint` in deployment-ui/: no new warnings beyond the
+    expected one (AzureDevOpsProjectContext.jsx triggers the same
+    "move context to its own file" fast-refresh warning every other
+    context file in this app already has - not a new class of issue).
+  - `npm run build` in deployment-ui/: succeeded - confirmed via chunk
+    output that Pipelines/Build Artifacts/Pull Requests all got
+    smaller (the project list/search/pagination code they used to
+    duplicate is now only in the new Dashboard chunk), corroborating
+    the consolidation actually removed the duplicated code rather than
+    just hiding it.
+  - Could not exercise GetRunningBuildsAsync against a real Azure
+    DevOps organization with an actual in-progress build in this
+    sandboxed session - same standing limitation as every mutating/
+    live-status call this session builds against a provider it can't
+    authenticate to directly. Recommend the user start a real pipeline
+    run and confirm it shows up on the Dashboard while in progress.
+  - Live check against the deployed Render backend after the push:
+    /api/bootstrap healthy (HTTP 200).
+
+Files changed: src/DeploymentAPI/DTOs/AzureDevOpsDtos.cs,
+src/DeploymentAPI/Services/AzureDevOpsService.cs,
+src/DeploymentAPI/Controllers/AzureDevOpsController.cs,
+deployment-ui/src/services/azureDevOpsService.js,
+deployment-ui/src/context/AzureDevOpsProjectContext.jsx (new),
+deployment-ui/src/hooks/useAzureDevOpsProject.js (new),
+deployment-ui/src/components/sourceControl/AzureDevOpsDashboardView.jsx
+(new), deployment-ui/src/pages/AzureDevOpsDashboard.jsx (new),
+deployment-ui/src/components/sourceControl/AzureDevOps{Pipelines,
+Artifacts,PullRequests}View.jsx (project picker removed from each,
+now read from context), deployment-ui/src/components/layout/Sidebar.jsx,
+deployment-ui/src/context/NavigationContext.jsx, deployment-ui/src/App.jsx,
+deployment-ui/src/main.jsx (new provider wired in).
+Commit: f7ca198.
+
+Status: Complete, pushed, live-verified the backend is up. Azure DevOps
+now matches the real portal's own "pick a project once, it applies
+everywhere" shape - Pipelines, Build Artifacts, and Pull Requests all
+read one shared selection instead of asking three separate times, and
+the Dashboard gives an at-a-glance view of what's currently running.
+Standing limitation: the running-builds view hasn't been confirmed
+against a real in-progress pipeline run - worth the user checking that
+specifically, since a live "in progress" status is the one thing here
+that can't be verified by just reading a static list back.
