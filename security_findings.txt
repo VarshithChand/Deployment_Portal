@@ -9033,3 +9033,140 @@ a confirm step. Standing limitation: the trigger action itself hasn't
 been exercised against a real pipeline in this sandboxed session -
 recommend the user confirm it end to end against their own connected
 Azure DevOps org shown in their screenshot.
+
+==================================================
+ROUND 66 - FIX + MAJOR FEATURE: DIALOG ALIGNMENT, PIPELINE
+RUN FORM REDESIGN, BRANCH CREATE/DELETE, PULL REQUESTS
+PAGE, LATEST ARTIFACTS
+==================================================
+Date: 2026-08-18
+Trigger: a screenshot of Round 65's own Run Pipeline confirm dialog
+rendering visibly misaligned (page content behind it not fully dimmed,
+the dialog off-center), plus one dense multi-part request covering:
+CI/CD/CI+CD categorization for running pipelines, matching GitHub
+Deploy's own search-by-name UX instead of the folder browser Round 65
+had just built, branch selection when running, branch create/delete,
+a Pull Requests page, and a Build Artifacts redesign (latest artifacts
+only, copy-name button, a detail view with the artifact's location).
+Asked one clarifying question before starting given the size of the
+ask: Pull Requests page scope - view-only, or also approve/complete?
+Answered: view + approve/complete.
+
+FIX (real bug, root-caused immediately): the confirm dialog was
+rendered as a CHILD of .card, which has its own backdrop-filter -
+any ancestor with backdrop-filter/transform creates a new CSS
+containing block for position:fixed descendants, trapping the
+dialog's own fixed backdrop inside the card's bounds instead of
+covering the viewport (the exact same class of bug
+AppCacheControlCard's own useConfirm usage already had to route
+around, missed here on first pass). Fixed by moving {dialog} to a
+sibling of .card in both render paths.
+
+FEATURE (supersedes Round 65's own "browsable by folder" work, per
+direct user feedback - "no need to open the folders, I will search by
+their name"):
+  - Pipelines page redesigned into one screen per project: a CI/CD/
+    CI+CD mode toggle plus a searchable ComboBox pipeline picker,
+    mirroring DeploymentForm.jsx's own classifyWorkflow heuristic and
+    ComboBox pattern exactly (same regex-on-name/path logic, applied
+    to a pipeline's name/folder instead of a GitHub workflow's
+    name/path, since Azure DevOps has no native CI/CD categorization
+    either). Selecting a pipeline now also offers an optional branch
+    picker before running - resolved via a new GetPipelineDetailAsync
+    call (the plain pipeline list has no repository info at all, only
+    the single-pipeline GET does), which feeds the existing
+    GetBranchesAsync for that pipeline's own linked repository.
+    RunPipelineAsync grew a branch parameter, translated into Azure
+    DevOps' resources.repositories.self.refName request field when
+    given, left as an empty body (pipeline's own default branch)
+    otherwise.
+  - Branches: added create and delete. Both are really one Git ref
+    update, batched the way Azure DevOps' own Refs API expects (create
+    sets oldObjectId to all-zeros and newObjectId to the source
+    commit; delete is the mirror image) - the same old/new-object-id
+    contract GitHub's own Git References API uses, not invented for
+    this app. Self-service, no AdminGate - same posture as every other
+    mutating action against a visitor's own connected credential in
+    this app. The UI disables deleting a repository's own default
+    branch as a guardrail.
+  - New Pull Requests page: project-wide list (Azure DevOps' own list
+    endpoint already spans every repository in a project, so unlike
+    Pipelines/Build Artifacts there's no second picker below the
+    project level) with Approve and Complete actions, each behind its
+    own confirm step. Approve resolves the caller's own Azure DevOps
+    identity via the Profile API first (app.vssps.visualstudio.com, a
+    third host beyond dev.azure.com/feeds.dev.azure.com) since the
+    reviewers endpoint has no "me" shorthand the way some of Azure
+    DevOps' other APIs do - flagged as the single least-certain part
+    of this round, since the Profile API's own "id" field being
+    accepted as a reviewer ID everywhere is documented behavior but
+    unverified against a real tenant here. Complete re-reads the PR's
+    current lastMergeSourceCommit immediately before merging rather
+    than trusting a possibly-stale value the frontend last saw - Azure
+    DevOps' complete call requires it to match exactly (optimistic
+    concurrency).
+  - Build Artifacts redesigned to match: same CI/CD-tabbed pipeline
+    picker as Pipelines, then straight to that pipeline's LATEST run's
+    artifacts (new GetLatestArtifactsAsync, built on top of the
+    existing GetRunsAsync/GetArtifactsAsync rather than a new
+    hand-rolled request) - no separate "pick a run" step. Each
+    artifact row got a copy-name button (reusing this app's existing
+    CopyButton component directly) and clicking a row opens a detail
+    dialog showing type, location (Azure DevOps' own "resource.data"
+    field - the artifact's internal container/file path, a new field
+    added to AzureDevOpsArtifactDto), and the download URL, each with
+    its own copy button too.
+
+Verification performed:
+  - `dotnet build` (isolated output dir), run three times across the
+    dialog fix, the service/controller layer, and the full feature
+    set: 0 errors each time, same pre-existing warnings as every prior
+    round.
+  - `npm run lint` in deployment-ui/: no new warnings.
+  - `npm run build` in deployment-ui/: succeeded each time - confirmed
+    via chunk output that the new Pull Requests page and every
+    redesigned view built into their own separate lazy-loaded chunks.
+  - Grepped the whole frontend source tree for every removed helper
+    (the old folder-browsing FolderIcon/folderSegments/
+    getFolderContents, the old by-run-id getAzureDevOpsArtifacts call)
+    after deleting them, confirming zero stray references before
+    considering the redesign complete - not just trusting the build to
+    catch it.
+  - Could not exercise any of this round's new mutating calls (branch
+    create/delete, pipeline run with a specific branch, PR approve/
+    complete) against a real Azure DevOps organization in this
+    sandboxed session - same standing limitation as every mutating
+    action this session builds against a provider it can't
+    authenticate to directly. The PR approve flow in particular
+    depends on the Profile API identity-resolution behavior described
+    above, which is the part most worth the user confirming first.
+  - Live check against the deployed Render backend after the push:
+    /api/bootstrap healthy (HTTP 200).
+
+Files changed: src/DeploymentAPI/DTOs/AzureDevOpsDtos.cs,
+src/DeploymentAPI/Services/AzureDevOpsService.cs,
+src/DeploymentAPI/Controllers/AzureDevOpsController.cs,
+deployment-ui/src/services/azureDevOpsService.js,
+deployment-ui/src/components/sourceControl/AzureDevOps{Pipelines,
+Artifacts,Branches}View.jsx, deployment-ui/src/components/sourceControl/
+AzureDevOpsPullRequestsView.jsx (new), deployment-ui/src/pages/
+AzureDevOpsPullRequests.jsx (new), deployment-ui/src/components/layout/
+Sidebar.jsx, deployment-ui/src/context/NavigationContext.jsx,
+deployment-ui/src/App.jsx, deployment-ui/src/components/settings/
+CredentialsView.jsx (PAT scope guidance updated for the new write/execute
+scopes now actually needed).
+Commit: d653cb6 (dialog fix: 20e6da9).
+
+Status: Complete, pushed, live-verified the backend is up. Azure DevOps
+now covers everything asked for across this and the two prior rounds:
+session-scoped Branches (browse + create/delete), Pipelines (search by
+name, CI/CD/CI+CD, branch picker, run trigger, run history), Build
+Artifacts (latest artifacts, copy, detail/location), Pull Requests
+(list, approve, complete), and Package Feeds. Standing limitation,
+stated plainly: none of this round's new mutating calls have been
+exercised against a real Azure DevOps organization - recommend the
+user try branch create/delete, a pipeline run with a specific branch
+picked, and a PR approve/complete against a real, low-stakes case
+each, since the Profile API identity resolution behind PR approval
+specifically is unverified and the single most likely thing to need a
+follow-up fix.
