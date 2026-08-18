@@ -9359,3 +9359,97 @@ recommend the user open the Deployment_Portal.git pipeline's Run form
 in this app and confirm the two real checkboxes from their own
 pipeline actually appear, since that's the one thing here that a code
 read-through alone can't fully confirm.
+
+==================================================
+ROUND 69 - FIX: AZURE DEVOPS ERRORS WERE ALWAYS SHOWN AS
+A GENERIC "UNABLE TO REACH" MESSAGE WITH NO REAL DETAIL
+==================================================
+Date: 2026-08-18
+Trigger: a screenshot confirming Round 68's parameter-fetch actually
+worked live (both real checkboxes from the user's own azure-pipelines.yml
+rendered correctly, one flipped from its YAML default - real evidence
+the YAML-fetch-and-parse pathway is sound), immediately followed by
+clicking "Run Pipeline" and getting a toast that said only "Unable to
+reach Azure DevOps for pipeline run trigger" - no usable detail about
+what actually went wrong.
+
+Root-caused rather than guessing at the underlying cause blind (with
+no real Azure DevOps org to reproduce against, guessing risked another
+wrong-shaped fix): every Azure DevOps call in AzureDevOpsService.cs
+was, on failure, routed through two layers that between them threw
+away any real information:
+  1. HttpClientHelper.EnsureSuccessAsync builds its exception message
+     via BuildFriendlyMessageAsync, which is GitHub Actions-specific
+     (checks GitHub's X-RateLimit-Remaining header, talks about "repo"
+     and "workflow" PAT scopes) - wrong, misleading content for an
+     Azure DevOps call, inherited by simply reusing the same shared
+     helper GitHubApiService already used, without checking it was
+     actually generic.
+  2. CloudErrorSanitizer.Describe (used in every catch block across
+     this file since Round 64) only special-cases AmazonServiceException
+     - its own doc comment scopes it to "every AWS/Azure lookup in
+     CloudStatusService, CloudServiceManagementService, and
+     AwsSsoService," which Azure DevOps was never actually part of.
+     Every other exception type, including the HttpRequestException
+     layer 1 throws, fell through to a hardcoded
+     "Unable to reach {provider} for {context}." with the real
+     .Message discarded entirely.
+  Together these meant NO Azure DevOps failure - a bad
+  templateParameters value, a PAT missing a required scope, a stale
+  optimistic-concurrency check on a PR complete, anything - could ever
+  surface its real cause to a visitor, or to this session while trying
+  to diagnose one from a screenshot.
+
+Fixed by adding EnsureAzureDevOpsSuccessAsync (used in all 4 places
+this file previously called HttpClientHelper.EnsureSuccessAsync),
+which reads Azure DevOps' own error response body - the standard TFS/
+Azure DevOps REST error envelope, {"message": "...", "typeKey": "...",
+...} - into the thrown exception's message instead of a GitHub-shaped
+one. CloudErrorSanitizer.Describe was extended with one new branch:
+when the exception is an HttpRequestException with a non-empty
+message, surface it directly ("{provider} rejected this request:
+{message}") instead of falling through to the generic fallback - the
+existing AWS-specific branch is completely untouched, so this is a
+strictly additive fix with no risk to any AWS/Azure Resource Manager
+code path already relying on this helper.
+
+Deliberately NOT claimed as "the pipeline run bug is fixed" - this
+round fixes the DIAGNOSTIC layer, not necessarily the underlying cause
+of why the run itself failed (that cause is still unknown pending the
+next real attempt). The honest framing: this makes whatever the real
+problem is visible for the first time, whether that's a
+templateParameters shape issue, a PAT scope gap, or something else
+- rather than guessing at a fix for a cause that was never actually
+confirmed.
+
+Verification performed:
+  - `dotnet build` (isolated output dir): 0 errors, same pre-existing
+    warnings as every prior round.
+  - Grepped the whole file for every remaining HttpClientHelper.
+    EnsureSuccessAsync call after the edit, confirming all 4 original
+    call sites (the shared GetAsync helper, SendJsonAsync, identity
+    resolution, and the raw YAML fetch) now use the new Azure DevOps-
+    specific version - not just the one this round's screenshot
+    happened to hit.
+  - Live check against the deployed Render backend after the push:
+    /api/bootstrap healthy (HTTP 200).
+  - Could NOT reproduce the original "Run Pipeline" failure in this
+    sandboxed session (no real Azure DevOps org/PAT available here) -
+    this fix is grounded in reading the actual code path that produced
+    the unhelpful message, not in reproducing and confirming the fix
+    resolves it end to end. Recommend the user retry the exact same
+    Run Pipeline action and report back whatever the NEW, more
+    specific error message says if it still fails - that message is
+    now the actual next debugging lead.
+
+Files changed: src/DeploymentAPI/Helpers/CloudErrorSanitizer.cs,
+src/DeploymentAPI/Services/AzureDevOpsService.cs.
+Commit: acf63d5.
+
+Status: Complete, pushed, live-verified the backend is up. Every
+Azure DevOps call in this app now surfaces its own real failure
+reason instead of a black box "unable to reach" message. Standing
+limitation, stated as plainly as possible: this is a diagnostic fix,
+not a confirmed root-cause fix for the original Run Pipeline failure
+- if it still fails, the next message it shows is the real lead to
+chase, and that message is worth reporting back directly.
