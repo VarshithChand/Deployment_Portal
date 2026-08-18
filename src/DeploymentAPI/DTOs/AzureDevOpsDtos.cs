@@ -45,6 +45,32 @@ public class AzureDevOpsProjectListDto
     public List<AzureDevOpsProjectDto> Projects { get; set; } = new();
 }
 
+// Dashboard sub-page - once a visitor picks a project here (persisted
+// client-side, not server-side - see AzureDevOpsProjectContext.jsx),
+// Pipelines/Build Artifacts/Pull Requests all read that same selection
+// instead of asking again, matching how the real Azure DevOps portal's own
+// project picker works. "Running pipelines" uses the classic Build API's
+// statusFilter=inProgress, which returns every in-progress build across
+// the WHOLE project in one call - there is no equivalent under the newer
+// Pipelines API surface, and calling GetRunsAsync per-pipeline would mean
+// one request per pipeline just to find out which (if any) are running.
+public class AzureDevOpsRunningBuildDto
+{
+    public int Id { get; set; }
+    public string PipelineName { get; set; } = string.Empty;
+    public string BuildNumber { get; set; } = string.Empty;
+    public string SourceBranch { get; set; } = string.Empty;
+    public DateTime? StartTime { get; set; }
+    public string WebUrl { get; set; } = string.Empty;
+}
+
+public class AzureDevOpsRunningBuildListDto
+{
+    public bool Configured { get; set; }
+    public string? Error { get; set; }
+    public List<AzureDevOpsRunningBuildDto> Builds { get; set; } = new();
+}
+
 // Branches page - repositories (org-wide, no project picker needed - the
 // list endpoint itself spans every project) -> branches (project-scoped,
 // using the ProjectName already carried on each repository).

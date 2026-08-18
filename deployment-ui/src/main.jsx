@@ -8,6 +8,7 @@ import ThemeProvider from "./context/ThemeContext";
 import StyleProvider from "./context/StyleContext";
 import AuthProvider from "./context/AuthContext";
 import NavigationProvider from "./context/NavigationContext";
+import AzureDevOpsProjectProvider from "./context/AzureDevOpsProjectContext";
 
 import "./styles/global.css";
 
@@ -27,7 +28,11 @@ ReactDOM.createRoot(
 
                         <AuthProvider>
 
-                            <App/>
+                            <AzureDevOpsProjectProvider>
+
+                                <App/>
+
+                            </AzureDevOpsProjectProvider>
 
                         </AuthProvider>
 

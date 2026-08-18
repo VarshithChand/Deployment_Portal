@@ -1,13 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
 
 import {
-    getAzureDevOpsProjects, getAzureDevOpsPipelines, getAzureDevOpsPipelineDetail,
+    getAzureDevOpsPipelines, getAzureDevOpsPipelineDetail,
     getAzureDevOpsBranches, getAzureDevOpsRuns, runAzureDevOpsPipeline
 } from "../../services/azureDevOpsService";
 import usePagination from "../../hooks/usePagination";
 import Pagination from "../common/Pagination";
-import SearchBox from "../common/SearchBox";
 import ComboBox from "../common/ComboBox";
+import useAzureDevOpsProject from "../../hooks/useAzureDevOpsProject";
 import useNavigation from "../../hooks/useNavigation";
 import useToast from "../../hooks/useToast";
 import useConfirm from "../../hooks/useConfirm";
@@ -69,24 +69,22 @@ function RunStatusBadge({ state, result }) {
 // history, plus a self-service "Run pipeline" action (the calling
 // session's own credential and its real Execute permission on Azure
 // DevOps' own side is the auth boundary, same posture as EC2/ECR mutating
-// actions elsewhere in this app - see RunPipelineAsync's own comment).
-// Two levels: projects -> one screen combining a CI/CD/CI+CD-tabbed,
-// search-by-name pipeline picker, an optional branch picker, and that
-// pipeline's own run history - deliberately mirroring DeploymentForm.jsx's
-// own GitHub Deploy form shape rather than a folder browser, since Azure
-// DevOps' folder structure isn't how a visitor actually wants to find a
-// specific pipeline to run.
+// actions elsewhere in this app - see RunPipelineAsync's own comment). The
+// project itself is picked once on the Dashboard sub-page and shared via
+// AzureDevOpsProjectContext - this page no longer asks for one separately,
+// matching how the real Azure DevOps portal's own project picker works.
+// A CI/CD/CI+CD-tabbed, search-by-name pipeline picker, an optional
+// branch picker, and that pipeline's own run history - deliberately
+// mirroring DeploymentForm.jsx's own GitHub Deploy form shape rather than
+// a folder browser, since Azure DevOps' folder structure isn't how a
+// visitor actually wants to find a specific pipeline to run.
 export default function AzureDevOpsPipelinesView() {
 
     const { setTab } = useNavigation();
+    const { project } = useAzureDevOpsProject();
     const toast = useToast();
     const { confirm, dialog } = useConfirm();
 
-    const [projects, setProjects] = useState(null);
-    const [loading, setLoading] = useState(true);
-    const [search, setSearch] = useState("");
-
-    const [selectedProject, setSelectedProject] = useState(null);
     const [pipelines, setPipelines] = useState(null);
     const [pipelinesLoading, setPipelinesLoading] = useState(false);
 
@@ -102,30 +100,18 @@ export default function AzureDevOpsPipelinesView() {
 
     const [running, setRunning] = useState(false);
 
-    function refresh() {
+    useEffect(() => {
 
-        setLoading(true);
-
-        getAzureDevOpsProjects().then((data) => {
-            setProjects(data);
-            setLoading(false);
-        }).catch((err) => {
-            console.error(err);
-            setProjects({ configured: false, error: "Unable to reach the Deployment API." });
-            setLoading(false);
-        });
-
-    }
-
-    useEffect(refresh, []);
-
-    function openProject(project) {
-
-        setSelectedProject(project);
         setPipelineId("");
         setBranches(null);
         setBranch("");
         setRuns(null);
+
+        if (!project) {
+            setPipelines(null);
+            return;
+        }
+
         setPipelinesLoading(true);
 
         getAzureDevOpsPipelines(project.name).then((data) => {
@@ -137,7 +123,8 @@ export default function AzureDevOpsPipelinesView() {
             setPipelinesLoading(false);
         });
 
-    }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [project?.id]);
 
     function handleModeChange(nextMode) {
 
@@ -167,7 +154,7 @@ export default function AzureDevOpsPipelinesView() {
 
         setRunsLoading(true);
 
-        getAzureDevOpsRuns(selectedProject.name, idNum).then((data) => {
+        getAzureDevOpsRuns(project.name, idNum).then((data) => {
             setRuns(data);
             setRunsLoading(false);
         }).catch((err) => {
@@ -178,7 +165,7 @@ export default function AzureDevOpsPipelinesView() {
 
         setBranchesLoading(true);
 
-        getAzureDevOpsPipelineDetail(selectedProject.name, idNum).then((detail) => {
+        getAzureDevOpsPipelineDetail(project.name, idNum).then((detail) => {
 
             if (!detail.repositoryId) {
                 setBranches({ configured: true, branches: [] });
@@ -186,7 +173,7 @@ export default function AzureDevOpsPipelinesView() {
                 return;
             }
 
-            return getAzureDevOpsBranches(selectedProject.name, detail.repositoryId).then((data) => {
+            return getAzureDevOpsBranches(project.name, detail.repositoryId).then((data) => {
                 setBranches(data);
                 setBranchesLoading(false);
             });
@@ -220,7 +207,7 @@ export default function AzureDevOpsPipelinesView() {
 
         try {
 
-            const result = await runAzureDevOpsPipeline(selectedProject.name, selectedPipeline.id, branch || undefined);
+            const result = await runAzureDevOpsPipeline(project.name, selectedPipeline.id, branch || undefined);
 
             if (result.success) {
                 toast.show(result.message || "Run started.", "success");
@@ -245,17 +232,6 @@ export default function AzureDevOpsPipelinesView() {
 
     }
 
-    const filteredProjects = useMemo(() => {
-
-        const items = projects?.projects || [];
-        const trimmed = search.trim().toLowerCase();
-
-        return trimmed ? items.filter((p) => p.name.toLowerCase().includes(trimmed)) : items;
-
-    }, [projects, search]);
-
-    const { page, setPage, pageCount, pageItems, totalCount, startIndex, endIndex } = usePagination(filteredProjects, PAGE_SIZE);
-
     const modeFilteredPipelines = useMemo(
         () => (pipelines?.pipelines || []).filter((p) => classifyPipeline(p) === mode),
         [pipelines, mode]
@@ -267,207 +243,207 @@ export default function AzureDevOpsPipelinesView() {
         totalCount: runsTotalCount, startIndex: runsStartIndex, endIndex: runsEndIndex
     } = usePagination(runsList, PAGE_SIZE);
 
-    // ---- Level 2: run a pipeline + its history ----
-
-    if (selectedProject) {
+    if (!project) {
 
         return (
-
-            <>
-
-            {dialog}
-
             <div className="card">
+                <p className="empty-state" style={{ textAlign: "left" }}>
+                    Pick a project on the{" "}
+                    <a href="#" onClick={(e) => { e.preventDefault(); setTab("azureDevOpsDashboard"); }}>Azure DevOps Dashboard</a>
+                    {" "}first.
+                </p>
+            </div>
+        );
 
-                <div className="button-row" style={{ justifyContent: "space-between", marginBottom: "12px" }}>
-                    <h2 className="card-title" style={{ marginBottom: 0 }}>{selectedProject.name}</h2>
-                    <button
-                        type="button"
-                        className="btn btn-secondary btn-sm"
-                        onClick={() => { setSelectedProject(null); setPipelines(null); }}
-                    >
-                        ← Back to projects
-                    </button>
+    }
+
+    return (
+
+        <>
+
+        {dialog}
+
+        <div className="card">
+
+            <div className="button-row" style={{ justifyContent: "space-between", marginBottom: "12px" }}>
+                <h2 className="card-title" style={{ marginBottom: 0 }}>{project.name}</h2>
+                <a href="#" onClick={(e) => { e.preventDefault(); setTab("azureDevOpsDashboard"); }}>Change project</a>
+            </div>
+
+            {pipelinesLoading ? (
+
+                <p className="field-hint">Loading pipelines...</p>
+
+            ) : !pipelines?.configured || pipelines.error ? (
+
+                <p className="error-message">{pipelines?.error || "Azure DevOps is not configured."}</p>
+
+            ) : (
+
+                <>
+
+                <div className="form-group">
+
+                    <label>Mode</label>
+
+                    <div className="mode-toggle">
+
+                        <button
+                            type="button"
+                            className={`mode-toggle-option ${mode === "CI" ? "active" : ""}`}
+                            onClick={() => handleModeChange("CI")}
+                        >
+                            CI
+                        </button>
+
+                        <button
+                            type="button"
+                            className={`mode-toggle-option ${mode === "CD" ? "active" : ""}`}
+                            onClick={() => handleModeChange("CD")}
+                        >
+                            CD
+                        </button>
+
+                        <button
+                            type="button"
+                            className={`mode-toggle-option ${mode === "CI+CD" ? "active" : ""}`}
+                            onClick={() => handleModeChange("CI+CD")}
+                        >
+                            CI+CD
+                        </button>
+
+                    </div>
+
                 </div>
 
-                {pipelinesLoading ? (
+                <div className="form-group">
 
-                    <p className="field-hint">Loading pipelines...</p>
+                    <label>Pipeline</label>
 
-                ) : !pipelines?.configured || pipelines.error ? (
+                    <p className="field-hint">
+                        {mode === "CI"
+                            ? "Showing pipelines that look like CI (build/test) only."
+                            : mode === "CD"
+                                ? "Showing pipelines that look like release/deploy only."
+                                : "Showing pipelines that combine CI and CD (e.g. \"Build & Release\")."}
+                    </p>
 
-                    <p className="error-message">{pipelines?.error || "Azure DevOps is not configured."}</p>
+                    <ComboBox
+                        options={modeFilteredPipelines.map((p) => ({ value: String(p.id), label: p.name }))}
+                        value={pipelineId}
+                        onChange={handleSelectPipeline}
+                        placeholder="Search or select a pipeline..."
+                        emptyLabel={`No ${mode} pipeline found`}
+                    />
 
-                ) : (
+                </div>
+
+                {pipelineId && (
 
                     <>
 
                     <div className="form-group">
 
-                        <label>Mode</label>
-
-                        <div className="mode-toggle">
-
-                            <button
-                                type="button"
-                                className={`mode-toggle-option ${mode === "CI" ? "active" : ""}`}
-                                onClick={() => handleModeChange("CI")}
-                            >
-                                CI
-                            </button>
-
-                            <button
-                                type="button"
-                                className={`mode-toggle-option ${mode === "CD" ? "active" : ""}`}
-                                onClick={() => handleModeChange("CD")}
-                            >
-                                CD
-                            </button>
-
-                            <button
-                                type="button"
-                                className={`mode-toggle-option ${mode === "CI+CD" ? "active" : ""}`}
-                                onClick={() => handleModeChange("CI+CD")}
-                            >
-                                CI+CD
-                            </button>
-
-                        </div>
-
-                    </div>
-
-                    <div className="form-group">
-
-                        <label>Pipeline</label>
+                        <label>Branch</label>
 
                         <p className="field-hint">
-                            {mode === "CI"
-                                ? "Showing pipelines that look like CI (build/test) only."
-                                : mode === "CD"
-                                    ? "Showing pipelines that look like release/deploy only."
-                                    : "Showing pipelines that combine CI and CD (e.g. \"Build & Release\")."}
+                            Optional - leave blank to run against this pipeline's own configured default branch.
                         </p>
 
-                        <ComboBox
-                            options={modeFilteredPipelines.map((p) => ({ value: String(p.id), label: p.name }))}
-                            value={pipelineId}
-                            onChange={handleSelectPipeline}
-                            placeholder="Search or select a pipeline..."
-                            emptyLabel={`No ${mode} pipeline found`}
-                        />
+                        {branchesLoading ? (
 
-                    </div>
+                            <p className="field-hint">Loading branches...</p>
 
-                    {pipelineId && (
+                        ) : branches?.error ? (
 
-                        <>
-
-                        <div className="form-group">
-
-                            <label>Branch</label>
-
-                            <p className="field-hint">
-                                Optional - leave blank to run against this pipeline's own configured default branch.
-                            </p>
-
-                            {branchesLoading ? (
-
-                                <p className="field-hint">Loading branches...</p>
-
-                            ) : branches?.error ? (
-
-                                <p className="field-hint">{branches.error}</p>
-
-                            ) : (
-
-                                <ComboBox
-                                    options={(branches?.branches || []).map((b) => ({ value: b.name, label: b.name }))}
-                                    value={branch}
-                                    onChange={setBranch}
-                                    placeholder="Search or select a branch..."
-                                    emptyLabel="No branch found"
-                                />
-
-                            )}
-
-                        </div>
-
-                        <button
-                            type="button"
-                            className="btn btn-primary"
-                            style={{ marginBottom: "20px" }}
-                            onClick={handleRunPipeline}
-                            disabled={running}
-                        >
-                            {running ? "Starting..." : "Run Pipeline"}
-                        </button>
-
-                        <h3 className="settings-subhead">Run History</h3>
-
-                        {runsLoading ? (
-
-                            <p className="field-hint">Loading run history...</p>
-
-                        ) : !runs?.configured || runs.error ? (
-
-                            <p className="error-message">{runs?.error || "Unable to load run history."}</p>
-
-                        ) : runsList.length === 0 ? (
-
-                            <p className="empty-state" style={{ textAlign: "left" }}>No runs for this pipeline yet.</p>
+                            <p className="field-hint">{branches.error}</p>
 
                         ) : (
 
-                            <>
-
-                            <div className="table-scroll">
-
-                                <table className="table">
-
-                                    <thead>
-                                        <tr>
-                                            <th>Run</th>
-                                            <th>Status</th>
-                                            <th>Created</th>
-                                            <th>Finished</th>
-                                        </tr>
-                                    </thead>
-
-                                    <tbody>
-
-                                        {runsPageItems.map((run) => (
-
-                                            <tr key={run.id}>
-                                                <td>
-                                                    {run.webUrl ? (
-                                                        <a href={run.webUrl} target="_blank" rel="noreferrer">{run.name || `#${run.id}`}</a>
-                                                    ) : (run.name || `#${run.id}`)}
-                                                </td>
-                                                <td><RunStatusBadge state={run.state} result={run.result} /></td>
-                                                <td>{run.createdDate ? new Date(run.createdDate).toLocaleString() : "—"}</td>
-                                                <td>{run.finishedDate ? new Date(run.finishedDate).toLocaleString() : "—"}</td>
-                                            </tr>
-
-                                        ))}
-
-                                    </tbody>
-
-                                </table>
-
-                            </div>
-
-                            <Pagination
-                                page={runsPage}
-                                pageCount={runsPageCount}
-                                totalCount={runsTotalCount}
-                                startIndex={runsStartIndex}
-                                endIndex={runsEndIndex}
-                                onPageChange={setRunsPage}
+                            <ComboBox
+                                options={(branches?.branches || []).map((b) => ({ value: b.name, label: b.name }))}
+                                value={branch}
+                                onChange={setBranch}
+                                placeholder="Search or select a branch..."
+                                emptyLabel="No branch found"
                             />
 
-                            </>
-
                         )}
+
+                    </div>
+
+                    <button
+                        type="button"
+                        className="btn btn-primary"
+                        style={{ marginBottom: "20px" }}
+                        onClick={handleRunPipeline}
+                        disabled={running}
+                    >
+                        {running ? "Starting..." : "Run Pipeline"}
+                    </button>
+
+                    <h3 className="settings-subhead">Run History</h3>
+
+                    {runsLoading ? (
+
+                        <p className="field-hint">Loading run history...</p>
+
+                    ) : !runs?.configured || runs.error ? (
+
+                        <p className="error-message">{runs?.error || "Unable to load run history."}</p>
+
+                    ) : runsList.length === 0 ? (
+
+                        <p className="empty-state" style={{ textAlign: "left" }}>No runs for this pipeline yet.</p>
+
+                    ) : (
+
+                        <>
+
+                        <div className="table-scroll">
+
+                            <table className="table">
+
+                                <thead>
+                                    <tr>
+                                        <th>Run</th>
+                                        <th>Status</th>
+                                        <th>Created</th>
+                                        <th>Finished</th>
+                                    </tr>
+                                </thead>
+
+                                <tbody>
+
+                                    {runsPageItems.map((run) => (
+
+                                        <tr key={run.id}>
+                                            <td>
+                                                {run.webUrl ? (
+                                                    <a href={run.webUrl} target="_blank" rel="noreferrer">{run.name || `#${run.id}`}</a>
+                                                ) : (run.name || `#${run.id}`)}
+                                            </td>
+                                            <td><RunStatusBadge state={run.state} result={run.result} /></td>
+                                            <td>{run.createdDate ? new Date(run.createdDate).toLocaleString() : "—"}</td>
+                                            <td>{run.finishedDate ? new Date(run.finishedDate).toLocaleString() : "—"}</td>
+                                        </tr>
+
+                                    ))}
+
+                                </tbody>
+
+                            </table>
+
+                        </div>
+
+                        <Pagination
+                            page={runsPage}
+                            pageCount={runsPageCount}
+                            totalCount={runsTotalCount}
+                            startIndex={runsStartIndex}
+                            endIndex={runsEndIndex}
+                            onPageChange={setRunsPage}
+                        />
 
                         </>
 
@@ -477,97 +453,13 @@ export default function AzureDevOpsPipelinesView() {
 
                 )}
 
-            </div>
-
-            </>
-
-        );
-
-    }
-
-    // ---- Level 1: projects ----
-
-    if (loading) {
-        return <div className="card"><p className="empty-state">Loading Azure DevOps projects...</p></div>;
-    }
-
-    if (!projects?.configured) {
-
-        return (
-            <div className="card">
-                <p className="empty-state" style={{ textAlign: "left" }}>
-                    Connect your Azure DevOps credentials in{" "}
-                    <a href="#" onClick={(e) => { e.preventDefault(); setTab("settings"); }}>Settings → Credentials → Azure DevOps</a>
-                    {" "}to browse this.
-                </p>
-            </div>
-        );
-
-    }
-
-    if (projects.error) {
-        return <div className="card"><p className="error-message">{projects.error}</p></div>;
-    }
-
-    return (
-
-        <div className="card">
-
-            <div className="button-row" style={{ justifyContent: "space-between", marginBottom: "12px" }}>
-                <h2 className="card-title" style={{ marginBottom: 0 }}>Azure DevOps Projects</h2>
-                <button type="button" className="btn btn-secondary btn-sm" onClick={refresh}>Refresh</button>
-            </div>
-
-            <SearchBox placeholder="Search projects..." value={search} onChange={setSearch} />
-
-            {filteredProjects.length === 0 ? (
-
-                <p className="empty-state" style={{ textAlign: "left", marginTop: "12px" }}>No projects found.</p>
-
-            ) : (
-
-                <>
-
-                <div className="table-scroll" style={{ marginTop: "12px" }}>
-
-                    <table className="table">
-
-                        <thead>
-                            <tr>
-                                <th>Project</th>
-                            </tr>
-                        </thead>
-
-                        <tbody>
-
-                            {pageItems.map((project) => (
-
-                                <tr key={project.id} className="table-row-clickable" onClick={() => openProject(project)}>
-                                    <td>{project.name}</td>
-                                </tr>
-
-                            ))}
-
-                        </tbody>
-
-                    </table>
-
-                </div>
-
-                <Pagination
-                    page={page}
-                    pageCount={pageCount}
-                    totalCount={totalCount}
-                    startIndex={startIndex}
-                    endIndex={endIndex}
-                    onPageChange={setPage}
-                />
-
                 </>
 
             )}
 
         </div>
+
+        </>
 
     );
 

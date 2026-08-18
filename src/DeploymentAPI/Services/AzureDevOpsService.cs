@@ -120,6 +120,42 @@ public class AzureDevOpsService
         return result;
     }
 
+    // One call, every in-progress build across the whole project (see
+    // AzureDevOpsRunningBuildDto's own comment on why this uses the
+    // classic Build API's statusFilter rather than iterating pipelines).
+    public async Task<AzureDevOpsRunningBuildListDto> GetRunningBuildsAsync(UserPaasCredentials credentials, string project)
+    {
+        var result = new AzureDevOpsRunningBuildListDto { Configured = credentials.IsConfigured };
+
+        if (!credentials.IsConfigured)
+            return result;
+
+        try
+        {
+            var path = $"/{Uri.EscapeDataString(project)}/_apis/build/builds?statusFilter=inProgress&api-version=7.1";
+            var json = await GetDevOpsAsync(credentials.AccountId!, credentials.Token!, path);
+            var builds = JObject.Parse(json)["value"] as JArray ?? new JArray();
+
+            result.Builds = builds.Select(b => new AzureDevOpsRunningBuildDto
+            {
+                Id = b["id"]?.ToObject<int?>() ?? 0,
+                PipelineName = b["definition"]?["name"]?.ToString() ?? string.Empty,
+                BuildNumber = b["buildNumber"]?.ToString() ?? string.Empty,
+                SourceBranch = b["sourceBranch"]?.ToString()?.Replace("refs/heads/", "") ?? string.Empty,
+                StartTime = b["startTime"]?.ToObject<DateTime?>(),
+                WebUrl = b["_links"]?["web"]?["href"]?.ToString() ?? string.Empty
+            })
+            .OrderByDescending(b => b.StartTime)
+            .ToList();
+        }
+        catch (Exception ex)
+        {
+            result.Error = CloudErrorSanitizer.Describe(ex, "Azure DevOps", "running build list");
+        }
+
+        return result;
+    }
+
     // ================= Branches: repositories -> branches =================
 
     public async Task<AzureDevOpsRepositoryListDto> GetRepositoriesAsync(UserPaasCredentials credentials)

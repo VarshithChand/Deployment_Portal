@@ -38,6 +38,7 @@ const Environments = lazy(() => import("./pages/Environments"));
 const Analytics = lazy(() => import("./pages/Analytics"));
 const Timeline = lazy(() => import("./pages/Timeline"));
 const TemplateTester = lazy(() => import("./pages/TemplateTester"));
+const AzureDevOpsDashboard = lazy(() => import("./pages/AzureDevOpsDashboard"));
 const AzureDevOpsBranches = lazy(() => import("./pages/AzureDevOpsBranches"));
 const AzureDevOpsPipelines = lazy(() => import("./pages/AzureDevOpsPipelines"));
 const AzureDevOpsArtifacts = lazy(() => import("./pages/AzureDevOpsArtifacts"));
@@ -243,6 +244,7 @@ function App(){
                             {tab === "history" && <History/>}
                             {tab === "environments" && <Environments/>}
                             {tab === "templates" && <TemplateTester/>}
+                            {tab === "azureDevOpsDashboard" && <AzureDevOpsDashboard/>}
                             {tab === "azureDevOpsBranches" && <AzureDevOpsBranches/>}
                             {tab === "azureDevOpsPipelines" && <AzureDevOpsPipelines/>}
                             {tab === "azureDevOpsArtifacts" && <AzureDevOpsArtifacts/>}

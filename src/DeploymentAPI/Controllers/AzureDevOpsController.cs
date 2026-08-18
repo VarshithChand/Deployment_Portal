@@ -89,6 +89,16 @@ public class AzureDevOpsController : ControllerBase
         return Ok(await _azureDevOps.GetProjectsAsync(creds));
     }
 
+    // ---- Dashboard: running pipelines for the selected project -------------
+
+    [HttpGet("projects/{project}/running-builds")]
+    public async Task<IActionResult> GetRunningBuilds(string project)
+    {
+        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var creds = await _settings.GetUserPaasCredentialsAsync(Provider, key);
+        return Ok(await _azureDevOps.GetRunningBuildsAsync(creds, project));
+    }
+
     // ---- Branches: repositories -> branches --------------------------------
 
     [HttpGet("repositories")]

@@ -101,24 +101,28 @@ export const TABS = [
                 ]
             },
             // Azure DevOps - one Organization + PAT credential (see
-            // Settings → Credentials → Azure DevOps) powering five real,
-            // independently-navigable sub-pages: Branches (Git repos, org-
-            // wide, create/delete included) plus four project-scoped ones
-            // (Pipelines' search-by-name run form, Build Artifacts' latest-
-            // run view, Azure Artifacts' Package Feeds, and Pull Requests'
-            // list/approve/complete). Nested the same way GitHub above is,
-            // since it's now more than one page deep. Pull Requests reuses
-            // GitHub's own PullRequestIcon rather than a new glyph - same
-            // concept, deliberately consistent iconography across
-            // providers, and it's not adjacent to GitHub's own PR item in
-            // the rail (different groups) so it doesn't repeat Round 63's
-            // "looks the same at a glance" problem.
+            // Settings → Credentials → Azure DevOps) powering six real,
+            // independently-navigable sub-pages. Dashboard is where a
+            // project is actually picked (see AzureDevOpsProjectContext.jsx)
+            // - that same selection then applies to Pipelines/Build
+            // Artifacts/Pull Requests, matching how the real Azure DevOps
+            // portal's own project picker works, so none of those three ask
+            // for a project separately anymore. Branches and Package Feeds
+            // are unaffected (both already org-wide). Listed first since
+            // it's the natural starting point of this whole group. Both
+            // Dashboard and Pull Requests reuse this app's own
+            // DashboardIcon/PullRequestIcon rather than new glyphs - same
+            // concepts, deliberately consistent iconography across
+            // providers, and neither is adjacent to its GitHub counterpart
+            // in the rail (different groups) so it doesn't repeat Round
+            // 63's "looks the same at a glance" problem.
             {
                 key: "azureDevOpsGroup",
                 type: "group",
                 label: "Azure DevOps",
                 Icon: AzureDevOpsIcon,
                 children: [
+                    { key: "azureDevOpsDashboard", label: "Dashboard", Icon: DashboardIcon },
                     { key: "azureDevOpsBranches", label: "Branches", Icon: AzureDevOpsBranchesIcon },
                     { key: "azureDevOpsPipelines", label: "Pipelines", Icon: AzureDevOpsPipelinesIcon },
                     { key: "azureDevOpsArtifacts", label: "Build Artifacts", Icon: AzureDevOpsArtifactsIcon },

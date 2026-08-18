@@ -1,14 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 
-import { getAzureDevOpsProjects, getAzureDevOpsPipelines, getAzureDevOpsLatestArtifacts } from "../../services/azureDevOpsService";
-import usePagination from "../../hooks/usePagination";
-import Pagination from "../common/Pagination";
-import SearchBox from "../common/SearchBox";
+import { getAzureDevOpsPipelines, getAzureDevOpsLatestArtifacts } from "../../services/azureDevOpsService";
 import ComboBox from "../common/ComboBox";
 import CopyButton from "../common/CopyButton";
+import useAzureDevOpsProject from "../../hooks/useAzureDevOpsProject";
 import useNavigation from "../../hooks/useNavigation";
-
-const PAGE_SIZE = 10;
 
 // Same CI/CD/CI+CD name-based heuristic as AzureDevOpsPipelinesView's own
 // classifyPipeline - duplicated rather than imported, same reasoning as
@@ -87,21 +83,18 @@ function ArtifactDetailDialog({ artifact, onClose }) {
 
 }
 
-// Azure DevOps' Build Artifacts sub-page - two levels: projects -> one
-// screen combining the same CI/CD/CI+CD-tabbed, search-by-name pipeline
-// picker Pipelines itself uses, then that pipeline's LATEST run's
-// artifacts directly - no separate "pick a run" step, by explicit
-// request. Copy-name button per row; clicking a row opens the full detail
-// dialog (type, location, download URL).
+// Azure DevOps' Build Artifacts sub-page - the same CI/CD/CI+CD-tabbed,
+// search-by-name pipeline picker Pipelines itself uses, then that
+// pipeline's LATEST run's artifacts directly - no separate "pick a run"
+// step, by explicit request. Copy-name button per row; clicking a row
+// opens the full detail dialog (type, location, download URL). The
+// project itself is picked once on the Dashboard sub-page and shared via
+// AzureDevOpsProjectContext - this page no longer asks for one separately.
 export default function AzureDevOpsArtifactsView() {
 
     const { setTab } = useNavigation();
+    const { project } = useAzureDevOpsProject();
 
-    const [projects, setProjects] = useState(null);
-    const [loading, setLoading] = useState(true);
-    const [search, setSearch] = useState("");
-
-    const [selectedProject, setSelectedProject] = useState(null);
     const [pipelines, setPipelines] = useState(null);
     const [pipelinesLoading, setPipelinesLoading] = useState(false);
 
@@ -113,28 +106,16 @@ export default function AzureDevOpsArtifactsView() {
 
     const [detailArtifact, setDetailArtifact] = useState(null);
 
-    function refresh() {
+    useEffect(() => {
 
-        setLoading(true);
-
-        getAzureDevOpsProjects().then((data) => {
-            setProjects(data);
-            setLoading(false);
-        }).catch((err) => {
-            console.error(err);
-            setProjects({ configured: false, error: "Unable to reach the Deployment API." });
-            setLoading(false);
-        });
-
-    }
-
-    useEffect(refresh, []);
-
-    function openProject(project) {
-
-        setSelectedProject(project);
         setPipelineId("");
         setArtifacts(null);
+
+        if (!project) {
+            setPipelines(null);
+            return;
+        }
+
         setPipelinesLoading(true);
 
         getAzureDevOpsPipelines(project.name).then((data) => {
@@ -146,7 +127,8 @@ export default function AzureDevOpsArtifactsView() {
             setPipelinesLoading(false);
         });
 
-    }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [project?.id]);
 
     function handleModeChange(nextMode) {
 
@@ -165,7 +147,7 @@ export default function AzureDevOpsArtifactsView() {
 
         setArtifactsLoading(true);
 
-        getAzureDevOpsLatestArtifacts(selectedProject.name, Number(nextId)).then((data) => {
+        getAzureDevOpsLatestArtifacts(project.name, Number(nextId)).then((data) => {
             setArtifacts(data);
             setArtifactsLoading(false);
         }).catch((err) => {
@@ -176,282 +158,187 @@ export default function AzureDevOpsArtifactsView() {
 
     }
 
-    const filteredProjects = useMemo(() => {
-
-        const items = projects?.projects || [];
-        const trimmed = search.trim().toLowerCase();
-
-        return trimmed ? items.filter((p) => p.name.toLowerCase().includes(trimmed)) : items;
-
-    }, [projects, search]);
-
-    const { page, setPage, pageCount, pageItems, totalCount, startIndex, endIndex } = usePagination(filteredProjects, PAGE_SIZE);
-
     const modeFilteredPipelines = useMemo(
         () => (pipelines?.pipelines || []).filter((p) => classifyPipeline(p) === mode),
         [pipelines, mode]
     );
 
-    // ---- Level 2: pick a pipeline, see its latest artifacts ----
-
-    if (selectedProject) {
-
-        return (
-
-            <>
-
-            <ArtifactDetailDialog artifact={detailArtifact} onClose={() => setDetailArtifact(null)} />
-
-            <div className="card">
-
-                <div className="button-row" style={{ justifyContent: "space-between", marginBottom: "12px" }}>
-                    <h2 className="card-title" style={{ marginBottom: 0 }}>{selectedProject.name}</h2>
-                    <button
-                        type="button"
-                        className="btn btn-secondary btn-sm"
-                        onClick={() => { setSelectedProject(null); setPipelines(null); }}
-                    >
-                        ← Back to projects
-                    </button>
-                </div>
-
-                {pipelinesLoading ? (
-
-                    <p className="field-hint">Loading pipelines...</p>
-
-                ) : !pipelines?.configured || pipelines.error ? (
-
-                    <p className="error-message">{pipelines?.error || "Azure DevOps is not configured."}</p>
-
-                ) : (
-
-                    <>
-
-                    <div className="form-group">
-
-                        <label>Mode</label>
-
-                        <div className="mode-toggle">
-
-                            <button
-                                type="button"
-                                className={`mode-toggle-option ${mode === "CI" ? "active" : ""}`}
-                                onClick={() => handleModeChange("CI")}
-                            >
-                                CI
-                            </button>
-
-                            <button
-                                type="button"
-                                className={`mode-toggle-option ${mode === "CD" ? "active" : ""}`}
-                                onClick={() => handleModeChange("CD")}
-                            >
-                                CD
-                            </button>
-
-                            <button
-                                type="button"
-                                className={`mode-toggle-option ${mode === "CI+CD" ? "active" : ""}`}
-                                onClick={() => handleModeChange("CI+CD")}
-                            >
-                                CI+CD
-                            </button>
-
-                        </div>
-
-                    </div>
-
-                    <div className="form-group">
-
-                        <label>Pipeline</label>
-
-                        <ComboBox
-                            options={modeFilteredPipelines.map((p) => ({ value: String(p.id), label: p.name }))}
-                            value={pipelineId}
-                            onChange={handleSelectPipeline}
-                            placeholder="Search or select a pipeline..."
-                            emptyLabel={`No ${mode} pipeline found`}
-                        />
-
-                    </div>
-
-                    {pipelineId && (
-
-                        artifactsLoading ? (
-
-                            <p className="field-hint">Loading the latest artifacts...</p>
-
-                        ) : !artifacts?.configured || artifacts.error ? (
-
-                            <p className="error-message">{artifacts?.error || "Unable to load artifacts."}</p>
-
-                        ) : !artifacts.runId ? (
-
-                            <p className="empty-state" style={{ textAlign: "left" }}>This pipeline has no runs yet.</p>
-
-                        ) : (
-
-                            <>
-
-                            <p className="field-hint">
-                                From the latest run{artifacts.runName ? ` — "${artifacts.runName}"` : ""} (#{artifacts.runId}).
-                            </p>
-
-                            {artifacts.artifacts.length === 0 ? (
-
-                                <p className="empty-state" style={{ textAlign: "left" }}>No artifacts were published by this run.</p>
-
-                            ) : (
-
-                                <div className="table-scroll">
-
-                                    <table className="table">
-
-                                        <thead>
-                                            <tr>
-                                                <th>Artifact</th>
-                                                <th>Type</th>
-                                                <th></th>
-                                            </tr>
-                                        </thead>
-
-                                        <tbody>
-
-                                            {artifacts.artifacts.map((artifact) => (
-
-                                                <tr key={artifact.name} className="table-row-clickable" onClick={() => setDetailArtifact(artifact)}>
-                                                    <td>
-                                                        <span style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                                                            {artifact.name}
-                                                            <CopyButton value={artifact.name} label="Copy artifact name" />
-                                                        </span>
-                                                    </td>
-                                                    <td>{artifact.type || "—"}</td>
-                                                    <td>
-                                                        {artifact.downloadUrl && (
-                                                            <a
-                                                                href={artifact.downloadUrl}
-                                                                target="_blank"
-                                                                rel="noreferrer"
-                                                                onClick={(e) => e.stopPropagation()}
-                                                            >
-                                                                Download
-                                                            </a>
-                                                        )}
-                                                    </td>
-                                                </tr>
-
-                                            ))}
-
-                                        </tbody>
-
-                                    </table>
-
-                                </div>
-
-                            )}
-
-                            </>
-
-                        )
-
-                    )}
-
-                    </>
-
-                )}
-
-            </div>
-
-            </>
-
-        );
-
-    }
-
-    // ---- Level 1: projects ----
-
-    if (loading) {
-        return <div className="card"><p className="empty-state">Loading Azure DevOps projects...</p></div>;
-    }
-
-    if (!projects?.configured) {
+    if (!project) {
 
         return (
             <div className="card">
                 <p className="empty-state" style={{ textAlign: "left" }}>
-                    Connect your Azure DevOps credentials in{" "}
-                    <a href="#" onClick={(e) => { e.preventDefault(); setTab("settings"); }}>Settings → Credentials → Azure DevOps</a>
-                    {" "}to browse this.
+                    Pick a project on the{" "}
+                    <a href="#" onClick={(e) => { e.preventDefault(); setTab("azureDevOpsDashboard"); }}>Azure DevOps Dashboard</a>
+                    {" "}first.
                 </p>
             </div>
         );
 
     }
 
-    if (projects.error) {
-        return <div className="card"><p className="error-message">{projects.error}</p></div>;
-    }
-
     return (
+
+        <>
+
+        <ArtifactDetailDialog artifact={detailArtifact} onClose={() => setDetailArtifact(null)} />
 
         <div className="card">
 
             <div className="button-row" style={{ justifyContent: "space-between", marginBottom: "12px" }}>
-                <h2 className="card-title" style={{ marginBottom: 0 }}>Azure DevOps Projects</h2>
-                <button type="button" className="btn btn-secondary btn-sm" onClick={refresh}>Refresh</button>
+                <h2 className="card-title" style={{ marginBottom: 0 }}>{project.name}</h2>
+                <a href="#" onClick={(e) => { e.preventDefault(); setTab("azureDevOpsDashboard"); }}>Change project</a>
             </div>
 
-            <SearchBox placeholder="Search projects..." value={search} onChange={setSearch} />
+            {pipelinesLoading ? (
 
-            {filteredProjects.length === 0 ? (
+                <p className="field-hint">Loading pipelines...</p>
 
-                <p className="empty-state" style={{ textAlign: "left", marginTop: "12px" }}>No projects found.</p>
+            ) : !pipelines?.configured || pipelines.error ? (
+
+                <p className="error-message">{pipelines?.error || "Azure DevOps is not configured."}</p>
 
             ) : (
 
                 <>
 
-                <div className="table-scroll" style={{ marginTop: "12px" }}>
+                <div className="form-group">
 
-                    <table className="table">
+                    <label>Mode</label>
 
-                        <thead>
-                            <tr>
-                                <th>Project</th>
-                            </tr>
-                        </thead>
+                    <div className="mode-toggle">
 
-                        <tbody>
+                        <button
+                            type="button"
+                            className={`mode-toggle-option ${mode === "CI" ? "active" : ""}`}
+                            onClick={() => handleModeChange("CI")}
+                        >
+                            CI
+                        </button>
 
-                            {pageItems.map((project) => (
+                        <button
+                            type="button"
+                            className={`mode-toggle-option ${mode === "CD" ? "active" : ""}`}
+                            onClick={() => handleModeChange("CD")}
+                        >
+                            CD
+                        </button>
 
-                                <tr key={project.id} className="table-row-clickable" onClick={() => openProject(project)}>
-                                    <td>{project.name}</td>
-                                </tr>
+                        <button
+                            type="button"
+                            className={`mode-toggle-option ${mode === "CI+CD" ? "active" : ""}`}
+                            onClick={() => handleModeChange("CI+CD")}
+                        >
+                            CI+CD
+                        </button>
 
-                            ))}
-
-                        </tbody>
-
-                    </table>
+                    </div>
 
                 </div>
 
-                <Pagination
-                    page={page}
-                    pageCount={pageCount}
-                    totalCount={totalCount}
-                    startIndex={startIndex}
-                    endIndex={endIndex}
-                    onPageChange={setPage}
-                />
+                <div className="form-group">
+
+                    <label>Pipeline</label>
+
+                    <ComboBox
+                        options={modeFilteredPipelines.map((p) => ({ value: String(p.id), label: p.name }))}
+                        value={pipelineId}
+                        onChange={handleSelectPipeline}
+                        placeholder="Search or select a pipeline..."
+                        emptyLabel={`No ${mode} pipeline found`}
+                    />
+
+                </div>
+
+                {pipelineId && (
+
+                    artifactsLoading ? (
+
+                        <p className="field-hint">Loading the latest artifacts...</p>
+
+                    ) : !artifacts?.configured || artifacts.error ? (
+
+                        <p className="error-message">{artifacts?.error || "Unable to load artifacts."}</p>
+
+                    ) : !artifacts.runId ? (
+
+                        <p className="empty-state" style={{ textAlign: "left" }}>This pipeline has no runs yet.</p>
+
+                    ) : (
+
+                        <>
+
+                        <p className="field-hint">
+                            From the latest run{artifacts.runName ? ` — "${artifacts.runName}"` : ""} (#{artifacts.runId}).
+                        </p>
+
+                        {artifacts.artifacts.length === 0 ? (
+
+                            <p className="empty-state" style={{ textAlign: "left" }}>No artifacts were published by this run.</p>
+
+                        ) : (
+
+                            <div className="table-scroll">
+
+                                <table className="table">
+
+                                    <thead>
+                                        <tr>
+                                            <th>Artifact</th>
+                                            <th>Type</th>
+                                            <th></th>
+                                        </tr>
+                                    </thead>
+
+                                    <tbody>
+
+                                        {artifacts.artifacts.map((artifact) => (
+
+                                            <tr key={artifact.name} className="table-row-clickable" onClick={() => setDetailArtifact(artifact)}>
+                                                <td>
+                                                    <span style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                                                        {artifact.name}
+                                                        <CopyButton value={artifact.name} label="Copy artifact name" />
+                                                    </span>
+                                                </td>
+                                                <td>{artifact.type || "—"}</td>
+                                                <td>
+                                                    {artifact.downloadUrl && (
+                                                        <a
+                                                            href={artifact.downloadUrl}
+                                                            target="_blank"
+                                                            rel="noreferrer"
+                                                            onClick={(e) => e.stopPropagation()}
+                                                        >
+                                                            Download
+                                                        </a>
+                                                    )}
+                                                </td>
+                                            </tr>
+
+                                        ))}
+
+                                    </tbody>
+
+                                </table>
+
+                            </div>
+
+                        )}
+
+                        </>
+
+                    )
+
+                )}
 
                 </>
 
             )}
 
         </div>
+
+        </>
 
     );
 

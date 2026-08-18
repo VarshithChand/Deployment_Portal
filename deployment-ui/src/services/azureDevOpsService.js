@@ -24,6 +24,13 @@ export const getAzureDevOpsProjects = async () => {
     return response.data;
 };
 
+// ---- Dashboard: running pipelines for the selected project ----
+
+export const getAzureDevOpsRunningBuilds = async (project) => {
+    const response = await azureDevOpsApi.get(`/projects/${encodeURIComponent(project)}/running-builds`);
+    return response.data;
+};
+
 // ---- Branches: repositories -> branches ----
 
 export const getAzureDevOpsRepositories = async () => {
