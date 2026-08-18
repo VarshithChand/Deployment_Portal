@@ -8469,3 +8469,101 @@ shipped. With this round, all four of this portal's major multi-
 provider feature areas (Source Control, Cloud Services, Container
 Registry, Code Quality) now share one identical nested-sidebar-group
 navigation pattern.
+
+==================================================
+ROUND 61 - UX FIX: LOCK ICON CENTERING + COLLAPSED SIDEBAR GROUPS
+DEFAULT TO HIDDEN
+==================================================
+Date: 2026-08-18
+Trigger: two screenshots - a cropped close-up of the blue ".pin-lock-icon"
+padlock tile (used by PinLockScreen.jsx's idle-lock screen and Round
+59's new CredentialsLockModal.jsx), and the collapsed icon-only sidebar
+rail showing 30+ stacked icons with no labels to tell them apart.
+Verbatim ask: "keep the pin icon at center" and "no need to see that
+much log the default is colapsed."
+
+Root-caused both before touching code:
+
+1. Lock icon centering: the padlock glyph's own SVG coordinates (rect
+   at y=11, shackle arc from y=7.5, circle at cy=15.2, all within a
+   24-unit viewBox) don't bound a shape whose midpoint is at y=12 (the
+   viewBox's true center) - the shape's real vertical extent is y=7.5
+   to y=20, centered at y=13.75, about 1.75 units (7% of the box)
+   below true center. .pin-lock-icon's own `place-items:center` CSS
+   was already correctly centering the SVG ELEMENT itself within its
+   60x60 tile - the glyph drawn INSIDE that correctly-centered SVG was
+   what sat low. Fixed by shifting every coordinate up by 1.75 units in
+   both places this exact icon is duplicated (PinLockScreen.jsx and
+   CredentialsLockModal.jsx, per that file's own established "small
+   hand-drawn SVG local to the one screen that needs it" precedent) -
+   confirmed by recomputing the new bounding box (y 5.75 to 18.25)
+   lands exactly on center (13.45... i.e. midpoint 12) before applying
+   the fix, not just eyeballing it. Left the OTHER, unrelated LockIcon
+   in SidebarIcons.jsx (used for admin-restricted sidebar items)
+   untouched - its own imbalance measured out to well under half a
+   pixel at real render size, not worth touching alongside a change
+   that wasn't asked for there.
+
+2. Collapsed-sidebar icon overload: Sidebar.jsx's renderNavItem had
+   `const isExpanded = collapsed || groupActive || !groupsCollapsed[item.key];`
+   - the bare `collapsed ||` unconditionally forced every group's
+   children to always render whenever the icon-only rail was active,
+   with a comment explaining the original reasoning ("nothing to hide,
+   no labels anyway"). That reasoning held when there was exactly one
+   2-level group (GitHub); after Rounds 55/57/58/60 turned Source
+   Control/Container Registry/Code Quality/Cloud Services into nested
+   groups too - Source Control alone now holds GitHub's 9 plus 4 more,
+   Container Registry 9, Code Quality 6 - the icon-only rail had grown
+   to 30+ stacked icons with nothing distinguishing one from another,
+   exactly matching the screenshot.
+
+   Fixed by making the DEFAULT expanded/collapsed state itself depend
+   on which rail mode is active (icon-only defaults to collapsed,
+   labeled rail keeps defaulting to expanded, matching its prior
+   behavior exactly) while still respecting BOTH override conditions
+   correctly: an explicit prior click on that specific group (tracked
+   via `Object.prototype.hasOwnProperty.call(groupsCollapsed, item.key)`
+   so "explicitly expanded" and "no choice made yet" are distinguishable
+   states, not conflated) always wins over the mode-based default in
+   either direction; a group containing the currently active page is
+   still always forced open regardless of anything else, so switching
+   into icon-only mode (or a fresh visit that defaults to it) can never
+   hide where you currently are. Also removed toggleGroup's now-
+   incorrect `if (collapsed) return;` no-op guard, which existed
+   specifically because clicking a group icon used to have no visible
+   effect in icon-only mode - it now does (revealing/hiding that
+   group's own children as additional icons), so the guard would have
+   silently broken the very interaction this round exists to enable.
+
+Verification performed:
+  - `npm run lint` in deployment-ui/: no new warnings.
+  - `npm run build` in deployment-ui/: succeeded, no chunk size
+    changes of note (both fixes are logic/coordinate tweaks within
+    already-existing files, no new imports or components).
+  - Manually recomputed the lock icon's bounding-box math by hand
+    before and after the coordinate shift to confirm the fix actually
+    lands on true center, rather than eyeballing a "looks about right"
+    adjustment.
+  - Manually traced the new isExpanded logic against all 4 relevant
+    cases (icon-only + no explicit state, icon-only + explicitly
+    expanded, labeled + no explicit state, any mode + group contains
+    active tab) to confirm each resolves to the intended visibility
+    before shipping - not just running the app and eyeballing one path.
+  - No backend changes in this round - purely frontend SVG coordinate
+    and sidebar-state-logic fixes, so no dotnet build was needed.
+  - Live check against the deployed Render backend after the push:
+    /api/bootstrap healthy (HTTP 200).
+
+Files changed: deployment-ui/src/components/PinLockScreen.jsx,
+deployment-ui/src/components/settings/credentials/
+CredentialsLockModal.jsx, deployment-ui/src/components/layout/
+Sidebar.jsx.
+Commit: ae94d22.
+
+Status: Complete, pushed, live-verified the backend is up. Both fixes
+are self-contained UI corrections with no new standing limitations -
+the lock icon fix is pure SVG coordinate math (independently
+verifiable, not a guess), and the sidebar default-collapse fix
+preserves every existing guarantee (active-page group always visible,
+explicit user choice always respected) while changing only the
+DEFAULT for a group nobody has touched yet.
