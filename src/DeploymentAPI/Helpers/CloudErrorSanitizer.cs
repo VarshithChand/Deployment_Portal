@@ -37,6 +37,19 @@ public static class CloudErrorSanitizer
             };
         }
 
+        // Non-AWS callers (currently Azure DevOps - see AzureDevOpsService's
+        // own EnsureAzureDevOpsSuccessAsync) build their own HttpRequestException
+        // with the PROVIDER'S real error text as .Message, rather than the
+        // GitHub-flavored text HttpClientHelper.BuildFriendlyMessageAsync
+        // would otherwise produce (that one is GitHub Actions-specific -
+        // rate-limit headers, "repo"/"workflow" scope wording - wrong for
+        // any other caller). Surfacing it here is strictly better than the
+        // generic fallback below: a visitor (and whoever debugs a report of
+        // "it just says unable to reach X") can actually see what Azure
+        // DevOps itself said instead of a black box.
+        if (ex is HttpRequestException httpEx && !string.IsNullOrWhiteSpace(httpEx.Message))
+            return $"{provider} rejected this request: {httpEx.Message}";
+
         return $"Unable to reach {provider} for {context}.";
     }
 }

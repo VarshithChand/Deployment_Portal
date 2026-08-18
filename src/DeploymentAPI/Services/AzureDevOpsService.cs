@@ -30,13 +30,51 @@ public class AzureDevOpsService
     private static AuthenticationHeaderValue BuildAuth(string token) =>
         new("Basic", Convert.ToBase64String(Encoding.ASCII.GetBytes($":{token}")));
 
+    // Deliberately NOT HttpClientHelper.EnsureSuccessAsync - that one builds
+    // its failure message via BuildFriendlyMessageAsync, which is GitHub
+    // Actions-specific (checks GitHub's rate-limit headers, talks about
+    // "repo"/"workflow" PAT scopes) - wrong content for an Azure DevOps
+    // call, and CloudErrorSanitizer.Describe's generic AWS-focused fallback
+    // was discarding it anyway, surfacing only "Unable to reach Azure
+    // DevOps for X" with no way to tell what actually went wrong. This
+    // reads Azure DevOps' own error body instead (typically
+    // {"message": "...", "typeKey": "...", ...} - the standard TFS/Azure
+    // DevOps REST error envelope) so a failed mutating call (branch
+    // create/delete, a pipeline run trigger, PR approve/complete) surfaces
+    // the REAL reason - a bad templateParameters value, a PAT missing a
+    // scope, a stale optimistic-concurrency check - instead of a black box.
+    private static async Task EnsureAzureDevOpsSuccessAsync(HttpResponseMessage response)
+    {
+        if (response.IsSuccessStatusCode)
+            return;
+
+        var body = await response.Content.ReadAsStringAsync();
+        string? message = null;
+
+        try
+        {
+            message = JObject.Parse(body)["message"]?.ToString();
+        }
+        catch
+        {
+            // Not JSON, or no "message" field - fall through to the raw
+            // body (still often readable) or the bare status code below.
+        }
+
+        var detail = !string.IsNullOrWhiteSpace(message)
+            ? message
+            : !string.IsNullOrWhiteSpace(body) ? body : $"{(int)response.StatusCode} {response.StatusCode}";
+
+        throw new HttpRequestException(detail, null, response.StatusCode);
+    }
+
     private static async Task<string> GetAsync(HttpClient client, string baseUrl, string organization, string urlPath, string token)
     {
         using var request = new HttpRequestMessage(HttpMethod.Get, $"{baseUrl}{Uri.EscapeDataString(organization)}{urlPath}");
         request.Headers.Authorization = BuildAuth(token);
 
         var response = await client.SendAsync(request);
-        await HttpClientHelper.EnsureSuccessAsync(response);
+        await EnsureAzureDevOpsSuccessAsync(response);
 
         return await response.Content.ReadAsStringAsync();
     }
@@ -59,7 +97,7 @@ public class AzureDevOpsService
             request.Content = new StringContent(Newtonsoft.Json.JsonConvert.SerializeObject(body), Encoding.UTF8, "application/json");
 
         var response = await client.SendAsync(request);
-        await HttpClientHelper.EnsureSuccessAsync(response);
+        await EnsureAzureDevOpsSuccessAsync(response);
 
         var text = await response.Content.ReadAsStringAsync();
         return string.IsNullOrWhiteSpace(text) ? new JObject() : JObject.Parse(text);
@@ -79,7 +117,7 @@ public class AzureDevOpsService
             request.Headers.Authorization = BuildAuth(token);
 
             var response = await VsspsHttpClient.SendAsync(request);
-            await HttpClientHelper.EnsureSuccessAsync(response);
+            await EnsureAzureDevOpsSuccessAsync(response);
 
             var profile = JObject.Parse(await response.Content.ReadAsStringAsync());
             return profile["id"]?.ToString();
@@ -315,7 +353,7 @@ public class AzureDevOpsService
             request.Headers.Accept.Add(new System.Net.Http.Headers.MediaTypeWithQualityHeaderValue("text/plain"));
 
             var response = await DevOpsHttpClient.SendAsync(request);
-            await HttpClientHelper.EnsureSuccessAsync(response);
+            await EnsureAzureDevOpsSuccessAsync(response);
 
             var yamlText = await response.Content.ReadAsStringAsync();
 
