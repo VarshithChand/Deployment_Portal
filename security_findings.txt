@@ -7519,3 +7519,146 @@ With Harbor and Nexus, the Container Registry hub is now feature-
 complete against its original 9-provider scope. No further registries
 are planned unless the user requests one not on the original reference
 image.
+
+==================================================
+ROUND 53 - BUG FIX: TEMPLATE TESTER IGNORED AZURE STAGE CONDITIONS
+==================================================
+Date: 2026-08-17
+Trigger: user pasted a real Azure DevOps pipeline (a Start/Stop RC
+App Services pipeline, two mutually-exclusive stages StartRC/StopRC
+gated by a string "action" parameter with values START/STOP, plus a
+per-app each/if loop generating one AzureCLI@2 step per app) and
+reported "I NEED TO TEST THIS IN TEMPLATE TESTER IT DOESN'T WORK
+PROPERLY WHAT I EXPECT" - no further detail given.
+
+Root-caused by tracing the exact pipeline through
+deployment-ui/src/utils/parseWorkflowYaml.js by hand (later confirmed
+with a throwaway Node script run against the parser directly, deleted
+after) rather than guessing:
+
+1. Azure stage-level "condition:" fields were never read anywhere in
+   the parser - extractAzureJobs's azure-stages branch read
+   stage.dependsOn for job ordering but nothing ever looked at
+   stage.condition. Since this pipeline's entire purpose is mutual
+   exclusivity between StartRC and StopRC based on the "action"
+   parameter, the practical effect was: BOTH stages always showed as
+   running in every simulated Run, regardless of what was picked -
+   the single biggest reason the simulation didn't match what a real
+   pipeline run would do.
+
+2. Azure's "type: string" + "values: [...]" parameter shape (its
+   equivalent of a dropdown/choice picker - here, action:
+   START/STOP) was dropped entirely by resolveRunParameters, which
+   hardcoded options: null for every Azure string/number parameter.
+   The Run dialog rendered "action" as a free-text box instead of a
+   picker, matching neither Azure's own real "Run pipeline" UI nor
+   this tool's own existing GitHub choice-input rendering (which
+   already worked correctly for GitHub's near-identical
+   workflow_dispatch "type: choice").
+
+3. A latent bug only surfaced once fixing #1 was attempted: the
+   existing "skip a job whose dependency was itself skipped" cascade
+   would have made StopRC ALWAYS show skipped whenever StartRC
+   correctly skipped (since Azure's default sequential stage ordering
+   makes StopRC implicitly depend on StartRC) - which is wrong real
+   Azure semantics. An explicit stage-level condition: REPLACES
+   Azure's implicit succeeded()-on-every-dependency default rather
+   than combining with it, so a job/stage with its own explicit
+   condition must be gated purely by that condition, not by upstream
+   skip-cascading. Fixed by only applying the cascade when a job has
+   no condition of its own.
+
+4. Separately spotted while reading the surrounding code (not
+   reported by the user, but a real, confirmed latent crash): the
+   parser's "azure-steps" flavor (a bare top-level "steps:" pipeline
+   with no jobs/stages) built a synthetic job object missing
+   referencedParams/environment/conditions entirely - runJob accesses
+   job.referencedParams.length and job.environment unconditionally,
+   so pasting a steps-only pipeline into Template Tester would have
+   thrown a runtime error. Fixed alongside the others since it's the
+   same file, same job-shape contract.
+
+Fix (parseWorkflowYaml.js):
+  - resolveRunParameters remaps a string/number parameter with a
+    non-empty values: list to type "choice" with those values as
+    options - the Run dialog's existing <select> rendering (already
+    built for GitHub) now applies to Azure choice-style parameters
+    too, with no UI changes needed.
+  - normalizeAzureJob/normalizeTemplateRefJob/the GitHub job builder/
+    the azure-steps synthetic job now all carry a "conditions: []"
+    array (the job's own raw "condition:" text, kept verbatim -
+    previously only scanned for referenced boolean names and then
+    discarded) - the azure-stages loop pushes the STAGE's own
+    condition text onto every job it contains.
+  - New substituteConditionParamRefs(text, paramsMap): a stage/job
+    condition string uses Azure's compile-time "${{ parameters.x }}"
+    substitution INSIDE a runtime condition (e.g. "eq('${{
+    parameters.action }}', 'START')") - a different syntax context
+    from the existing "${{ if ... }}:" map-key evaluator
+    (evaluateCondition), which was built for bare, already-unwrapped
+    expression text. This replaces those markers with the actual
+    parameter value first, producing plain runtime-condition syntax
+    (e.g. "eq('STOP', 'START')") the existing evaluateCondition then
+    parses as an ordinary string-literal comparison - reused as-is,
+    not reimplemented.
+  - New exported shouldSkipJob(job, paramValues): true if ANY of a
+    job's stored conditions decidably evaluates false against the
+    actual values chosen in the Run dialog; undecidable (a
+    runtime-only reference like succeeded()/variables.x) or decidably
+    true never skips - the same safe-default posture every other
+    condition-evaluation path in this file already uses.
+
+Fix (TemplateTester.jsx):
+  - Imports and calls shouldSkipJob as a new gate in runJob, alongside
+    the existing referencedParams boolean-checkbox gate (kept
+    unchanged/unioned, not replaced, to avoid any regression risk on
+    whatever it already correctly handled).
+  - The pre-existing "dependency was skipped" cascade now only fires
+    when job.conditions.length === 0 - see reasoning above.
+
+Explicitly NOT fixed (documented, out of scope): this pipeline's
+per-app "${{ each app in parameters.apps }}: ${{ if ... }}:" loop lives
+INSIDE "steps:", not "jobs:" - it correctly expands into two separate
+AzureCLI@2 STEPS (with the app_ChannelManager/app_RateManagement/
+allApps ticks' referenced-param text correctly attached to each
+step's own condition), but Template Tester's graph renders at JOB
+granularity only - individual steps have no skip/run visual state of
+their own, so the per-app ticks in the Run dialog currently have no
+visible effect on the simulated run. Fixing this would need
+WorkflowGraph.jsx to render per-step status, a materially bigger UI
+change than a parser fix - not attempted this round, flagged to the
+user directly rather than left as a silent gap.
+
+Verification performed:
+  - Traced the exact reported pipeline by hand against the parser's
+    logic before writing any fix, to have a concrete, provable root
+    cause rather than a guess.
+  - After the fix, wrote a throwaway Node script (deleted immediately
+    after, never committed) that ran parseWorkflowYaml + shouldSkipJob
+    directly against the user's exact YAML: confirmed "action" now
+    resolves to {type: "choice", options: ["START","STOP"]}; with
+    action left at its default "STOP", StartRC::StartApps correctly
+    evaluates as SKIPPED and StopRC::StopApps as RUNS; with
+    action="START" picked, the result correctly flips (StartRC runs,
+    StopRC skips) - exactly matching what a real Azure pipeline run
+    would do.
+  - `npm run lint` in deployment-ui/: no new warnings.
+  - `npm run build` in deployment-ui/: succeeded.
+  - Live check against the deployed Render backend after the push:
+    /api/bootstrap healthy (HTTP 200).
+
+Files changed: deployment-ui/src/utils/parseWorkflowYaml.js,
+deployment-ui/src/pages/TemplateTester.jsx.
+Commit: b6aba7a.
+
+Status: Complete, pushed, live-verified the backend is up, AND
+independently verified correct against the user's own exact pipeline
+before shipping (unlike most rounds this session, which could only be
+verified by build/lint since no real credentials existed to exercise
+them live - this one is a pure client-side parser/simulator with no
+external dependency, so full behavioral verification was possible and
+performed). Recommend @VarshithChand re-paste the pipeline in Template
+Tester and confirm the Run dialog now shows a START/STOP dropdown and
+only the matching stage runs; flagged directly that per-app
+(ChannelManager/RateManagement) tick behavior is not yet reflected in
+the simulated run, a known and stated limitation, not a silent gap.
