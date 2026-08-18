@@ -322,21 +322,26 @@ export function GitHubGroupIcon() {
     );
 }
 
-// Source Control's 5 providers - GitHub reuses its own existing
-// GitHubGroupIcon (repo-with-spine glyph) unchanged, now nested one level
-// deeper; the other 4 share PullRequestIcon's node-and-merge-line
-// vocabulary (already established as "this is a repo/branching concept" in
-// this file) with a small distinguishing accent each, same "one base
-// shape, one accent" economy as Container Registry's/Code Quality's icons.
+// Source Control's providers - a shared base shape with only a tiny corner
+// accent (the original approach here) reads as the same icon at 18px in
+// the collapsed rail, which is exactly what a visitor flagged. Each one
+// below now has its own OUTER silhouette instead - only GitHubGroupIcon
+// stays a repo-spine rect, since that exact glyph is reused elsewhere in
+// the app (SwitchRepositoryModal, HeaderSearch) and changing it here would
+// make it inconsistent with itself, not just with its siblings.
 
-// The group header itself - a repo-spine rect (like GitHubGroupIcon) but
-// wider/plainer, reading as "any repository host" rather than GitHub
-// specifically.
+// The group header - a small hub with 3 satellite nodes, reading as "many
+// repository hosts, one place" rather than any specific provider's shape.
 export function SourceControlIcon() {
     return (
         <svg {...common}>
-            <rect x="2" y="4" width="14" height="10" rx="1.5" stroke="currentColor" strokeWidth="1.4" />
-            <line x1="6" y1="4" x2="6" y2="14" stroke="currentColor" strokeWidth="1.3" />
+            <circle cx="9" cy="9" r="1.8" fill="currentColor" />
+            <circle cx="4" cy="4" r="1.6" stroke="currentColor" strokeWidth="1.3" />
+            <circle cx="14" cy="4" r="1.6" stroke="currentColor" strokeWidth="1.3" />
+            <circle cx="9" cy="15" r="1.6" stroke="currentColor" strokeWidth="1.3" />
+            <line x1="7.9" y1="7.9" x2="5.1" y2="5.1" stroke="currentColor" strokeWidth="1.2" />
+            <line x1="10.1" y1="7.9" x2="12.9" y2="5.1" stroke="currentColor" strokeWidth="1.2" />
+            <line x1="9" y1="10.8" x2="9" y2="13.4" stroke="currentColor" strokeWidth="1.2" />
         </svg>
     );
 }
@@ -367,29 +372,35 @@ export function BitbucketIcon() {
     );
 }
 
-// A repo-spine rect (same base as GitHubGroupIcon/SourceControlIcon) with a
-// small triangular "cloud provider" accent at the bottom-right - Azure
-// Repos, keeping the same visual family Azure ACR's own icon already
-// established for this app's Azure integrations.
+// A diamond outline with a filled triangle inside - Azure Repos. The
+// diamond is the same "this is Azure" signature Azure ACR's icon uses
+// below (AcrIcon) and Azure Cloud Services uses too (AzureCloudIcon) - a
+// deliberate, recognizable brand thread across this app's Azure
+// integrations, same reasoning the old accent-only version already had.
+// Distinct from all three by inner fill: triangle here, square on ACR,
+// circle on Cloud Services - and none of the three ever sit adjacent to
+// each other in the rail, so the shared outline doesn't repeat the "looks
+// the same at a glance" problem this round exists to fix.
 export function AzureReposIcon() {
     return (
         <svg {...common}>
-            <rect x="3" y="3" width="12" height="12" rx="1.6" stroke="currentColor" strokeWidth="1.4" />
-            <line x1="6.5" y1="3" x2="6.5" y2="15" stroke="currentColor" strokeWidth="1.4" />
-            <polygon points="10.5,15 15,15 15,10.5" fill="currentColor" />
+            <polygon points="9,1.5 16.5,9 9,16.5 1.5,9" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
+            <polygon points="9,5.5 12.5,11.5 5.5,11.5" fill="currentColor" />
         </svg>
     );
 }
 
-// A repo-spine rect with a small "commit dot on a line" accent (a single
-// filled circle on a short line) - AWS CodeCommit.
+// A diagonal chain of 3 connected dots - "commit history," AWS CodeCommit.
+// No bounding rect at all, unlike its siblings - the shape itself is the
+// whole icon rather than a base-plus-accent.
 export function CodeCommitIcon() {
     return (
         <svg {...common}>
-            <rect x="3" y="3" width="12" height="12" rx="1.6" stroke="currentColor" strokeWidth="1.4" />
-            <line x1="6.5" y1="3" x2="6.5" y2="15" stroke="currentColor" strokeWidth="1.4" />
-            <line x1="9" y1="9" x2="14" y2="9" stroke="currentColor" strokeWidth="1.3" />
-            <circle cx="11.5" cy="9" r="1.6" fill="currentColor" />
+            <circle cx="4" cy="14" r="1.8" stroke="currentColor" strokeWidth="1.4" />
+            <circle cx="9" cy="9" r="1.8" fill="currentColor" />
+            <circle cx="14" cy="4" r="1.8" stroke="currentColor" strokeWidth="1.4" />
+            <line x1="5.3" y1="12.7" x2="7.7" y2="10.3" stroke="currentColor" strokeWidth="1.3" />
+            <line x1="10.3" y1="7.7" x2="12.7" y2="5.3" stroke="currentColor" strokeWidth="1.3" />
         </svg>
     );
 }
@@ -409,48 +420,50 @@ export function CloudServicesIcon() {
     );
 }
 
-// Cloud Services' 3 providers - each a stroked cloud silhouette (same
-// circle-plus-rounded-rect-base technique SonarCloudIcon already uses, kept
-// distinct from CloudServicesIcon's own FILLED version above since that's
-// now the group header, not one specific child) with one small accent per
-// provider, echoing the same accent vocabulary this file already
-// established for Azure (triangle - see AzureReposIcon) so a visitor
-// who's seen one Azure icon recognizes the pattern in another.
+// Cloud Services' 3 providers - the original version gave all three the
+// same stroked cloud-silhouette base with only a small accent apiece,
+// which is exactly the "looks the same at 18px" problem a visitor flagged
+// in the collapsed rail. Each now has its own OUTER shape instead, so the
+// three are distinguishable at a glance rather than only on close
+// inspection of a tiny corner mark.
 
-// AWS - a small filled square accent (a plain, provider-neutral mark since
-// AWS has no icon precedent elsewhere in this file to echo).
+// AWS - keeps the cloud silhouette (the only one of the three that still
+// looks like a "cloud"), with a bold, large-enough-to-actually-see filled
+// square rather than the old small corner accent.
 export function AwsCloudIcon() {
     return (
         <svg {...common}>
             <circle cx="9" cy="6.8" r="3.3" stroke="currentColor" strokeWidth="1.3" fill="none" />
             <rect x="3.5" y="9" width="11" height="5.5" rx="2.5" stroke="currentColor" strokeWidth="1.3" fill="none" />
-            <rect x="7.3" y="10.5" width="3.4" height="3.4" fill="currentColor" />
+            <rect x="6.6" y="10.2" width="4.8" height="3.1" fill="currentColor" />
         </svg>
     );
 }
 
-// Azure - a small triangle accent, same mark AzureReposIcon already uses
-// for this app's other Azure integration.
+// Azure - a diamond outline, the same "this is Azure" signature AzureReposIcon
+// and AcrIcon use (see AzureReposIcon's own comment) - inner fill (a circle
+// here, vs. triangle/square on the other two) keeps this one distinct from
+// them even though none of the three are ever adjacent in the rail anyway.
 export function AzureCloudIcon() {
     return (
         <svg {...common}>
-            <circle cx="9" cy="6.8" r="3.3" stroke="currentColor" strokeWidth="1.3" fill="none" />
-            <rect x="3.5" y="9" width="11" height="5.5" rx="2.5" stroke="currentColor" strokeWidth="1.3" fill="none" />
-            <polygon points="9,10.3 11.2,13.8 6.8,13.8" fill="currentColor" />
+            <polygon points="9,1.5 16.5,9 9,16.5 1.5,9" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
+            <circle cx="9" cy="9" r="2.8" fill="currentColor" />
         </svg>
     );
 }
 
-// GCP - three small dots, an abstraction of Google's own multi-dot mark
-// (primitives only, no brand colors).
+// GCP - a plain circle with 3 dots in a triangular arrangement, an
+// abstraction of Google's own multi-dot mark (primitives only, no brand
+// colors) - no cloud-base rect at all, so its outer shape (a circle) never
+// gets confused with AWS's cloud-blob or Azure's diamond next to it.
 export function GcpCloudIcon() {
     return (
         <svg {...common}>
-            <circle cx="9" cy="6.8" r="3.3" stroke="currentColor" strokeWidth="1.3" fill="none" />
-            <rect x="3.5" y="9" width="11" height="5.5" rx="2.5" stroke="currentColor" strokeWidth="1.3" fill="none" />
-            <circle cx="6.5" cy="11.75" r="1.1" fill="currentColor" />
-            <circle cx="9" cy="11.75" r="1.1" fill="currentColor" />
-            <circle cx="11.5" cy="11.75" r="1.1" fill="currentColor" />
+            <circle cx="9" cy="9" r="7" stroke="currentColor" strokeWidth="1.4" fill="none" />
+            <circle cx="9" cy="5.3" r="1.5" fill="currentColor" />
+            <circle cx="5.8" cy="11.5" r="1.5" fill="currentColor" />
+            <circle cx="12.2" cy="11.5" r="1.5" fill="currentColor" />
         </svg>
     );
 }
@@ -481,112 +494,135 @@ export function ContainerRegistryIcon() {
     );
 }
 
-// Container Registry's 9 providers, each sharing one common "image" base (a
-// single rounded rect - the group header's own 3-box cluster, simplified to
-// one box per provider since these are now individual pages) plus one small
-// accent distinguishing each - same "one base shape, one distinguishing
-// mark" economy this file already uses for the Code Quality group's
-// ESLint/Pylint/Checkstyle icons.
+// Container Registry's 9 providers. The original version gave all 9 the
+// same rounded-rect "box" base with only a small corner accent apiece -
+// exactly the "these all look the same" problem a visitor flagged in the
+// collapsed rail, made worse here specifically since all 9 sit as direct
+// siblings under one group. Each now gets its own OUTER silhouette -
+// layered bars / diamond / circle / octagon / pentagon / hexagon /
+// triangle / anchor / hub - so no two of the nine share a shape family.
 
-// Box + a "lid" line near the top - AWS ECR, the simplest/first one.
+// Three stacked, widening bars - a "layered image" stand-in (Docker-style
+// image layers), AWS ECR.
 export function EcrIcon() {
     return (
         <svg {...common}>
-            <rect x="3" y="4" width="12" height="11" rx="1.4" stroke="currentColor" strokeWidth="1.4" />
-            <line x1="3" y1="7.5" x2="15" y2="7.5" stroke="currentColor" strokeWidth="1.3" />
+            <rect x="5.5" y="2.5" width="7" height="3" rx="0.8" stroke="currentColor" strokeWidth="1.3" />
+            <rect x="3" y="7.5" width="12" height="3" rx="0.8" stroke="currentColor" strokeWidth="1.3" />
+            <rect x="1" y="12.5" width="16" height="3" rx="0.8" stroke="currentColor" strokeWidth="1.3" />
         </svg>
     );
 }
 
-// Box + a small triangle accent at the top-right corner - Azure ACR.
+// A diamond outline with a filled square inside - Azure ACR, part of the
+// same "diamond = Azure" thread as AzureReposIcon/AzureCloudIcon (see
+// AzureReposIcon's own comment), distinguished from both by its inner fill.
 export function AcrIcon() {
     return (
         <svg {...common}>
-            <rect x="3" y="4" width="12" height="11" rx="1.4" stroke="currentColor" strokeWidth="1.4" />
-            <polygon points="11,4 15,4 15,8" fill="currentColor" />
+            <polygon points="9,1.5 16.5,9 9,16.5 1.5,9" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
+            <rect x="6.8" y="6.8" width="4.4" height="4.4" fill="currentColor" />
         </svg>
     );
 }
 
-// Box + a small circle "tag" badge at the bottom-right - GCP Artifact
+// A circle with a center dot and a trailing line - reads as a luggage/price
+// tag (ring + string), fitting for "tagged" container images - GCP Artifact
 // Registry.
 export function ArtifactRegistryIcon() {
     return (
         <svg {...common}>
-            <rect x="3" y="3" width="11" height="10" rx="1.4" stroke="currentColor" strokeWidth="1.4" />
-            <circle cx="14.2" cy="13.8" r="2.4" stroke="currentColor" strokeWidth="1.3" fill="none" />
+            <circle cx="7.5" cy="7.5" r="5" stroke="currentColor" strokeWidth="1.4" />
+            <circle cx="7.5" cy="7.5" r="1.3" fill="currentColor" />
+            <line x1="11.05" y1="11.05" x2="15.5" y2="15.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
         </svg>
     );
 }
 
-// Box with a smaller filled square nested inside - Docker Hub, distinct
-// from DockerIcon's two-stacked-rects "Engine" glyph elsewhere in the
-// sidebar (a different concept entirely - see ContainerRegistry.jsx's own
-// comment on why the two nav items stay separate).
+// An octagon outline with a filled center dot - Docker Hub, distinct from
+// DockerIcon's two-stacked-rects "Engine" glyph elsewhere in the sidebar (a
+// different concept entirely - see ContainerRegistry.jsx's own comment on
+// why the two nav items stay separate), and from every other shape in this
+// group.
 export function DockerHubIcon() {
     return (
         <svg {...common}>
-            <rect x="3" y="3" width="12" height="12" rx="1.4" stroke="currentColor" strokeWidth="1.4" />
-            <rect x="6.5" y="6.5" width="5" height="5" rx="0.8" fill="currentColor" />
+            <polygon points="6.2,2 11.8,2 16,6.2 16,11.8 11.8,16 6.2,16 2,11.8 2,6.2" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
+            <circle cx="9" cy="9" r="2.3" fill="currentColor" />
         </svg>
     );
 }
 
-// Box + a vertical "spine" on the left edge - GHCR, echoing
-// GitHubGroupIcon's own repository spine to tie it visually back to GitHub.
+// A pentagon ("house" shape - flat sides and bottom, peaked top) with a
+// vertical spine - GHCR, echoing GitHubGroupIcon's own repository spine to
+// tie it back to GitHub while still reading as a completely different
+// outline from GitHubGroupIcon's plain rect.
 export function GhcrIcon() {
     return (
         <svg {...common}>
-            <rect x="3" y="3" width="12" height="12" rx="1.4" stroke="currentColor" strokeWidth="1.4" />
-            <line x1="6.2" y1="3" x2="6.2" y2="15" stroke="currentColor" strokeWidth="1.4" />
+            <polygon points="9,1.5 16,7.2 16,16 2,16 2,7.2" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
+            <line x1="9" y1="7.2" x2="9" y2="16" stroke="currentColor" strokeWidth="1.3" />
         </svg>
     );
 }
 
-// Box + a small diamond accent at the top - GitLab Registry.
+// A hexagon outline with a filled triangle inside - GitLab Registry.
 export function GitLabRegistryIcon() {
     return (
         <svg {...common}>
-            <rect x="3" y="4" width="12" height="11" rx="1.4" stroke="currentColor" strokeWidth="1.4" />
-            <polygon points="9,1.8 11,4 9,6.2 7,4" fill="currentColor" />
+            <polygon points="9,2 14.5,5.25 14.5,11.75 9,15 3.5,11.75 3.5,5.25" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
+            <polygon points="9,6.3 11.7,11 6.3,11" fill="currentColor" />
         </svg>
     );
 }
 
-// Box + two small dots near the top - JFrog Artifactory.
+// A large triangle with two dots inside, reading as a pair of eyes - a
+// small nod to the name, JFrog Artifactory.
 export function JfrogIcon() {
     return (
         <svg {...common}>
-            <rect x="3" y="4" width="12" height="11" rx="1.4" stroke="currentColor" strokeWidth="1.4" />
-            <circle cx="6.8" cy="7.5" r="1" fill="currentColor" />
-            <circle cx="11.2" cy="7.5" r="1" fill="currentColor" />
+            <polygon points="9,2 16,15 2,15" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
+            <circle cx="7" cy="11" r="1.3" fill="currentColor" />
+            <circle cx="11" cy="11" r="1.3" fill="currentColor" />
         </svg>
     );
 }
 
-// Box + a short horizontal line with two downward ticks at the base - an
-// anchor stand-in for Harbor.
+// A real simplified anchor - ring, shaft, crossbar, and flared flukes at
+// the base - built entirely from lines and circles with no bounding box at
+// all, unlike every other icon in this group. Harbor.
 export function HarborIcon() {
     return (
         <svg {...common}>
-            <rect x="3" y="3" width="12" height="10" rx="1.4" stroke="currentColor" strokeWidth="1.4" />
-            <line x1="5.5" y1="16" x2="12.5" y2="16" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
-            <line x1="6.5" y1="13" x2="6.5" y2="16" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
-            <line x1="11.5" y1="13" x2="11.5" y2="16" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+            <circle cx="9" cy="4" r="2" stroke="currentColor" strokeWidth="1.4" />
+            <line x1="9" y1="6" x2="9" y2="14" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+            <line x1="5" y1="9" x2="13" y2="9" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+            <polyline points="4,11 9,15.5 14,11" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
     );
 }
 
-// Box + a small row of three connected dots - a "junction point" stand-in
-// for Nexus.
+// A hub-and-spoke cluster - a central node connected to 5 satellites
+// arranged around it, reading as "junction/nexus" by shape alone, no
+// bounding box. Deliberately busier (5 satellites vs. 3) than
+// SourceControlIcon's own hub glyph above so the two don't read as the
+// same icon even though they're both network shapes - the two groups they
+// belong to are far enough apart in the rail that this is a secondary
+// concern next to this group's own internal distinctness. Nexus.
 export function NexusIcon() {
     return (
         <svg {...common}>
-            <rect x="3" y="4" width="12" height="11" rx="1.4" stroke="currentColor" strokeWidth="1.4" />
-            <line x1="6" y1="7.5" x2="12" y2="7.5" stroke="currentColor" strokeWidth="1.2" />
-            <circle cx="6" cy="7.5" r="1" fill="currentColor" />
-            <circle cx="9" cy="7.5" r="1" fill="currentColor" />
-            <circle cx="12" cy="7.5" r="1" fill="currentColor" />
+            <circle cx="9" cy="9" r="1.8" fill="currentColor" />
+            <circle cx="9" cy="2.5" r="1.5" stroke="currentColor" strokeWidth="1.3" />
+            <circle cx="15" cy="6.5" r="1.5" stroke="currentColor" strokeWidth="1.3" />
+            <circle cx="12.5" cy="15" r="1.5" stroke="currentColor" strokeWidth="1.3" />
+            <circle cx="5.5" cy="15" r="1.5" stroke="currentColor" strokeWidth="1.3" />
+            <circle cx="3" cy="6.5" r="1.5" stroke="currentColor" strokeWidth="1.3" />
+            <line x1="9" y1="9" x2="9" y2="4" stroke="currentColor" strokeWidth="1.1" />
+            <line x1="9" y1="9" x2="13.6" y2="7" stroke="currentColor" strokeWidth="1.1" />
+            <line x1="9" y1="9" x2="11.7" y2="13.4" stroke="currentColor" strokeWidth="1.1" />
+            <line x1="9" y1="9" x2="6.3" y2="13.4" stroke="currentColor" strokeWidth="1.1" />
+            <line x1="9" y1="9" x2="4.4" y2="7" stroke="currentColor" strokeWidth="1.1" />
         </svg>
     );
 }
