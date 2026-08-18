@@ -9613,3 +9613,121 @@ their real org next and report back anything that looks wrong (an
 empty page where runs are expected, a run missing its status/result,
 etc.) so it can be fixed against real response data rather than
 re-guessed.
+
+
+==================================================
+ROUND 72 - UX: MERGE AZURE DEVOPS DASHBOARD INTO
+MAIN DASHBOARD + NEW QUICK ACCESS PANEL
+==================================================
+Date: 2026-08-19
+Trigger: verbatim ask: "the azure dashboard removed there and that to
+be integrated into the main dashboard, and in main dashboard at
+bottom there is an quick access that we can easily access all the
+congigured page i mean all the credentials pages." Two changes, both
+frontend-only.
+
+Part 1 - Azure DevOps Dashboard retired, merged into the main
+Dashboard:
+The standalone "Azure DevOps Dashboard" sub-page (project picker +
+running-pipelines table, introduced Round 67) is gone - its content
+moved onto the portal's own main Dashboard as a new AzureDevOpsCard,
+sitting alongside AllRepositoriesCard/AwsServicesCard/EnvironmentsCard.
+components/sourceControl/AzureDevOpsDashboardView.jsx was moved (git
+detected it as an 86% rename) to components/dashboard/AzureDevOpsCard.jsx
+rather than duplicated - same project-picker-then-running-pipelines
+two-card shape as before, just re-titled for Dashboard context ("Project"
+-> "Azure DevOps", "Running Pipelines" -> "Azure DevOps — Running
+Pipelines") and its own project selection still flows through the
+same AzureDevOpsProjectContext every other Azure DevOps sub-page
+(Pipelines, History, Build Artifacts, Pull Requests) already reads -
+nothing about how the project selection propagates changed, only
+where it's picked. pages/AzureDevOpsDashboard.jsx was deleted, the
+"azureDevOpsDashboard" tab key was removed from Sidebar.jsx's Azure
+DevOps group, NavigationContext.jsx's TABS whitelist, and App.jsx's
+lazy imports/routes. All 8 "Pick a project on the Azure DevOps
+Dashboard first" / "Change project" links across
+AzureDevOpsArtifactsView.jsx, AzureDevOpsPipelinesView.jsx,
+AzureDevOpsPullRequestsView.jsx, and AzureDevOpsHistoryView.jsx now
+setTab("dashboard") and point at the main Dashboard instead.
+
+Part 2 - Quick Access panel on the main Dashboard:
+New QuickAccessCard, rendered last (bottom of the page, as explicitly
+requested), listing one tile per credential-backed page this browser
+session already has connected - GitHub, Azure DevOps, AWS, Azure,
+GCP, AWS ECR, Azure ACR, GCP Artifact Registry, Docker Hub, GHCR,
+GitLab Registry, JFrog, Harbor, Nexus, SonarQube, SonarCloud (16
+possible tiles). Only providers that resolve `configured: true` ever
+render a tile - this mirrors CredentialsView.jsx's own established
+per-tab "checkmark" pattern (Settings → Credentials), reusing the
+exact same status endpoints that page already calls
+(getMyAwsSettings/getMyAzureSettings/getMyGcpSettings,
+getAzureDevOpsStatus, getDockerHubStatus/getGhcrStatus/
+getGitLabRegistryStatus/getJfrogStatus/getHostRegistryStatus,
+getSonarStatus) via one Promise.all on mount, same shape as that
+page's own fetch. GitHub's status is read from useAuth()'s
+githubTokenConfigured (already in context, no extra call). AWS
+ECR/Azure ACR/GCP Artifact Registry deliberately piggyback on the
+aws/azure/gcp status respectively rather than firing their own
+separate check - the same credential already backs all three (see
+the Container Registry hub's own ECR/ACR/Artifact Registry pages), so
+a second status call would just re-ask a question already answered.
+Clicking a tile calls setTab() straight to that page. New CSS
+(.quick-access-grid/.quick-access-tile/...) added to global.css,
+modeled directly on AwsServicesCard's existing .aws-service-tile
+family (same card-bg/border/hover-lift/focus-ring treatment) rather
+than inventing a new visual language.
+
+Deliberately NOT done: Render/Cloudflare/Netlify/Vercel (Hosting
+Providers) were left out of the Quick Access roster - the
+paasHosting page shows this PORTAL's own fixed production deployment
+(admin-only), not a visitor's own connected account (that view only
+exists inline in Settings → Credentials via MyConnectedAccounts per
+that component's own comment), so a tile pointing at paasHosting for
+"your own Render account" would be misleading navigation, not a
+useful shortcut. The plain Docker registry credential and GitHub
+OAuth app were also left out - neither backs a real feature page in
+this portal yet.
+
+Verification performed:
+  - No backend changes in this round - both parts are frontend-only,
+    so no dotnet build was needed.
+  - `npm run lint` in deployment-ui/: no new warnings from any
+    touched/new/moved file.
+  - `npm run build` in deployment-ui/: succeeded; confirmed no
+    AzureDevOpsDashboard-*.js chunk remains in the bundle.
+  - Grepped the whole repo for "azureDevOpsDashboard" after every
+    edit - zero remaining references outside AzureDevOpsCard.jsx's
+    own explanatory comment about what it replaced.
+  - Live check against the deployed Render backend after the push:
+    /api/bootstrap healthy (HTTP 200).
+  - Could NOT visually verify either change in a real browser against
+    a live Azure DevOps org / real connected credentials in this
+    sandboxed session (same standing limitation as every prior round
+    touching this integration) - recommend the user load the
+    Dashboard next and confirm both the Azure DevOps project
+    picker/running-pipelines card and the Quick Access tiles render
+    and navigate as expected.
+
+Files changed: deployment-ui/src/App.jsx,
+deployment-ui/src/components/layout/Sidebar.jsx,
+deployment-ui/src/components/sourceControl/AzureDevOpsArtifactsView.jsx,
+deployment-ui/src/components/sourceControl/AzureDevOpsHistoryView.jsx,
+deployment-ui/src/components/sourceControl/AzureDevOpsPipelinesView.jsx,
+deployment-ui/src/components/sourceControl/AzureDevOpsPullRequestsView.jsx,
+deployment-ui/src/context/NavigationContext.jsx,
+deployment-ui/src/pages/Dashboard.jsx,
+deployment-ui/src/styles/global.css,
+deployment-ui/src/components/dashboard/AzureDevOpsCard.jsx (renamed
+from components/sourceControl/AzureDevOpsDashboardView.jsx),
+deployment-ui/src/components/dashboard/QuickAccessCard.jsx (new).
+Deleted: deployment-ui/src/pages/AzureDevOpsDashboard.jsx.
+Commit: feba149.
+
+Status: Complete, pushed, live-verified the backend is up. The Azure
+DevOps project picker now lives on the main Dashboard instead of its
+own separate sub-page, and a new Quick Access panel at the bottom of
+the Dashboard links straight to every credential-backed page this
+session has already connected. Standing limitation, stated plainly:
+neither change has been exercised in a real browser against real
+credentials in this sandboxed session - worth a quick look on the
+user's end to confirm the tiles/cards render and navigate correctly.
