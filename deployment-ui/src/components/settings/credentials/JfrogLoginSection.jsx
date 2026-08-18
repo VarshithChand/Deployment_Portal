@@ -6,10 +6,11 @@ import { getJfrogStatus, saveJfrogCredentials, clearJfrogCredentials } from "../
 
 const EMPTY_FORM = { hostUrl: "", token: "" };
 
-// JFrog Artifactory's shared, portal-wide credential form (see
-// ContainerRegistryController) - every Artifactory instance is its own
-// domain (unlike Docker Hub/GHCR's fixed hosts), so this needs its own
-// Host URL field rather than reusing PortalRegistryLoginSection's generic
+// JFrog Artifactory's session-scoped credential form (see
+// ContainerRegistryController) - each visitor connects their own, isolated
+// from every other visitor. Every Artifactory instance is its own domain
+// (unlike Docker Hub/GHCR's fixed hosts), so this needs its own Host URL
+// field rather than reusing PortalRegistryLoginSection's generic
 // username/token shape.
 export default function JfrogLoginSection({ onCleared }) {
 
@@ -41,7 +42,7 @@ export default function JfrogLoginSection({ onCleared }) {
         try {
 
             await saveJfrogCredentials(form);
-            toast.show("JFrog credentials saved for the whole portal.", "success");
+            toast.show("JFrog credentials saved for this session.", "success");
             setForm(EMPTY_FORM);
             refresh();
 
@@ -100,8 +101,8 @@ export default function JfrogLoginSection({ onCleared }) {
             <p className="empty-state" style={{ padding: "0 0 15px", textAlign: "left" }}>
                 Powers the Container Registry hub's JFrog tab — your Artifactory instance's base
                 URL (e.g. https://mycompany.jfrog.io/artifactory) and an Access Token with read
-                access to its Docker repositories. Shared by the whole portal — saving here
-                requires an admin account.
+                access to its Docker repositories. Kept for your own session only — isolated
+                from every other visitor of the portal.
             </p>
 
             {loading ? (

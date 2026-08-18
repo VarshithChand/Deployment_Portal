@@ -9,7 +9,7 @@ import useNavigation from "../../hooks/useNavigation";
 const PAGE_SIZE = 10;
 
 // Nexus (Sonatype Nexus Repository) - three levels deep (repositories ->
-// images -> tags), against the portal-wide shared credential (see
+// images -> tags), against this session's own credential (see
 // HostCredentialLoginSection in Settings → Credentials → Nexus). "Images"
 // here means the distinct component names Nexus's generic package API
 // groups a docker-format repository's pushed images under - see
@@ -231,9 +231,9 @@ export default function NexusView() {
         return (
             <div className="card">
                 <p className="empty-state" style={{ textAlign: "left" }}>
-                    Nobody has connected Nexus yet. An admin can connect it in{" "}
+                    Connect your Nexus credentials in{" "}
                     <a href="#" onClick={(e) => { e.preventDefault(); setTab("settings"); }}>Settings → Credentials → Nexus</a>
-                    {" "}to enable this for everyone.
+                    {" "}to browse this.
                 </p>
             </div>
         );

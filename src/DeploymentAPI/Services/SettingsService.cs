@@ -867,73 +867,24 @@ public class SettingsService
         }
     }
 
-    // Portal-wide credentials for the Container Registry hub's two shared
-    // standalone registries (Docker Hub, GHCR) - see the reasoning in the
-    // Container Registry plan: one admin connects each once, every visitor
-    // then browses the same repositories/packages. Deliberately a SEPARATE
-    // JSON node from PortalPaasCredentials above, even though it reuses that
-    // same (Token, AccountId) shape - PortalPaasCredentials is gated by
-    // DenyUnlessSuperAdminAsync everywhere it's used (Hosting Observability's
-    // higher bar), while these two are gated by the regular
-    // AdminGate.DenyUnlessAdminAsync, the same bar the existing generic
-    // "Docker" registry credential (SaveDockerAsync) already uses. Keeping
-    // them in one shared node would mean two different authorization levels
-    // silently coexisting under an identical key shape - confusing for
-    // whoever reads this next. provider is "dockerhub" or "ghcr". Storage:
-    // root["PortalContainerRegistryCredentials"][provider] = { Token, AccountId }
-    // - AccountId holds the registry/GitHub username, Token holds the PAT.
-    public async Task<UserPaasCredentials> GetPortalContainerRegistryCredentialsAsync(string provider)
+    // Docker Hub and GHCR - session-scoped, same isolation as
+    // UserPaasCredentials above (each visitor connects their own, never
+    // shared with any other visitor of the portal). Both reuse that exact
+    // (Token, AccountId) shape and method set directly - see
+    // GetUserPaasCredentialsAsync - so no dedicated methods are needed here;
+    // callers pass provider "dockerhub" or "ghcr" straight into
+    // GetUserPaasCredentialsAsync/SaveUserPaasCredentialsAsync/
+    // ClearUserPaasCredentialsAsync.
+
+    // GitLab Container Registry - its own dedicated shape (HostUrl,
+    // ProjectId, Token), not the generic (Token, AccountId) pair - see
+    // ContainerRegistryDtos.cs's own comment on why. Session-scoped: each
+    // visitor's own connection, isolated from every other visitor. Storage:
+    // root["UserGitLabRegistryCredentials"][key] = { HostUrl, ProjectId, Token }.
+    public async Task<PortalGitLabRegistryCredentials> GetUserGitLabRegistryCredentialsAsync(string key)
     {
         var root = await ReadRootAsync();
-        var entry = (root["PortalContainerRegistryCredentials"] as JObject)?[provider] as JObject;
-
-        return new UserPaasCredentials(
-            Unprotect(entry?["Token"]?.ToString()),
-            entry?["AccountId"]?.ToString());
-    }
-
-    // Blank fields keep whatever was already saved - see SavePortalPaasCredentialsAsync.
-    public async Task SavePortalContainerRegistryCredentialsAsync(string provider, PaasCredentialsUpdateDto update)
-    {
-        var root = await ReadRootAsync();
-        var providers = root["PortalContainerRegistryCredentials"] as JObject ?? new JObject();
-        var entry = providers[provider] as JObject ?? new JObject();
-
-        if (!string.IsNullOrWhiteSpace(update.Token))
-            entry["Token"] = Protect(update.Token.Trim());
-
-        if (!string.IsNullOrWhiteSpace(update.AccountId))
-            entry["AccountId"] = update.AccountId.Trim();
-
-        providers[provider] = entry;
-        root["PortalContainerRegistryCredentials"] = providers;
-        await WriteRootAsync(root);
-
-        _log.LogInfo("Settings", $"Portal-wide container registry credentials saved ({provider}).");
-    }
-
-    public async Task ClearPortalContainerRegistryCredentialsAsync(string provider)
-    {
-        var root = await ReadRootAsync();
-
-        if (root["PortalContainerRegistryCredentials"] is JObject providers && providers[provider] != null)
-        {
-            providers.Remove(provider);
-            await WriteRootAsync(root);
-
-            _log.LogInfo("Settings", $"Portal-wide container registry credentials cleared ({provider}).");
-        }
-    }
-
-    // GitLab Container Registry - its own dedicated shape/store (HostUrl,
-    // ProjectId, Token), not PortalContainerRegistryCredentials's generic
-    // (Token, AccountId) pair - see ContainerRegistryDtos.cs's own comment
-    // on why. Same portal-wide, regular-AdminGate posture as Docker Hub/GHCR
-    // above. Storage: flat root["PortalGitLabRegistryCredentials"] = {...}.
-    public async Task<PortalGitLabRegistryCredentials> GetPortalGitLabRegistryCredentialsAsync()
-    {
-        var root = await ReadRootAsync();
-        var node = root["PortalGitLabRegistryCredentials"] as JObject;
+        var node = (root["UserGitLabRegistryCredentials"] as JObject)?[key] as JObject;
 
         return new PortalGitLabRegistryCredentials(
             node?["HostUrl"]?.ToString(),
@@ -941,11 +892,12 @@ public class SettingsService
             Unprotect(node?["Token"]?.ToString()));
     }
 
-    // Blank fields keep whatever was already saved - see SavePortalPaasCredentialsAsync.
-    public async Task SavePortalGitLabRegistryCredentialsAsync(GitLabRegistryCredentialsUpdateDto update)
+    // Blank fields keep whatever was already saved - see SaveUserPaasCredentialsAsync.
+    public async Task SaveUserGitLabRegistryCredentialsAsync(string key, GitLabRegistryCredentialsUpdateDto update)
     {
         var root = await ReadRootAsync();
-        var node = root["PortalGitLabRegistryCredentials"] as JObject ?? new JObject();
+        var users = root["UserGitLabRegistryCredentials"] as JObject ?? new JObject();
+        var node = users[key] as JObject ?? new JObject();
 
         if (!string.IsNullOrWhiteSpace(update.HostUrl))
             node["HostUrl"] = update.HostUrl.Trim().TrimEnd('/');
@@ -956,43 +908,45 @@ public class SettingsService
         if (!string.IsNullOrWhiteSpace(update.Token))
             node["Token"] = Protect(update.Token.Trim());
 
-        root["PortalGitLabRegistryCredentials"] = node;
+        users[key] = node;
+        root["UserGitLabRegistryCredentials"] = users;
         await WriteRootAsync(root);
 
-        _log.LogInfo("Settings", "Portal-wide GitLab Registry credentials saved.");
+        _log.LogInfo("Settings", "GitLab Registry credentials saved for a session.");
     }
 
-    public async Task ClearPortalGitLabRegistryCredentialsAsync()
+    public async Task ClearUserGitLabRegistryCredentialsAsync(string key)
     {
         var root = await ReadRootAsync();
 
-        if (root["PortalGitLabRegistryCredentials"] != null)
+        if (root["UserGitLabRegistryCredentials"] is JObject users && users[key] != null)
         {
-            root.Remove("PortalGitLabRegistryCredentials");
+            users.Remove(key);
             await WriteRootAsync(root);
 
-            _log.LogInfo("Settings", "Portal-wide GitLab Registry credentials cleared.");
+            _log.LogInfo("Settings", "GitLab Registry credentials cleared for a session.");
         }
     }
 
     // JFrog Artifactory - same reasoning as GitLab Registry above, its own
-    // dedicated shape/store (HostUrl, Token) since every Artifactory
-    // instance is its own domain, unlike Docker Hub/GHCR's fixed hosts.
-    // Storage: flat root["PortalJfrogCredentials"] = {...}.
-    public async Task<PortalJfrogCredentials> GetPortalJfrogCredentialsAsync()
+    // dedicated shape (HostUrl, Token) since every Artifactory instance is
+    // its own domain, unlike Docker Hub/GHCR's fixed hosts. Session-scoped.
+    // Storage: root["UserJfrogCredentials"][key] = { HostUrl, Token }.
+    public async Task<PortalJfrogCredentials> GetUserJfrogCredentialsAsync(string key)
     {
         var root = await ReadRootAsync();
-        var node = root["PortalJfrogCredentials"] as JObject;
+        var node = (root["UserJfrogCredentials"] as JObject)?[key] as JObject;
 
         return new PortalJfrogCredentials(
             node?["HostUrl"]?.ToString(),
             Unprotect(node?["Token"]?.ToString()));
     }
 
-    public async Task SavePortalJfrogCredentialsAsync(JfrogCredentialsUpdateDto update)
+    public async Task SaveUserJfrogCredentialsAsync(string key, JfrogCredentialsUpdateDto update)
     {
         var root = await ReadRootAsync();
-        var node = root["PortalJfrogCredentials"] as JObject ?? new JObject();
+        var users = root["UserJfrogCredentials"] as JObject ?? new JObject();
+        var node = users[key] as JObject ?? new JObject();
 
         if (!string.IsNullOrWhiteSpace(update.HostUrl))
             node["HostUrl"] = update.HostUrl.Trim().TrimEnd('/');
@@ -1000,35 +954,37 @@ public class SettingsService
         if (!string.IsNullOrWhiteSpace(update.Token))
             node["Token"] = Protect(update.Token.Trim());
 
-        root["PortalJfrogCredentials"] = node;
+        users[key] = node;
+        root["UserJfrogCredentials"] = users;
         await WriteRootAsync(root);
 
-        _log.LogInfo("Settings", "Portal-wide JFrog credentials saved.");
+        _log.LogInfo("Settings", "JFrog credentials saved for a session.");
     }
 
-    public async Task ClearPortalJfrogCredentialsAsync()
+    public async Task ClearUserJfrogCredentialsAsync(string key)
     {
         var root = await ReadRootAsync();
 
-        if (root["PortalJfrogCredentials"] != null)
+        if (root["UserJfrogCredentials"] is JObject users && users[key] != null)
         {
-            root.Remove("PortalJfrogCredentials");
+            users.Remove(key);
             await WriteRootAsync(root);
 
-            _log.LogInfo("Settings", "Portal-wide JFrog credentials cleared.");
+            _log.LogInfo("Settings", "JFrog credentials cleared for a session.");
         }
     }
 
     // Harbor and Nexus - both self-hosted, both authenticate with a plain
     // (HostUrl, Username, Password) Basic-auth triple - see
     // PortalHostCredentials' own comment for why that one shape covers
-    // both rather than two near-identical dedicated stores. provider is
-    // "harbor" or "nexus". Storage:
-    // root["PortalHostCredentials"][provider] = { HostUrl, Username, Password }.
-    public async Task<PortalHostCredentials> GetPortalHostCredentialsAsync(string provider)
+    // both rather than two near-identical dedicated stores. Session-scoped:
+    // provider is "harbor" or "nexus", key is the caller's own session.
+    // Storage: root["UserHostCredentials"][provider][key] =
+    // { HostUrl, Username, Password }.
+    public async Task<PortalHostCredentials> GetUserHostCredentialsAsync(string provider, string key)
     {
         var root = await ReadRootAsync();
-        var entry = (root["PortalHostCredentials"] as JObject)?[provider] as JObject;
+        var entry = ((root["UserHostCredentials"] as JObject)?[provider] as JObject)?[key] as JObject;
 
         return new PortalHostCredentials(
             entry?["HostUrl"]?.ToString(),
@@ -1036,12 +992,13 @@ public class SettingsService
             Unprotect(entry?["Password"]?.ToString()));
     }
 
-    // Blank fields keep whatever was already saved - see SavePortalPaasCredentialsAsync.
-    public async Task SavePortalHostCredentialsAsync(string provider, HostCredentialsUpdateDto update)
+    // Blank fields keep whatever was already saved - see SaveUserPaasCredentialsAsync.
+    public async Task SaveUserHostCredentialsAsync(string provider, string key, HostCredentialsUpdateDto update)
     {
         var root = await ReadRootAsync();
-        var providers = root["PortalHostCredentials"] as JObject ?? new JObject();
-        var entry = providers[provider] as JObject ?? new JObject();
+        var providers = root["UserHostCredentials"] as JObject ?? new JObject();
+        var users = providers[provider] as JObject ?? new JObject();
+        var entry = users[key] as JObject ?? new JObject();
 
         if (!string.IsNullOrWhiteSpace(update.HostUrl))
             entry["HostUrl"] = update.HostUrl.Trim().TrimEnd('/');
@@ -1052,75 +1009,35 @@ public class SettingsService
         if (!string.IsNullOrWhiteSpace(update.Password))
             entry["Password"] = Protect(update.Password.Trim());
 
-        providers[provider] = entry;
-        root["PortalHostCredentials"] = providers;
+        users[key] = entry;
+        providers[provider] = users;
+        root["UserHostCredentials"] = providers;
         await WriteRootAsync(root);
 
-        _log.LogInfo("Settings", $"Portal-wide host credentials saved ({provider}).");
+        _log.LogInfo("Settings", $"{provider} host credentials saved for a session.");
     }
 
-    public async Task ClearPortalHostCredentialsAsync(string provider)
+    public async Task ClearUserHostCredentialsAsync(string provider, string key)
     {
         var root = await ReadRootAsync();
 
-        if (root["PortalHostCredentials"] is JObject providers && providers[provider] != null)
+        if (root["UserHostCredentials"] is JObject providers
+            && providers[provider] is JObject users
+            && users[key] != null)
         {
-            providers.Remove(provider);
+            users.Remove(key);
             await WriteRootAsync(root);
 
-            _log.LogInfo("Settings", $"Portal-wide host credentials cleared ({provider}).");
+            _log.LogInfo("Settings", $"{provider} host credentials cleared for a session.");
         }
     }
 
     // Source Control providers (currently just Azure Repos - Organization +
     // PAT) - reuses UserPaasCredentials(Token, AccountId)'s existing generic
-    // shape (AccountId holds the org name) rather than a new DTO, same
-    // reasoning as Docker Hub/GHCR above. provider is "azureRepos" today;
-    // future providers whose credential also happens to be a plain
-    // (identifier, secret) pair can slot into this same store. Storage:
-    // root["PortalSourceControlCredentials"][provider] = { Token, AccountId }.
-    public async Task<UserPaasCredentials> GetPortalSourceControlCredentialsAsync(string provider)
-    {
-        var root = await ReadRootAsync();
-        var entry = (root["PortalSourceControlCredentials"] as JObject)?[provider] as JObject;
-
-        return new UserPaasCredentials(
-            Unprotect(entry?["Token"]?.ToString()),
-            entry?["AccountId"]?.ToString());
-    }
-
-    // Blank fields keep whatever was already saved - see SavePortalPaasCredentialsAsync.
-    public async Task SavePortalSourceControlCredentialsAsync(string provider, PaasCredentialsUpdateDto update)
-    {
-        var root = await ReadRootAsync();
-        var providers = root["PortalSourceControlCredentials"] as JObject ?? new JObject();
-        var entry = providers[provider] as JObject ?? new JObject();
-
-        if (!string.IsNullOrWhiteSpace(update.Token))
-            entry["Token"] = Protect(update.Token.Trim());
-
-        if (!string.IsNullOrWhiteSpace(update.AccountId))
-            entry["AccountId"] = update.AccountId.Trim();
-
-        providers[provider] = entry;
-        root["PortalSourceControlCredentials"] = providers;
-        await WriteRootAsync(root);
-
-        _log.LogInfo("Settings", $"Portal-wide source control credentials saved ({provider}).");
-    }
-
-    public async Task ClearPortalSourceControlCredentialsAsync(string provider)
-    {
-        var root = await ReadRootAsync();
-
-        if (root["PortalSourceControlCredentials"] is JObject providers && providers[provider] != null)
-        {
-            providers.Remove(provider);
-            await WriteRootAsync(root);
-
-            _log.LogInfo("Settings", $"Portal-wide source control credentials cleared ({provider}).");
-        }
-    }
+    // shape and method set directly (AccountId holds the org name), same as
+    // Docker Hub/GHCR above - callers pass provider "azureRepos" straight
+    // into GetUserPaasCredentialsAsync/SaveUserPaasCredentialsAsync/
+    // ClearUserPaasCredentialsAsync. No dedicated methods needed here.
 
     // Which provider+service fills each of the Hosting Observability
     // dashboard's 3 roles - see PortalDeploymentTargetsDto. One object, not
@@ -1305,29 +1222,29 @@ public class SettingsService
     }
 
     // SonarQube and SonarCloud credentials for the Code Quality page's two
-    // sidebar sub-pages — shared, portal-wide, same as Docker/OAuth above
-    // (there's one repo being scanned, not one per PAT user). Previously
-    // ONE shared credential covered both (a single Host URL could point at
-    // either) - split into two independent, separately-storable
-    // credentials per explicit user request, so a team using self-hosted
-    // SonarQube AND SonarCloud simultaneously (or just wanting them kept
-    // genuinely distinct) isn't limited to one or the other. provider is
-    // "sonarqube" or "sonarcloud". Storage: root["Sonar"][provider] =
-    // { HostUrl, Organization, ProjectKey, Token } - "Sonar" stays the same
-    // top-level JSON key as before (now nested by provider), so
-    // ClearAllAsync's existing root.Remove("Sonar") still wipes both at
-    // once with no change needed there. SonarCloud has no user-editable
-    // Host URL (always sonarcloud.io, forced server-side below) since
-    // that's the one thing that's genuinely fixed about it, unlike
-    // self-hosted SonarQube which requires one with no sensible default.
-    // The token is never sent to the frontend; SonarController uses it
-    // server-side to call Sonar's own Web API, the same pattern GitHub
-    // credentials already follow.
-    public async Task SaveSonarCredentialsAsync(string provider, SonarSettingsUpdateDto update)
+    // sidebar sub-pages — session-scoped: each visitor connects their own,
+    // isolated from every other visitor of the portal (previously portal-
+    // wide/shared; converted per explicit user request that no visitor's
+    // connected credential should be shared with or visible to any other
+    // visitor). Two independent, separately-storable credentials per
+    // provider (a single Host URL used to have to point at either one) so a
+    // team using self-hosted SonarQube AND SonarCloud simultaneously isn't
+    // limited to one or the other. provider is "sonarqube" or "sonarcloud",
+    // key is the caller's own session. Storage:
+    // root["UserSonarCredentials"][provider][key] =
+    // { HostUrl, Organization, ProjectKey, Token }. SonarCloud has no
+    // user-editable Host URL (always sonarcloud.io, forced server-side
+    // below) since that's the one thing that's genuinely fixed about it,
+    // unlike self-hosted SonarQube which requires one with no sensible
+    // default. The token is never sent to the frontend; SonarController
+    // uses it server-side to call Sonar's own Web API, the same pattern
+    // GitHub credentials already follow.
+    public async Task SaveUserSonarCredentialsAsync(string provider, string key, SonarSettingsUpdateDto update)
     {
         var root = await ReadRootAsync();
-        var providers = root["Sonar"] as JObject ?? new JObject();
-        var sonar = providers[provider] as JObject ?? new JObject();
+        var providers = root["UserSonarCredentials"] as JObject ?? new JObject();
+        var users = providers[provider] as JObject ?? new JObject();
+        var sonar = users[key] as JObject ?? new JObject();
 
         sonar["HostUrl"] = provider == "sonarcloud"
             ? "https://sonarcloud.io"
@@ -1342,19 +1259,20 @@ public class SettingsService
         if (!string.IsNullOrWhiteSpace(update.Token))
             sonar["Token"] = Protect(update.Token);
 
-        providers[provider] = sonar;
-        root["Sonar"] = providers;
+        users[key] = sonar;
+        providers[provider] = users;
+        root["UserSonarCredentials"] = providers;
 
         await WriteRootAsync(root);
 
-        _log.LogInfo("Settings", $"{provider} settings saved: {sonar["Organization"]}/{sonar["ProjectKey"]}"
+        _log.LogInfo("Settings", $"{provider} settings saved for a session: {sonar["Organization"]}/{sonar["ProjectKey"]}"
             + (string.IsNullOrWhiteSpace(update.Token) ? "" : " (token updated)"));
     }
 
-    public async Task<SonarCredentials> GetSonarCredentialsAsync(string provider)
+    public async Task<SonarCredentials> GetUserSonarCredentialsAsync(string provider, string key)
     {
         var root = await ReadRootAsync();
-        var sonar = (root["Sonar"] as JObject)?[provider] as JObject;
+        var sonar = ((root["UserSonarCredentials"] as JObject)?[provider] as JObject)?[key] as JObject;
 
         return new SonarCredentials(
             sonar?["HostUrl"]?.ToString() is string h && !string.IsNullOrWhiteSpace(h)
@@ -1365,16 +1283,18 @@ public class SettingsService
             Unprotect(sonar?["Token"]?.ToString()));
     }
 
-    public async Task ClearSonarCredentialsAsync(string provider)
+    public async Task ClearUserSonarCredentialsAsync(string provider, string key)
     {
         var root = await ReadRootAsync();
 
-        if (root["Sonar"] is JObject providers && providers[provider] != null)
+        if (root["UserSonarCredentials"] is JObject providers
+            && providers[provider] is JObject users
+            && users[key] != null)
         {
-            providers.Remove(provider);
+            users.Remove(key);
             await WriteRootAsync(root);
 
-            _log.LogInfo("Settings", $"{provider} settings cleared.");
+            _log.LogInfo("Settings", $"{provider} settings cleared for a session.");
         }
     }
 
@@ -1540,23 +1460,24 @@ public class SettingsService
     }
 
     // The admin version of the button above: everything ClearMyCredentialsAsync
-    // does, PLUS every shared, portal-wide section (Docker, GitHubOAuth,
-    // Sonar) - resetting the whole portal back to unconfigured, first-run
-    // state for everyone, not just the caller. Admin-gated at the
-    // controller because those sections affect every visitor, not just
-    // whoever clicked the button. "Auth" (the admin allowlist) is
-    // deliberately the one exception even here: wiping it used to drop the
-    // whole portal into bootstrap mode (anyone is Admin until it's
-    // reconfigured) as a side effect of a reset button - a much bigger
-    // blast radius than intended. Jwt is deliberately left alone too, so
-    // existing sessions/cookies stay valid.
+    // does, PLUS every shared, portal-wide section (Docker, GitHubOAuth) -
+    // resetting the whole portal back to unconfigured, first-run state for
+    // everyone, not just the caller. Admin-gated at the controller because
+    // those sections affect every visitor, not just whoever clicked the
+    // button. "Auth" (the admin allowlist) is deliberately the one
+    // exception even here: wiping it used to drop the whole portal into
+    // bootstrap mode (anyone is Admin until it's reconfigured) as a side
+    // effect of a reset button - a much bigger blast radius than intended.
+    // Jwt is deliberately left alone too, so existing sessions/cookies stay
+    // valid. Sonar is deliberately NOT here anymore - it's session-scoped
+    // now (see SaveUserSonarCredentialsAsync), same as every other
+    // per-session credential this generic portal-wide reset never touches.
     public async Task<SettingsViewDto> ClearAllAsync(string callerKey)
     {
         var root = await ReadRootAsync();
 
         root.Remove("Docker");
         root.Remove("GitHubOAuth");
-        root.Remove("Sonar");
         root.Remove("AiAssistant");
 
         await WriteRootAsync(root);

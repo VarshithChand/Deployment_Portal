@@ -9,8 +9,8 @@ import useNavigation from "../../hooks/useNavigation";
 const PAGE_SIZE = 10;
 
 // GHCR (GitHub Container Registry) - two levels (packages -> versions),
-// against the portal-wide shared credential (see PortalRegistryLoginSection
-// in Settings → Credentials → GHCR). Packages are scoped to that token's own
+// against this session's own credential (see PortalRegistryLoginSection in
+// Settings → Credentials → GHCR). Packages are scoped to that token's own
 // GitHub account - see ContainerRegistryService.GetGhcrPackagesAsync's own
 // comment on why organization-owned packages aren't covered yet.
 export default function GhcrView() {
@@ -143,9 +143,9 @@ export default function GhcrView() {
         return (
             <div className="card">
                 <p className="empty-state" style={{ textAlign: "left" }}>
-                    Nobody has connected GHCR yet. An admin can connect it in{" "}
+                    Connect your GHCR credentials in{" "}
                     <a href="#" onClick={(e) => { e.preventDefault(); setTab("settings"); }}>Settings → Credentials → GHCR</a>
-                    {" "}to enable this for everyone.
+                    {" "}to browse this.
                 </p>
             </div>
         );

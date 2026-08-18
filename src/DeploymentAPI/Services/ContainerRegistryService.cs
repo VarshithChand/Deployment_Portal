@@ -7,14 +7,16 @@ using Newtonsoft.Json.Linq;
 
 namespace DeploymentAPI.Services;
 
-// The two "standalone" Container Registry providers built in this pass -
-// Docker Hub and GHCR - browsing against the single shared, portal-wide
-// credential each one has (see SettingsService.
-// GetPortalContainerRegistryCredentialsAsync). Deliberately its own service,
-// not folded into CloudServiceManagementService: that service's whole shape
-// is built around AWS/Azure/GCP credential records passed in, one per
-// session: these two take the generic UserPaasCredentials(Token, AccountId)
-// pair instead, and there is no "cloud provider" underneath either of them.
+// The six "standalone" Container Registry providers - Docker Hub, GHCR,
+// GitLab Registry, JFrog, Harbor, Nexus - browsing against this session's
+// own, isolated credential for each (see SettingsService.
+// GetUserPaasCredentialsAsync/GetUserGitLabRegistryCredentialsAsync/
+// GetUserJfrogCredentialsAsync/GetUserHostCredentialsAsync). Deliberately
+// its own service, not folded into CloudServiceManagementService: that
+// service's whole shape is built around AWS/Azure/GCP credential records
+// passed in, one per session; Docker Hub/GHCR take the generic
+// UserPaasCredentials(Token, AccountId) pair instead, and there is no
+// "cloud provider" underneath any of these six.
 //
 // Same never-throws-to-the-caller, Configured/Error contract as every other
 // Cloud Services/Container Registry method in this app - a bad or missing

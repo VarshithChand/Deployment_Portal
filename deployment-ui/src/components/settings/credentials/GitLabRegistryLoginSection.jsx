@@ -9,12 +9,13 @@ import {
 const DEFAULT_HOST = "https://gitlab.com";
 const EMPTY_FORM = { hostUrl: "", projectId: "", token: "" };
 
-// GitLab Container Registry's shared, portal-wide credential form (see
-// ContainerRegistryController) - unlike Docker Hub/GHCR, GitLab has no
-// single "list every registry" call; the registry is scoped to one
-// project, and a self-hosted GitLab instance needs its own host too, so
-// this needs its own 3-field form rather than reusing
-// PortalRegistryLoginSection's generic username/token shape.
+// GitLab Container Registry's session-scoped credential form (see
+// ContainerRegistryController) - each visitor connects their own, isolated
+// from every other visitor. Unlike Docker Hub/GHCR, GitLab has no single
+// "list every registry" call; the registry is scoped to one project, and a
+// self-hosted GitLab instance needs its own host too, so this needs its own
+// 3-field form rather than reusing PortalRegistryLoginSection's generic
+// username/token shape.
 export default function GitLabRegistryLoginSection({ onCleared }) {
 
     const toast = useToast();
@@ -45,7 +46,7 @@ export default function GitLabRegistryLoginSection({ onCleared }) {
         try {
 
             await saveGitLabRegistryCredentials(form);
-            toast.show("GitLab Registry credentials saved for the whole portal.", "success");
+            toast.show("GitLab Registry credentials saved for this session.", "success");
             setForm(EMPTY_FORM);
             refresh();
 
@@ -104,8 +105,8 @@ export default function GitLabRegistryLoginSection({ onCleared }) {
             <p className="empty-state" style={{ padding: "0 0 15px", textAlign: "left" }}>
                 Powers the Container Registry hub's GitLab tab — a Personal Access Token with the
                 read_registry (or read_api) scope, and the project that owns the registry (numeric
-                ID, or the URL-encoded namespace/project path). Shared by the whole portal —
-                saving here requires an admin account.
+                ID, or the URL-encoded namespace/project path). Kept for your own session only —
+                isolated from every other visitor of the portal.
             </p>
 
             {loading ? (

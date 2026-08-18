@@ -346,16 +346,18 @@ export default function CredentialsView({
             </h2>
 
             <p className="empty-state" style={{ padding: "0 0 15px", textAlign: "left" }}>
-                GitHub, AWS, and Azure below are yours alone — kept for your own browser
-                session, isolated from every other user of this portal. GCP is stored the
-                same way, for future use, and your API Key is scoped the same way too.
-                Render, Cloudflare, Netlify, and Vercel are the same — see what's under
-                your own connected account right below once saved. (The Hosting Providers
-                page itself now shows this portal's own production deployment instead —
-                a separate, portal-wide view restricted to a single administrator account.)
-                SonarQube, Docker, and OAuth are shared by the whole portal instead. A
-                checkmark below means it's already configured — no need to click in just
-                to check.
+                Everything below is yours alone — kept for your own browser session,
+                isolated from every other visitor of this portal: GitHub, AWS, Azure, GCP,
+                your API Key, Render, Cloudflare, Netlify, Vercel, Azure Repos, Docker Hub,
+                GHCR, GitLab Registry, JFrog, Harbor, Nexus, SonarQube, and SonarCloud all
+                work this way — see what's under your own connected account right below
+                once saved. (The Hosting Providers page itself shows this portal's own
+                production deployment instead — a separate, portal-wide view restricted to
+                a single administrator account.) The plain Docker registry credential and
+                the GitHub OAuth app below are the two remaining portal-wide settings — one
+                shared push credential and one shared login app for the whole deployment
+                pipeline. A checkmark below means it's already configured — no need to
+                click in just to check.
             </p>
 
             <div style={{ display: "flex", flexDirection: "column", gap: "10px", marginBottom: "20px" }}>

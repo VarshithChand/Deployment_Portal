@@ -10,10 +10,10 @@ import useNavigation from "../../hooks/useNavigation";
 const PAGE_SIZE = 10;
 
 // Docker Hub - two levels (repositories -> tags), same shape as ECR/
-// Artifact Registry, but against the portal-wide shared credential (see
-// PortalRegistryLoginSection in Settings → Credentials → Docker Hub) rather
-// than a session-scoped one - "not connected" here means nobody on the
-// portal has connected it yet, not "you haven't."
+// Artifact Registry, against this session's own credential (see
+// PortalRegistryLoginSection in Settings → Credentials → Docker Hub) -
+// "not connected" here means this visitor hasn't connected it, same
+// self-service posture as every other provider on this hub.
 export default function DockerHubView() {
 
     const { setTab } = useNavigation();
@@ -146,9 +146,9 @@ export default function DockerHubView() {
         return (
             <div className="card">
                 <p className="empty-state" style={{ textAlign: "left" }}>
-                    Nobody has connected Docker Hub yet. An admin can connect it in{" "}
+                    Connect your Docker Hub credentials in{" "}
                     <a href="#" onClick={(e) => { e.preventDefault(); setTab("settings"); }}>Settings → Credentials → Docker Hub</a>
-                    {" "}to enable this for everyone.
+                    {" "}to browse this.
                 </p>
             </div>
         );

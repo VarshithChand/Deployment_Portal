@@ -5,12 +5,11 @@ import useToast from "../../../hooks/useToast";
 
 const EMPTY_FORM = { username: "", token: "" };
 
-// Docker Hub and GHCR's shared, portal-wide credential form (see
-// ContainerRegistryController) - one admin connects each once, every
-// visitor then browses the same repositories/packages on the Container
-// Registry hub. Deliberately NOT session-scoped like AwsLoginSection/
-// AzureLoginSection/PaasLoginSection above: statusFn/saveFn/clearFn are
-// passed in per-provider (containerRegistryService.js) rather than this
+// Docker Hub and GHCR's credential form (see ContainerRegistryController) -
+// session-scoped (see PortalIdentity), same isolation as AwsLoginSection/
+// AzureLoginSection/PaasLoginSection above: each visitor connects their own,
+// never shared with any other visitor of the portal. statusFn/saveFn/clearFn
+// are passed in per-provider (containerRegistryService.js) rather than this
 // component branching on a provider string itself, since the two providers'
 // username/token labels and help text differ enough to be worth spelling
 // out at the call site.
@@ -58,7 +57,7 @@ export default function PortalRegistryLoginSection({
         try {
 
             await saveFn({ accountId: form.username, token: form.token });
-            toast.show(`${label} credentials saved for the whole portal.`, "success");
+            toast.show(`${label} credentials saved for this session.`, "success");
             setForm(EMPTY_FORM);
             refresh();
 
@@ -115,8 +114,8 @@ export default function PortalRegistryLoginSection({
             )}
 
             <p className="empty-state" style={{ padding: "0 0 15px", textAlign: "left" }}>
-                {helpText} Shared by the whole portal — saving here requires an admin
-                account, and every visitor browses the same repositories once it's set.
+                {helpText} Kept for your own session only — isolated from every other
+                visitor of the portal.
             </p>
 
             {loading ? (

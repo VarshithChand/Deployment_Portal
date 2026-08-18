@@ -6,10 +6,11 @@ import { getHostRegistryStatus, saveHostRegistryCredentials, clearHostRegistryCr
 
 const EMPTY_FORM = { hostUrl: "", username: "", password: "" };
 
-// Harbor and Nexus's shared, portal-wide credential form - both are
-// almost always self-hosted, plain-username-and-password (Basic auth)
-// registries, so one generic component covers both rather than two
-// near-identical bespoke ones (see PortalHostCredentials' own comment).
+// Harbor and Nexus's session-scoped credential form - each visitor
+// connects their own, isolated from every other visitor. Both are almost
+// always self-hosted, plain-username-and-password (Basic auth) registries,
+// so one generic component covers both rather than two near-identical
+// bespoke ones (see PortalHostCredentials' own comment).
 export default function HostCredentialLoginSection({ provider, label, hostPlaceholder, passwordLabel, helpText, onCleared }) {
 
     const toast = useToast();
@@ -40,7 +41,7 @@ export default function HostCredentialLoginSection({ provider, label, hostPlaceh
         try {
 
             await saveHostRegistryCredentials(provider, form);
-            toast.show(`${label} credentials saved for the whole portal.`, "success");
+            toast.show(`${label} credentials saved for this session.`, "success");
             setForm(EMPTY_FORM);
             refresh();
 
@@ -98,8 +99,8 @@ export default function HostCredentialLoginSection({ provider, label, hostPlaceh
             )}
 
             <p className="empty-state" style={{ padding: "0 0 15px", textAlign: "left" }}>
-                {helpText} Shared by the whole portal — saving here requires an admin
-                account, and every visitor browses the same repositories once it's set.
+                {helpText} Kept for your own session only — isolated from every other
+                visitor of the portal.
             </p>
 
             {loading ? (

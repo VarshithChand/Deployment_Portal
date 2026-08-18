@@ -7,8 +7,9 @@ import { getSonarStatus, saveSonarCredentials, clearSonarCredentials } from "../
 const EMPTY_FORM = { hostUrl: "", organization: "", projectKey: "", token: "" };
 
 // SonarQube and SonarCloud's shared form shape - two fully independent,
-// portal-wide credentials now (see SettingsService.SaveSonarCredentialsAsync's
-// own comment on why they were split). hasHostUrl distinguishes them: only
+// session-scoped credentials (each visitor connects their own, isolated
+// from every other visitor - see SettingsService.SaveUserSonarCredentialsAsync's
+// own comment on why they're split). hasHostUrl distinguishes them: only
 // self-hosted SonarQube needs one (no sensible default); SonarCloud's is
 // always sonarcloud.io, forced server-side.
 export default function SonarLoginSection({ provider, label, hasHostUrl, onCleared }) {
@@ -41,7 +42,7 @@ export default function SonarLoginSection({ provider, label, hasHostUrl, onClear
         try {
 
             await saveSonarCredentials(provider, form);
-            toast.show(`${label} credentials saved for the whole portal.`, "success");
+            toast.show(`${label} credentials saved for this session.`, "success");
             setForm(EMPTY_FORM);
             refresh();
 
@@ -94,8 +95,8 @@ export default function SonarLoginSection({ provider, label, hasHostUrl, onClear
             <p className="empty-state" style={{ padding: "0 0 15px", textAlign: "left" }}>
                 Powers the Code Quality page's {label} tab — a project and a token with
                 permission to read its analysis. The token is only ever used server-side, never
-                sent to the browser. Shared by the whole portal — saving here requires an admin
-                account.
+                sent to the browser. Kept for your own session only — isolated from every other
+                visitor of the portal.
             </p>
 
             {loading ? (

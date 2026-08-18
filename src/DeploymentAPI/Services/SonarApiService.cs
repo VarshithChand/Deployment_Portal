@@ -23,9 +23,9 @@ public class SonarApiService
         "sqale_rating", "ncloc"
     };
 
-    public async Task<SonarOverviewDto> GetOverviewAsync(string provider)
+    public async Task<SonarOverviewDto> GetOverviewAsync(string provider, string key)
     {
-        var creds = await _settings.GetSonarCredentialsAsync(provider);
+        var creds = await _settings.GetUserSonarCredentialsAsync(provider, key);
 
         if (!creds.IsConfigured)
             return new SonarOverviewDto { Configured = false };

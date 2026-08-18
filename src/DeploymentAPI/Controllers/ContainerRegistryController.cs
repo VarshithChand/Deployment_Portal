@@ -5,18 +5,16 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace DeploymentAPI.Controllers;
 
-// Docker Hub and GHCR - the two portal-wide "standalone" registries on the
-// Container Registry hub (see ContainerRegistry.jsx). Configuring/clearing
-// the shared credential is restricted to admins (AdminGate.
-// DenyUnlessAdminAsync + the same screen-lock PIN gate every other shared
-// credential in this app goes through - see CredentialGate) - the exact
-// same bar the existing generic "Docker" registry credential
-// (SettingsController.SaveDocker) already uses, NOT the higher
-// DenyUnlessSuperAdminAsync bar Hosting Observability's portal-wide
-// credentials use. Browsing (repositories/tags/packages/versions) has no
-// gate at all - once an admin connects it, every portal visitor sees the
-// same repositories, matching how ECR/ACR/Artifact Registry browsing is
-// already self-service on this same hub.
+// Docker Hub, GHCR, GitLab Registry, JFrog, Harbor, Nexus - all six
+// standalone registries on the Container Registry hub (see
+// ContainerRegistry.jsx). Session-scoped: each visitor connects their own
+// credential, isolated from every other visitor (same posture as ECR/ACR/
+// Artifact Registry browsing on this same hub, and as AWS/Azure/GCP/GitHub
+// credentials elsewhere in this app) - no AdminGate on save/clear, just the
+// same screen-lock PIN gate every session credential goes through (see
+// CredentialGate). Browsing (repositories/tags/packages/versions) has no
+// gate at all and reads only the CALLING session's own credential, never
+// another visitor's.
 [ApiController]
 [Route("api/containerregistry")]
 public class ContainerRegistryController : ControllerBase
@@ -54,7 +52,8 @@ public class ContainerRegistryController : ControllerBase
         if (ValidateProvider(provider) is IActionResult invalid)
             return invalid;
 
-        var creds = await _settings.GetPortalContainerRegistryCredentialsAsync(provider);
+        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var creds = await _settings.GetUserPaasCredentialsAsync(provider, key);
 
         return Ok(new ContainerRegistryCredentialStatusDto
         {
@@ -69,19 +68,17 @@ public class ContainerRegistryController : ControllerBase
         if (ValidateProvider(provider) is IActionResult invalid)
             return invalid;
 
-        if (await AdminGate.DenyUnlessAdminAsync(this, _settings, "change settings") is IActionResult denied)
-            return denied;
-
         if (await CredentialGate.DenyUnlessUnlockedAsync(this, _settings, _activity, provider) is IActionResult locked)
             return locked;
 
-        var existing = await _settings.GetPortalContainerRegistryCredentialsAsync(provider);
+        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var existing = await _settings.GetUserPaasCredentialsAsync(provider, key);
         var effectiveUsername = string.IsNullOrWhiteSpace(request.AccountId) ? existing.AccountId : request.AccountId;
 
         if (string.IsNullOrWhiteSpace(effectiveUsername))
             return BadRequest(new { message = "A username is required." });
 
-        await _settings.SavePortalContainerRegistryCredentialsAsync(provider, request);
+        await _settings.SaveUserPaasCredentialsAsync(provider, key, request);
 
         return Ok(new { configured = true });
     }
@@ -92,13 +89,12 @@ public class ContainerRegistryController : ControllerBase
         if (ValidateProvider(provider) is IActionResult invalid)
             return invalid;
 
-        if (await AdminGate.DenyUnlessAdminAsync(this, _settings, "change settings") is IActionResult denied)
-            return denied;
-
         if (await CredentialGate.DenyUnlessUnlockedAsync(this, _settings, _activity, provider) is IActionResult locked)
             return locked;
 
-        await _settings.ClearPortalContainerRegistryCredentialsAsync(provider);
+        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        await _settings.ClearUserPaasCredentialsAsync(provider, key);
+        _activity.RevokeCredentialUnlock(key, provider);
 
         return Ok(new { success = true });
     }
@@ -108,14 +104,16 @@ public class ContainerRegistryController : ControllerBase
     [HttpGet("dockerhub/repositories")]
     public async Task<IActionResult> GetDockerHubRepositories()
     {
-        var creds = await _settings.GetPortalContainerRegistryCredentialsAsync("dockerhub");
+        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var creds = await _settings.GetUserPaasCredentialsAsync("dockerhub", key);
         return Ok(await _registry.GetDockerHubRepositoriesAsync(creds));
     }
 
     [HttpGet("dockerhub/repositories/{repositoryName}/tags")]
     public async Task<IActionResult> GetDockerHubTags(string repositoryName)
     {
-        var creds = await _settings.GetPortalContainerRegistryCredentialsAsync("dockerhub");
+        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var creds = await _settings.GetUserPaasCredentialsAsync("dockerhub", key);
         return Ok(await _registry.GetDockerHubTagsAsync(creds, repositoryName));
     }
 
@@ -124,14 +122,16 @@ public class ContainerRegistryController : ControllerBase
     [HttpGet("ghcr/packages")]
     public async Task<IActionResult> GetGhcrPackages()
     {
-        var creds = await _settings.GetPortalContainerRegistryCredentialsAsync("ghcr");
+        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var creds = await _settings.GetUserPaasCredentialsAsync("ghcr", key);
         return Ok(await _registry.GetGhcrPackagesAsync(creds));
     }
 
     [HttpGet("ghcr/packages/{packageName}/versions")]
     public async Task<IActionResult> GetGhcrVersions(string packageName)
     {
-        var creds = await _settings.GetPortalContainerRegistryCredentialsAsync("ghcr");
+        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var creds = await _settings.GetUserPaasCredentialsAsync("ghcr", key);
         return Ok(await _registry.GetGhcrVersionsAsync(creds, packageName));
     }
 
@@ -144,7 +144,8 @@ public class ContainerRegistryController : ControllerBase
     [HttpGet("gitlab-registry/status")]
     public async Task<IActionResult> GetGitLabRegistryStatus()
     {
-        var creds = await _settings.GetPortalGitLabRegistryCredentialsAsync();
+        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var creds = await _settings.GetUserGitLabRegistryCredentialsAsync(key);
 
         return Ok(new GitLabRegistryStatusDto
         {
@@ -157,19 +158,17 @@ public class ContainerRegistryController : ControllerBase
     [HttpPost("gitlab-registry")]
     public async Task<IActionResult> SaveGitLabRegistryCredentials(GitLabRegistryCredentialsUpdateDto request)
     {
-        if (await AdminGate.DenyUnlessAdminAsync(this, _settings, "change settings") is IActionResult denied)
-            return denied;
-
         if (await CredentialGate.DenyUnlessUnlockedAsync(this, _settings, _activity, "gitlab-registry") is IActionResult locked)
             return locked;
 
-        var existing = await _settings.GetPortalGitLabRegistryCredentialsAsync();
+        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var existing = await _settings.GetUserGitLabRegistryCredentialsAsync(key);
         var effectiveProjectId = string.IsNullOrWhiteSpace(request.ProjectId) ? existing.ProjectId : request.ProjectId;
 
         if (string.IsNullOrWhiteSpace(effectiveProjectId))
             return BadRequest(new { message = "A Project ID (or path) is required." });
 
-        await _settings.SavePortalGitLabRegistryCredentialsAsync(request);
+        await _settings.SaveUserGitLabRegistryCredentialsAsync(key, request);
 
         return Ok(new { configured = true });
     }
@@ -177,13 +176,12 @@ public class ContainerRegistryController : ControllerBase
     [HttpDelete("gitlab-registry")]
     public async Task<IActionResult> ClearGitLabRegistryCredentials()
     {
-        if (await AdminGate.DenyUnlessAdminAsync(this, _settings, "change settings") is IActionResult denied)
-            return denied;
-
         if (await CredentialGate.DenyUnlessUnlockedAsync(this, _settings, _activity, "gitlab-registry") is IActionResult locked)
             return locked;
 
-        await _settings.ClearPortalGitLabRegistryCredentialsAsync();
+        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        await _settings.ClearUserGitLabRegistryCredentialsAsync(key);
+        _activity.RevokeCredentialUnlock(key, "gitlab-registry");
 
         return Ok(new { success = true });
     }
@@ -193,14 +191,16 @@ public class ContainerRegistryController : ControllerBase
     [HttpGet("gitlab-registry/repositories")]
     public async Task<IActionResult> GetGitLabRepositories()
     {
-        var creds = await _settings.GetPortalGitLabRegistryCredentialsAsync();
+        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var creds = await _settings.GetUserGitLabRegistryCredentialsAsync(key);
         return Ok(await _registry.GetGitLabRepositoriesAsync(creds));
     }
 
     [HttpGet("gitlab-registry/repositories/{repositoryId}/tags")]
     public async Task<IActionResult> GetGitLabTags(string repositoryId)
     {
-        var creds = await _settings.GetPortalGitLabRegistryCredentialsAsync();
+        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var creds = await _settings.GetUserGitLabRegistryCredentialsAsync(key);
         return Ok(await _registry.GetGitLabTagsAsync(creds, repositoryId));
     }
 
@@ -209,7 +209,8 @@ public class ContainerRegistryController : ControllerBase
     [HttpGet("jfrog/status")]
     public async Task<IActionResult> GetJfrogStatus()
     {
-        var creds = await _settings.GetPortalJfrogCredentialsAsync();
+        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var creds = await _settings.GetUserJfrogCredentialsAsync(key);
 
         return Ok(new JfrogStatusDto
         {
@@ -221,19 +222,17 @@ public class ContainerRegistryController : ControllerBase
     [HttpPost("jfrog")]
     public async Task<IActionResult> SaveJfrogCredentials(JfrogCredentialsUpdateDto request)
     {
-        if (await AdminGate.DenyUnlessAdminAsync(this, _settings, "change settings") is IActionResult denied)
-            return denied;
-
         if (await CredentialGate.DenyUnlessUnlockedAsync(this, _settings, _activity, "jfrog") is IActionResult locked)
             return locked;
 
-        var existing = await _settings.GetPortalJfrogCredentialsAsync();
+        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var existing = await _settings.GetUserJfrogCredentialsAsync(key);
         var effectiveHostUrl = string.IsNullOrWhiteSpace(request.HostUrl) ? existing.HostUrl : request.HostUrl;
 
         if (string.IsNullOrWhiteSpace(effectiveHostUrl))
             return BadRequest(new { message = "A host URL is required." });
 
-        await _settings.SavePortalJfrogCredentialsAsync(request);
+        await _settings.SaveUserJfrogCredentialsAsync(key, request);
 
         return Ok(new { configured = true });
     }
@@ -241,13 +240,12 @@ public class ContainerRegistryController : ControllerBase
     [HttpDelete("jfrog")]
     public async Task<IActionResult> ClearJfrogCredentials()
     {
-        if (await AdminGate.DenyUnlessAdminAsync(this, _settings, "change settings") is IActionResult denied)
-            return denied;
-
         if (await CredentialGate.DenyUnlessUnlockedAsync(this, _settings, _activity, "jfrog") is IActionResult locked)
             return locked;
 
-        await _settings.ClearPortalJfrogCredentialsAsync();
+        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        await _settings.ClearUserJfrogCredentialsAsync(key);
+        _activity.RevokeCredentialUnlock(key, "jfrog");
 
         return Ok(new { success = true });
     }
@@ -257,21 +255,24 @@ public class ContainerRegistryController : ControllerBase
     [HttpGet("jfrog/repositories")]
     public async Task<IActionResult> GetJfrogRepositories()
     {
-        var creds = await _settings.GetPortalJfrogCredentialsAsync();
+        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var creds = await _settings.GetUserJfrogCredentialsAsync(key);
         return Ok(await _registry.GetJfrogRepositoriesAsync(creds));
     }
 
     [HttpGet("jfrog/repositories/{repositoryKey}/images")]
     public async Task<IActionResult> GetJfrogImages(string repositoryKey)
     {
-        var creds = await _settings.GetPortalJfrogCredentialsAsync();
+        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var creds = await _settings.GetUserJfrogCredentialsAsync(key);
         return Ok(await _registry.GetJfrogImagesAsync(creds, repositoryKey));
     }
 
     [HttpGet("jfrog/repositories/{repositoryKey}/images/{imageName}/tags")]
     public async Task<IActionResult> GetJfrogTags(string repositoryKey, string imageName)
     {
-        var creds = await _settings.GetPortalJfrogCredentialsAsync();
+        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var creds = await _settings.GetUserJfrogCredentialsAsync(key);
         return Ok(await _registry.GetJfrogTagsAsync(creds, repositoryKey, imageName));
     }
 
@@ -283,7 +284,8 @@ public class ContainerRegistryController : ControllerBase
         if (ValidateHostProvider(provider) is IActionResult invalid)
             return invalid;
 
-        var creds = await _settings.GetPortalHostCredentialsAsync(provider);
+        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var creds = await _settings.GetUserHostCredentialsAsync(provider, key);
 
         return Ok(new HostCredentialStatusDto
         {
@@ -299,19 +301,17 @@ public class ContainerRegistryController : ControllerBase
         if (ValidateHostProvider(provider) is IActionResult invalid)
             return invalid;
 
-        if (await AdminGate.DenyUnlessAdminAsync(this, _settings, "change settings") is IActionResult denied)
-            return denied;
-
         if (await CredentialGate.DenyUnlessUnlockedAsync(this, _settings, _activity, provider) is IActionResult locked)
             return locked;
 
-        var existing = await _settings.GetPortalHostCredentialsAsync(provider);
+        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var existing = await _settings.GetUserHostCredentialsAsync(provider, key);
         var effectiveHostUrl = string.IsNullOrWhiteSpace(request.HostUrl) ? existing.HostUrl : request.HostUrl;
 
         if (string.IsNullOrWhiteSpace(effectiveHostUrl))
             return BadRequest(new { message = "A host URL is required." });
 
-        await _settings.SavePortalHostCredentialsAsync(provider, request);
+        await _settings.SaveUserHostCredentialsAsync(provider, key, request);
 
         return Ok(new { configured = true });
     }
@@ -322,13 +322,12 @@ public class ContainerRegistryController : ControllerBase
         if (ValidateHostProvider(provider) is IActionResult invalid)
             return invalid;
 
-        if (await AdminGate.DenyUnlessAdminAsync(this, _settings, "change settings") is IActionResult denied)
-            return denied;
-
         if (await CredentialGate.DenyUnlessUnlockedAsync(this, _settings, _activity, provider) is IActionResult locked)
             return locked;
 
-        await _settings.ClearPortalHostCredentialsAsync(provider);
+        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        await _settings.ClearUserHostCredentialsAsync(provider, key);
+        _activity.RevokeCredentialUnlock(key, provider);
 
         return Ok(new { success = true });
     }
@@ -338,21 +337,24 @@ public class ContainerRegistryController : ControllerBase
     [HttpGet("harbor/projects")]
     public async Task<IActionResult> GetHarborProjects()
     {
-        var creds = await _settings.GetPortalHostCredentialsAsync("harbor");
+        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var creds = await _settings.GetUserHostCredentialsAsync("harbor", key);
         return Ok(await _registry.GetHarborProjectsAsync(creds));
     }
 
     [HttpGet("harbor/projects/{projectName}/repositories")]
     public async Task<IActionResult> GetHarborRepositories(string projectName)
     {
-        var creds = await _settings.GetPortalHostCredentialsAsync("harbor");
+        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var creds = await _settings.GetUserHostCredentialsAsync("harbor", key);
         return Ok(await _registry.GetHarborRepositoriesAsync(creds, projectName));
     }
 
     [HttpGet("harbor/projects/{projectName}/repositories/{repositoryName}/artifacts")]
     public async Task<IActionResult> GetHarborArtifacts(string projectName, string repositoryName)
     {
-        var creds = await _settings.GetPortalHostCredentialsAsync("harbor");
+        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var creds = await _settings.GetUserHostCredentialsAsync("harbor", key);
         return Ok(await _registry.GetHarborArtifactsAsync(creds, projectName, repositoryName));
     }
 
@@ -361,21 +363,24 @@ public class ContainerRegistryController : ControllerBase
     [HttpGet("nexus/repositories")]
     public async Task<IActionResult> GetNexusRepositories()
     {
-        var creds = await _settings.GetPortalHostCredentialsAsync("nexus");
+        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var creds = await _settings.GetUserHostCredentialsAsync("nexus", key);
         return Ok(await _registry.GetNexusRepositoriesAsync(creds));
     }
 
     [HttpGet("nexus/repositories/{repositoryName}/images")]
     public async Task<IActionResult> GetNexusImages(string repositoryName)
     {
-        var creds = await _settings.GetPortalHostCredentialsAsync("nexus");
+        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var creds = await _settings.GetUserHostCredentialsAsync("nexus", key);
         return Ok(await _registry.GetNexusImagesAsync(creds, repositoryName));
     }
 
     [HttpGet("nexus/repositories/{repositoryName}/images/{imageName}/tags")]
     public async Task<IActionResult> GetNexusTags(string repositoryName, string imageName)
     {
-        var creds = await _settings.GetPortalHostCredentialsAsync("nexus");
+        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var creds = await _settings.GetUserHostCredentialsAsync("nexus", key);
         return Ok(await _registry.GetNexusTagsAsync(creds, repositoryName, imageName));
     }
 }

@@ -10,7 +10,7 @@ import useNavigation from "../../hooks/useNavigation";
 const PAGE_SIZE = 10;
 
 // GitLab Container Registry - two levels (repositories -> tags), against
-// the portal-wide shared credential (see GitLabRegistryLoginSection in
+// this session's own credential (see GitLabRegistryLoginSection in
 // Settings → Credentials → GitLab Registry), scoped to that credential's
 // one configured project.
 export default function GitLabRegistryView() {
@@ -145,9 +145,9 @@ export default function GitLabRegistryView() {
         return (
             <div className="card">
                 <p className="empty-state" style={{ textAlign: "left" }}>
-                    Nobody has connected GitLab Registry yet. An admin can connect it in{" "}
+                    Connect your GitLab Registry credentials in{" "}
                     <a href="#" onClick={(e) => { e.preventDefault(); setTab("settings"); }}>Settings → Credentials → GitLab Registry</a>
-                    {" "}to enable this for everyone.
+                    {" "}to browse this.
                 </p>
             </div>
         );

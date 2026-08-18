@@ -9,8 +9,8 @@ import useNavigation from "../../hooks/useNavigation";
 
 const PAGE_SIZE = 10;
 
-// Azure Repos - two levels (repositories -> branches), against the
-// portal-wide shared credential (see PortalRegistryLoginSection in
+// Azure Repos - two levels (repositories -> branches), against this
+// session's own credential (see PortalRegistryLoginSection in
 // Settings → Credentials → Azure Repos). Lists across the whole
 // organization (every project's repositories), not one project at a time.
 export default function AzureReposView() {
@@ -141,9 +141,9 @@ export default function AzureReposView() {
         return (
             <div className="card">
                 <p className="empty-state" style={{ textAlign: "left" }}>
-                    Nobody has connected Azure Repos yet. An admin can connect it in{" "}
+                    Connect your Azure Repos credentials in{" "}
                     <a href="#" onClick={(e) => { e.preventDefault(); setTab("settings"); }}>Settings → Credentials → Azure Repos</a>
-                    {" "}to enable this for everyone.
+                    {" "}to browse this.
                 </p>
             </div>
         );

@@ -1,10 +1,9 @@
 namespace DeploymentAPI.DTOs;
 
-// Docker Hub and GHCR (GitHub Container Registry) - the two "standalone"
-// registries built in this pass, browsing against the shared, portal-wide
-// credential in SettingsService.GetPortalContainerRegistryCredentialsAsync
-// (see its own comment for why that's a separate store from
-// PortalPaasCredentials). Shapes mirror the existing AwsEcr*/AzureAcr*/
+// Docker Hub and GHCR (GitHub Container Registry) - two of the "standalone"
+// registries, browsing against this session's own credential (reuses
+// UserPaasCredentials/GetUserPaasCredentialsAsync directly - see
+// SettingsService's own comment). Shapes mirror the existing AwsEcr*/AzureAcr*/
 // GcpArtifactRegistry* DTOs' Configured/Error contract - Configured is false
 // only when nobody has saved a credential yet; Error carries a sanitized
 // message (see CloudErrorSanitizer) for every other kind of failure so the
@@ -87,13 +86,12 @@ public class ContainerRegistryCredentialStatusDto
 // neither is reachable from a bare (username, token) pair: GitLab's
 // registry is scoped to one project (self-hosted or gitlab.com), and
 // Artifactory has no fixed host at all - every instance is its own domain.
-// Both get their own dedicated credential shape/storage
-// (SettingsService.GetPortalGitLabRegistryCredentialsAsync/
-// GetPortalJfrogCredentialsAsync) rather than reusing
-// PortalContainerRegistryCredentials's generic (Token, AccountId) pair,
-// same reasoning that shape itself was kept separate from
-// PortalPaasCredentials - a shape that doesn't fit is a sign to add a new
-// one, not to overload an existing one with an extra convention-only field.
+// Both get their own dedicated, session-scoped credential shape/storage
+// (SettingsService.GetUserGitLabRegistryCredentialsAsync/
+// GetUserJfrogCredentialsAsync) rather than reusing UserPaasCredentials'
+// generic (Token, AccountId) pair - a shape that doesn't fit is a sign to
+// add a new one, not to overload an existing one with an extra
+// convention-only field.
 
 public record PortalGitLabRegistryCredentials(string? HostUrl, string? ProjectId, string? Token)
 {

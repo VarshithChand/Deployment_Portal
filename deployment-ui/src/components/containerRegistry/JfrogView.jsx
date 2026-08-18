@@ -10,9 +10,8 @@ const PAGE_SIZE = 10;
 
 // JFrog Artifactory - three levels deep (repositories -> images -> tags),
 // same shape as ACR - an Artifactory instance can hold several docker-type
-// repositories, each its own image namespace. Against the portal-wide
-// shared credential (see JfrogLoginSection in Settings → Credentials →
-// JFrog).
+// repositories, each its own image namespace. Against this session's own
+// credential (see JfrogLoginSection in Settings → Credentials → JFrog).
 export default function JfrogView() {
 
     const { setTab } = useNavigation();
@@ -228,9 +227,9 @@ export default function JfrogView() {
         return (
             <div className="card">
                 <p className="empty-state" style={{ textAlign: "left" }}>
-                    Nobody has connected JFrog yet. An admin can connect it in{" "}
+                    Connect your JFrog credentials in{" "}
                     <a href="#" onClick={(e) => { e.preventDefault(); setTab("settings"); }}>Settings → Credentials → JFrog</a>
-                    {" "}to enable this for everyone.
+                    {" "}to browse this.
                 </p>
             </div>
         );

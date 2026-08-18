@@ -10,7 +10,7 @@ import useNavigation from "../../hooks/useNavigation";
 const PAGE_SIZE = 10;
 
 // Harbor - three levels deep (projects -> repositories -> artifacts),
-// against the portal-wide shared credential (see HostCredentialLoginSection
+// against this session's own credential (see HostCredentialLoginSection
 // in Settings → Credentials → Harbor).
 export default function HarborView() {
 
@@ -244,9 +244,9 @@ export default function HarborView() {
         return (
             <div className="card">
                 <p className="empty-state" style={{ textAlign: "left" }}>
-                    Nobody has connected Harbor yet. An admin can connect it in{" "}
+                    Connect your Harbor credentials in{" "}
                     <a href="#" onClick={(e) => { e.preventDefault(); setTab("settings"); }}>Settings → Credentials → Harbor</a>
-                    {" "}to enable this for everyone.
+                    {" "}to browse this.
                 </p>
             </div>
         );

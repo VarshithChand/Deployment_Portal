@@ -11,14 +11,15 @@ using Newtonsoft.Json.Linq;
 namespace DeploymentAPI.Services;
 
 // Source Control hub's Azure Repos and AWS CodeCommit sub-pages. Azure
-// Repos uses a portal-wide shared credential (Organization + PAT - see
-// SettingsService.GetPortalSourceControlCredentialsAsync's own comment on
-// why this is a DIFFERENT credential from the session-scoped Azure App
-// Registration ACR/Web App status already use); AWS CodeCommit reuses this
-// session's own UserAwsCredentials, the same one ECR/EC2/ECS/RDS/Lambda
-// already use - no new credential to set up, same "raw HttpClient, not a
-// vendor SDK" convention for Azure Repos and "official per-service AWS SDK
-// package" convention for CodeCommit this app already follows elsewhere.
+// Repos uses a session-scoped credential (Organization + PAT, reusing
+// UserPaasCredentials/GetUserPaasCredentialsAsync directly under provider
+// "azureRepos" - a DIFFERENT credential from the Azure App Registration
+// ACR/Web App status already use, just the same isolation model); AWS
+// CodeCommit reuses this session's own UserAwsCredentials, the same one
+// ECR/EC2/ECS/RDS/Lambda already use - no new credential to set up, same
+// "raw HttpClient, not a vendor SDK" convention for Azure Repos and
+// "official per-service AWS SDK package" convention for CodeCommit this
+// app already follows elsewhere.
 public class SourceControlService
 {
     private static AWSCredentials BuildAwsCredentials(UserAwsCredentials credentials) =>
