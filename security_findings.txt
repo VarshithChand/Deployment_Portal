@@ -9258,3 +9258,104 @@ Standing limitation: the running-builds view hasn't been confirmed
 against a real in-progress pipeline run - worth the user checking that
 specifically, since a live "in progress" status is the one thing here
 that can't be verified by just reading a static list back.
+
+==================================================
+ROUND 68 - FEATURE: AZURE DEVOPS PIPELINES - FETCH AND
+RUN WITH THE PIPELINE'S OWN DECLARED PARAMETERS
+==================================================
+Date: 2026-08-18
+Trigger: two screenshots - this app's own Pipelines Run form next to a
+screenshot of the REAL Azure DevOps portal's own "Run pipeline" dialog
+for the same pipeline, showing a "Parameters" section with two real
+checkboxes ("Start pipeline (run build + publish)" / "Stop pipeline
+(skip build + publish)") declared in the user's own azure-pipelines.yml
+(confirmed by reading that file directly - a `parameters:` list with
+two `type: boolean` entries). Verbatim ask: "i need if there are any
+booleons or any placeholder are there i can fetch form them."
+
+This is the one piece explicitly flagged as deferred/uncertain back in
+Round 66's own documentation ("Azure DevOps doesn't have an easy way
+to introspect a pipeline's declared parameters the way GitHub does") -
+now built for real, grounded in the user's own live pipeline YAML
+rather than guessed.
+
+Root-caused the actual API gap before writing code: Azure DevOps has
+no REST endpoint that returns a pipeline's parameter schema directly
+(unlike GitHub Actions, where workflow_dispatch.inputs is just another
+key in the workflow YAML this app already fetches for View YAML).
+Azure Pipelines' `parameters:` block only exists inside the pipeline's
+own YAML FILE - so the only way to get it is the same "fetch the file,
+parse the YAML" approach GitHubApiService.GetWorkflowInputsAsync
+already uses for GitHub, reusing the exact same YamlDotNet dependency
+and DeserializerBuilder().Deserialize<Dictionary<object,object>>
+pattern (already a project dependency, not a new one) - just walking a
+LIST shape instead of a MAP, since that's genuinely how Azure
+Pipelines declares parameters (a `parameters:` array of objects, each
+with name/displayName/type/default[/values]), unlike GitHub's inputs
+map keyed by input name.
+
+New GetPipelineParametersAsync: resolves the pipeline's own YAML path
+via GetPipelineDetailAsync (extended with a new YamlPath field reading
+`configuration.path` from the single-pipeline GET, alongside the
+repository info it already resolved for the branch picker), fetches
+that file's raw text via the Git Items API with an `Accept: text/plain`
+header (the standard way to get a raw file body instead of a
+JSON-wrapped one from that endpoint), then parses the top-level
+`parameters:` list the same way GetWorkflowInputsAsync parses
+workflow_dispatch.inputs. Only boolean/string/number parameter types
+map onto a sensible form control - step/job/stage types and their List
+variants are YAML-authoring-time pipeline-structure constructs with no
+meaningful value a visitor could type in, so those are parsed but
+deliberately left out of the rendered form rather than guessing at a
+control for them.
+
+The Run form renders whatever renderable parameters the selected
+pipeline declares - a checkbox for boolean, a searchable ComboBox for
+a string parameter that also declares a `values:` enum list, a plain
+text/number input otherwise - each pre-filled from the parameter's own
+YAML default, matching the real Azure DevOps "Run pipeline" dialog's
+own behavior. RunPipelineAsync grew a templateParameters field
+(Dictionary<string,string>, omitted from the POST body entirely when
+empty) carrying whatever the visitor filled in, sent through to Azure
+DevOps' own templateParameters request field untouched.
+
+Verification performed:
+  - `dotnet build` (isolated output dir): 0 errors, same pre-existing
+    warnings as every prior round.
+  - `npm run lint` in deployment-ui/: no new warnings.
+  - `npm run build` in deployment-ui/: succeeded.
+  - Manually walked the user's own azure-pipelines.yml against the new
+    parser by hand (not just trusting the code to compile) - both
+    `startPipeline`/`stopPipeline` boolean parameters, their
+    displayName/type/default fields, confirming the parsing logic
+    would actually produce the two checkboxes shown in the real Azure
+    DevOps screenshot before considering this correct.
+  - Could not exercise GetPipelineParametersAsync's actual HTTP call
+    (the Git Items API's `Accept: text/plain` raw-content behavior)
+    against a real Azure DevOps organization in this sandboxed session
+    - same standing limitation as every integration this session
+    builds without a real, authenticated account to test against. This
+    is explicitly the least-certain part of this round: the YAML
+    parsing itself was hand-verified against the user's real file
+    content, but the raw-text HTTP fetch that feeds it has not been.
+  - Live check against the deployed Render backend after the push:
+    /api/bootstrap healthy (HTTP 200).
+
+Files changed: src/DeploymentAPI/DTOs/AzureDevOpsDtos.cs,
+src/DeploymentAPI/Services/AzureDevOpsService.cs,
+src/DeploymentAPI/Controllers/AzureDevOpsController.cs,
+deployment-ui/src/services/azureDevOpsService.js,
+deployment-ui/src/components/sourceControl/AzureDevOpsPipelinesView.jsx.
+Commit: 943db46.
+
+Status: Complete, pushed, live-verified the backend is up. The Run
+form now matches Azure DevOps' own "Run pipeline" dialog for pipelines
+that declare boolean/string/number parameters, using the user's own
+real azure-pipelines.yml as the concrete case this was built and
+hand-verified against. Standing limitation, stated plainly: the actual
+HTTP fetch of the raw YAML file (Accept: text/plain against the Git
+Items API) is unverified against a live Azure DevOps organization -
+recommend the user open the Deployment_Portal.git pipeline's Run form
+in this app and confirm the two real checkboxes from their own
+pipeline actually appear, since that's the one thing here that a code
+read-through alone can't fully confirm.
