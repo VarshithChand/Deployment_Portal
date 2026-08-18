@@ -8789,3 +8789,147 @@ been visually confirmed in a rendered browser (no screenshot tool
 available in this environment) - worth the user taking a quick look at
 the collapsed rail once deployed to confirm the new shapes read clearly
 at 18px, since that's ultimately a visual judgment call.
+
+==================================================
+ROUND 64 - FEATURE: AZURE REPOS REPLACED WITH FULL
+AZURE DEVOPS (BRANCHES, PIPELINES, BUILD ARTIFACTS,
+PACKAGE FEEDS)
+==================================================
+Date: 2026-08-18
+Trigger: "i need azuredevops in place of azure reops and i can manage
+ci-cd and artifacts and branches there create the sub pages in the
+sidebar from them from the source control." Azure Repos was previously
+a single repo/branch browser (session-scoped, see Round 62) - this
+expands it into a genuine Azure DevOps integration.
+
+Two real ambiguities were confirmed with the user via AskUserQuestion
+before writing any code, given the size of guessing wrong (a whole new
+REST integration, wrong shape, per branch):
+1. "Artifacts" - Azure Artifacts package feeds, pipeline build
+   artifacts, or both? Answered: Both (two distinct sub-pages).
+2. CI/CD scope - view-only (pipelines + run history/status) or also
+   trigger new runs? Answered: View only (Recommended) - matches this
+   app's own established posture for every other browse-only provider
+   integration (ECR/ACR/Harbor/etc.), no new trigger/confirmation
+   surface needed.
+
+Resulting structure: Source Control's old flat "Azure Repos" leaf
+became a nested "Azure DevOps" group (same treatment GitHub already
+has) with 4 real, independently-navigable children, all sharing one
+session-scoped Organization + PAT credential (renamed provider key
+azureRepos -> azureDevOps everywhere - CredentialGate, settings
+storage, routes, sidebar/nav keys - since one credential now powers
+four pages, not just repo browsing):
+  - Branches: org-wide repositories -> branches - unchanged behavior
+    from the old Azure Repos page, just moved/renamed (the org-wide
+    Git repositories endpoint already carries each repo's own project
+    name, so no project picker was needed here, same as before).
+  - Pipelines: project -> pipeline -> run history (status/result/
+    dates, link to open in Azure DevOps for full logs) - both
+    Pipelines and Runs are strictly project-scoped in Azure DevOps'
+    own API (no org-wide "every pipeline" endpoint exists), so this
+    page starts with a project picker fetched from /_apis/projects.
+  - Build Artifacts: project -> pipeline -> run -> artifacts - reuses
+    the same project/pipeline/run selection Pipelines itself uses (a
+    run is the means to an end here, not the payoff). Artifacts are
+    fetched via the classic Build API's .../build/builds/{id}/
+    artifacts endpoint against the SAME id a pipeline run already
+    has (Azure Pipelines runs on top of the Build service internally)
+    - there is no artifacts endpoint under the newer Pipelines API
+    surface at all.
+  - Package Feeds: Azure Artifacts feeds -> packages -> versions,
+    against the separate feeds.dev.azure.com host - org-wide like
+    Branches, no project picker needed.
+
+Backend: AzureDevOpsDtos.cs/AzureDevOpsService.cs/
+AzureDevOpsController.cs (new) - Azure-specific code split out of
+SourceControlDtos.cs/SourceControlService.cs/SourceControlController.cs,
+which now handle only AWS CodeCommit (mirrors how ContainerRegistry/
+Sonar already got their own dedicated controllers). Session-scoped, no
+AdminGate, same CredentialGate PIN posture as every other Source
+Control/Container Registry credential. Registered AzureDevOpsService
+as a Singleton in Program.cs (same statelessness as
+ContainerRegistryService/SourceControlService - every credential is
+passed in per-call, the shared HttpClients never carry per-caller
+state).
+
+Frontend: 4 new view components (AzureDevOpsBranchesView - a straight
+rename of the old AzureReposView, AzureDevOpsPipelinesView,
+AzureDevOpsArtifactsView, AzureDevOpsFeedsView) each following this
+app's own established multi-level drill-down template (see
+HarborView.jsx). Applied the pagination policy's "evaluate nested
+lists independently" guidance rather than blindly matching every
+prior view's "top level only" default: paginated every level plausibly
+unbounded over time (projects, run history, package versions), left
+genuinely small per-item lists (branches in one repo, artifacts in one
+run) unpaginated, matching this app's own established precedent for
+those specific shapes. 4 new sidebar icons (Branches/Pipelines/Build
+Artifacts/Package Feeds), each a fresh, distinct silhouette per Round
+63's own "no shared base plus tiny accent" discipline - reused the
+existing diamond-outline "this is Azure" signature (AcrIcon/
+AzureCloudIcon's own family) for the GROUP header only, not for any of
+the 4 children, so nothing repeats among direct siblings.
+
+Verification performed:
+  - `dotnet build` (isolated output dir), run twice (once after the
+    main backend change set, once after a trailing comment fix): 0
+    errors both times, same pre-existing warnings as every prior round.
+  - `npm run lint` in deployment-ui/: no new warnings.
+  - `npm run build` in deployment-ui/: succeeded - confirmed via chunk
+    output that all 4 new pages (AzureDevOpsBranches/Pipelines/
+    Artifacts/Feeds) built into their own separate lazy-loaded chunks.
+  - Grepped the entire frontend AND backend source trees for every
+    remaining "azureRepos"/"Azure Repos" reference after the rename,
+    fixing five stale comments the grep turned up (Sidebar.jsx,
+    PortalRegistryLoginSection.jsx, CredentialsView.jsx, Bitbucket.jsx,
+    SettingsService.cs) before considering the rename complete - not
+    just the functional code paths.
+  - git itself detected AzureReposView.jsx -> AzureDevOpsBranchesView.jsx
+    as an 87%-similarity rename rather than a delete+add, corroborating
+    that the Branches page's own logic really was moved largely intact.
+  - No real Azure DevOps organization/PAT is available in this sandboxed
+    session, so none of the four new endpoints (repositories, pipelines,
+    runs, artifacts, feeds, packages, versions) could be exercised
+    end-to-end against a real Azure DevOps org - implemented directly
+    from Azure DevOps' own published REST API v7.1 documentation rather
+    than guessed, but this is explicitly the least-certain part of this
+    round, the same "recommend the user test this against a real
+    account" posture this session has used for every credential-gated
+    integration with no real account available (Render Metrics, GCP
+    Artifact Registry's JWT flow, etc.). Most likely failure points if
+    the real response shapes differ: pipeline "folder" field formatting,
+    and whether a run's ID reliably maps onto the Build API's artifacts
+    endpoint for every pipeline type (YAML vs. classic).
+  - Live check against the deployed Render backend after the push:
+    /api/bootstrap healthy (HTTP 200).
+
+Files changed: src/DeploymentAPI/{DTOs/AzureDevOpsDtos,
+Services/AzureDevOpsService,Controllers/AzureDevOpsController}.cs (new),
+src/DeploymentAPI/{DTOs/SourceControlDtos,Services/SourceControlService,
+Controllers/SourceControlController}.cs (trimmed to CodeCommit only),
+src/DeploymentAPI/{Helpers/CredentialGate,Program}.cs,
+src/DeploymentAPI/Services/SettingsService.cs (comment only),
+deployment-ui/src/{api/azureDevOpsApi,services/azureDevOpsService}.js
+(new), deployment-ui/src/services/sourceControlService.js (trimmed),
+deployment-ui/src/components/sourceControl/AzureDevOps{Branches,
+Pipelines,Artifacts,Feeds}View.jsx (Branches renamed from
+AzureReposView.jsx, other three new), deployment-ui/src/pages/
+AzureDevOps{Branches,Pipelines,Artifacts,Feeds}.jsx (new, AzureRepos.jsx
+deleted), deployment-ui/src/components/layout/{Sidebar,SidebarIcons}.jsx,
+deployment-ui/src/context/NavigationContext.jsx, deployment-ui/src/App.jsx,
+deployment-ui/src/components/settings/CredentialsView.jsx,
+deployment-ui/src/components/settings/credentials/
+PortalRegistryLoginSection.jsx, deployment-ui/src/pages/Bitbucket.jsx
+(comment only).
+Commit: 4fb11c9.
+
+Status: Complete, pushed, live-verified the backend is up. Azure DevOps
+now has real, navigable pages for all three things asked for (branches,
+CI/CD, artifacts) plus package feeds, all self-service and session-
+scoped like every other Source Control credential in this app. Standing
+limitation, stated plainly: unverified against a real Azure DevOps
+organization - recommend the user connect a real org + PAT and browse
+all four sub-pages once deployed, treating the first pass as needing a
+likely follow-up fix once real response shapes are seen, same posture
+this session has used for every integration built without a real
+account available to test against.
