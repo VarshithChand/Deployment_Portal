@@ -40,7 +40,15 @@ const Timeline = lazy(() => import("./pages/Timeline"));
 const TemplateTester = lazy(() => import("./pages/TemplateTester"));
 const CloudServices = lazy(() => import("./pages/CloudServices"));
 const PaasHosting = lazy(() => import("./pages/PaasHosting"));
-const ContainerRegistry = lazy(() => import("./pages/ContainerRegistry"));
+const Ecr = lazy(() => import("./pages/Ecr"));
+const Acr = lazy(() => import("./pages/Acr"));
+const ArtifactRegistry = lazy(() => import("./pages/ArtifactRegistry"));
+const DockerHub = lazy(() => import("./pages/DockerHub"));
+const Ghcr = lazy(() => import("./pages/Ghcr"));
+const GitLabRegistry = lazy(() => import("./pages/GitLabRegistry"));
+const Jfrog = lazy(() => import("./pages/Jfrog"));
+const Harbor = lazy(() => import("./pages/Harbor"));
+const Nexus = lazy(() => import("./pages/Nexus"));
 const Services = lazy(() => import("./pages/Services"));
 const Docker = lazy(() => import("./pages/Docker"));
 const CodeQuality = lazy(() => import("./pages/CodeQuality"));
@@ -227,7 +235,15 @@ function App(){
                             {tab === "templates" && <TemplateTester/>}
                             {tab === "cloudServices" && <CloudServices/>}
                             {tab === "paasHosting" && <PaasHosting/>}
-                            {tab === "containerRegistry" && <ContainerRegistry/>}
+                            {tab === "ecr" && <Ecr/>}
+                            {tab === "acr" && <Acr/>}
+                            {tab === "artifactRegistry" && <ArtifactRegistry/>}
+                            {tab === "dockerHub" && <DockerHub/>}
+                            {tab === "ghcr" && <Ghcr/>}
+                            {tab === "gitlabRegistry" && <GitLabRegistry/>}
+                            {tab === "jfrog" && <Jfrog/>}
+                            {tab === "harbor" && <Harbor/>}
+                            {tab === "nexus" && <Nexus/>}
                             {tab === "services" && <Services/>}
                             {tab === "docker" && <Docker/>}
                             {tab === "codeQuality" && <CodeQuality/>}

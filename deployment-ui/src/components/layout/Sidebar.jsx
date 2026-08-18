@@ -29,6 +29,15 @@ import {
     CloudServicesIcon,
     HostingProvidersIcon,
     ContainerRegistryIcon,
+    EcrIcon,
+    AcrIcon,
+    ArtifactRegistryIcon,
+    DockerHubIcon,
+    GhcrIcon,
+    GitLabRegistryIcon,
+    JfrogIcon,
+    HarborIcon,
+    NexusIcon,
     ChevronIcon,
     SunIcon,
     MoonIcon,
@@ -83,17 +92,41 @@ export const TABS = [
     // SettingsService.GrantablePageKeys, since this is the visitor's own
     // account credential, not a portal-admin-gated feature.
     { key: "paasHosting", label: "Hosting Providers", Icon: HostingProvidersIcon },
-    // A hub for browsing container image registries (AWS ECR/Azure ACR/GCP
-    // Artifact Registry now; Docker Hub/GHCR/GitLab/JFrog/Harbor/Nexus are
-    // shown but not yet built - see pages/ContainerRegistry.jsx). Kept
-    // deliberately separate from "docker" below, which is Docker *Engine*
-    // management (containers/images/volumes on the host) - a different
-    // concept from a container *registry*, and reusing that nav item would
-    // have recreated the exact naming confusion Hosting Providers' own
-    // redesign already hit once this session. Same self-service posture as
-    // Cloud Services/Hosting Providers above - each provider's own session
-    // credential is the auth boundary, not a portal admin gate.
-    { key: "containerRegistry", label: "Container Registry", Icon: ContainerRegistryIcon },
+    // Every container image registry provider as its own nested sidebar
+    // page, same "collapsible group" treatment as GitHub/Code Quality above
+    // - each child is a real, independently-navigable page (own tab key,
+    // own App.jsx route), not a tile inside one shared hub page (the
+    // earlier design, see git history for pages/ContainerRegistry.jsx's
+    // prior tile-grid version - fully retired, no tab key survives it).
+    // Kept deliberately separate from "docker" below, which is Docker
+    // *Engine* management (containers/images/volumes on the host) - a
+    // different concept from a container *registry*, and reusing that nav
+    // item would have recreated the exact naming confusion Hosting
+    // Providers' own redesign already hit once this session. Same self-
+    // service posture as Cloud Services/Hosting Providers above for the 3
+    // cloud-native providers (each one's own session credential is the
+    // auth boundary); the 6 standalone registries (Docker Hub/GHCR/GitLab/
+    // JFrog/Harbor/Nexus) use a portal-wide shared credential instead, but
+    // VIEWING them is still open to everyone - only saving/clearing that
+    // shared credential (in Settings → Credentials) is admin-gated, so
+    // none of these 9 children belong in ADMIN_ONLY_TABS below.
+    {
+        key: "containerRegistryGroup",
+        type: "group",
+        label: "Container Registry",
+        Icon: ContainerRegistryIcon,
+        children: [
+            { key: "ecr", label: "AWS ECR", Icon: EcrIcon },
+            { key: "acr", label: "Azure ACR", Icon: AcrIcon },
+            { key: "artifactRegistry", label: "Artifact Registry", Icon: ArtifactRegistryIcon },
+            { key: "dockerHub", label: "Docker Hub", Icon: DockerHubIcon },
+            { key: "ghcr", label: "GHCR", Icon: GhcrIcon },
+            { key: "gitlabRegistry", label: "GitLab Registry", Icon: GitLabRegistryIcon },
+            { key: "jfrog", label: "JFrog Artifactory", Icon: JfrogIcon },
+            { key: "harbor", label: "Harbor", Icon: HarborIcon },
+            { key: "nexus", label: "Nexus", Icon: NexusIcon }
+        ]
+    },
     { key: "services", label: "Services", Icon: ServicesIcon },
     { key: "docker", label: "Docker", Icon: DockerIcon },
     // Every code-quality/static-analysis tool as its own nested sidebar

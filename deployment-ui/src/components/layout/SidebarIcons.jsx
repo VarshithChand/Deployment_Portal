@@ -363,6 +363,116 @@ export function ContainerRegistryIcon() {
     );
 }
 
+// Container Registry's 9 providers, each sharing one common "image" base (a
+// single rounded rect - the group header's own 3-box cluster, simplified to
+// one box per provider since these are now individual pages) plus one small
+// accent distinguishing each - same "one base shape, one distinguishing
+// mark" economy this file already uses for the Code Quality group's
+// ESLint/Pylint/Checkstyle icons.
+
+// Box + a "lid" line near the top - AWS ECR, the simplest/first one.
+export function EcrIcon() {
+    return (
+        <svg {...common}>
+            <rect x="3" y="4" width="12" height="11" rx="1.4" stroke="currentColor" strokeWidth="1.4" />
+            <line x1="3" y1="7.5" x2="15" y2="7.5" stroke="currentColor" strokeWidth="1.3" />
+        </svg>
+    );
+}
+
+// Box + a small triangle accent at the top-right corner - Azure ACR.
+export function AcrIcon() {
+    return (
+        <svg {...common}>
+            <rect x="3" y="4" width="12" height="11" rx="1.4" stroke="currentColor" strokeWidth="1.4" />
+            <polygon points="11,4 15,4 15,8" fill="currentColor" />
+        </svg>
+    );
+}
+
+// Box + a small circle "tag" badge at the bottom-right - GCP Artifact
+// Registry.
+export function ArtifactRegistryIcon() {
+    return (
+        <svg {...common}>
+            <rect x="3" y="3" width="11" height="10" rx="1.4" stroke="currentColor" strokeWidth="1.4" />
+            <circle cx="14.2" cy="13.8" r="2.4" stroke="currentColor" strokeWidth="1.3" fill="none" />
+        </svg>
+    );
+}
+
+// Box with a smaller filled square nested inside - Docker Hub, distinct
+// from DockerIcon's two-stacked-rects "Engine" glyph elsewhere in the
+// sidebar (a different concept entirely - see ContainerRegistry.jsx's own
+// comment on why the two nav items stay separate).
+export function DockerHubIcon() {
+    return (
+        <svg {...common}>
+            <rect x="3" y="3" width="12" height="12" rx="1.4" stroke="currentColor" strokeWidth="1.4" />
+            <rect x="6.5" y="6.5" width="5" height="5" rx="0.8" fill="currentColor" />
+        </svg>
+    );
+}
+
+// Box + a vertical "spine" on the left edge - GHCR, echoing
+// GitHubGroupIcon's own repository spine to tie it visually back to GitHub.
+export function GhcrIcon() {
+    return (
+        <svg {...common}>
+            <rect x="3" y="3" width="12" height="12" rx="1.4" stroke="currentColor" strokeWidth="1.4" />
+            <line x1="6.2" y1="3" x2="6.2" y2="15" stroke="currentColor" strokeWidth="1.4" />
+        </svg>
+    );
+}
+
+// Box + a small diamond accent at the top - GitLab Registry.
+export function GitLabRegistryIcon() {
+    return (
+        <svg {...common}>
+            <rect x="3" y="4" width="12" height="11" rx="1.4" stroke="currentColor" strokeWidth="1.4" />
+            <polygon points="9,1.8 11,4 9,6.2 7,4" fill="currentColor" />
+        </svg>
+    );
+}
+
+// Box + two small dots near the top - JFrog Artifactory.
+export function JfrogIcon() {
+    return (
+        <svg {...common}>
+            <rect x="3" y="4" width="12" height="11" rx="1.4" stroke="currentColor" strokeWidth="1.4" />
+            <circle cx="6.8" cy="7.5" r="1" fill="currentColor" />
+            <circle cx="11.2" cy="7.5" r="1" fill="currentColor" />
+        </svg>
+    );
+}
+
+// Box + a short horizontal line with two downward ticks at the base - an
+// anchor stand-in for Harbor.
+export function HarborIcon() {
+    return (
+        <svg {...common}>
+            <rect x="3" y="3" width="12" height="10" rx="1.4" stroke="currentColor" strokeWidth="1.4" />
+            <line x1="5.5" y1="16" x2="12.5" y2="16" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+            <line x1="6.5" y1="13" x2="6.5" y2="16" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+            <line x1="11.5" y1="13" x2="11.5" y2="16" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+        </svg>
+    );
+}
+
+// Box + a small row of three connected dots - a "junction point" stand-in
+// for Nexus.
+export function NexusIcon() {
+    return (
+        <svg {...common}>
+            <rect x="3" y="4" width="12" height="11" rx="1.4" stroke="currentColor" strokeWidth="1.4" />
+            <line x1="6" y1="7.5" x2="12" y2="7.5" stroke="currentColor" strokeWidth="1.2" />
+            <circle cx="6" cy="7.5" r="1" fill="currentColor" />
+            <circle cx="9" cy="7.5" r="1" fill="currentColor" />
+            <circle cx="12" cy="7.5" r="1" fill="currentColor" />
+        </svg>
+    );
+}
+
 export function ChevronIcon({ direction = "left" }) {
     return (
         <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true"
