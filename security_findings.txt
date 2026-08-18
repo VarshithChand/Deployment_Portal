@@ -8231,3 +8231,117 @@ same "likely needs one follow-up fix once real response shapes are
 seen" posture as every other unverified live-API integration this
 session. GitLab and Bitbucket remain explicitly unbuilt pending their
 own credential-shape specifics.
+
+==================================================
+ROUND 59 - UX: CREDENTIALS PAGE - GROUPED TABS + WHOLE-PAGE LOCK
+POPUP WITH MFA-BACKED RESET
+==================================================
+Date: 2026-08-18
+Trigger: user shared a screenshot of the Settings -> Credentials page
+(a single long flat row of 20+ pill buttons) and asked for two things:
+(1) group the tab bar into collapsible clusters the same way the
+Sidebar's Source Control/Code Quality/Container Registry sections
+already are, and (2) show a lock popup immediately on opening the
+Credentials page (rather than only per-tab, as it works today) with
+an option on that popup to change/reset the PIN using "the same MFA
+functionality" already used elsewhere in the app.
+
+Before writing any code, researched the existing PIN/MFA machinery via
+an Explore agent rather than guessing, to reuse it correctly instead of
+building something parallel:
+  - PinLockScreen.jsx (portal-wide idle lock) and CredentialPinGate.jsx
+    (per-tab gate, already used throughout CredentialsView.jsx) both
+    call the exact same backend flow - verifyMyPin/unlockMyCredential,
+    a server-side 5-wrong-attempts counter shared across every entry
+    point, and (for CredentialPinGate specifically) one correct PIN
+    grants ALL providers in CredentialGate.AllProviders together, not
+    just the one tab that prompted.
+  - SecurityPinSection.jsx (Settings -> Credentials -> Screen Lock) can
+    ALREADY set or change a PIN using only a 6-digit MFA code (no need
+    to know the old PIN at all) when the visitor's GitHub identity has
+    MFA enabled - and works with no code requirement at all if MFA
+    isn't enabled. This is a real, already-built, MFA-backed reset path
+    - just not exposed from anywhere on first opening Credentials.
+  - Confirmed there is NO existing "reset PIN via MFA" flow duplicated
+    or missing anywhere else - SecurityPinSection.jsx is the one and
+    only place this already happens, deliberately (its own comment
+    notes recovery codes are intentionally NOT offered there).
+
+Grouped tab bar (CredentialsView.jsx): CREDENTIAL_GROUPS is a pure
+DISPLAY grouping (Source Control: GitHub/Azure Repos; Code Quality:
+SonarQube/SonarCloud; Container Registry: Docker Hub/GHCR/GitLab
+Registry/JFrog/Harbor/Nexus; Hosting Providers: Render/Cloudflare/
+Netlify/Vercel) - it never touches MODES, configuredByMode, or mode-
+switching at all; anything not listed in a group (AWS, Azure, GCP, API
+Key, Screen Lock, Docker, GitHub OAuth, AI Assistant, Database) simply
+renders in the same flat row it always has, unchanged. Each group is
+its own bordered, independently collapsible cluster (local
+expandedGroups Set state, all expanded by default matching the
+Sidebar's own "nothing hidden on first visit" default), using the same
+ChevronIcon component the Sidebar's own group headers already use for
+visual consistency, reusing the shared renderModeButton helper so
+grouped and ungrouped buttons never visually drift apart.
+
+Whole-page lock popup (new CredentialsLockModal.jsx): shown whenever
+`pinConfigured && unlockedProviders.size === 0 && mode !== "screenlock"`
+- reusing CredentialsView's OWN EXISTING unlockedProviders/
+markAllUnlocked state (no parallel "is this unlocked" tracking added).
+Calls the exact same unlockMyCredential("github", pin) endpoint
+CredentialPinGate already uses (the provider string is arbitrary - the
+backend grants every provider together regardless of which one was
+named), and mirrors PinLockScreen's identical 5-wrong-attempts/wipe
+handling exactly, since the server's own attempt counter is shared
+across every entry point that calls it - inventing different client-
+side handling here would have produced a wrong error message the
+moment the shared server-side counter actually tripped.
+
+Explicitly designed as a CONVENIENCE gate, not a new security boundary:
+every individual credential form is still wrapped in its own
+CredentialPinGate exactly as before, so this modal being dismissed
+(via its own "Forgot your PIN?" link) can never expose a credential
+form without a real PIN check succeeding first - defense stays where
+it already was. "Forgot your PIN?" deliberately does NOT reuse
+PinLockScreen/CredentialPinGate's destructive self-clear-everything
+fallback - instead it calls setMode("screenlock") to jump straight to
+the Screen Lock tab (which has no gate of its own, by existing design,
+specifically so a locked-out visitor can reach it) where
+SecurityPinSection's already-built MFA-code-verified set/change flow
+takes over completely unmodified - satisfying "the same mfa
+functionality" by routing to the one place that functionality already
+lives, rather than building a second, parallel copy of it inside a
+modal.
+
+Verification performed:
+  - `npm run lint` in deployment-ui/: no new warnings.
+  - `npm run build` in deployment-ui/: succeeded (Settings chunk grew
+    ~3.75kB as expected for the new modal + grouping code, no other
+    chunk affected).
+  - Manually traced the full state-interaction logic by hand before
+    shipping (not just build/lint): confirmed the modal's backdrop
+    correctly blocks the underlying flat tab row (so "Forgot your PIN"
+    inside the modal is the ONLY reachable path to Screen Lock while
+    locked, not an accidental double path); confirmed mode changing to
+    "screenlock" correctly and immediately hides the modal via its own
+    condition (no separate dismiss flag needed); confirmed setting a
+    NEW pin via Screen Lock does NOT implicitly grant an unlock
+    (unlockedProviders stays empty until a real PIN is entered and
+    verified) - re-navigating away and back correctly re-prompts with
+    the new PIN, no security gap from the reset flow itself.
+  - No backend changes in this round at all - purely a frontend
+    reorganization + a new modal reusing existing, already-verified
+    backend endpoints and PIN/MFA logic unchanged, so no dotnet build
+    was needed.
+  - Live check against the deployed Render backend after the push:
+    /api/bootstrap healthy (HTTP 200).
+
+Files changed: deployment-ui/src/components/settings/CredentialsView.jsx,
+deployment-ui/src/components/settings/credentials/
+CredentialsLockModal.jsx (new).
+Commit: cc0c4d0.
+
+Status: Complete, pushed, live-verified the backend is up. Every piece
+of ACTUAL PIN/MFA logic here (verifyMyPin/unlockMyCredential/
+SecurityPinSection's MFA-verified set-PIN flow) is unchanged, already-
+built, already-in-production code - this round only added a new,
+optional entry point into flows that already existed and were already
+trusted, so no new standing limitations were introduced.
