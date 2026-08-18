@@ -172,6 +172,23 @@ public class AzureDevOpsController : ControllerBase
         return Ok(await _azureDevOps.GetRunsAsync(creds, project, pipelineId));
     }
 
+    // Resolved on demand right before showing the Run form's parameter
+    // fields for one specific pipeline - see GetPipelineParametersAsync's
+    // own comment. repositoryId/yamlPath both come from GetPipelineDetail
+    // above (the frontend calls that first, same as it already does before
+    // populating the branch picker).
+    [HttpGet("projects/{project}/repositories/{repositoryId}/parameters")]
+    public async Task<IActionResult> GetPipelineParameters(string project, string repositoryId, [FromQuery] string yamlPath)
+    {
+        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var creds = await _settings.GetUserPaasCredentialsAsync(Provider, key);
+
+        if (string.IsNullOrWhiteSpace(yamlPath))
+            return Ok(new AzureDevOpsPipelineParameterListDto { Configured = true });
+
+        return Ok(await _azureDevOps.GetPipelineParametersAsync(creds, project, repositoryId, yamlPath));
+    }
+
     // Self-service, no AdminGate/CredentialGate - see RunPipelineAsync's own
     // comment on why (the calling session's own credential and its real
     // Azure DevOps permission are the auth boundary, same as EC2/ECR
@@ -181,7 +198,7 @@ public class AzureDevOpsController : ControllerBase
     {
         var key = PortalIdentity.GetOrCreateKey(HttpContext);
         var creds = await _settings.GetUserPaasCredentialsAsync(Provider, key);
-        return Ok(await _azureDevOps.RunPipelineAsync(creds, project, pipelineId, request?.Branch));
+        return Ok(await _azureDevOps.RunPipelineAsync(creds, project, pipelineId, request?.Branch, request?.TemplateParameters));
     }
 
     // ---- Build Artifacts: pipelines -> latest run's artifacts --------------

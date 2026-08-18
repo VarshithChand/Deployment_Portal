@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 
 import {
-    getAzureDevOpsPipelines, getAzureDevOpsPipelineDetail,
+    getAzureDevOpsPipelines, getAzureDevOpsPipelineDetail, getAzureDevOpsPipelineParameters,
     getAzureDevOpsBranches, getAzureDevOpsRuns, runAzureDevOpsPipeline
 } from "../../services/azureDevOpsService";
 import usePagination from "../../hooks/usePagination";
@@ -47,6 +47,14 @@ function classifyPipeline(item) {
 // queued/in_progress/success/failure vocabulary specifically) or StateBadge
 // (AWS resource states) - Azure Pipelines uses a different pair of fields
 // entirely (State while running, Result only once State is "completed").
+// Azure Pipelines' own declared parameter types that actually map onto a
+// plain input control - step/job/stage and their List variants are
+// YAML-authoring-time constructs (literal pipeline stage/job definitions)
+// with no meaningful "value" a visitor could type into a form, so those
+// are left out of the rendered form entirely rather than guessing at a
+// control for them.
+const RENDERABLE_PARAM_TYPES = new Set(["boolean", "string", "number"]);
+
 function RunStatusBadge({ state, result }) {
 
     const value = (result || state || "").toLowerCase();
@@ -95,6 +103,10 @@ export default function AzureDevOpsPipelinesView() {
     const [branchesLoading, setBranchesLoading] = useState(false);
     const [branch, setBranch] = useState("");
 
+    const [parameters, setParameters] = useState(null);
+    const [parametersLoading, setParametersLoading] = useState(false);
+    const [paramValues, setParamValues] = useState({});
+
     const [runs, setRuns] = useState(null);
     const [runsLoading, setRunsLoading] = useState(false);
 
@@ -105,6 +117,8 @@ export default function AzureDevOpsPipelinesView() {
         setPipelineId("");
         setBranches(null);
         setBranch("");
+        setParameters(null);
+        setParamValues({});
         setRuns(null);
 
         if (!project) {
@@ -132,20 +146,28 @@ export default function AzureDevOpsPipelinesView() {
         setPipelineId("");
         setBranches(null);
         setBranch("");
+        setParameters(null);
+        setParamValues({});
         setRuns(null);
 
     }
 
-    // Picking a pipeline kicks off two independent fetches: its own run
-    // history (same as before), and its linked repository's branches (a
-    // pipeline's basic list entry carries no repository info at all - see
-    // GetPipelineDetailAsync's own comment on why that needs its own
-    // dedicated call).
+    // Picking a pipeline kicks off three independent fetches: its own run
+    // history (same as before), its linked repository's branches, and its
+    // own declared parameters (a pipeline's basic list entry carries
+    // neither its repository nor its YAML file's parameters - see
+    // GetPipelineDetailAsync/GetPipelineParametersAsync's own comments on
+    // why each needs its own dedicated call). Branches and parameters both
+    // depend on the same pipeline-detail fetch (repositoryId for branches,
+    // repositoryId+yamlPath for parameters), so they're chained off one
+    // shared call rather than two separate detail fetches.
     function handleSelectPipeline(nextId) {
 
         setPipelineId(nextId);
         setBranch("");
         setBranches(null);
+        setParameters(null);
+        setParamValues({});
         setRuns(null);
 
         if (!nextId) return;
@@ -164,25 +186,65 @@ export default function AzureDevOpsPipelinesView() {
         });
 
         setBranchesLoading(true);
+        setParametersLoading(true);
 
         getAzureDevOpsPipelineDetail(project.name, idNum).then((detail) => {
 
             if (!detail.repositoryId) {
                 setBranches({ configured: true, branches: [] });
                 setBranchesLoading(false);
+                setParameters({ configured: true, parameters: [] });
+                setParametersLoading(false);
                 return;
             }
 
-            return getAzureDevOpsBranches(project.name, detail.repositoryId).then((data) => {
+            getAzureDevOpsBranches(project.name, detail.repositoryId).then((data) => {
                 setBranches(data);
                 setBranchesLoading(false);
+            }).catch((err) => {
+                console.error(err);
+                setBranches({ configured: false, error: "Unable to load branches." });
+                setBranchesLoading(false);
+            });
+
+            if (!detail.yamlPath) {
+                setParameters({ configured: true, parameters: [] });
+                setParametersLoading(false);
+                return;
+            }
+
+            getAzureDevOpsPipelineParameters(project.name, detail.repositoryId, detail.yamlPath).then((data) => {
+
+                setParameters(data);
+                setParametersLoading(false);
+
+                const defaults = {};
+
+                (data?.parameters || [])
+                    .filter((p) => RENDERABLE_PARAM_TYPES.has(p.type))
+                    .forEach((p) => { defaults[p.name] = p.default ?? (p.type === "boolean" ? "false" : ""); });
+
+                setParamValues(defaults);
+
+            }).catch((err) => {
+                console.error(err);
+                setParameters({ configured: false, error: "Unable to load pipeline parameters." });
+                setParametersLoading(false);
             });
 
         }).catch((err) => {
             console.error(err);
             setBranches({ configured: false, error: "Unable to load branches." });
             setBranchesLoading(false);
+            setParameters({ configured: false, error: "Unable to load pipeline parameters." });
+            setParametersLoading(false);
         });
+
+    }
+
+    function setParamValue(name, value) {
+
+        setParamValues((prev) => ({ ...prev, [name]: value }));
 
     }
 
@@ -207,7 +269,7 @@ export default function AzureDevOpsPipelinesView() {
 
         try {
 
-            const result = await runAzureDevOpsPipeline(project.name, selectedPipeline.id, branch || undefined);
+            const result = await runAzureDevOpsPipeline(project.name, selectedPipeline.id, branch || undefined, paramValues);
 
             if (result.success) {
                 toast.show(result.message || "Run started.", "success");
@@ -371,6 +433,70 @@ export default function AzureDevOpsPipelinesView() {
                         )}
 
                     </div>
+
+                    {parametersLoading ? (
+
+                        <p className="field-hint">Loading pipeline parameters...</p>
+
+                    ) : parameters?.error ? (
+
+                        <p className="field-hint">{parameters.error}</p>
+
+                    ) : (parameters?.parameters || []).filter((p) => RENDERABLE_PARAM_TYPES.has(p.type)).length > 0 && (
+
+                        <div className="form-group">
+
+                            <label>Parameters</label>
+
+                            <p className="field-hint">
+                                Declared by this pipeline's own YAML file, same as Azure DevOps' own "Run pipeline" dialog.
+                            </p>
+
+                            {parameters.parameters.filter((p) => RENDERABLE_PARAM_TYPES.has(p.type)).map((p) => (
+
+                                p.type === "boolean" ? (
+
+                                    <label key={p.name} className="checkbox-list-item" style={{ display: "block" }}>
+                                        <input
+                                            type="checkbox"
+                                            checked={paramValues[p.name] === "true"}
+                                            onChange={(e) => setParamValue(p.name, e.target.checked ? "true" : "false")}
+                                        />
+                                        &nbsp;{p.displayName || p.name}
+                                    </label>
+
+                                ) : p.values && p.values.length > 0 ? (
+
+                                    <div key={p.name} style={{ marginBottom: "10px" }}>
+                                        <label style={{ display: "block" }}>{p.displayName || p.name}</label>
+                                        <ComboBox
+                                            options={p.values.map((v) => ({ value: v, label: v }))}
+                                            value={paramValues[p.name] || ""}
+                                            onChange={(value) => setParamValue(p.name, value)}
+                                            placeholder={`Search or select ${p.displayName || p.name}...`}
+                                            emptyLabel="No matching value"
+                                        />
+                                    </div>
+
+                                ) : (
+
+                                    <div key={p.name} className="form-group" style={{ marginBottom: "10px" }}>
+                                        <label>{p.displayName || p.name}</label>
+                                        <input
+                                            type={p.type === "number" ? "number" : "text"}
+                                            className="form-control"
+                                            value={paramValues[p.name] || ""}
+                                            onChange={(e) => setParamValue(p.name, e.target.value)}
+                                        />
+                                    </div>
+
+                                )
+
+                            ))}
+
+                        </div>
+
+                    )}
 
                     <button
                         type="button"

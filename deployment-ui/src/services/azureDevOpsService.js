@@ -80,12 +80,29 @@ export const getAzureDevOpsRuns = async (project, pipelineId) => {
     return response.data;
 };
 
+// A pipeline's own declared runtime parameters (its YAML file's top-level
+// `parameters:` list) - resolved from the same repositoryId/yamlPath
+// getAzureDevOpsPipelineDetail already returns, right before showing the
+// Run form's parameter fields.
+export const getAzureDevOpsPipelineParameters = async (project, repositoryId, yamlPath) => {
+    const response = await azureDevOpsApi.get(
+        `/projects/${encodeURIComponent(project)}/repositories/${encodeURIComponent(repositoryId)}/parameters`,
+        { params: { yamlPath } }
+    );
+    return response.data;
+};
+
 // Triggers a new run - against the pipeline's own default branch if branch
-// is omitted, or a specific one if given. Self-service, no confirmation/
-// gating on this call itself (the frontend confirms before calling it -
-// see AzureDevOpsPipelinesView.jsx).
-export const runAzureDevOpsPipeline = async (project, pipelineId, branch) => {
-    const response = await azureDevOpsApi.post(`/projects/${encodeURIComponent(project)}/pipelines/${pipelineId}/runs`, { branch });
+// is omitted, or a specific one if given, with whatever values were filled
+// in for the pipeline's own declared parameters (templateParameters,
+// keyed by parameter name). Self-service, no confirmation/gating on this
+// call itself (the frontend confirms before calling it - see
+// AzureDevOpsPipelinesView.jsx).
+export const runAzureDevOpsPipeline = async (project, pipelineId, branch, templateParameters) => {
+    const response = await azureDevOpsApi.post(
+        `/projects/${encodeURIComponent(project)}/pipelines/${pipelineId}/runs`,
+        { branch, templateParameters }
+    );
     return response.data;
 };
 

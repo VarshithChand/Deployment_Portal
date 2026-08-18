@@ -164,6 +164,46 @@ public class AzureDevOpsPipelineDetailDto
     public string Name { get; set; } = string.Empty;
     public string? RepositoryId { get; set; }
     public string? RepositoryName { get; set; }
+    // The pipeline's own YAML file path within that repository (e.g.
+    // "azure-pipelines.yml") - needed by GetPipelineParametersAsync to
+    // fetch and parse that same file for its declared `parameters:` list.
+    public string? YamlPath { get; set; }
+}
+
+// A pipeline's own declared runtime parameter (its top-level YAML
+// `parameters:` list - a LIST of objects, unlike GitHub Actions'
+// workflow_dispatch.inputs, which is a MAP keyed by input name) - fetched
+// on demand right before showing the Run form, the same "resolved once
+// per selected pipeline, not for every pipeline in the list" pattern
+// GetPipelineDetailAsync/GetBranchesAsync already use. Values is only
+// populated for a `type: string` parameter that also declares a `values:`
+// enum list; Default is always the YAML's own literal default, sent back
+// as a plain string regardless of the parameter's declared type (a
+// boolean's default of `true`/`false` round-trips through ToString() and
+// bool.Parse() the same way WorkflowInputDto's own Default field already
+// does for GitHub Actions inputs) - the frontend renders based on Type,
+// not on Default's own runtime .NET type.
+public class AzureDevOpsPipelineParameterDto
+{
+    public string Name { get; set; } = string.Empty;
+    public string DisplayName { get; set; } = string.Empty;
+    // "boolean" | "string" | "number" | "object" | "step" | "stepList" |
+    // "job" | "jobList" | "deployment" | "deploymentList" | "stage" |
+    // "stageList" - Azure Pipelines' own declared parameter types. Only
+    // boolean/string/number map onto a sensible plain input control; the
+    // rest (step/job/stage and their List variants) are YAML-authoring-time
+    // constructs with no meaningful "value" a visitor could type into a
+    // form, so the frontend leaves those out of the rendered form entirely.
+    public string Type { get; set; } = "string";
+    public string? Default { get; set; }
+    public List<string>? Values { get; set; }
+}
+
+public class AzureDevOpsPipelineParameterListDto
+{
+    public bool Configured { get; set; }
+    public string? Error { get; set; }
+    public List<AzureDevOpsPipelineParameterDto> Parameters { get; set; } = new();
 }
 
 // State is "inProgress"/"completed"/"canceling"/"unknown"; Result is only
@@ -202,6 +242,11 @@ public class AzureDevOpsRunListDto
 public class AzureDevOpsRunPipelineRequestDto
 {
     public string? Branch { get; set; }
+    // Whatever values the caller filled in for the pipeline's own declared
+    // parameters (see AzureDevOpsPipelineParameterDto) - keyed by parameter
+    // name, sent through to Azure DevOps' own templateParameters field
+    // untouched. Omitted/empty when the pipeline declares none.
+    public Dictionary<string, string>? TemplateParameters { get; set; }
 }
 
 public class AzureDevOpsRunTriggerResultDto

@@ -271,11 +271,13 @@ public class AzureDevOpsService
             var path = $"/{Uri.EscapeDataString(project)}/_apis/pipelines/{pipelineId}?api-version=7.1";
             var json = await GetDevOpsAsync(credentials.AccountId!, credentials.Token!, path);
             var pipeline = JObject.Parse(json);
-            var repository = pipeline["configuration"]?["repository"];
+            var configuration = pipeline["configuration"];
+            var repository = configuration?["repository"];
 
             result.Name = pipeline["name"]?.ToString() ?? string.Empty;
             result.RepositoryId = repository?["id"]?.ToString();
             result.RepositoryName = repository?["name"]?.ToString();
+            result.YamlPath = configuration?["path"]?.ToString();
         }
         catch (Exception ex)
         {
@@ -283,6 +285,78 @@ public class AzureDevOpsService
         }
 
         return result;
+    }
+
+    // A pipeline's own declared runtime parameters - unlike GitHub Actions'
+    // workflow_dispatch.inputs, Azure DevOps has no REST endpoint that
+    // returns a pipeline's parameter schema directly, so this fetches the
+    // pipeline's own YAML file (via GetPipelineDetailAsync's YamlPath, then
+    // the Git Items API) and parses its top-level `parameters:` LIST the
+    // same way GitHubApiService.GetWorkflowInputsAsync already parses
+    // workflow_dispatch.inputs - same YamlDotNet dependency, same
+    // Dictionary<object,object> deserialize-then-walk approach, just a
+    // different shape (a list of parameter objects, not a map keyed by
+    // name) because that's genuinely how Azure Pipelines' own YAML schema
+    // declares them.
+    public async Task<AzureDevOpsPipelineParameterListDto> GetPipelineParametersAsync(UserPaasCredentials credentials, string project, string repositoryId, string yamlPath)
+    {
+        var result = new AzureDevOpsPipelineParameterListDto { Configured = credentials.IsConfigured };
+
+        if (!credentials.IsConfigured)
+            return result;
+
+        try
+        {
+            var escapedPath = string.Join('/', yamlPath.TrimStart('/').Split('/').Select(Uri.EscapeDataString));
+            var url = $"https://dev.azure.com/{Uri.EscapeDataString(credentials.AccountId!)}/{Uri.EscapeDataString(project)}/_apis/git/repositories/{Uri.EscapeDataString(repositoryId)}/items?path={escapedPath}&api-version=7.1";
+
+            using var request = new HttpRequestMessage(HttpMethod.Get, url);
+            request.Headers.Authorization = BuildAuth(credentials.Token!);
+            request.Headers.Accept.Add(new System.Net.Http.Headers.MediaTypeWithQualityHeaderValue("text/plain"));
+
+            var response = await DevOpsHttpClient.SendAsync(request);
+            await HttpClientHelper.EnsureSuccessAsync(response);
+
+            var yamlText = await response.Content.ReadAsStringAsync();
+
+            var deserializer = new YamlDotNet.Serialization.DeserializerBuilder().Build();
+            var root = deserializer.Deserialize<Dictionary<object, object>>(yamlText);
+
+            if (root != null
+                && root.TryGetValue("parameters", out var parametersValue)
+                && parametersValue is IEnumerable<object> parametersList)
+            {
+                result.Parameters = parametersList
+                    .OfType<IDictionary<object, object>>()
+                    .Select(ParsePipelineParameter)
+                    .ToList();
+            }
+        }
+        catch (Exception ex)
+        {
+            result.Error = CloudErrorSanitizer.Describe(ex, "Azure DevOps", "pipeline parameters");
+        }
+
+        return result;
+    }
+
+    private static AzureDevOpsPipelineParameterDto ParsePipelineParameter(IDictionary<object, object> spec)
+    {
+        List<string>? values = null;
+
+        if (spec.TryGetValue("values", out var valuesRaw) && valuesRaw is IEnumerable<object> valuesList)
+            values = valuesList.Select(v => v?.ToString() ?? string.Empty).ToList();
+
+        var name = spec.TryGetValue("name", out var nameRaw) ? nameRaw?.ToString() ?? string.Empty : string.Empty;
+
+        return new AzureDevOpsPipelineParameterDto
+        {
+            Name = name,
+            DisplayName = spec.TryGetValue("displayName", out var displayNameRaw) ? displayNameRaw?.ToString() ?? name : name,
+            Type = spec.TryGetValue("type", out var typeRaw) ? typeRaw?.ToString() ?? "string" : "string",
+            Default = spec.TryGetValue("default", out var defaultRaw) ? defaultRaw?.ToString() : null,
+            Values = values
+        };
     }
 
     public async Task<AzureDevOpsRunListDto> GetRunsAsync(UserPaasCredentials credentials, string project, int pipelineId)
@@ -320,18 +394,22 @@ public class AzureDevOpsService
     }
 
     // Triggers a new run - against the pipeline's own configured default
-    // branch when branch is null/blank (an empty "{}" body, same as Azure
-    // DevOps' own docs show for "just run it as configured"), or against a
-    // specific one when the caller picked one from GetBranchesAsync's own
-    // list for that pipeline's linked repository (see
-    // GetPipelineDetailAsync). Real GitHub Deploy trigger elsewhere in this
+    // branch when branch is null/blank (same as Azure DevOps' own docs show
+    // for "just run it as configured"), or against a specific one when the
+    // caller picked one from GetBranchesAsync's own list for that
+    // pipeline's linked repository (see GetPipelineDetailAsync).
+    // templateParameters carries whatever values the caller filled in for
+    // the pipeline's own declared parameters (see GetPipelineParametersAsync)
+    // - omitted entirely when empty, matching how a manual run through
+    // Azure DevOps' own portal only sends the ones actually shown in its
+    // "Run pipeline" dialog. Real GitHub Deploy trigger elsewhere in this
     // app requires AdminGate + real repo-write access because it acts
     // against this PORTAL's own shared pipeline; this one deliberately
     // doesn't - it's the calling session's own connected Azure DevOps org,
     // so that credential's real Execute permission on Azure DevOps' own
     // side is the auth boundary, same self-service posture as EC2 start/
     // stop/terminate and ECR create/delete elsewhere in this app.
-    public async Task<AzureDevOpsRunTriggerResultDto> RunPipelineAsync(UserPaasCredentials credentials, string project, int pipelineId, string? branch)
+    public async Task<AzureDevOpsRunTriggerResultDto> RunPipelineAsync(UserPaasCredentials credentials, string project, int pipelineId, string? branch, Dictionary<string, string>? templateParameters)
     {
         if (!credentials.IsConfigured)
             return new AzureDevOpsRunTriggerResultDto { Success = false, Error = "Azure DevOps is not configured." };
@@ -340,9 +418,13 @@ public class AzureDevOpsService
         {
             var url = $"https://dev.azure.com/{Uri.EscapeDataString(credentials.AccountId!)}/{Uri.EscapeDataString(project)}/_apis/pipelines/{pipelineId}/runs?api-version=7.1";
 
-            object body = string.IsNullOrWhiteSpace(branch)
-                ? new { }
-                : new { resources = new { repositories = new { self = new { refName = $"refs/heads/{branch}" } } } };
+            var body = new Dictionary<string, object>();
+
+            if (!string.IsNullOrWhiteSpace(branch))
+                body["resources"] = new { repositories = new { self = new { refName = $"refs/heads/{branch}" } } };
+
+            if (templateParameters is { Count: > 0 })
+                body["templateParameters"] = templateParameters;
 
             var run = await SendJsonAsync(DevOpsHttpClient, HttpMethod.Post, url, credentials.Token!, body);
             var runId = run["id"]?.ToObject<int?>();
