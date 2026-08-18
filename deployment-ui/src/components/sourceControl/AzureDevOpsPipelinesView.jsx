@@ -247,9 +247,17 @@ export default function AzureDevOpsPipelinesView() {
 
         return (
 
-            <div className="card">
+            <>
 
-                {dialog}
+            {/* Rendered as a sibling of .card, not inside it - .card has its
+                own backdrop-filter (this app's glass theme), and any ancestor
+                with backdrop-filter/transform creates a new CSS containing
+                block for position:fixed descendants, trapping the dialog's
+                backdrop inside the card's own bounds instead of the viewport
+                (same fix AppCacheControlCard's own useConfirm usage needed). */}
+            {dialog}
+
+            <div className="card">
 
                 <div className="button-row" style={{ justifyContent: "space-between", marginBottom: "12px" }}>
                     <h2 className="card-title" style={{ marginBottom: 0 }}>{selectedPipeline.name}</h2>
@@ -335,6 +343,8 @@ export default function AzureDevOpsPipelinesView() {
 
             </div>
 
+            </>
+
         );
 
     }
@@ -353,9 +363,11 @@ export default function AzureDevOpsPipelinesView() {
 
         return (
 
-            <div className="card">
+            <>
 
-                {dialog}
+            {dialog}
+
+            <div className="card">
 
                 <div className="button-row" style={{ justifyContent: "space-between", marginBottom: "12px" }}>
                     <nav aria-label="Breadcrumb" style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
@@ -445,6 +457,8 @@ export default function AzureDevOpsPipelinesView() {
                 )}
 
             </div>
+
+            </>
 
         );
 
