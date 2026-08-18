@@ -9453,3 +9453,54 @@ limitation, stated as plainly as possible: this is a diagnostic fix,
 not a confirmed root-cause fix for the original Run Pipeline failure
 - if it still fails, the next message it shows is the real lead to
 chase, and that message is worth reporting back directly.
+
+==================================================
+ROUND 70 - UX: AZURE DEVOPS PIPELINES - SAME TWO-PANEL
+LAYOUT AS GITHUB DEPLOY
+==================================================
+Date: 2026-08-18
+Trigger: a screenshot of the GitHub Deploy page's own two-column
+"Deployment Configuration" + "Deployment Summary" layout. Verbatim
+ask: "i need pipeline's in azure devops like this same like deploy."
+
+Read this as a request to match Deploy's actual LAYOUT (the
+side-by-side config-plus-live-summary grid), not just its form
+controls (mode tabs/branch/workflow pickers), which Round 66 had
+already replicated - the Pipelines page was still one single stacked
+card, missing the second "summary" panel entirely.
+
+Rebuilt the "project selected" view as a new PipelineSummary component
+mirroring DeploymentSummary.jsx's own shape field-for-field: a Mode
+badge, Branch, a workflow-equivalent field (Pipeline), each currently-
+set parameter's own value (paired with the boolean Enabled/Disabled
+styling DeploymentSummary already uses for GitHub Actions' own boolean
+inputs), then a "Previous Run" section (status badge, created,
+finished, a link out to Azure DevOps) - reusing this app's existing
+`.deploy-panel` CSS grid class directly rather than inventing a new
+one, since the two-column layout itself is already generic (not
+GitHub-specific) despite the class name. The "Previous Run" shown in
+the summary is just the first item of the same run-history list this
+page already fetches (sorted newest-first by GetRunsAsync) - no new
+API call needed for it. The full paginated Run History table stays as
+its own separate, full-width card below the two-panel grid, unchanged
+from before.
+
+Verification performed:
+  - `npm run lint` in deployment-ui/: no new warnings.
+  - `npm run build` in deployment-ui/: succeeded.
+  - No backend changes in this round - purely a frontend layout
+    restructure reusing data this page already fetches, so no dotnet
+    build was needed.
+  - Live check against the deployed Render backend after the push:
+    /api/bootstrap healthy (HTTP 200).
+
+Files changed: deployment-ui/src/components/sourceControl/
+AzureDevOpsPipelinesView.jsx.
+Commit: 7a09fa7.
+
+Status: Complete, pushed, live-verified the backend is up. The
+Pipelines page now visually matches GitHub Deploy's own two-panel
+config-plus-summary pattern, not just its form controls. No new
+standing limitations - this round only rearranged already-fetched
+data into a new layout, it didn't touch any API call or add anything
+unverified.
