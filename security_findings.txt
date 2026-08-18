@@ -7979,3 +7979,95 @@ practice, but flagged directly rather than silently: if
 @VarshithChand had already saved a working Sonar connection before this
 round, it will need to be re-entered under whichever of the two new
 tabs (SonarQube or SonarCloud) actually matches it.
+
+==================================================
+ROUND 57 - UX FIX: CONTAINER REGISTRY AS A NESTED SIDEBAR GROUP, NOT
+AN INTERNAL HUB PAGE
+==================================================
+Date: 2026-08-18
+Trigger: "i need to see the Container Registry also same have sub pages
+like this no need to keep inside that keep it in the side bar give an
+option to expand colaps" - applying the exact same restructure Round 55
+gave Code Quality (nested, expand/collapse sidebar group with real
+independently-navigable child pages) to Container Registry, which had
+been left as the Round 49-52 tile-grid hub page (one "Container
+Registry" sidebar item, clicking it opened a page with 9 tiles and an
+internal "?view=" sub-nav).
+
+Restructured to match the GitHub/Code Quality groups' own established
+Sidebar.jsx pattern exactly:
+  - "containerRegistryGroup" is a new type:"group" entry (purely a
+    Sidebar-side grouping, no tab key of its own, never appears in
+    App.jsx's tab switch) with 9 real children - AWS ECR, Azure ACR,
+    Artifact Registry, Docker Hub, GHCR, GitLab Registry, JFrog
+    Artifactory, Harbor, Nexus - each its own independently navigable
+    page/route.
+  - Unlike Code Quality's restructure (which had to keep one child's
+    key/route identical to the old flat tab, "codeQuality", to avoid
+    touching a backend admin gate), Container Registry's old flat tab
+    key ("containerRegistry") didn't need to survive anywhere - none
+    of the 9 providers was ever the "same thing" as the old hub tab
+    itself, and none of the 9 needed any admin-gate change (viewing
+    was already open/self-service for all 9 before this round; only
+    saving a shared credential in Settings → Credentials is admin-
+    gated, and that was untouched). So the old tab key/page was fully
+    retired rather than partially reused: pages/ContainerRegistry.jsx
+    (the tile-grid hub, ~215 lines) was deleted outright, its App.jsx
+    lazy import and tab-switch line removed, and "containerRegistry"
+    dropped from NavigationContext's TABS whitelist in favor of 9 new
+    real keys (ecr/acr/artifactRegistry/dockerHub/ghcr/gitlabRegistry/
+    jfrog/harbor/nexus).
+  - Each of the 9 new pages (Ecr.jsx, Acr.jsx, ArtifactRegistry.jsx,
+    DockerHub.jsx, Ghcr.jsx, GitLabRegistry.jsx, Jfrog.jsx, Harbor.jsx,
+    Nexus.jsx) is a thin wrapper reusing the EXACT SAME View component
+    the old hub already rendered for that provider (EcrView.jsx,
+    AcrView.jsx, etc. - all untouched, zero logic changes) - this
+    round was purely navigational, not a rewrite of any provider's
+    actual browse/credential logic.
+  - 9 new sidebar icons added (EcrIcon/AcrIcon/ArtifactRegistryIcon/
+    DockerHubIcon/GhcrIcon/GitLabRegistryIcon/JfrogIcon/HarborIcon/
+    NexusIcon), each built from one shared "box" base (the group
+    header's own 3-box ContainerRegistryIcon, simplified to a single
+    box per child) plus one small distinguishing accent per provider -
+    same "one base shape, one accent" economy this session's icon set
+    already established for Code Quality's ESLint/Pylint/Checkstyle
+    icons, and the same "primitive shapes only, no hand-authored curve
+    paths" convention every icon in this file follows.
+
+Verification performed:
+  - `npm run lint` in deployment-ui/: no new warnings.
+  - `npm run build` in deployment-ui/: succeeded - confirmed via chunk
+    output that each of the 9 providers now builds as its own separate
+    lazy-loaded chunk (Ecr/Acr/ArtifactRegistry/DockerHub/Ghcr/
+    GitLabRegistry/Jfrog/Harbor/Nexus, 4-6kB each) and the old single
+    ~215-line ContainerRegistry hub chunk is gone entirely.
+  - Grepped the whole frontend source tree for any remaining reference
+    to the retired "containerRegistry" tab key (App.jsx's tab switch,
+    Dashboard quick-link cards, any setTab("containerRegistry") call)
+    before deleting the old page file - found none, confirmed the
+    retirement was clean with no dangling links.
+  - No backend changes in this round at all - purely a frontend
+    routing/navigation restructure reusing every provider's already-
+    built, already-verified View component and credential/service
+    logic from Rounds 49-52 unchanged, so no dotnet build was needed.
+  - Live check against the deployed Render backend after the push:
+    /api/bootstrap healthy (HTTP 200).
+
+Files changed: deployment-ui/src/components/layout/Sidebar.jsx,
+deployment-ui/src/components/layout/SidebarIcons.jsx,
+deployment-ui/src/context/NavigationContext.jsx,
+deployment-ui/src/App.jsx, deployment-ui/src/pages/ContainerRegistry.jsx
+(deleted), deployment-ui/src/pages/{Ecr,Acr,ArtifactRegistry,DockerHub,
+Ghcr,GitLabRegistry,Jfrog,Harbor,Nexus}.jsx (new, thin wrappers).
+Commit: 75809d9.
+
+Status: Complete, pushed, live-verified the backend is up. Every piece
+of ACTUAL logic here (all 9 providers' browse views, credential status
+checks, save/clear flows) is unchanged, already-verified code from
+Rounds 49-52 - this round was purely structural/navigational, so no new
+standing limitations were introduced. The Code Quality group (Round 55)
+and Container Registry group (this round) now both follow the exact
+same nested-sidebar pattern GitHub already established, giving this
+portal one consistent navigation model across all three multi-page
+feature areas instead of two different UX patterns (hub-with-tiles vs.
+nested-sidebar) for conceptually similar features.
