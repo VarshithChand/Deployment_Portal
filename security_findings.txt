@@ -7662,3 +7662,105 @@ Tester and confirm the Run dialog now shows a START/STOP dropdown and
 only the matching stage runs; flagged directly that per-app
 (ChannelManager/RateManagement) tick behavior is not yet reflected in
 the simulated run, a known and stated limitation, not a silent gap.
+
+==================================================
+ROUND 54 - FEATURE: CODE QUALITY HUB (SONARQUBE/SONARCLOUD + CODEQL,
+ESLINT/PYLINT/CHECKSTYLE DEFERRED)
+==================================================
+Date: 2026-08-17
+Trigger: user shared a screenshot of the Sidebar and a "CODE QUALITY"
+reference tile grid (SonarQube, SonarCloud, CodeQL, ESLint, Pylint,
+Checkstyle icons) and asked for these as sub-pages under the existing
+Code Quality sidebar item, plus moving the existing Sonar-only page's
+content into its own sub-page.
+
+Two real design questions existed before any code was written, asked
+directly via AskUserQuestion rather than guessed:
+  1. SonarQube and SonarCloud are the SAME integration in this app
+     already - one Sonar credential form (Host URL/token, Settings ->
+     Credentials -> SonarQube) covers either a self-hosted SonarQube
+     instance or sonarcloud.io. Showing them as two separate tiles that
+     both silently point at the identical connection would look like a
+     bug (the same "same word, different meaning" trap this session's
+     own Round 48 Follow-up 10 explicitly fixed once already for
+     "Database"). Confirmed: one combined "SonarQube / SonarCloud" tile.
+  2. CodeQL, ESLint, Pylint, and Checkstyle have no precedent in this
+     codebase. Researched via an Explore agent first (not guessed):
+     CodeQL has a real, well-documented GitHub REST API
+     (code-scanning/alerts) this portal can call with the SAME GitHub
+     token every other page already requires - no new credential needed
+     at all, comparable effort to ECR's "just reuse what's already
+     connected" case in the Container Registry hub. ESLint/Pylint/
+     Checkstyle have NO hosted API of any kind - the only real way to
+     surface them is downloading a workflow-run artifact and parsing a
+     lint-report file out of it (a genuinely new capability - no
+     ZipArchive/unzip-and-parse code exists anywhere in this codebase
+     today), which depends entirely on a specific repo's own CI actually
+     producing a report in a specific format/filename this portal has
+     no way to know in advance. Confirmed: build CodeQL now, ship
+     ESLint/Pylint/Checkstyle as real, visible "Coming soon" tiles -
+     same phasing precedent as Harbor/Nexus before they were built out
+     in the Container Registry hub.
+
+Restructured the existing single-purpose CodeQuality.jsx (previously:
+Sonar overview only, no sub-navigation) into a hub page using the exact
+same "?view=" tile pattern already established for PaasHosting.jsx/
+Settings.jsx/Services.jsx/ContainerRegistry.jsx - no NEW sidebar entry
+or NavigationContext change needed at all, since "Code Quality" was
+already an existing, working top-level tab; only what that tab renders
+changed. The existing Sonar dashboard logic (quality gate, bugs,
+vulnerabilities, code smells, A-E ratings) was moved verbatim into a new
+components/codeQuality/SonarView.jsx, unchanged in behavior - purely a
+relocation, not a rewrite.
+
+CodeQL (new): GitHubApiService.GetCodeQlAlertsAsync - GET
+.../code-scanning/alerts?state=open, same _auth.CreateClient()/20s-cache
+pattern every other GitHubApiService method already uses. Two real
+failure modes given specific, actionable messages rather than a raw
+404/403: code scanning not enabled for the repo, or the token missing
+the security_events/repo scope this endpoint needs (distinct from every
+other GitHub API call already used in this portal, which don't need
+that particular scope) - both are things a user could plausibly hit on
+first connecting a real repo. New route: GET
+api/github/code-scanning-alerts. Frontend: new components/codeQuality/
+CodeQlView.jsx - severity counts (error/warning/note) plus a paginated,
+searchable table of open alerts linking out to each on GitHub.
+
+Verification performed:
+  - `dotnet build` (isolated output dir): 0 errors, only pre-existing
+    unrelated warnings.
+  - `npm run lint` in deployment-ui/: caught and fixed one unused
+    import (useNavigation, imported in the hub but only actually used
+    in SonarView) before it reached the build - no warnings survived.
+  - `npm run build` in deployment-ui/: succeeded, new CodeQuality chunk
+    (9.9kB) bundles the hub + both sub-views correctly.
+  - Live check against the deployed Render backend after the push:
+    /api/bootstrap healthy (HTTP 200).
+  - Could NOT live-verify CodeQL's exact code-scanning/alerts JSON
+    response shape against a real repo with code scanning enabled in
+    this sandboxed session (no such repo/token available here) - flagged
+    directly as unverified, same posture as every other live-API
+    integration built this session. The endpoint/auth/scope mechanics
+    are real and documented, not guessed, but the exact field names
+    (rule.severity vs. a security-severity-level field some repos use
+    instead, most_recent_instance.location shape) are the least-certain
+    part of this round.
+
+Files changed: src/DeploymentAPI/DTOs/CodeQlDtos.cs (new),
+src/DeploymentAPI/Services/GitHubApiService.cs (GetCodeQlAlertsAsync),
+src/DeploymentAPI/Controllers/GitHubController.cs (code-scanning-alerts
+route), deployment-ui/src/services/githubService.js (getCodeQlAlerts),
+deployment-ui/src/components/codeQuality/{SonarView,CodeQlView}.jsx
+(new), deployment-ui/src/pages/CodeQuality.jsx (rewritten as the hub).
+Commit: 6353ef5.
+
+Status: Complete, pushed, live-verified the backend is up. SonarQube/
+SonarCloud's move is a pure relocation of already-working, already-
+verified code - no new risk there. CodeQL is real but unverified against
+a live repo (see above) - recommend @VarshithChand open the CodeQL tab
+on a repo with code scanning actually enabled and confirm alerts list
+correctly, especially severity labels, before relying on it. ESLint/
+Pylint/Checkstyle remain explicitly unbuilt, shown as "Coming soon" -
+building them for real would need a follow-up conversation about which
+artifact name/report format this portal should assume for each tool,
+since there's no universal convention to default to.
