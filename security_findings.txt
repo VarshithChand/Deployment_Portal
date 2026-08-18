@@ -9504,3 +9504,112 @@ config-plus-summary pattern, not just its form controls. No new
 standing limitations - this round only rearranged already-fetched
 data into a new layout, it didn't touch any API call or add anything
 unverified.
+
+
+==================================================
+ROUND 71 - FEATURE: AZURE DEVOPS HISTORY PAGE +
+BUILD ARTIFACTS SHOWS EVERY RUN, NOT JUST THE LATEST
+==================================================
+Date: 2026-08-18
+Trigger: verbatim ask, following straight on from Round 70's Pipelines
+layout work: "in azure devops there i page for the history / and in
+Build Artifacts page there should all artifacts that ran all
+pipelines example :- i run 1 pipeline 2 times there should be 2
+artifacts with that name i can copy the artifact name and revert
+artifact easly from the pipline no need to the go to azure and pick
+that name from the azure." Two distinct asks bundled into one
+message, built as two separate changes.
+
+Part 1 - History page:
+Mirrors GitHub's own History page conceptually (one project-wide feed
+of every run, not scoped to a single pipeline), but the underlying
+Azure DevOps call is different: GetHistoryAsync (AzureDevOpsService.cs)
+hits the same classic Build API list endpoint GetRunningBuildsAsync
+already uses for the Dashboard's "running now" view, but without its
+statusFilter=inProgress restriction, capped at the API's own $top=200
+most recent builds across every pipeline in the project. New
+AzureDevOpsHistoryRunDto/AzureDevOpsHistoryListDto (kept separate from
+AzureDevOpsRunningBuildDto - Status/Result/RequestedFor only make
+sense once a run isn't still in flight, and overloading the Dashboard's
+DTO with fields only History populates was the wrong call). New route
+GET projects/{project}/history, new frontend service call
+getAzureDevOpsHistory, new AzureDevOpsHistoryView.jsx (search box over
+pipeline/build number/branch/requester, paginated table, a duplicated
+small RunStatusBadge helper matching the one AzureDevOpsPipelinesView
+already has for the same state/result vocabulary), new
+pages/AzureDevOpsHistory.jsx, wired into Sidebar.jsx (between
+Pipelines and Build Artifacts, reusing the existing HistoryIcon -
+same cross-provider icon reuse already established for Dashboard/Pull
+Requests), NavigationContext.jsx's TABS whitelist, and App.jsx's lazy
+imports/routes.
+
+Part 2 - Build Artifacts, all runs instead of latest:
+The old design (Round 66) intentionally showed only the most recent
+run's artifacts - by explicit request at the time, no run picker.
+This round replaces that with every artifact from the pipeline's last
+10 runs, each still tagged with (and traceable back to) the run it
+came from - so running the same pipeline twice now produces two
+separate rows for an identically-named artifact instead of the second
+run's artifacts silently replacing the first's. Backend:
+GetLatestArtifactsAsync removed, replaced with GetArtifactHistoryAsync
+(AzureDevOpsService.cs) - takes the pipeline's most recent N runs from
+GetRunsAsync, fetches each run's artifacts in parallel via
+Task.WhenAll (Azure DevOps has no "artifacts for N runs" batch
+endpoint), drops any run that published zero artifacts, and groups
+the rest as AzureDevOpsArtifactRunGroupDto (RunId/RunName/Result/
+CreatedDate/WebUrl + that run's own AzureDevOpsArtifactDto list) inside
+a new AzureDevOpsArtifactHistoryListDto. Route renamed from
+GET .../latest-artifacts to GET .../artifact-history. Frontend
+(AzureDevOpsArtifactsView.jsx) flattens the grouped response into one
+row per artifact (each row carrying its own run's context) client-side,
+now paginated with usePagination/Pagination per this app's own
+pagination policy; the per-row copy-name button and the
+ArtifactDetailDialog (now also showing which run and when) are both
+kept from the original design, just extended with the run context.
+
+Verification performed:
+  - `dotnet build` (isolated scratchpad output dir): 0 errors, only
+    the same 2 pre-existing warnings every prior round has seen
+    (NU1510 Microsoft.Extensions.Http, ASPDEPR005 KnownNetworks).
+  - `npm run lint` in deployment-ui/: no new warnings introduced by
+    any of the touched/new files.
+  - `npm run build` in deployment-ui/: succeeded, new
+    AzureDevOpsHistory-*.js chunk present in the bundle.
+  - Live check against the deployed Render backend after the push:
+    /api/bootstrap healthy (HTTP 200).
+  - Could NOT exercise either page against a real Azure DevOps org/PAT
+    in this sandboxed session (same standing limitation as every prior
+    Azure DevOps round). GetHistoryAsync's $top=200 cap and
+    GetArtifactHistoryAsync's 10-run cap are both untested against a
+    project with genuinely large run history - if a real org has more
+    runs than that, only the most recent ones within each cap will
+    show. GetArtifactHistoryAsync also fails the whole call if ANY one
+    of the N parallel per-run artifact fetches errors (matching this
+    file's existing fail-fast pattern elsewhere), rather than
+    partially degrading - worth knowing if artifacts intermittently
+    fail to load for a pipeline with many runs.
+
+Files changed: src/DeploymentAPI/DTOs/AzureDevOpsDtos.cs,
+src/DeploymentAPI/Services/AzureDevOpsService.cs,
+src/DeploymentAPI/Controllers/AzureDevOpsController.cs,
+deployment-ui/src/services/azureDevOpsService.js,
+deployment-ui/src/components/sourceControl/AzureDevOpsArtifactsView.jsx,
+deployment-ui/src/components/sourceControl/AzureDevOpsHistoryView.jsx
+(new), deployment-ui/src/pages/AzureDevOpsHistory.jsx (new),
+deployment-ui/src/components/layout/Sidebar.jsx,
+deployment-ui/src/context/NavigationContext.jsx,
+deployment-ui/src/App.jsx.
+Commit: 8cb4031.
+
+Status: Complete, pushed, live-verified the backend is up. Azure
+DevOps now has a project-wide History page matching GitHub's own, and
+Build Artifacts no longer hides older runs' artifacts behind the
+latest run - both requests from this round are implemented. Standing
+limitation, stated plainly: neither page has been exercised against a
+real Azure DevOps org in this sandboxed session, so the exact JSON
+shapes assumed from Azure DevOps' documented REST responses are
+unverified end-to-end: recommend the user open both pages against
+their real org next and report back anything that looks wrong (an
+empty page where runs are expected, a run missing its status/result,
+etc.) so it can be fixed against real response data rather than
+re-guessed.
