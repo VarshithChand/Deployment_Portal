@@ -8567,3 +8567,134 @@ verifiable, not a guess), and the sidebar default-collapse fix
 preserves every existing guarantee (active-page group always visible,
 explicit user choice always respected) while changing only the
 DEFAULT for a group nobody has touched yet.
+
+==================================================
+ROUND 62 - SECURITY: 9 PORTAL-WIDE CREDENTIALS
+CONVERTED TO SESSION-SCOPED (NO CROSS-VISITOR
+CREDENTIAL SHARING)
+==================================================
+Date: 2026-08-18
+Trigger: screenshot of the fully-expanded Credentials page under Settings.
+Verbatim ask: "no need to share the one user details to other." Given the
+blast radius (this reverses several earlier rounds' explicit "portal-wide,
+shared (Recommended)" architecture decisions), used AskUserQuestion to
+confirm scope before touching code. User selected "All portal-wide
+credentials (Recommended)."
+
+Root-caused the actual scope before writing anything: the question's own
+first option had imprecisely bundled in Render/Cloudflare/Netlify/Vercel,
+but those are ALREADY session-scoped (confirmed against the Credentials
+page's own text and PaasLoginSection.jsx). The real list of 9 still-shared
+credentials: Azure Repos, SonarQube, SonarCloud, Docker Hub, GHCR, GitLab
+Registry, JFrog, Harbor, Nexus. Deliberately left untouched: the separate,
+super-admin-only PortalPaasCredentials system Hosting Observability uses
+(Render/Cloudflare/Netlify/Vercel's OWN production-deployment status, a
+genuinely different purpose), and the generic "Docker" registry credential
++ GitHub OAuth app config (both inherently single, portal-wide-by-nature
+settings - one shared push credential and one shared login app for the
+whole deployment pipeline, not "shared team credentials" in the sense the
+user meant).
+
+Backend (SettingsService.cs): converted each provider's storage from
+flat/provider-keyed JSON to session-key-nested JSON, replicating the
+existing UserPaasCredentials/GetUserPaasCredentialsAsync pattern already
+proven by Render/Cloudflare/Netlify/Vercel:
+  - Azure Repos, Docker Hub, GHCR: already used the generic (Token,
+    AccountId) shape - deleted their dedicated Portal* methods entirely
+    and repointed callers straight at GetUserPaasCredentialsAsync/
+    SaveUserPaasCredentialsAsync/ClearUserPaasCredentialsAsync with
+    provider "azureRepos"/"dockerhub"/"ghcr". No new storage code needed.
+  - GitLab Registry (HostUrl, ProjectId, Token) and JFrog (HostUrl, Token):
+    each got a new session-nested store (root["UserGitLabRegistryCredentials"]
+    [key], root["UserJfrogCredentials"][key]).
+  - Harbor/Nexus (HostUrl, Username, Password, provider-keyed) and
+    SonarQube/SonarCloud (HostUrl, Organization, ProjectKey, Token,
+    provider-keyed): each got an extra session-key nesting level
+    (root["UserHostCredentials"][provider][key],
+    root["UserSonarCredentials"][provider][key]).
+  - ClearAllAsync's root.Remove("Sonar") removed - Sonar credentials are no
+    longer part of the "shared portal-wide settings" bucket it resets.
+
+Controllers (ContainerRegistryController, SonarController,
+SourceControlController): removed AdminGate.DenyUnlessAdminAsync from
+every save/clear action (matching how AWS/Azure/GCP/PaaS save endpoints
+have never been admin-gated - your own session credential doesn't need
+another admin's permission), resolved PortalIdentity.GetOrCreateKey(
+HttpContext) in every status/save/clear/browse action so each caller only
+ever reads or writes their OWN session's data, and kept
+CredentialGate.DenyUnlessUnlockedAsync (the screen-lock PIN gate) exactly
+as before on save/clear - that gate is orthogonal to the admin-vs-session
+axis and still applies. SonarController's Overview/Status endpoints kept
+their existing AdminGate "codeQuality" pageKey check deliberately - that's
+a separate, pre-existing per-PAT-user SIDEBAR VISIBILITY restriction
+(can this session even see the Code Quality tab), unrelated to whether the
+underlying credential is shared or per-session; removing it wasn't part of
+what the user asked for. SonarApiService.GetOverviewAsync's signature grew
+a `key` parameter to thread the caller's session through to the now
+session-scoped credential lookup.
+
+Frontend: updated the "Shared by the whole portal - saving here requires
+an admin account" copy on PortalRegistryLoginSection.jsx (Docker Hub/GHCR/
+Azure Repos), GitLabRegistryLoginSection.jsx, JfrogLoginSection.jsx,
+HostCredentialLoginSection.jsx (Harbor/Nexus), and SonarLoginSection.jsx to
+"Kept for your own session only - isolated from every other visitor of the
+portal" (matching AwsLoginSection.jsx's own existing session-scoped
+framing), and toast messages from "saved for the whole portal" to "saved
+for this session." Updated the "Nobody has connected X yet. An admin can
+connect it..." empty-state copy on every affected browse view (DockerHub/
+Ghcr/GitLabRegistry/Jfrog/Harbor/Nexus/AzureReposView.jsx) to "Connect your
+X credentials in Settings -> Credentials -> X to browse this." (matching
+EcrView.jsx/AcrView.jsx's existing self-service framing). Rewrote
+CredentialsView.jsx's top descriptive paragraph to list all 17 now-
+session-scoped credential types together and name the 2 still-genuinely-
+portal-wide settings (plain Docker registry credential, GitHub OAuth app)
+separately, instead of the old three-way split that no longer matched
+reality.
+
+CredentialGate.AllProviders was NOT touched - PIN-gating on save/clear is
+orthogonal to the admin-vs-session scope question (AWS/Azure/GCP are
+session-scoped AND still PIN-gated), and all 9 providers were already
+listed there from when they were portal-wide.
+
+Verification performed:
+  - `dotnet build` (isolated scratchpad output dir): 0 errors, only
+    pre-existing warnings (NU1510, ASPDEPR005).
+  - `npm run lint` in deployment-ui/: only pre-existing warnings (no new
+    ones from this round's changes, including PortalRegistryLoginSection's
+    long-standing exhaustive-deps warning, unrelated to this round).
+  - `npm run build` in deployment-ui/: succeeded twice (once after the
+    main change set, once after a trailing comment-only fix).
+  - Grepped the entire backend AND frontend source trees for every old
+    method name (GetPortalContainerRegistryCredentialsAsync,
+    GetPortalGitLabRegistryCredentialsAsync, GetPortalJfrogCredentialsAsync,
+    GetPortalHostCredentialsAsync, GetPortalSourceControlCredentialsAsync,
+    GetSonarCredentialsAsync, and their Save/Clear counterparts) after
+    every edit, confirming zero stray references anywhere (including
+    comments) before considering the conversion complete.
+  - Live check against the deployed Render backend after the push:
+    /api/bootstrap healthy (HTTP 200).
+
+Files changed: src/DeploymentAPI/Services/{SettingsService,
+ContainerRegistryService,SonarApiService,SourceControlService}.cs,
+src/DeploymentAPI/Controllers/{ContainerRegistryController,
+SonarController,SourceControlController}.cs,
+src/DeploymentAPI/DTOs/ContainerRegistryDtos.cs,
+deployment-ui/src/components/containerRegistry/{DockerHubView,GhcrView,
+GitLabRegistryView,HarborView,JfrogView,NexusView}.jsx,
+deployment-ui/src/components/settings/CredentialsView.jsx,
+deployment-ui/src/components/settings/credentials/
+{GitLabRegistryLoginSection,HostCredentialLoginSection,JfrogLoginSection,
+PortalRegistryLoginSection,SonarLoginSection}.jsx,
+deployment-ui/src/components/sourceControl/AzureReposView.jsx,
+deployment-ui/src/pages/SonarCloud.jsx.
+Commit: 67c662b.
+
+Status: Complete, pushed, live-verified the backend is up. Every
+credential a visitor connects on this portal is now isolated to their own
+browser session - GitHub, AWS, Azure, GCP, API Key, Render, Cloudflare,
+Netlify, Vercel, Azure Repos, Docker Hub, GHCR, GitLab Registry, JFrog,
+Harbor, Nexus, SonarQube, and SonarCloud all share the same PortalIdentity-
+keyed isolation model now. Only two genuinely portal-wide settings remain
+by design: the plain Docker push credential and the GitHub OAuth app
+config, both single-instance-by-nature rather than "one user's credential
+shared with another."
