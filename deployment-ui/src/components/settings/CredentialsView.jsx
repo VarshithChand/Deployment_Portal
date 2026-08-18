@@ -17,6 +17,8 @@ import GitLabRegistryLoginSection from "./credentials/GitLabRegistryLoginSection
 import JfrogLoginSection from "./credentials/JfrogLoginSection";
 import HostCredentialLoginSection from "./credentials/HostCredentialLoginSection";
 import SonarLoginSection from "./credentials/SonarLoginSection";
+import CredentialsLockModal from "./credentials/CredentialsLockModal";
+import { ChevronIcon } from "../layout/SidebarIcons";
 import useAuth from "../../hooks/useAuth";
 import { getMyAwsSettings, getMyAzureSettings, getMyGcpSettings } from "../../services/settingsService";
 import { getMyApiKeys } from "../../services/securityService";
@@ -67,6 +69,23 @@ const ALL_CREDENTIAL_PROVIDERS = [
     "github", "aws", "azure", "gcp", "apikey", "docker", "github-oauth", "sonarqube", "sonarcloud", "ai",
     "render", "cloudflare", "netlify", "vercel", "dockerhub", "ghcr", "gitlab-registry", "jfrog",
     "harbor", "nexus", "azureRepos"
+];
+
+// Purely a display grouping for the tab bar below - mirrors the Sidebar's
+// own Source Control/Code Quality/Container Registry nested groups (see
+// Sidebar.jsx) so a visitor who already knows that structure recognizes it
+// here too, but this doesn't touch MODES/configuredByMode/mode-switching at
+// all - a mode not listed in any group's `modes` here just renders in the
+// flat row below the groups, same as every mode did before grouping existed.
+// "Hosting Providers" isn't itself a nested Sidebar group (Render/
+// Cloudflare/Netlify/Vercel all live inside one PaasHosting.jsx page via
+// its own internal tabs, not separate sidebar pages) but groups naturally
+// here since they're 4 separate credential forms.
+const CREDENTIAL_GROUPS = [
+    { key: "sourceControl", label: "Source Control", modes: ["github", "azureRepos"] },
+    { key: "codeQuality", label: "Code Quality", modes: ["sonarqube", "sonarcloud"] },
+    { key: "containerRegistry", label: "Container Registry", modes: ["dockerhub", "ghcr", "gitlab-registry", "jfrog", "harbor", "nexus"] },
+    { key: "hostingProviders", label: "Hosting Providers", modes: ["render", "cloudflare", "netlify", "vercel"] }
 ];
 
 // A convenience picker, not a restriction — GEMINI_MODEL is still whatever
@@ -143,6 +162,22 @@ export default function CredentialsView({
 
     const [mode, setMode] = useState("github");
     const { pinConfigured, isSuperAdminSession } = useAuth();
+
+    // Which credential groups (Source Control/Code Quality/Container
+    // Registry/Hosting Providers) are expanded - all expanded by default,
+    // same "nothing hidden behind an extra click on first visit" default
+    // the Sidebar's own groups use.
+    const [expandedGroups, setExpandedGroups] = useState(
+        () => new Set(CREDENTIAL_GROUPS.map((g) => g.key))
+    );
+
+    function toggleGroup(key) {
+        setExpandedGroups((prev) => {
+            const next = new Set(prev);
+            if (next.has(key)) next.delete(key); else next.add(key);
+            return next;
+        });
+    }
 
     // "At a glance" status per tab, shown as a small checkmark on the
     // button-row below so you can see what's already connected without
@@ -229,6 +264,19 @@ export default function CredentialsView({
         setUnlockedProviders(new Set(ALL_CREDENTIAL_PROVIDERS));
     }
 
+    // Whole-page lock popup, shown on open (and again after any Clear
+    // brings unlockedProviders back to empty) whenever a PIN is set and
+    // nothing has been unlocked yet this visit - a convenience gate, not
+    // the actual security boundary (every tab below still has its own
+    // CredentialPinGate wrapper regardless of whether this modal was ever
+    // shown, so dismissing it via "Forgot your PIN?" can never expose a
+    // credential form without a real PIN check). Suppressed specifically
+    // on the Screen Lock tab itself - that's the one place a locked-out
+    // visitor needs to reach to reset their PIN via MFA in the first place
+    // (see SecurityPinSection - it needs no PIN, only an MFA code, to set
+    // a brand new one).
+    const showLockModal = pinConfigured && unlockedProviders.size === 0 && mode !== "screenlock";
+
     // Clearing a credential revokes THAT ONE provider's unlock grant
     // server-side (see RevokeCredentialUnlock calls in SettingsController),
     // even though unlocking grants every provider together. Without this,
@@ -255,9 +303,41 @@ export default function CredentialsView({
         removeUnlocked(section);
     }
 
+    // Shared by both the grouped clusters and the flat ungrouped row below
+    // so the two never visually drift apart.
+    function renderModeButton(m) {
+
+        return (
+
+            <button
+                key={m.key}
+                type="button"
+                className={`btn btn-sm ${mode === m.key ? "btn-primary" : "btn-secondary"}`}
+                onClick={() => setMode(m.key)}
+            >
+                {m.label}
+                {configuredByMode[m.key] && (
+                    <span className="badge badge-success" style={{ marginLeft: "6px", padding: "0 5px" }}>✓</span>
+                )}
+            </button>
+
+        );
+
+    }
+
+    const groupedModeKeys = new Set(CREDENTIAL_GROUPS.flatMap((g) => g.modes));
+    const ungroupedModes = MODES.filter((m) => !groupedModeKeys.has(m.key));
+
     return (
 
         <>
+
+        {showLockModal && (
+            <CredentialsLockModal
+                onUnlock={markAllUnlocked}
+                onForgotPin={() => setMode("screenlock")}
+            />
+        )}
 
         <div className="card">
 
@@ -278,23 +358,44 @@ export default function CredentialsView({
                 to check.
             </p>
 
-            <div className="button-row" style={{ marginBottom: "20px" }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: "10px", marginBottom: "20px" }}>
 
-                {MODES.map((m) => (
+                {CREDENTIAL_GROUPS.map((group) => {
 
-                    <button
-                        key={m.key}
-                        type="button"
-                        className={`btn btn-sm ${mode === m.key ? "btn-primary" : "btn-secondary"}`}
-                        onClick={() => setMode(m.key)}
-                    >
-                        {m.label}
-                        {configuredByMode[m.key] && (
-                            <span className="badge badge-success" style={{ marginLeft: "6px", padding: "0 5px" }}>✓</span>
-                        )}
-                    </button>
+                    const expanded = expandedGroups.has(group.key);
 
-                ))}
+                    return (
+
+                        <div key={group.key} style={{ border: "1px solid var(--border)", borderRadius: "8px", padding: "8px 10px" }}>
+
+                            <button
+                                type="button"
+                                onClick={() => toggleGroup(group.key)}
+                                className="btn btn-link"
+                                style={{ display: "flex", alignItems: "center", gap: "6px", padding: 0, fontWeight: 600 }}
+                                aria-expanded={expanded}
+                            >
+                                <span style={{ display: "inline-flex", transform: expanded ? "rotate(90deg)" : "none", transition: "transform 0.15s" }}>
+                                    <ChevronIcon direction="right" />
+                                </span>
+                                {group.label}
+                            </button>
+
+                            {expanded && (
+                                <div className="button-row" style={{ marginTop: "8px" }}>
+                                    {group.modes.map((key) => renderModeButton(MODES.find((m) => m.key === key)))}
+                                </div>
+                            )}
+
+                        </div>
+
+                    );
+
+                })}
+
+                <div className="button-row">
+                    {ungroupedModes.map(renderModeButton)}
+                </div>
 
             </div>
 
