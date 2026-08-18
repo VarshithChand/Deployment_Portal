@@ -8345,3 +8345,127 @@ SecurityPinSection's MFA-verified set-PIN flow) is unchanged, already-
 built, already-in-production code - this round only added a new,
 optional entry point into flows that already existed and were already
 trusted, so no new standing limitations were introduced.
+
+==================================================
+ROUND 60 - UX FIX: CLOUD SERVICES AS A NESTED SIDEBAR GROUP WITH
+AWS/AZURE/GCP SUB-PAGES
+==================================================
+Date: 2026-08-18
+Trigger: "i need same for csp also cloud services has sub pages are
+aws,azure and gcp" - applying the same nested-sidebar-group restructure
+(Rounds 55/57/58) to Cloud Services, the one remaining major page still
+using the OLDER flat-tab-plus-internal-switcher pattern.
+
+Root-caused before writing any code: unlike Container Registry/Code
+Quality/Source Control (each of which already had genuinely separate,
+independently-built provider implementations before their sidebar
+restructure), Cloud Services (pages/CloudServices.jsx) was a SINGLE
+page with an internal `provider` <select> where Azure and GCP were
+ALREADY marked `enabled: false` ("(coming soon)") in the existing
+PROVIDERS array - only AWS was ever real. This meant the restructure
+here wasn't "split N already-built things apart" like the prior three
+rounds, but "expose the one real thing as its own page, and turn the
+two already-acknowledged-as-unbuilt options into real, visible pages
+instead of a disabled dropdown entry."
+
+AWS's entire existing implementation - the ~100-service static catalog
+(data/awsServiceCatalog.js), live inventory polling, region picker,
+history-based push-state routing with real browser back/forward
+through catalog -> service -> ECS cluster -> ECS service, and every
+*ManagementPage component - moved to pages/CloudServicesAws.jsx
+completely unchanged in behavior. The only real content change: the
+now-pointless provider <select> (permanently AWS-only in practice,
+Azure/GCP both `disabled`) was removed along with the `provider`/
+`setProvider` state that drove it - `AWS_SERVICES.filter(s => s.provider
+=== "aws")` stays as a literal instead of a state-driven filter, since
+the catalog data's own `provider` field is worth keeping (in case a
+real Azure/GCP catalog gets pushed into that same file later) even
+though the user-facing switcher wasn't.
+
+Azure and GCP are real, visible "not built yet" pages (pages/
+CloudServicesAzure.jsx, CloudServicesGcp.jsx) - neither had a specified
+catalog/live-status data shape (this session has no idea what "Azure
+services you're using" or "GCP services you're using" should even look
+like without that spec), so neither was guessed at - the same posture
+already established for GitLab/Bitbucket/ESLint/Pylint/Checkstyle
+before them, now applied a sixth time.
+
+Retiring the old flat "cloudServices" tab key required updating every
+place that referenced it by name, found by grepping the whole frontend
+source tree before touching anything (not assumed from memory) - five
+call sites beyond the Sidebar/NavigationContext/App.jsx routing
+plumbing itself:
+  - The page's OWN internal navigate() function, which pushes real
+    browser history entries containing "?tab=cloudServices" for its
+    service/cluster/ecsService/repo drill-down routing - missing this
+    one would have left every "back" button and every deep link/reload
+    landing on a URL referencing a tab key that no longer exists in
+    NavigationContext's TABS whitelist, silently bouncing to Dashboard
+    (the exact class of bug this session's own Round 48 Follow-up 8
+    already taught the lesson for, applied proactively here).
+  - NavigationContext's goToCloudService() hand-off (the Dashboard's
+    AWS Services card's click-through) - retargeted to
+    "cloudServicesAws" specifically, since AWS is the only provider
+    with real services to jump into.
+  - DeploymentCopilot's per-tab chat-suggestion lookup
+    (tab === "cloudServices" -> CLOUD_SERVICES_SUGGESTIONS).
+  - CloudServiceDetailPage's own breadcrumb label ("Cloud Services" ->
+    "AWS Services", matching the page's own new title - a minor
+    consistency polish, not a functional fix).
+  - HeaderSearch's page search and SecurityTestingView's frontend-page
+    smoke-test list needed NO manual update at all - both already
+    derive their page lists from Sidebar's own FLAT_TABS (made
+    recursive in Round 58), so the new nested structure and its 3 real
+    leaf pages were picked up automatically, confirming that Round
+    58's generalization work is already paying for itself on a second,
+    unrelated feature.
+
+3 new sidebar icons (AwsCloudIcon/AzureCloudIcon/GcpCloudIcon), each
+built from the same cloud-silhouette base SonarCloudIcon already
+established (a circle "puff" over a rounded-rect base, distinct from
+the FILLED three-circle CloudServicesIcon now serving as the group
+header) plus one small accent per provider - Azure's triangle accent
+deliberately echoes AzureReposIcon's own triangle from Round 58, so a
+visitor who's already seen one Azure icon in this app recognizes the
+same visual language in a second, unrelated one.
+
+Verification performed:
+  - `npm run lint` in deployment-ui/: no new warnings.
+  - `npm run build` in deployment-ui/: succeeded - confirmed via chunk
+    output that CloudServicesAws (92.26kB) closely matches the
+    original single CloudServices chunk's size (no logic lost or
+    duplicated in the split), plus two new near-empty placeholder
+    chunks for Azure/GCP.
+  - Grepped the ENTIRE frontend source tree for every remaining literal
+    "cloudServices" string reference after all edits and confirmed
+    zero stray references anywhere - no dangling links, no missed call
+    site, before deleting the old page file.
+  - git itself detected the CloudServices.jsx -> CloudServicesAws.jsx
+    change as a clean 84%-similarity rename rather than a delete+add,
+    corroborating that the AWS logic itself really was moved intact,
+    not rewritten.
+  - No backend changes in this round at all - purely a frontend
+    routing/navigation restructure reusing every piece of AWS logic
+    unchanged, so no dotnet build was needed.
+  - Live check against the deployed Render backend after the push:
+    /api/bootstrap healthy (HTTP 200).
+
+Files changed: deployment-ui/src/components/layout/{Sidebar,
+SidebarIcons}.jsx, deployment-ui/src/context/NavigationContext.jsx,
+deployment-ui/src/App.jsx, deployment-ui/src/components/copilot/
+DeploymentCopilot.jsx, deployment-ui/src/components/cloudServices/
+CloudServiceDetailPage.jsx, deployment-ui/src/pages/CloudServices.jsx
+(renamed to CloudServicesAws.jsx), deployment-ui/src/pages/
+{CloudServicesAzure,CloudServicesGcp}.jsx (new).
+Commit: 0715d04.
+
+Status: Complete, pushed, live-verified the backend is up. All of
+AWS's actual functionality (catalog, live inventory, region picker,
+per-service management pages) is unchanged, already-verified code -
+this round was purely structural/navigational for AWS, and Azure/GCP
+introduce no new standing limitations beyond the ones already accepted
+for every other honest "not built yet" placeholder this session has
+shipped. With this round, all four of this portal's major multi-
+provider feature areas (Source Control, Cloud Services, Container
+Registry, Code Quality) now share one identical nested-sidebar-group
+navigation pattern.
