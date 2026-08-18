@@ -8933,3 +8933,103 @@ all four sub-pages once deployed, treating the first pass as needing a
 likely follow-up fix once real response shapes are seen, same posture
 this session has used for every integration built without a real
 account available to test against.
+
+==================================================
+ROUND 65 - FEATURE: AZURE DEVOPS PIPELINES - BROWSABLE
+FOLDERS + SELF-SERVICE RUN TRIGGER
+==================================================
+Date: 2026-08-18
+Trigger: a screenshot of the live Pipelines page (already connected to a
+real Azure DevOps org by the user, confirming Round 64's integration
+actually works end to end - "Deployment_Portal.git" pipeline, one real
+run "20260818.1 succeeded" shown). Verbatim ask: "in pipelines first
+gvie an option to open the folder and give an oprtion to run the
+pipeline from here."
+
+Two distinct asks, both scoped to the Pipelines page (and, for the
+first one, its sibling Build Artifacts page, which shares the same
+project -> pipeline selection step):
+
+1. Folder navigation: the pipeline list previously showed every
+   pipeline in a project flat, with a raw Folder text column - Azure
+   DevOps pipelines are actually organized into real folders (e.g.
+   "\CI\Backend"), and the ask was to browse them as such. Azure
+   DevOps' own Pipelines API has no separate "list folders" endpoint -
+   folder membership only exists as a field on each pipeline - so the
+   folder tree (getFolderContents, exported from
+   AzureDevOpsPipelinesView.jsx and reused by AzureDevOpsArtifactsView)
+   is built entirely client-side from the flat pipeline list already
+   being fetched: split each pipeline's folder path on "\", compare
+   against the currently-open path's segments, and bucket into either
+   "a subfolder one level deeper" or "a pipeline directly in this
+   folder." A breadcrumb (project name, then each open folder segment,
+   each clickable to jump back) replaces the old flat "Folder" column.
+   A small local FolderIcon (closed polygon outline, no curves, same
+   house style as the sidebar icon set) marks folder rows so they read
+   as navigable at a glance, distinct from a leaf pipeline row.
+
+2. Run trigger: this reverses the "View only" answer given during
+   Round 64's own AskUserQuestion - a direct, explicit follow-up
+   request supersedes that earlier scoping choice. New
+   RunPipelineAsync (AzureDevOpsService.cs) POSTs to Azure DevOps' own
+   .../pipelines/{id}/runs endpoint with an empty body (runs against
+   the pipeline's already-configured default branch - no branch
+   picker was asked for, so none was added). Deliberately NOT gated
+   behind AdminGate the way this app's OWN GitHub Deploy trigger is
+   (that one requires admin-or-repo-write specifically because it acts
+   on THIS PORTAL's shared pipeline) - this instead follows the
+   self-service precedent already set by every other mutating action
+   against a visitor's OWN connected cloud credential in this app (EC2
+   start/stop/terminate, ECR create/delete repository): the session's
+   own PAT and its real Execute permission on Azure DevOps' own side
+   is the auth boundary, not a portal-side gate. A confirm dialog
+   (useConfirm, matching AppCacheControlCard's own established
+   pattern) still guards the click itself as a UX safety net against
+   an accidental trigger, separate from that authorization question. A
+   "Run" button lives on each pipeline-list row (so a run can be
+   started without drilling into that pipeline's history first) and a
+   "Run Pipeline" button lives on the run-history view itself
+   (matching where the user's own screenshot showed them already
+   standing) - triggering from the run-history view refreshes that
+   list afterward so the new run appears without a manual refresh.
+
+Verification performed:
+  - `dotnet build` (isolated output dir): 0 errors, same pre-existing
+    warnings as every prior round.
+  - `npm run lint` in deployment-ui/: no new warnings beyond the same
+    class already accepted elsewhere in this codebase (Sidebar.jsx,
+    NavigationContext.jsx, etc. all already export a non-component
+    value alongside a default component export, which oxlint's
+    fast-refresh rule flags every time regardless of file).
+  - `npm run build` in deployment-ui/: succeeded.
+  - Manually traced getFolderContents against several hand-picked
+    folder-path examples (root pipelines, one level deep, two levels
+    deep, a pipeline whose folder doesn't match the open path at all)
+    to confirm the bucketing logic lands correctly before trusting it,
+    not just running the app and eyeballing one path.
+  - Could not exercise RunPipelineAsync against a real Azure DevOps
+    pipeline in this sandboxed session (no real org/PAT available
+    here, unlike the user's own live environment shown in their
+    screenshot) - same standing limitation as every mutating action
+    this session builds against a provider it can't authenticate to
+    directly. Recommend the user click "Run" once against a real,
+    low-stakes pipeline to confirm the trigger and refresh behavior
+    end to end.
+  - Live check against the deployed Render backend after the push:
+    /api/bootstrap healthy (HTTP 200).
+
+Files changed: src/DeploymentAPI/DTOs/AzureDevOpsDtos.cs,
+src/DeploymentAPI/Services/AzureDevOpsService.cs,
+src/DeploymentAPI/Controllers/AzureDevOpsController.cs,
+deployment-ui/src/services/azureDevOpsService.js,
+deployment-ui/src/components/sourceControl/
+{AzureDevOpsPipelinesView,AzureDevOpsArtifactsView}.jsx.
+Commit: 54c2492.
+
+Status: Complete, pushed, live-verified the backend is up. Pipelines
+and Build Artifacts both now browse by real folder instead of a flat
+list, and Pipelines has a working self-service run-trigger action with
+a confirm step. Standing limitation: the trigger action itself hasn't
+been exercised against a real pipeline in this sandboxed session -
+recommend the user confirm it end to end against their own connected
+Azure DevOps org shown in their screenshot.
