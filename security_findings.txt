@@ -7764,3 +7764,94 @@ Pylint/Checkstyle remain explicitly unbuilt, shown as "Coming soon" -
 building them for real would need a follow-up conversation about which
 artifact name/report format this portal should assume for each tool,
 since there's no universal convention to default to.
+
+==================================================
+ROUND 55 - UX FIX: CODE QUALITY AS A NESTED SIDEBAR GROUP, NOT AN
+INTERNAL HUB PAGE
+==================================================
+Date: 2026-08-17
+Trigger: "i need them like subpage sin the side bar" - immediate
+follow-up to Round 54, clarifying that the user wanted SonarQube/
+SonarCloud/CodeQL/ESLint/Pylint/Checkstyle to be literal nested items
+in the Sidebar itself (expandable group with indented children,
+directly clickable, each its own real page/route) - the same treatment
+the existing "GitHub" section already gets (Deploy/Approvals/Pull
+Requests/Artifacts & Images/Analytics/Timeline/History/Environments/
+Template Tester all show as indented children under one collapsible
+"GitHub" header) - not the tile-based internal-hub pattern Round 54
+built (one "Code Quality" sidebar item, clicking it opened a page with
+its own tile grid inside).
+
+Restructured entirely to match the GitHub group's own established
+Sidebar.jsx pattern:
+  - "codeQualityGroup" is a new type:"group" entry (purely a Sidebar-
+    side grouping, no tab key of its own, never appears in App.jsx's
+    tab switch - same as "github" itself) with 5 real children, each
+    its own independently navigable page/route.
+  - Deliberately kept the EXISTING "codeQuality" tab key on the
+    SonarQube/SonarCloud child specifically (not moved to the new
+    group) so the backend's existing admin gate
+    (AdminGate.DenyUnlessAdminAsync(..., "codeQuality") in
+    SonarController.cs) and the existing grantable-page-key list both
+    kept working completely unchanged - zero backend changes needed
+    for this round. CodeQL/ESLint/Pylint/Checkstyle are new tab keys,
+    deliberately left OUT of ADMIN_ONLY_TABS (both the Sidebar.jsx and
+    App.jsx copies) since none of them share Sonar's "one shared team
+    credential, not per-user" reasoning for being admin-gated - CodeQL
+    reuses the visitor's own already-connected GitHub token as its
+    real auth boundary, the same open posture Artifacts/Analytics/
+    History already have.
+  - Round 54's CodeQuality.jsx hub page (tile grid + "?view=" internal
+    sub-nav) was fully removed - each former tile is now a standalone
+    page instead: CodeQuality.jsx trimmed back to just the Sonar
+    content (reusing SonarView.jsx unchanged from last round), new
+    CodeQl.jsx/Eslint.jsx/Pylint.jsx/Checkstyle.jsx thin wrapper pages
+    added. CodeQlView.jsx (the actual CodeQL logic/UI) is unchanged
+    from last round, just now reached via its own sidebar item instead
+    of a hub tile.
+  - New shared ComingSoonTool.jsx component for the three unbuilt
+    tools (ESLint/Pylint/Checkstyle), each still a real page with its
+    own sidebar entry and route - not hidden, not a dead link.
+  - 5 new sidebar icons added (SonarIcon/CodeQlIcon/EslintIcon/
+    PylintIcon/CheckstyleIcon), matching this codebase's own
+    established "primitive shapes only, no hand-authored curve paths"
+    icon style exactly (CodeQualityIcon's shield-and-checkmark moved
+    up to become the GROUP header's icon, since it no longer belongs
+    to one specific child).
+  - Wired the 4 new tab keys into NavigationContext.jsx's TABS
+    whitelist AND App.jsx's route switch together, in the same change
+    - proactively applying the lesson from this session's earlier
+    "paasHosting missing from TABS caused reload-bounces-to-Dashboard"
+    bug (Round 48 Follow-up 8), same as every subsequent new-tab
+    addition this session has already done deliberately.
+
+Verification performed:
+  - `npm run lint` in deployment-ui/: no new warnings.
+  - `npm run build` in deployment-ui/: succeeded - confirmed via chunk
+    sizes that the split actually happened as intended (CodeQuality
+    chunk dropped from 9.9kB, Round 54's hub+2-views bundle, down to
+    4.4kB now that it's Sonar-only; CodeQl split into its own 3.9kB
+    chunk).
+  - Live check against the deployed Render backend after the push:
+    /api/bootstrap healthy (HTTP 200).
+  - No backend changes in this round at all - purely a frontend
+    routing/navigation restructure reusing Round 54's already-built
+    and already-verified SonarView/CodeQlView logic unchanged, so no
+    dotnet build was needed.
+
+Files changed: deployment-ui/src/components/layout/Sidebar.jsx,
+deployment-ui/src/components/layout/SidebarIcons.jsx,
+deployment-ui/src/context/NavigationContext.jsx,
+deployment-ui/src/App.jsx, deployment-ui/src/pages/CodeQuality.jsx
+(rewritten - Sonar-only now), deployment-ui/src/pages/{CodeQl,Eslint,
+Pylint,Checkstyle}.jsx (new),
+deployment-ui/src/components/codeQuality/ComingSoonTool.jsx (new).
+Commit: a973fc6.
+
+Status: Complete, pushed, live-verified the backend is up. Every piece
+of ACTUAL logic here (Sonar dashboard, CodeQL alert fetching/rendering)
+is unchanged, already-verified code from Round 54 - this round was
+purely structural/navigational, so the same standing limitation from
+last round (CodeQL's exact GitHub API response shape unverified against
+a live repo) still applies unchanged, nothing new introduced by this
+restructure.
