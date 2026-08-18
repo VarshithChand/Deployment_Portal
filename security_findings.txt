@@ -9731,3 +9731,98 @@ session has already connected. Standing limitation, stated plainly:
 neither change has been exercised in a real browser against real
 credentials in this sandboxed session - worth a quick look on the
 user's end to confirm the tiles/cards render and navigate correctly.
+
+
+==================================================
+ROUND 73 - UX: QUICK ACCESS COVERS EVERY CONFIGURED
+CREDENTIAL, NOT JUST PAGE-BACKED PROVIDERS
+==================================================
+Date: 2026-08-19
+Trigger: a screenshot of the live Settings → Credentials screen showing
+checkmarks on Azure DevOps, Docker Hub, GHCR, Render, Cloudflare, AWS,
+Screen Lock, and AI Assistant, with the verbatim ask: "except
+screenpin and ai i need all the resources what i had configured they
+canbe visible in the quick actions." Round 72's Quick Access only
+covered the 16 providers with their own dedicated feature page,
+deliberately leaving out Render/Cloudflare/Netlify/Vercel/API Key/
+Docker (plain registry)/GitHub OAuth on the reasoning that none of
+those has anywhere to "jump to" - this round reverses that scoping
+decision per direct follow-up: the user wants every configured
+credential represented, full stop, with only Screen Lock and AI
+Assistant excluded (neither is a browsable resource - one's a PIN,
+the other is Deployment Copilot's own API key).
+
+The blocker Round 72 sidestepped: Render/Cloudflare/Netlify/Vercel/
+API Key/Docker/GitHub OAuth don't have a standalone page - the only
+place their own "configured" status and management form are visible
+is their own tab inside Settings → Credentials (CredentialsView.jsx's
+local `mode` state), which had no way to be set from outside that
+component. Solved with a new hand-off, same shape as the existing
+pendingRepoUrl/pendingSettingsView pair:
+  - NavigationContext.jsx: new pendingCredentialMode state +
+    goToCredential(mode) function (sets it, then calls
+    goToSettingsView("credentials")).
+  - Settings.jsx: reads pendingCredentialMode, passes it to
+    CredentialsView as initialMode plus an onConsumedInitialMode
+    callback that clears it.
+  - CredentialsView.jsx: new initialMode/onConsumedInitialMode props:
+    a mount/update effect calls setMode(initialMode) once, then
+    immediately clears the hand-off so switching tabs manually
+    afterward isn't fought by the same effect firing again.
+
+QuickAccessCard.jsx's ITEMS list grew from 16 to 23, the 7 new entries
+each carrying a `credentialMode` field (routed through goToCredential)
+instead of the existing `tab` field (routed through plain setTab).
+Their `configured` signals: Render/Cloudflare/Netlify/Vercel reuse
+getPaasStatus(provider) - the exact same call CredentialsView's own
+remoteStatus fetch already makes; API Key reuses getMyApiKeys(),
+configured = at least one non-revoked key exists (mirrors
+CredentialsView's own activeKeyCount computation); Docker (plain
+registry) and GitHub OAuth both come from one new getSettings() call
+added to the Promise.all (dockerPasswordConfigured and
+gitHubOAuthClientId + gitHubOAuthClientSecretConfigured respectively -
+matching exactly what Settings.jsx itself derives from the same
+endpoint). Icons: Render/Cloudflare/Netlify/Vercel all reuse
+HostingProvidersIcon (same single icon Sidebar.jsx already uses for
+that whole group before individual pages existed for them); API Key
+and GitHub OAuth reuse SettingsIcon, deliberately signaling "this
+leads into Settings" rather than a real feature page, so these tiles
+read differently at a glance from the ones that jump to an actual
+page; Docker reuses the existing DockerIcon.
+
+Deliberately still NOT included: Database. It's the one remaining
+MODES entry with no "configured" signal at all - CredentialsView never
+fetches one for it (no getDatabaseStatus call exists), and it's
+restricted to a single super-admin identity regardless, so there's
+no reliable way to show a checkmark for it even in Settings' own tab
+row today, let alone Quick Access.
+
+Verification performed:
+  - No backend changes - frontend-only, so no dotnet build was needed.
+  - `npm run lint` in deployment-ui/: no new warnings from any
+    touched file.
+  - `npm run build` in deployment-ui/: succeeded.
+  - Live check against the deployed Render backend after the push:
+    /api/bootstrap healthy (HTTP 200).
+  - Could NOT click through this in a real browser against real
+    connected credentials in this sandboxed session (same standing
+    limitation as every prior round touching this app's UI) -
+    recommend the user reload the Dashboard and confirm the newly
+    added tiles (Render/Cloudflare per the screenshot, plus any of
+    the other 5 that are configured) both render and land on the
+    correct Settings → Credentials tab when clicked.
+
+Files changed: deployment-ui/src/components/dashboard/QuickAccessCard.jsx,
+deployment-ui/src/components/settings/CredentialsView.jsx,
+deployment-ui/src/context/NavigationContext.jsx,
+deployment-ui/src/pages/Settings.jsx.
+Commit: b9685eb.
+
+Status: Complete, pushed, live-verified the backend is up. Quick
+Access now surfaces every configured credential in this portal except
+Screen Lock and AI Assistant, including the four Hosting Providers and
+the three portal-level settings (API Key/Docker/GitHub OAuth) that
+have no page of their own - each of those seven now deep-links
+straight to its own tab in Settings → Credentials instead of just the
+Settings hub. Standing limitation, stated plainly: unverified in a
+real browser in this sandboxed session.
