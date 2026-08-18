@@ -5,6 +5,8 @@ import PageLayout from "../components/layout/PageLayout";
 import AllRepositoriesCard from "../components/dashboard/AllRepositoriesCard";
 import AwsServicesCard from "../components/dashboard/AwsServicesCard";
 import EnvironmentsCard from "../components/dashboard/EnvironmentsCard";
+import AzureDevOpsCard from "../components/dashboard/AzureDevOpsCard";
+import QuickAccessCard from "../components/dashboard/QuickAccessCard";
 
 export default function Dashboard() {
 
@@ -49,7 +51,15 @@ export default function Dashboard() {
 
             <br />
 
+            <AzureDevOpsCard />
+
+            <br />
+
             <EnvironmentsCard />
+
+            <br />
+
+            <QuickAccessCard />
 
         </PageLayout>
 

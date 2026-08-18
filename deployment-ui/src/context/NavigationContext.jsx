@@ -2,7 +2,7 @@ import { createContext, useCallback, useEffect, useState } from "react";
 
 import { getSidebarAccess } from "../services/settingsService";
 
-const TABS = ["dashboard", "deploy", "approvals", "pullRequests", "storage", "analytics", "timeline", "history", "environments", "templates", "azureDevOpsDashboard", "azureDevOpsBranches", "azureDevOpsPipelines", "azureDevOpsHistory", "azureDevOpsArtifacts", "azureDevOpsPullRequests", "azureDevOpsFeeds", "codeCommit", "gitlab", "bitbucket", "cloudServicesAws", "cloudServicesAzure", "cloudServicesGcp", "services", "paasHosting", "ecr", "acr", "artifactRegistry", "dockerHub", "ghcr", "gitlabRegistry", "jfrog", "harbor", "nexus", "docker", "codeQuality", "sonarcloud", "codeql", "eslint", "pylint", "checkstyle", "settings"];
+const TABS = ["dashboard", "deploy", "approvals", "pullRequests", "storage", "analytics", "timeline", "history", "environments", "templates", "azureDevOpsBranches", "azureDevOpsPipelines", "azureDevOpsHistory", "azureDevOpsArtifacts", "azureDevOpsPullRequests", "azureDevOpsFeeds", "codeCommit", "gitlab", "bitbucket", "cloudServicesAws", "cloudServicesAzure", "cloudServicesGcp", "services", "paasHosting", "ecr", "acr", "artifactRegistry", "dockerHub", "ghcr", "gitlabRegistry", "jfrog", "harbor", "nexus", "docker", "codeQuality", "sonarcloud", "codeql", "eslint", "pylint", "checkstyle", "settings"];
 
 // Read the starting tab from the URL so a hard reload (or a bookmarked/
 // shared link) lands back on the same page instead of always resetting

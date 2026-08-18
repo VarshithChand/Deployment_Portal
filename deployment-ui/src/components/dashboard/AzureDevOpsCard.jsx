@@ -5,14 +5,19 @@ import useAzureDevOpsProject from "../../hooks/useAzureDevOpsProject";
 import SearchBox from "../common/SearchBox";
 import useNavigation from "../../hooks/useNavigation";
 
-// Azure DevOps' Dashboard sub-page - pick a project here once, and it
-// applies across every other Azure DevOps sub-page that needs one
-// (Pipelines, Build Artifacts, Pull Requests - see
+// Was its own separate "Azure DevOps Dashboard" sub-page (see git history
+// for components/sourceControl/AzureDevOpsDashboardView.jsx, now retired,
+// no tab key survives it) - moved onto the main Dashboard by explicit
+// request, alongside AwsServicesCard/EnvironmentsCard, rather than making
+// a visitor leave the portal's own Overview to pick an Azure DevOps
+// project. Content is otherwise unchanged: pick a project here once, and
+// it applies across every other Azure DevOps sub-page that needs one
+// (Pipelines, History, Build Artifacts, Pull Requests - see
 // AzureDevOpsProjectContext.jsx), the same "pick a project, everything
 // else follows" shape the real Azure DevOps portal itself uses. Branches
 // and Package Feeds aren't affected - both are already org-wide and never
 // asked for a project to begin with.
-export default function AzureDevOpsDashboardView() {
+export default function AzureDevOpsCard() {
 
     const { setTab } = useNavigation();
     const { project, setProject } = useAzureDevOpsProject();
@@ -83,6 +88,7 @@ export default function AzureDevOpsDashboardView() {
 
         return (
             <div className="card">
+                <h2 className="card-title">Azure DevOps</h2>
                 <p className="empty-state" style={{ textAlign: "left" }}>
                     Connect your Azure DevOps credentials in{" "}
                     <a href="#" onClick={(e) => { e.preventDefault(); setTab("settings"); }}>Settings → Credentials → Azure DevOps</a>
@@ -94,7 +100,7 @@ export default function AzureDevOpsDashboardView() {
     }
 
     if (projects.error) {
-        return <div className="card"><p className="error-message">{projects.error}</p></div>;
+        return <div className="card"><h2 className="card-title">Azure DevOps</h2><p className="error-message">{projects.error}</p></div>;
     }
 
     return (
@@ -103,12 +109,12 @@ export default function AzureDevOpsDashboardView() {
 
         <div className="card" style={{ marginBottom: "20px" }}>
 
-            <h2 className="card-title">Project</h2>
+            <h2 className="card-title">Azure DevOps</h2>
 
             {project && (
                 <p className="field-hint field-hint-good">
-                    Currently working in <strong>{project.name}</strong> — every other Azure DevOps
-                    page (Pipelines, Build Artifacts, Pull Requests) uses this same project.
+                    Currently working in <strong>{project.name}</strong> — every Azure DevOps
+                    page (Pipelines, History, Build Artifacts, Pull Requests) uses this same project.
                 </p>
             )}
 
@@ -159,7 +165,7 @@ export default function AzureDevOpsDashboardView() {
             <div className="card">
 
                 <div className="button-row" style={{ justifyContent: "space-between", marginBottom: "12px" }}>
-                    <h2 className="card-title" style={{ marginBottom: 0 }}>Running Pipelines</h2>
+                    <h2 className="card-title" style={{ marginBottom: 0 }}>Azure DevOps — Running Pipelines</h2>
                     <button type="button" className="btn btn-secondary btn-sm" onClick={() => loadRunningBuilds(project)}>
                         Refresh
                     </button>

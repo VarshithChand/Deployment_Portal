@@ -220,8 +220,8 @@ export default function AzureDevOpsArtifactsView() {
         return (
             <div className="card">
                 <p className="empty-state" style={{ textAlign: "left" }}>
-                    Pick a project on the{" "}
-                    <a href="#" onClick={(e) => { e.preventDefault(); setTab("azureDevOpsDashboard"); }}>Azure DevOps Dashboard</a>
+                    Pick an Azure DevOps project on the{" "}
+                    <a href="#" onClick={(e) => { e.preventDefault(); setTab("dashboard"); }}>Dashboard</a>
                     {" "}first.
                 </p>
             </div>
@@ -239,7 +239,7 @@ export default function AzureDevOpsArtifactsView() {
 
             <div className="button-row" style={{ justifyContent: "space-between", marginBottom: "12px" }}>
                 <h2 className="card-title" style={{ marginBottom: 0 }}>{project.name}</h2>
-                <a href="#" onClick={(e) => { e.preventDefault(); setTab("azureDevOpsDashboard"); }}>Change project</a>
+                <a href="#" onClick={(e) => { e.preventDefault(); setTab("dashboard"); }}>Change project</a>
             </div>
 
             {pipelinesLoading ? (

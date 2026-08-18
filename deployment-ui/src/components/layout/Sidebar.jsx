@@ -102,27 +102,26 @@ export const TABS = [
             },
             // Azure DevOps - one Organization + PAT credential (see
             // Settings → Credentials → Azure DevOps) powering six real,
-            // independently-navigable sub-pages. Dashboard is where a
-            // project is actually picked (see AzureDevOpsProjectContext.jsx)
-            // - that same selection then applies to Pipelines/Build
-            // Artifacts/Pull Requests, matching how the real Azure DevOps
-            // portal's own project picker works, so none of those three ask
-            // for a project separately anymore. Branches and Package Feeds
-            // are unaffected (both already org-wide). Listed first since
-            // it's the natural starting point of this whole group. Both
-            // Dashboard and Pull Requests reuse this app's own
-            // DashboardIcon/PullRequestIcon rather than new glyphs - same
-            // concepts, deliberately consistent iconography across
-            // providers, and neither is adjacent to its GitHub counterpart
-            // in the rail (different groups) so it doesn't repeat Round
-            // 63's "looks the same at a glance" problem.
+            // independently-navigable sub-pages. The project picker (see
+            // AzureDevOpsProjectContext.jsx) used to be its own "Dashboard"
+            // sub-page here; it now lives on the main portal Dashboard
+            // instead (see components/dashboard/AzureDevOpsCard.jsx) - one
+            // less click than leaving the portal's own Overview to pick a
+            // project, and that same selection still applies to Pipelines/
+            // History/Build Artifacts/Pull Requests exactly as before.
+            // Branches and Package Feeds are unaffected (both already
+            // org-wide). Pull Requests reuses this app's own
+            // PullRequestIcon rather than a new glyph - same concept,
+            // deliberately consistent iconography across providers, and
+            // not adjacent to its GitHub counterpart in the rail (different
+            // groups) so it doesn't repeat Round 63's "looks the same at a
+            // glance" problem.
             {
                 key: "azureDevOpsGroup",
                 type: "group",
                 label: "Azure DevOps",
                 Icon: AzureDevOpsIcon,
                 children: [
-                    { key: "azureDevOpsDashboard", label: "Dashboard", Icon: DashboardIcon },
                     { key: "azureDevOpsBranches", label: "Branches", Icon: AzureDevOpsBranchesIcon },
                     { key: "azureDevOpsPipelines", label: "Pipelines", Icon: AzureDevOpsPipelinesIcon },
                     { key: "azureDevOpsHistory", label: "History", Icon: HistoryIcon },
