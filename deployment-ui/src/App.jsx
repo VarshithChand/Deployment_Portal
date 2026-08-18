@@ -44,6 +44,10 @@ const ContainerRegistry = lazy(() => import("./pages/ContainerRegistry"));
 const Services = lazy(() => import("./pages/Services"));
 const Docker = lazy(() => import("./pages/Docker"));
 const CodeQuality = lazy(() => import("./pages/CodeQuality"));
+const CodeQl = lazy(() => import("./pages/CodeQl"));
+const Eslint = lazy(() => import("./pages/Eslint"));
+const Pylint = lazy(() => import("./pages/Pylint"));
+const Checkstyle = lazy(() => import("./pages/Checkstyle"));
 const Settings = lazy(() => import("./pages/Settings"));
 
 // Admin-only regardless of Sidebar Access state — same guard the Sidebar
@@ -226,6 +230,10 @@ function App(){
                             {tab === "services" && <Services/>}
                             {tab === "docker" && <Docker/>}
                             {tab === "codeQuality" && <CodeQuality/>}
+                            {tab === "codeql" && <CodeQl/>}
+                            {tab === "eslint" && <Eslint/>}
+                            {tab === "pylint" && <Pylint/>}
+                            {tab === "checkstyle" && <Checkstyle/>}
                             {tab === "settings" && <Settings/>}
 
                         </Suspense>

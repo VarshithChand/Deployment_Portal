@@ -18,6 +18,11 @@ import {
     ServicesIcon,
     DockerIcon,
     CodeQualityIcon,
+    SonarIcon,
+    CodeQlIcon,
+    EslintIcon,
+    PylintIcon,
+    CheckstyleIcon,
     SettingsIcon,
     GitHubGroupIcon,
     CloudServicesIcon,
@@ -90,7 +95,32 @@ export const TABS = [
     { key: "containerRegistry", label: "Container Registry", Icon: ContainerRegistryIcon },
     { key: "services", label: "Services", Icon: ServicesIcon },
     { key: "docker", label: "Docker", Icon: DockerIcon },
-    { key: "codeQuality", label: "Code Quality", Icon: CodeQualityIcon },
+    // Every code-quality/static-analysis tool as its own nested sidebar
+    // page, same "collapsible group" treatment as GitHub above - each
+    // child is a real, independently-navigable page (own tab key, own
+    // App.jsx route), not a tile inside one shared page. "codeQuality"
+    // itself is kept as the SonarQube/SonarCloud child's own key (not the
+    // group's) specifically so the existing backend admin gate
+    // (AdminGate.DenyUnlessAdminAsync(..., "codeQuality") in
+    // SonarController) and the existing grantable-page-key list both keep
+    // working completely unchanged - only Sonar needs that gate (one
+    // shared team credential, not per-user); CodeQL reuses this session's
+    // own GitHub token as ITS auth boundary the same way Artifacts/
+    // Analytics/History do, so it stays open like they are, not grouped
+    // into the same admin-only bucket.
+    {
+        key: "codeQualityGroup",
+        type: "group",
+        label: "Code Quality",
+        Icon: CodeQualityIcon,
+        children: [
+            { key: "codeQuality", label: "SonarQube / SonarCloud", Icon: SonarIcon },
+            { key: "codeql", label: "CodeQL", Icon: CodeQlIcon },
+            { key: "eslint", label: "ESLint", Icon: EslintIcon },
+            { key: "pylint", label: "Pylint", Icon: PylintIcon },
+            { key: "checkstyle", label: "Checkstyle", Icon: CheckstyleIcon }
+        ]
+    },
     { key: "settings", label: "Settings", Icon: SettingsIcon }
 ];
 

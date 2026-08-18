@@ -97,6 +97,72 @@ export function CodeQualityIcon() {
     );
 }
 
+// A dial with a needle (circle rim + line + small filled pivot) - reads as
+// a "quality rating gauge," distinct from CodeQualityIcon's shield-and-
+// checkmark now that shield is the Code Quality GROUP header rather than
+// this specific child.
+export function SonarIcon() {
+    return (
+        <svg {...common}>
+            <circle cx="9" cy="9" r="6.5" stroke="currentColor" strokeWidth="1.4" />
+            <line x1="9" y1="9" x2="12.2" y2="5.8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+            <circle cx="9" cy="9" r="1.1" fill="currentColor" />
+        </svg>
+    );
+}
+
+// A magnifying glass - "scanning code for issues," distinct from
+// ApprovalsIcon's plain checkmark-in-circle by shape (handle + smaller
+// rim) alone.
+export function CodeQlIcon() {
+    return (
+        <svg {...common}>
+            <circle cx="8" cy="8" r="4.5" stroke="currentColor" strokeWidth="1.4" />
+            <line x1="11.2" y1="11.2" x2="15" y2="15" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+        </svg>
+    );
+}
+
+// Three left-aligned bars of decreasing length - a simple "lint rule list"
+// glyph, distinct from PullRequestIcon's node-and-line graph.
+export function EslintIcon() {
+    return (
+        <svg {...common}>
+            <line x1="3.5" y1="5" x2="14.5" y2="5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+            <line x1="3.5" y1="9" x2="11.5" y2="9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+            <line x1="3.5" y1="13" x2="8.5" y2="13" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+        </svg>
+    );
+}
+
+// A hexagon outline with a center dot - distinct silhouette from EslintIcon's
+// bars and CheckstyleIcon's document, still a simple "linter" stand-in.
+export function PylintIcon() {
+    return (
+        <svg {...common}>
+            <polygon
+                points="9,2.5 14.5,5.75 14.5,12.25 9,15.5 3.5,12.25 3.5,5.75"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.4"
+                strokeLinejoin="round"
+            />
+            <circle cx="9" cy="9" r="1.3" fill="currentColor" />
+        </svg>
+    );
+}
+
+// A document (rect) with a checkmark - "style guide compliance," distinct
+// from ApprovalsIcon's checkmark-in-CIRCLE by using a rect instead.
+export function CheckstyleIcon() {
+    return (
+        <svg {...common}>
+            <rect x="4" y="2.5" width="10" height="13" rx="1.2" stroke="currentColor" strokeWidth="1.4" />
+            <polyline points="6.5,9.2 8.3,11 11.5,6.8" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+    );
+}
+
 export function StorageIcon() {
     return (
         <svg {...common}>
