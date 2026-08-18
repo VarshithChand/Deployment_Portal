@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 
 import { getAzureDevOpsProjects, getAzureDevOpsPipelines, getAzureDevOpsRuns, getAzureDevOpsArtifacts } from "../../services/azureDevOpsService";
+import { FolderIcon, getFolderContents } from "./AzureDevOpsPipelinesView";
 import usePagination from "../../hooks/usePagination";
 import Pagination from "../common/Pagination";
 import SearchBox from "../common/SearchBox";
@@ -9,12 +10,15 @@ import useNavigation from "../../hooks/useNavigation";
 const PAGE_SIZE = 10;
 
 // Azure DevOps' Build Artifacts sub-page - four levels: projects ->
-// pipelines -> runs -> artifacts. The first three selection steps are the
-// same project/pipeline/run picker the Pipelines page itself uses (both
-// pages independently drive through Azure DevOps' own project-scoped
-// structure, same reasoning GitHub's History and Artifacts & Images pages
-// already stay separate despite both drilling through repo/run selection)
-// - here a run is the means to an end (its artifacts), not the payoff.
+// pipelines (browsable by folder, same as the Pipelines page - see
+// FolderIcon/getFolderContents there) -> runs -> artifacts. The first
+// three selection steps are the same project/pipeline/run picker the
+// Pipelines page itself uses (both pages independently drive through
+// Azure DevOps' own project-scoped structure, same reasoning GitHub's
+// History and Artifacts & Images pages already stay separate despite both
+// drilling through repo/run selection) - here a run is the means to an
+// end (its artifacts), not the payoff, so no run-trigger action lives on
+// this page - that's Pipelines' job.
 export default function AzureDevOpsArtifactsView() {
 
     const { setTab } = useNavigation();
@@ -26,6 +30,7 @@ export default function AzureDevOpsArtifactsView() {
     const [selectedProject, setSelectedProject] = useState(null);
     const [pipelines, setPipelines] = useState(null);
     const [pipelinesLoading, setPipelinesLoading] = useState(false);
+    const [folderPath, setFolderPath] = useState([]);
 
     const [selectedPipeline, setSelectedPipeline] = useState(null);
     const [runs, setRuns] = useState(null);
@@ -55,6 +60,7 @@ export default function AzureDevOpsArtifactsView() {
     function openProject(project) {
 
         setSelectedProject(project);
+        setFolderPath([]);
         setPipelinesLoading(true);
 
         getAzureDevOpsPipelines(project.name).then((data) => {
@@ -116,6 +122,11 @@ export default function AzureDevOpsArtifactsView() {
         page: runsPage, setPage: setRunsPage, pageCount: runsPageCount, pageItems: runsPageItems,
         totalCount: runsTotalCount, startIndex: runsStartIndex, endIndex: runsEndIndex
     } = usePagination(runsList, PAGE_SIZE);
+
+    const folderContents = useMemo(
+        () => getFolderContents(pipelines?.pipelines || [], folderPath),
+        [pipelines, folderPath]
+    );
 
     // ---- Level 4: artifacts ----
 
@@ -266,17 +277,38 @@ export default function AzureDevOpsArtifactsView() {
 
     }
 
-    // ---- Level 2: pipelines ----
+    // ---- Level 2: pipelines, browsable by folder ----
 
     if (selectedProject) {
+
+        const breadcrumbItems = [
+            { label: selectedProject.name, onClick: () => setFolderPath([]) },
+            ...folderPath.map((seg, i) => ({
+                label: seg,
+                onClick: i < folderPath.length - 1 ? () => setFolderPath(folderPath.slice(0, i + 1)) : undefined
+            }))
+        ];
 
         return (
 
             <div className="card">
 
                 <div className="button-row" style={{ justifyContent: "space-between", marginBottom: "12px" }}>
-                    <h2 className="card-title" style={{ marginBottom: 0 }}>{selectedProject.name}</h2>
-                    <button type="button" className="btn btn-secondary btn-sm" onClick={() => { setSelectedProject(null); setPipelines(null); }}>
+                    <nav aria-label="Breadcrumb" style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
+                        {breadcrumbItems.map((item, i) => (
+                            <span key={i} style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                                {i > 0 && <span className="field-hint" style={{ margin: 0 }}>/</span>}
+                                {item.onClick ? (
+                                    <button type="button" className="btn btn-link" style={{ padding: 0 }} onClick={item.onClick}>
+                                        {item.label}
+                                    </button>
+                                ) : (
+                                    <span className="card-title" style={{ marginBottom: 0 }}>{item.label}</span>
+                                )}
+                            </span>
+                        ))}
+                    </nav>
+                    <button type="button" className="btn btn-secondary btn-sm" onClick={() => { setSelectedProject(null); setPipelines(null); setFolderPath([]); }}>
                         ← Back to projects
                     </button>
                 </div>
@@ -289,9 +321,9 @@ export default function AzureDevOpsArtifactsView() {
 
                     <p className="error-message">{pipelines?.error || "Azure DevOps is not configured."}</p>
 
-                ) : pipelines.pipelines.length === 0 ? (
+                ) : folderContents.subfolders.length === 0 && folderContents.items.length === 0 ? (
 
-                    <p className="empty-state" style={{ textAlign: "left" }}>No pipelines in this project.</p>
+                    <p className="empty-state" style={{ textAlign: "left" }}>Nothing in this folder.</p>
 
                 ) : (
 
@@ -301,18 +333,29 @@ export default function AzureDevOpsArtifactsView() {
 
                             <thead>
                                 <tr>
-                                    <th>Pipeline</th>
-                                    <th>Folder</th>
+                                    <th>Name</th>
                                 </tr>
                             </thead>
 
                             <tbody>
 
-                                {pipelines.pipelines.map((pipeline) => (
+                                {folderContents.subfolders.map((name) => (
+
+                                    <tr key={`folder:${name}`} className="table-row-clickable" onClick={() => setFolderPath([...folderPath, name])}>
+                                        <td>
+                                            <span style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                                                <FolderIcon />
+                                                {name}
+                                            </span>
+                                        </td>
+                                    </tr>
+
+                                ))}
+
+                                {folderContents.items.map((pipeline) => (
 
                                     <tr key={pipeline.id} className="table-row-clickable" onClick={() => openPipeline(pipeline)}>
                                         <td>{pipeline.name}</td>
-                                        <td>{pipeline.folder || "—"}</td>
                                     </tr>
 
                                 ))}

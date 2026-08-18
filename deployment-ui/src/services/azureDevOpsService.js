@@ -50,6 +50,14 @@ export const getAzureDevOpsRuns = async (project, pipelineId) => {
     return response.data;
 };
 
+// Triggers a new run against the pipeline's default branch - self-service,
+// no confirmation/gating on this call itself (the frontend confirms before
+// calling it - see AzureDevOpsPipelinesView.jsx).
+export const runAzureDevOpsPipeline = async (project, pipelineId) => {
+    const response = await azureDevOpsApi.post(`/projects/${encodeURIComponent(project)}/pipelines/${pipelineId}/runs`);
+    return response.data;
+};
+
 // ---- Build Artifacts: pipelines -> runs -> artifacts ----
 
 export const getAzureDevOpsArtifacts = async (project, runId) => {

@@ -203,6 +203,54 @@ public class AzureDevOpsService
         return result;
     }
 
+    // Triggers a new run against the pipeline's default branch (no branch
+    // picker - keeps the request body to the same empty "{}" Azure DevOps'
+    // own docs show for "just run it as configured"). Real GitHub Deploy
+    // trigger elsewhere in this app requires AdminGate + real repo-write
+    // access because it acts against this PORTAL's own shared pipeline;
+    // this one deliberately doesn't - it's the calling session's own
+    // connected Azure DevOps org, so that credential's real Execute
+    // permission on Azure DevOps' own side is the auth boundary, same
+    // self-service posture as EC2 start/stop/terminate and ECR create/
+    // delete elsewhere in this app.
+    public async Task<AzureDevOpsRunTriggerResultDto> RunPipelineAsync(UserPaasCredentials credentials, string project, int pipelineId)
+    {
+        if (!credentials.IsConfigured)
+            return new AzureDevOpsRunTriggerResultDto { Success = false, Error = "Azure DevOps is not configured." };
+
+        try
+        {
+            var url = $"https://dev.azure.com/{Uri.EscapeDataString(credentials.AccountId!)}/{Uri.EscapeDataString(project)}/_apis/pipelines/{pipelineId}/runs?api-version=7.1";
+
+            using var request = new HttpRequestMessage(HttpMethod.Post, url)
+            {
+                Content = new StringContent("{}", Encoding.UTF8, "application/json")
+            };
+            request.Headers.Authorization = BuildAuth(credentials.Token!);
+
+            var response = await DevOpsHttpClient.SendAsync(request);
+            await HttpClientHelper.EnsureSuccessAsync(response);
+
+            var run = JObject.Parse(await response.Content.ReadAsStringAsync());
+            var runId = run["id"]?.ToObject<int?>();
+
+            return new AzureDevOpsRunTriggerResultDto
+            {
+                Success = true,
+                Message = runId != null ? $"Run #{runId} started." : "Run started.",
+                RunId = runId
+            };
+        }
+        catch (Exception ex)
+        {
+            return new AzureDevOpsRunTriggerResultDto
+            {
+                Success = false,
+                Error = CloudErrorSanitizer.Describe(ex, "Azure DevOps", "pipeline run trigger")
+            };
+        }
+    }
+
     // ================= Build Artifacts: pipelines -> runs -> artifacts =================
     //
     // Reuses GetPipelinesAsync/GetRunsAsync above for its first two levels

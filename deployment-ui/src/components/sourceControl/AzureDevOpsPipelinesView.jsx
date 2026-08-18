@@ -1,12 +1,70 @@
 import { useEffect, useMemo, useState } from "react";
 
-import { getAzureDevOpsProjects, getAzureDevOpsPipelines, getAzureDevOpsRuns } from "../../services/azureDevOpsService";
+import {
+    getAzureDevOpsProjects, getAzureDevOpsPipelines, getAzureDevOpsRuns, runAzureDevOpsPipeline
+} from "../../services/azureDevOpsService";
 import usePagination from "../../hooks/usePagination";
 import Pagination from "../common/Pagination";
 import SearchBox from "../common/SearchBox";
 import useNavigation from "../../hooks/useNavigation";
+import useToast from "../../hooks/useToast";
+import useConfirm from "../../hooks/useConfirm";
 
 const PAGE_SIZE = 10;
+
+// A closed-outline folder glyph, local to this file (and ArtifactsView,
+// which shares the same project -> pipeline folder browser) rather than
+// added to the sidebar's own icon set - this marks rows inside a page's
+// content area, not a nav destination. Single polygon, no curves, same
+// "simple geometric shapes" house style as the sidebar icons.
+export function FolderIcon() {
+    return (
+        <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+            <polygon
+                points="1.5,4 6,4 7.5,5.5 14.5,5.5 14.5,12.5 1.5,12.5"
+                stroke="currentColor"
+                strokeWidth="1.3"
+                strokeLinejoin="round"
+            />
+        </svg>
+    );
+}
+
+// Azure DevOps pipelines carry a "folder" path (e.g. "\", "\CI",
+// "\CI\Backend") - Azure DevOps' own portal lets you browse these as real
+// folders rather than a flat list with a folder column, which is what this
+// page did before. Both helpers below turn that flat list into a
+// navigable tree purely client-side (the Pipelines list API has no
+// separate "list folders" endpoint - folder membership only exists as a
+// field on each pipeline).
+export function folderSegments(folder) {
+    return (folder || "").split("\\").filter(Boolean);
+}
+
+export function getFolderContents(pipelines, currentSegments) {
+
+    const subfolders = new Set();
+    const items = [];
+
+    pipelines.forEach((p) => {
+
+        const segments = folderSegments(p.folder);
+        const matchesPrefix = currentSegments.every((seg, i) => segments[i] === seg);
+
+        if (!matchesPrefix) return;
+
+        if (segments.length === currentSegments.length) {
+            items.push(p);
+        }
+        else {
+            subfolders.add(segments[currentSegments.length]);
+        }
+
+    });
+
+    return { subfolders: Array.from(subfolders).sort(), items };
+
+}
 
 // Azure DevOps run state/result as a colored badge - its own small helper
 // rather than reusing StatusBadge (that one speaks GitHub Actions'
@@ -31,16 +89,20 @@ function RunStatusBadge({ state, result }) {
 
 }
 
-// Azure DevOps' Pipelines sub-page - view-only (list pipelines and recent
-// run status/history, no trigger action - a real "start a run" flow is a
-// separate, bigger feature with its own confirmation/permission surface).
-// Three levels: projects -> pipelines -> runs. Unlike Branches, both
-// Pipelines and its runs are strictly project-scoped in Azure DevOps' own
-// API - there is no org-wide "every pipeline in every project" endpoint -
-// so this page always starts with a project picker.
+// Azure DevOps' Pipelines sub-page - lists pipelines and recent run status/
+// history, plus a self-service "Run pipeline" action (the calling
+// session's own credential and its real Execute permission on Azure
+// DevOps' own side is the auth boundary, same posture as EC2/ECR mutating
+// actions elsewhere in this app - see RunPipelineAsync's own comment).
+// Three levels: projects -> pipelines (browsable by folder) -> runs.
+// Unlike Branches, both Pipelines and its runs are strictly project-scoped
+// in Azure DevOps' own API - there is no org-wide "every pipeline in every
+// project" endpoint - so this page always starts with a project picker.
 export default function AzureDevOpsPipelinesView() {
 
     const { setTab } = useNavigation();
+    const toast = useToast();
+    const { confirm, dialog } = useConfirm();
 
     const [projects, setProjects] = useState(null);
     const [loading, setLoading] = useState(true);
@@ -49,10 +111,13 @@ export default function AzureDevOpsPipelinesView() {
     const [selectedProject, setSelectedProject] = useState(null);
     const [pipelines, setPipelines] = useState(null);
     const [pipelinesLoading, setPipelinesLoading] = useState(false);
+    const [folderPath, setFolderPath] = useState([]);
 
     const [selectedPipeline, setSelectedPipeline] = useState(null);
     const [runs, setRuns] = useState(null);
     const [runsLoading, setRunsLoading] = useState(false);
+
+    const [runningPipelineId, setRunningPipelineId] = useState(null);
 
     function refresh() {
 
@@ -74,6 +139,7 @@ export default function AzureDevOpsPipelinesView() {
     function openProject(project) {
 
         setSelectedProject(project);
+        setFolderPath([]);
         setPipelinesLoading(true);
 
         getAzureDevOpsPipelines(project.name).then((data) => {
@@ -87,7 +153,7 @@ export default function AzureDevOpsPipelinesView() {
 
     }
 
-    function openPipeline(pipeline) {
+    function loadRuns(pipeline) {
 
         setSelectedPipeline(pipeline);
         setRunsLoading(true);
@@ -100,6 +166,56 @@ export default function AzureDevOpsPipelinesView() {
             setRuns({ configured: false, error: "Unable to load run history." });
             setRunsLoading(false);
         });
+
+    }
+
+    async function handleRunPipeline(pipeline, e) {
+
+        // Stops a click on the row's own "view run history" handler from
+        // also firing when the button nested inside that row is clicked.
+        e?.stopPropagation();
+
+        if (!(await confirm({
+            title: `Run "${pipeline.name}"?`,
+            message: "Starts a new run against this pipeline's default branch, using your own connected Azure DevOps credential.",
+            confirmLabel: "Run Pipeline",
+            danger: false
+        }))) {
+            return;
+        }
+
+        setRunningPipelineId(pipeline.id);
+
+        try {
+
+            const result = await runAzureDevOpsPipeline(selectedProject.name, pipeline.id);
+
+            if (result.success) {
+                toast.show(result.message || "Run started.", "success");
+
+                // If this trigger happened from inside the pipeline's own
+                // run-history view, refresh it so the new run shows up
+                // immediately instead of waiting for a manual refresh.
+                if (selectedPipeline?.id === pipeline.id) {
+                    loadRuns(pipeline);
+                }
+            }
+            else {
+                toast.show(result.error || "Unable to start the run.", "error");
+            }
+
+        }
+        catch (err) {
+
+            console.error(err);
+            toast.show(err.response?.data?.message || "Unable to start the run.", "error");
+
+        }
+        finally {
+
+            setRunningPipelineId(null);
+
+        }
 
     }
 
@@ -120,6 +236,11 @@ export default function AzureDevOpsPipelinesView() {
         totalCount: runsTotalCount, startIndex: runsStartIndex, endIndex: runsEndIndex
     } = usePagination(runsList, PAGE_SIZE);
 
+    const folderContents = useMemo(
+        () => getFolderContents(pipelines?.pipelines || [], folderPath),
+        [pipelines, folderPath]
+    );
+
     // ---- Level 3: runs ----
 
     if (selectedPipeline) {
@@ -128,11 +249,23 @@ export default function AzureDevOpsPipelinesView() {
 
             <div className="card">
 
+                {dialog}
+
                 <div className="button-row" style={{ justifyContent: "space-between", marginBottom: "12px" }}>
                     <h2 className="card-title" style={{ marginBottom: 0 }}>{selectedPipeline.name}</h2>
-                    <button type="button" className="btn btn-secondary btn-sm" onClick={() => { setSelectedPipeline(null); setRuns(null); }}>
-                        ← Back to pipelines
-                    </button>
+                    <div className="button-row">
+                        <button
+                            type="button"
+                            className="btn btn-primary btn-sm"
+                            onClick={(e) => handleRunPipeline(selectedPipeline, e)}
+                            disabled={runningPipelineId === selectedPipeline.id}
+                        >
+                            {runningPipelineId === selectedPipeline.id ? "Starting..." : "Run Pipeline"}
+                        </button>
+                        <button type="button" className="btn btn-secondary btn-sm" onClick={() => { setSelectedPipeline(null); setRuns(null); }}>
+                            ← Back to pipelines
+                        </button>
+                    </div>
                 </div>
 
                 {runsLoading ? (
@@ -206,17 +339,40 @@ export default function AzureDevOpsPipelinesView() {
 
     }
 
-    // ---- Level 2: pipelines ----
+    // ---- Level 2: pipelines, browsable by folder ----
 
     if (selectedProject) {
+
+        const breadcrumbItems = [
+            { label: selectedProject.name, onClick: () => setFolderPath([]) },
+            ...folderPath.map((seg, i) => ({
+                label: seg,
+                onClick: i < folderPath.length - 1 ? () => setFolderPath(folderPath.slice(0, i + 1)) : undefined
+            }))
+        ];
 
         return (
 
             <div className="card">
 
+                {dialog}
+
                 <div className="button-row" style={{ justifyContent: "space-between", marginBottom: "12px" }}>
-                    <h2 className="card-title" style={{ marginBottom: 0 }}>{selectedProject.name}</h2>
-                    <button type="button" className="btn btn-secondary btn-sm" onClick={() => { setSelectedProject(null); setPipelines(null); }}>
+                    <nav aria-label="Breadcrumb" style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
+                        {breadcrumbItems.map((item, i) => (
+                            <span key={i} style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                                {i > 0 && <span className="field-hint" style={{ margin: 0 }}>/</span>}
+                                {item.onClick ? (
+                                    <button type="button" className="btn btn-link" style={{ padding: 0 }} onClick={item.onClick}>
+                                        {item.label}
+                                    </button>
+                                ) : (
+                                    <span className="card-title" style={{ marginBottom: 0 }}>{item.label}</span>
+                                )}
+                            </span>
+                        ))}
+                    </nav>
+                    <button type="button" className="btn btn-secondary btn-sm" onClick={() => { setSelectedProject(null); setPipelines(null); setFolderPath([]); }}>
                         ← Back to projects
                     </button>
                 </div>
@@ -229,9 +385,9 @@ export default function AzureDevOpsPipelinesView() {
 
                     <p className="error-message">{pipelines?.error || "Azure DevOps is not configured."}</p>
 
-                ) : pipelines.pipelines.length === 0 ? (
+                ) : folderContents.subfolders.length === 0 && folderContents.items.length === 0 ? (
 
-                    <p className="empty-state" style={{ textAlign: "left" }}>No pipelines in this project.</p>
+                    <p className="empty-state" style={{ textAlign: "left" }}>Nothing in this folder.</p>
 
                 ) : (
 
@@ -241,18 +397,41 @@ export default function AzureDevOpsPipelinesView() {
 
                             <thead>
                                 <tr>
-                                    <th>Pipeline</th>
-                                    <th>Folder</th>
+                                    <th>Name</th>
+                                    <th></th>
                                 </tr>
                             </thead>
 
                             <tbody>
 
-                                {pipelines.pipelines.map((pipeline) => (
+                                {folderContents.subfolders.map((name) => (
 
-                                    <tr key={pipeline.id} className="table-row-clickable" onClick={() => openPipeline(pipeline)}>
+                                    <tr key={`folder:${name}`} className="table-row-clickable" onClick={() => setFolderPath([...folderPath, name])}>
+                                        <td>
+                                            <span style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                                                <FolderIcon />
+                                                {name}
+                                            </span>
+                                        </td>
+                                        <td></td>
+                                    </tr>
+
+                                ))}
+
+                                {folderContents.items.map((pipeline) => (
+
+                                    <tr key={pipeline.id} className="table-row-clickable" onClick={() => loadRuns(pipeline)}>
                                         <td>{pipeline.name}</td>
-                                        <td>{pipeline.folder || "—"}</td>
+                                        <td>
+                                            <button
+                                                type="button"
+                                                className="btn btn-secondary btn-sm"
+                                                onClick={(e) => handleRunPipeline(pipeline, e)}
+                                                disabled={runningPipelineId === pipeline.id}
+                                            >
+                                                {runningPipelineId === pipeline.id ? "Starting..." : "Run"}
+                                            </button>
+                                        </td>
                                     </tr>
 
                                 ))}

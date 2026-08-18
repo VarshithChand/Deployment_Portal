@@ -125,6 +125,18 @@ public class AzureDevOpsController : ControllerBase
         return Ok(await _azureDevOps.GetRunsAsync(creds, project, pipelineId));
     }
 
+    // Self-service, no AdminGate/CredentialGate - see RunPipelineAsync's own
+    // comment on why (the calling session's own credential and its real
+    // Azure DevOps permission are the auth boundary, same as EC2/ECR
+    // mutating actions elsewhere in this app).
+    [HttpPost("projects/{project}/pipelines/{pipelineId}/runs")]
+    public async Task<IActionResult> RunPipeline(string project, int pipelineId)
+    {
+        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var creds = await _settings.GetUserPaasCredentialsAsync(Provider, key);
+        return Ok(await _azureDevOps.RunPipelineAsync(creds, project, pipelineId));
+    }
+
     // ---- Build Artifacts: pipelines -> runs -> artifacts -------------------
 
     [HttpGet("projects/{project}/runs/{runId}/artifacts")]

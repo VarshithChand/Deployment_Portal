@@ -120,6 +120,21 @@ public class AzureDevOpsRunListDto
     public List<AzureDevOpsRunDto> Runs { get; set; } = new();
 }
 
+// Triggering a new run - session-scoped, self-service, no AdminGate, same
+// posture this app already uses for other real mutating actions against a
+// visitor's own connected cloud credential (see CloudServiceManagementService.
+// CreateEcrRepositoryAsync's own comment: the credential's real permission
+// on the provider's own side is the auth boundary, not a portal-side gate).
+// Shape mirrors CloudServiceActionResultDto (Success/Error/Message), plus
+// the new run's ID so the frontend can refresh straight to it.
+public class AzureDevOpsRunTriggerResultDto
+{
+    public bool Success { get; set; }
+    public string? Error { get; set; }
+    public string? Message { get; set; }
+    public int? RunId { get; set; }
+}
+
 // Build Artifacts page - project -> pipeline -> run -> artifacts. A
 // pipeline run's ID is the same ID the classic Build API uses internally
 // (Azure Pipelines runs on top of the Build service), so artifacts are
