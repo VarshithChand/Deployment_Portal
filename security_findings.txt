@@ -8071,3 +8071,163 @@ same nested-sidebar pattern GitHub already established, giving this
 portal one consistent navigation model across all three multi-page
 feature areas instead of two different UX patterns (hub-with-tiles vs.
 nested-sidebar) for conceptually similar features.
+
+==================================================
+ROUND 58 - FEATURE: SOURCE CONTROL HUB (NESTED SIDEBAR GROUPS + AZURE
+REPOS + AWS CODECOMMIT)
+==================================================
+Date: 2026-08-18
+Trigger: user shared a "SOURCE CONTROL" reference tile grid (GitHub,
+GitLab, Bitbucket, Azure Repos, AWS CodeCommit) and asked for: (1) sub-
+pages for all 5, (2) GitHub moved to become a sub-page of Source
+Control with its OWN existing sub-pages ("keep the sub pages as is")
+kept intact, (3) nested in the sidebar with expand/collapse (matching
+the Code Quality/Container Registry pattern from Rounds 55/57), (4)
+explicit credential detail for two providers - "azure repos need's
+orginzation name and pat", "aws csp can get the data with the
+credentials" (i.e. reuse existing AWS creds) - and (5) "add in credends
+for azure devops."
+
+This request needed a genuine new capability the Sidebar never had:
+GitHub, when nested under Source Control, becomes a GROUP nested
+INSIDE another group (Source Control > GitHub > Deploy/Approvals/...) -
+a real 3-level tree, whereas every prior grouped section this session
+built (GitHub, Container Registry, Code Quality) was exactly 2 levels
+(top-level group -> leaf children). Sidebar.jsx's rendering/filtering/
+flattening logic was all hardcoded to that 2-level assumption
+(`item.children.map(renderTabButton)` assumed children were always
+leaves; `item.children.some((c) => c.key === tab)` for "is this group
+active" likewise). Generalized all three functions to be recursive
+instead of special-casing depth:
+  - filterTree(items) - recursively filters/prunes hidden or empty
+    groups at any depth (previously one level only).
+  - containsActiveTab(item) - recursively checks whether the active tab
+    lives anywhere under an item, at any depth, so a group nested
+    inside another group still auto-expands/highlights correctly when
+    the active page lives two levels down.
+  - renderNavItem(item) - recursively renders a leaf as a button or a
+    group as its own header (with its OWN independent collapse state,
+    keyed by that group's own key - "sourceControlGroup" and "github"
+    never collide) plus its children rendered the same way, however
+    deep. Replaces the old inline, non-recursive JSX map entirely.
+  - flattenTabs(items) (was FLAT_TABS's inline one-level flatMap) - now
+    recursive too, so HeaderSearch's page search and
+    SecurityTestingView's "test every frontend page" smoke-test list
+    both automatically pick up pages at any nesting depth with no
+    separate list to keep in sync (their own existing "derived from
+    Sidebar's own data, not hand-maintained" design already carried
+    this through correctly once the underlying data recursed).
+No CSS changes were needed - .app-sidebar-group-children's existing
+22px padding-left naturally cascades to 44px at the second nesting
+level purely from being applied at each level's own wrapping div,
+confirmed by reading global.css before touching any JS.
+
+GitHub itself is completely unchanged internally - same 9 pages, same
+tab keys, same components - only its position in the tree moved one
+level deeper. GitLab and Bitbucket are real, visible, navigable "not
+built yet" pages (not disabled sidebar entries, not hidden) - their
+credential shapes were not specified (GitLab: Host URL + PAT;
+Bitbucket: Workspace + App Password - materially different from each
+other and from Azure Repos), so neither was guessed at, consistent with
+this session's standing policy on genuine ambiguity (Harbor/Nexus/
+ESLint/Pylint/Checkstyle were all shipped the same way before their
+specifics were confirmed).
+
+Azure Repos (new, fully built): a NEW portal-wide shared credential
+(Organization + PAT) - deliberately NOT the same credential as this
+app's existing session-scoped Azure App Registration (TenantId/
+ClientId/ClientSecret, used for ACR/Web App status), since Azure
+DevOps' REST API authenticates via HTTP Basic auth with a PAT, a
+genuinely different auth system from Azure Resource Manager's AAD
+tokens despite both being "Azure" - conflating the two would have been
+wrong, not just inconvenient. Reuses UserPaasCredentials(Token,
+AccountId)'s existing generic shape (AccountId = organization) rather
+than a new DTO. Lists repositories ORG-WIDE (dev.azure.com's
+GET .../_apis/git/repositories with no project scope needed) rather
+than requiring a third "project" field up front - matches exactly what
+was asked for (org + PAT, nothing else) - then branches per repository
+via the project name each repo's own listing already carries.
+PortalRegistryLoginSection.jsx (Docker Hub/GHCR's shared credential
+form component) gained one new optional prop (identityLabel) so its
+"already configured" status line could correctly say "Organization:"
+instead of a hardcoded "Username:" for this new use, without touching
+its two existing callers' behavior at all.
+
+AWS CodeCommit (new, fully built): reuses this session's own already-
+connected AWS credentials (UserAwsCredentials, the same store ECR/EC2/
+ECS/RDS/Lambda already read) - no new credential to set up at all,
+matching "aws csp can get the data with the credentials" exactly. Added
+the AWSSDK.CodeCommit NuGet package (Version 4.0.*, matching every
+other AWS service package already in this project's own per-service-
+package convention) and mirrored ECR's own GetEcrRepositoriesAsync
+shape precisely: ListRepositories then a best-effort GetRepository call
+per repo for description/default branch/clone URL (one repo's detail
+failing doesn't blank the whole table, same as ECR's own per-repo image
+count).
+
+Self-caught issue during implementation (before it ever built): the
+first draft of sourceControlService.js had a leftover, unused `import
+api from "./githubApi"` copy-pasted from a similar service file and
+never actually referenced - caught and removed before the file was
+even used anywhere, not left as dead code.
+
+Verification performed:
+  - `dotnet build` (isolated output dir, three times across the round
+    as pieces landed - once caught a genuinely missing `using
+    Amazon.Runtime;` for AWSCredentials, fixed immediately): 0 errors
+    on the final pass, only pre-existing unrelated warnings. Confirmed
+    the new AWSSDK.CodeCommit package itself resolved and compiled
+    clean, not just that the rest of the code compiled around it.
+  - `npm run lint` in deployment-ui/: no new warnings.
+  - `npm run build` in deployment-ui/: succeeded - confirmed via chunk
+    output that GitLab/Bitbucket/AzureRepos/CodeCommit all build as
+    their own separate lazy chunks.
+  - Manually re-read the entire final Sidebar.jsx after writing it
+    (not just running lint/build) specifically to trace the new
+    recursive logic by hand for correctness - confirmed
+    containsActiveTab correctly bubbles "is this page active" up
+    through both nesting levels, and that groupsCollapsed's per-key
+    default (undefined -> expanded) means both Source Control AND the
+    nested GitHub group start expanded on a first visit, matching
+    "keep the sub pages as is" reachability rather than accidentally
+    hiding them behind an extra click.
+  - Live check against the deployed Render backend after the push:
+    /api/bootstrap healthy (HTTP 200) - checked with a longer poll
+    window than usual specifically because this push adds a brand-new
+    NuGet package dependency, which only a real CI/CD restore (not a
+    locally-cached build) can fully prove out.
+
+Files changed: src/DeploymentAPI/DeploymentAPI.csproj (AWSSDK.CodeCommit
+added), src/DeploymentAPI/DTOs/SourceControlDtos.cs (new),
+src/DeploymentAPI/Services/SourceControlService.cs (new),
+src/DeploymentAPI/Controllers/SourceControlController.cs (new),
+src/DeploymentAPI/Services/SettingsService.cs (Azure Repos portal
+credential storage), src/DeploymentAPI/Helpers/CredentialGate.cs
+(added azureRepos), src/DeploymentAPI/Program.cs (DI registration),
+deployment-ui/src/api/sourceControlApi.js (new),
+deployment-ui/src/services/sourceControlService.js (new),
+deployment-ui/src/components/sourceControl/{AzureReposView,
+CodeCommitView}.jsx (new), deployment-ui/src/components/settings/
+credentials/PortalRegistryLoginSection.jsx (identityLabel prop added),
+deployment-ui/src/components/settings/CredentialsView.jsx,
+deployment-ui/src/pages/{AzureRepos,CodeCommit,GitLab,Bitbucket}.jsx
+(new), deployment-ui/src/components/layout/{Sidebar,SidebarIcons}.jsx,
+deployment-ui/src/App.jsx, deployment-ui/src/context/
+NavigationContext.jsx.
+Commit: 97e2c61.
+
+Status: Complete, pushed, live-verified the backend is up (including
+the new NuGet dependency resolving in the real CI/CD environment, not
+just locally). Could NOT live-verify Azure Repos' or AWS CodeCommit's
+exact live API response shapes against a real Azure DevOps org or AWS
+account in this sandboxed session (no such credentials available here)
+- both follow real, documented API contracts (Azure DevOps REST API
+7.1, the official AWS CodeCommit SDK), not guessed, but neither has
+been exercised against a live account. Recommend @VarshithChand connect
+a real Azure DevOps organization + PAT (Settings -> Credentials ->
+Azure Repos) and confirm AWS credentials already cover a region with
+CodeCommit repositories, then browse both end to end once deployed -
+same "likely needs one follow-up fix once real response shapes are
+seen" posture as every other unverified live-API integration this
+session. GitLab and Bitbucket remain explicitly unbuilt pending their
+own credential-shape specifics.
