@@ -10981,3 +10981,148 @@ best-effort audit history - reachable by clicking a row in their
 existing management lists. GCP Compute Engine went from an explicit
 stub to fully managed. ECS's fuller console, Azure Container Apps, GCP
 Cloud Run, and nav/capability polish remain as Phases 2-4, not started.
+
+==================================================
+ROUND 83 - PHASE 2 OF MULTI-CLOUD INFRASTRUCTURE
+CONSOLE: AWS ECS FULL CONSOLE
+==================================================
+Date: 2026-08-19
+Trigger: "yes", confirming continuation into Phase 2 of the roadmap laid
+out and approved in Round 82's plan (spec sections 9-15 - clusters,
+services, tasks/containers, task-definition scaling, bulk operations,
+task monitoring, logs, metrics, ECR image correlation).
+
+Inspected before writing any code (per this app's standing practice,
+not a new step): EcsManagementPage.jsx's existing cluster/service
+drill-down (built on CloudStatusService.GetEcsDetailAsync's one-call
+account-wide summary) and CloudServiceManagementService.
+ScaleEcsServiceAsync (the only existing ECS write action, single-
+service desired-count scale). Both kept exactly as they were for the
+cluster list / service list level - Phase 2 adds a genuinely new,
+separately-fetched layer of per-service detail (tasks, containers,
+metrics, running image) rather than inflating the already-working
+summary-level fetch with per-service costs every visitor would pay for
+every service in every cluster on page load (section 29's aggregation
+principle, same reasoning Phase 1 already applied to EC2/Azure VM
+detail).
+
+Backend (new file DTOs/EcsDetailDtos.cs; extended
+CloudServiceManagementService.cs and CloudServicesController.cs):
+  - GetEcsServiceDetailAsync - one DescribeServices + one
+    DescribeTaskDefinition (for container-level env vars, since ECS has
+    no per-running-task env API - env vars only exist on the task
+    DEFINITION) + one ListTasks/DescribeTasks pair, assembled into a
+    full service+task+container tree in as few calls as the ECS API
+    allows. Environment variables are redacted server-side before ever
+    leaving this method - any key containing SECRET/PASSWORD/PWD/TOKEN/
+    KEY/CREDENTIAL/CONNSTR (case-insensitive) becomes "***redacted***",
+    never the real value - section 12's explicit "WITHOUT secrets"
+    requirement.
+  - StopEcsTaskAsync (ECS StopTask - the scheduler replaces it if
+    desired count still calls for one, not something this method
+    orchestrates itself), RestartEcsServiceAsync (ECS has no separate
+    "restart" API - this is UpdateService with ForceNewDeployment=true,
+    the real mechanism, not a workaround), BulkScaleEcsServicesAsync
+    (loops the EXISTING single-service ScaleEcsServiceAsync per
+    selected service, collecting each one's own success/error rather
+    than a combined pass/fail - section 27's explicit "do not report
+    bulk operation as successful if some resources failed").
+  - GetEcsMetricsAsync - reuses Phase 1's ResourceMetricsDto/
+    MetricSeriesDto shapes unchanged (AWS/ECS namespace, ClusterName+
+    ServiceName dimensions, CPUUtilization/MemoryUtilization) - the
+    provider-agnostic metrics DTO from Phase 1 paid off immediately,
+    zero new metric-shape code needed for a second AWS resource type.
+  - GetEcsTaskLogsAsync - resolves the log group/stream from the task
+    definition's own awslogs log-configuration options (ECS exposes no
+    other way to find this), then AmazonCloudWatchLogsClient.
+    GetLogEventsAsync for the last N minutes only - a glance viewer,
+    same "not a full query builder" posture already used for
+    CloudWatch/X-Ray/Azure Monitor. Log line redaction (regex match on
+    AWS access-key-ID shape and key=value/key:value patterns for
+    password/secret/token/api-key) is explicitly best-effort, stated
+    plainly rather than claimed as exhaustive - arbitrary free-text log
+    redaction can't be made complete by pattern matching alone.
+  - GetEcsRunningImageAsync - parses the task definition's container
+    image URI; if it matches this account's ECR hostname pattern
+    (\d+\.dkr\.ecr\.{region}\.amazonaws\.com/{repo}:{tag}), calls a real
+    ECR DescribeImages for that exact tag's digest/push time/size
+    rather than guessing - section 15's "which image/repository is
+    running" answered with a real correlation, not just the raw image
+    string.
+  - New routes on CloudServicesController, same self-service posture
+    (no AdminGate) as every route in this feature area: GET
+    ecs/{cluster}/{service}/detail, POST ecs/{cluster}/{service}/
+    restart, POST ecs/{cluster}/tasks/{taskId}/stop, POST ecs/scale/
+    bulk, GET ecs/{cluster}/{service}/metrics, GET ecs/{cluster}/
+    tasks/{taskId}/logs, GET ecs/{cluster}/{service}/image. Every
+    mutation (restart, stop task, each bulk-scale item) calls the
+    existing AppendAuditLog helper - no new audit infrastructure.
+  - Two real compile errors caught and fixed via the build-fix loop
+    (guessed AWS SDK field types, corrected once the compiler
+    disagreed rather than guessed twice): CloudWatchLogs'
+    GetLogEventsRequest.StartTime takes a DateTime, not a Unix-ms long
+    the way CloudWatch's own GetMetricData does; OutputLogEvent.
+    Timestamp is a DateTime?, not a long. Every other AWS SDK type
+    guessed while writing this round's code (Task.HealthStatus.Value,
+    NetworkBinding.ContainerPort/Protocol, ECS's own KeyValuePair
+    class, ContainerDefinition.Environment,
+    LogConfiguration.Options/LogDriver.Value) compiled correctly on the
+    first pass.
+
+Frontend: EcsTaskDetailDialog.jsx (new) - section 12's task/container
+click-through (image/ports/redacted environment/health/exit code) with
+an embedded per-container log panel (RangeSelector + client-side
+search + the log lines themselves) rather than a separate dialog,
+since a task's containers and their logs are the same drill-down, not
+two features. EcsManagementPage.jsx substantially extended:
+EcsClusterDetail gained checkbox selection + a bulk-scale bar (quick
+0/1/2/5/10 buttons + custom input + Set Desired Count, a ConfirmDialog
+whose message differs for the "set to 0" case per section 10's exact
+wording, and a results list showing each selected service's own
+success/failure afterward - section 27 applied on the frontend too,
+not just the backend contract). EcsServiceDetail was rewritten from a
+single scale form into the full section-31-style detail: Restart Tasks
+button, running-image card (only rendered when the task definition's
+image resolves to something), a Performance section reusing Phase 1's
+RangeSelector/LineChart pattern unchanged, and a Tasks table with a
+per-task Stop button (ConfirmDialog) and row-click into
+EcsTaskDetailDialog.
+
+Verification performed:
+  - `dotnet build`: 0 errors after the two AWS SDK type fixes above.
+  - `npm run lint` in deployment-ui/: 0 new warnings (one introduced by
+    an unused map-callback parameter in EcsTaskDetailDialog.jsx was
+    caught and removed before the final check).
+  - `npm run build` in deployment-ui/: succeeded.
+  - git status re-checked before staging - the same unrelated,
+    pre-existing uncommitted Prometheus integration noted in Round 82
+    is still sitting in the tree, still untouched, still not part of
+    this or any other round's commits.
+  - Live check against the deployed Render backend after the push:
+    /api/bootstrap healthy (HTTP 200).
+  - Standing limitation, stated as plainly as every prior round: no
+    real AWS credentials exist in this sandboxed session. Every ECS
+    call here is new surface area, entirely unverified against a real
+    cluster/service/task. The log-group/stream-name derivation
+    (awslogs-stream-prefix/{container}/{taskId}) is the single most
+    likely point of failure if a real task's logging setup doesn't
+    match the standard awslogs convention this assumes - recommend
+    testing task detail + logs first, then bulk scale, then the ECR
+    image correlation.
+
+Files changed: src/DeploymentAPI/DTOs/EcsDetailDtos.cs (new),
+src/DeploymentAPI/Services/CloudServiceManagementService.cs,
+src/DeploymentAPI/Controllers/CloudServicesController.cs,
+deployment-ui/src/components/cloudServices/EcsTaskDetailDialog.jsx
+(new), EcsManagementPage.jsx,
+deployment-ui/src/services/cloudServicesService.js,
+deployment-ui/src/styles/global.css.
+Commit: 221099d.
+
+Status: Phase 2 complete, pushed, live-verified the backend is up. ECS
+services now have real task/container drill-down, per-container logs,
+CPU/memory metrics, bulk multi-service scaling with per-service
+confirmation and results, Restart Tasks, per-task Stop, and ECR image
+correlation. Phase 3 (Azure Container Apps + GCP Cloud Run, both net-
+new backend integrations) and Phase 4 (nav/capability polish) remain,
+not started.
