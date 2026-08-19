@@ -11387,3 +11387,183 @@ recommend the user confirm directly rather than take this round's own
 bootstrap poll as sufficient proof, unlike every prior round's poll,
 which measured an already-live change rather than recovering from a
 failed one.
+
+==================================================
+ROUND 86 - PAAS/MICROSERVICES CONSOLE PHASE A:
+AWS ELASTIC BEANSTALK
+==================================================
+Date: 2026-08-19
+Trigger: a second large, 42-section spec pasted verbatim, asking for a
+new "PaaS / Microservices" lifecycle-management area covering AWS
+Elastic Beanstalk, Azure App Service + Deployment Slots + Swap, and an
+extended GCP Cloud Run (revisions/traffic-splitting/rollback). Section
+40 explicitly asked for inspection before implementation, same as the
+first mega-spec (Round 82) - went through plan mode again rather than
+straight to code: two parallel Explore passes (existing PaaS/hosting
+code, existing bulk-operation/confirm-dialog/sidebar UI patterns), no
+edits until a plan was written and approved.
+
+Two things confirmed during research that shaped the plan directly:
+1. **"Hosting Providers" is unrelated** - `PaasHosting.jsx`/
+   `PaasProviderService.cs` show THIS PORTAL'S OWN production deployment
+   (Render/Cloudflare/Netlify/Vercel), restricted to the super-admin
+   session, zero AWS/Azure/GCP PaaS logic. The user's own spec offered
+   "Hosting Providers → PaaS Applications" as an alternative location for
+   the new feature - deliberately NOT used, to avoid recreating the exact
+   Docker-Engine-vs-Container-Registry naming confusion this session
+   already fixed once. New top-level sidebar group instead, placed after
+   "Cloud Services" per the user's own first-listed suggestion.
+2. **GCP Cloud Run overlaps with already-shipped work** - the earlier
+   "multi-cloud infrastructure console" Phase 3 (Round 84) already built
+   real Cloud Run list/detail/scale/redeploy/delete/metrics. This spec's
+   §20-23 asks for Cloud Run again PLUS revisions/traffic-splitting/
+   rollback, which do NOT exist yet. Rather than duplicate a second Cloud
+   Run UI, the plan's Phase C will extend the EXISTING
+   `ContainerServiceManagementService.cs`/`CloudRunManagementPage.jsx` in
+   place and have the new PaaS hub page import that same component - not
+   built this round, but the decision is recorded so Phase C doesn't
+   re-litigate it.
+
+Scope phased the same way as the first mega-spec: Phase A (this round,
+AWS Elastic Beanstalk) built now; Phase B (Azure App Service + slots +
+swap + bulk swap) and Phase C (Cloud Run extension + cross-provider hub
+page + sidebar wiring for Azure/GCP children) recorded as roadmap, not
+started.
+
+Backend (new files DTOs/ElasticBeanstalkDtos.cs,
+Services/ElasticBeanstalkService.cs,
+Controllers/ElasticBeanstalkController.cs,
+Helpers/SecretRedaction.cs; `AWSSDK.ElasticBeanstalk` added to
+DeploymentAPI.csproj and `dotnet restore`-verified before writing any
+dependent code, same precaution used for every new AWS SDK dependency
+this session):
+  - `SecretRedaction.LooksLikeSecretKey`/`RedactLogLine` - promoted out
+    of `CloudServiceManagementService.cs` (where they were built inline
+    for ECS in an earlier round) into a shared static helper class,
+    since Elastic Beanstalk needed the exact same check for environment
+    variables. The ECS call sites were updated to call the shared
+    helper, not left duplicated a third time once Azure App Service
+    needs it too in Phase B.
+  - `GetApplicationsAsync`/`GetEnvironmentsAsync` - one
+    `DescribeEnvironments` call covers every application's environments
+    at once (§36's aggregation principle).
+  - `GetEnvironmentDetailAsync` - `DescribeEnvironmentResources` for
+    instance IDs/load balancer/ASG names, `DescribeConfigurationSettings`
+    for the `aws:autoscaling:asg` MinSize/MaxSize and the
+    `aws:elasticbeanstalk:application:environment` namespace (environment
+    variables, redacted via the shared helper before ever leaving this
+    method - §38's exact `{name, isSecret, value: null}` contract for
+    secrets).
+  - `GetApplicationVersionsAsync`/`DeployVersionAsync` - never
+    auto-deploys; the frontend's own before/after confirmation dialog
+    (current version → new version) gates this call, per §8's explicit
+    mockup.
+  - `RestartAppServerAsync`/`RebuildEnvironmentAsync` - EB's own two
+    real, DISTINCT operations (app-server restart vs. full
+    terminate-and-recreate) - explicitly NOT a fake Azure-style slot
+    swap, per §7's own instruction that EB doesn't behave like Azure
+    slots.
+  - `ScaleEnvironmentAsync` - `UpdateEnvironment` with
+    `aws:autoscaling:asg` MinSize/MaxSize option settings.
+  - `UpdateEnvironmentVariableAsync` - a genuine read-modify-write: EB's
+    configuration-settings API has no single-key upsert for the
+    application-environment namespace (submitting `OptionSettings`
+    replaces what's given but doesn't touch keys omitted from the call,
+    and removal needs an explicit `OptionsToRemove` entry) - this reads
+    current settings, merges the one change, and resubmits only that
+    namespace. Documented as EB's real API shape, not an invented
+    limitation.
+  - `TerminateEnvironmentAsync` - real delete, gated on the frontend by
+    `TypedConfirmDialog` with `resourceName="DELETE {environmentName}"`
+    (confirmed during Phase-A research that the component's matching is
+    plain string equality, so a composed "DELETE x" string works
+    unchanged - satisfies §37's exact "Type: DELETE production-api"
+    wording with zero component changes).
+  - `GetEnvironmentEventsAsync` - `DescribeEvents`, most recent 50, a
+    glance not a full paginated log.
+  - `GetEnvironmentMetricsAsync` - a REAL aggregate CPU view across
+    every instance in the environment, via CloudWatch's `AWS/EC2`
+    namespace using the environment's own `AutoScalingGroupName` as the
+    dimension (a documented CloudWatch capability, not a guess) -
+    environment-level enhanced-health metrics aren't exposed the same
+    straightforward way and are deliberately not charted this round.
+  - New `Controllers/ElasticBeanstalkController.cs`
+    (`api/paas/aws/elasticbeanstalk`), same self-service posture as
+    every other route in this feature area (no AdminGate).
+  - Backend build succeeded after one fix: missing `using Amazon.
+    Runtime;` for `AWSCredentials` in the new service file - caught
+    immediately by the build-fix loop.
+
+Frontend: new "PaaS / Microservices" sidebar group (two new icons,
+`PaasMicroservicesIcon`/`ElasticBeanstalkIcon`, same geometric-shapes-
+only house style as every other sidebar icon) placed directly after
+"Cloud Services" in both `Sidebar.jsx` and `NavigationContext.jsx`'s
+`TABS` whitelist - added to BOTH in the same pass this time, the exact
+step this session forgot once before (the `paasHosting` bug). New
+`PaasElasticBeanstalk.jsx` (list, search + `usePagination`, same
+list→local-state-detail pattern as the earlier Phase 1's GCP VM
+pages) + `ElasticBeanstalkEnvironmentDetailPage.jsx` (overview,
+versions-with-deploy-confirmation, scaling, environment variables,
+events, a CPU chart reusing `LineChart.jsx`/`RangeSelector.jsx`
+unchanged per §25's explicit "do not create duplicate chart
+components", and a relationships chain reusing `RelationshipDiagram.jsx`
+unchanged). Zero new chart/dialog/pagination primitives built - every
+piece is a reuse of components from the earlier multi-cloud
+infrastructure console rounds.
+
+A process change adopted directly from the PRIOR round's hotfix (Round
+85's own lesson about `git add -p` getting silently undone by a later
+plain `git add` on the same path): this round's Program.cs and
+DeploymentAPI.csproj changes (one service registration, one package
+reference) were staged via `git add -p`, verified via
+`git diff --cached`, and committed IMMEDIATELY in that same step -
+before any other file in this round was staged - rather than left
+pending for a later combined `git add` that could clobber the partial
+selection again. Confirmed via `git diff` on both files after every
+subsequent commit in this round that the unrelated pre-existing
+Prometheus/docker-compose work remained untouched throughout.
+
+Verification performed:
+  - `dotnet restore` after adding `AWSSDK.ElasticBeanstalk`: resolved
+    cleanly before any dependent code was written.
+  - `dotnet build`: 1 error caught and fixed (missing using directive,
+    see above), 0 errors after.
+  - `npm run lint` in deployment-ui/: 0 new warnings.
+  - `npm run build` in deployment-ui/: succeeded.
+  - `git diff --cached`/`git diff` re-checked after EVERY staging step
+    in this round (not just once at the end) - Program.cs and
+    DeploymentAPI.csproj's unrelated Prometheus content confirmed still
+    unstaged/uncommitted after each commit.
+  - Live check against the deployed Render backend after the push:
+    /api/bootstrap healthy (HTTP 200).
+  - Standing limitation, stated as plainly as every prior round: no
+    real AWS Elastic Beanstalk environment exists in this sandboxed
+    session. Every call in this round is new, unverified surface area -
+    the config-settings read-modify-write for environment variables and
+    the ASG-dimensioned CloudWatch metric are the two least-certain
+    pieces, worth testing first.
+
+Files changed: src/DeploymentAPI/DTOs/ElasticBeanstalkDtos.cs (new),
+src/DeploymentAPI/Services/ElasticBeanstalkService.cs (new),
+src/DeploymentAPI/Controllers/ElasticBeanstalkController.cs (new),
+src/DeploymentAPI/Helpers/SecretRedaction.cs (new),
+src/DeploymentAPI/Services/CloudServiceManagementService.cs,
+src/DeploymentAPI/Program.cs, src/DeploymentAPI/DeploymentAPI.csproj,
+deployment-ui/src/App.jsx,
+deployment-ui/src/components/layout/Sidebar.jsx, SidebarIcons.jsx,
+deployment-ui/src/context/NavigationContext.jsx,
+deployment-ui/src/api/elasticBeanstalkApi.js (new),
+deployment-ui/src/services/elasticBeanstalkService.js (new),
+deployment-ui/src/pages/PaasElasticBeanstalk.jsx (new),
+deployment-ui/src/components/paas/ElasticBeanstalkEnvironmentDetailPage.jsx
+(new).
+Commits: 129038e (backend), aafbf51 (frontend).
+
+Status: Phase A complete, pushed, live-verified the backend is up. AWS
+Elastic Beanstalk now has real environment/application-version
+management - list, detail, deploy (with confirmation), restart,
+rebuild, scale, environment variables (secret-safe), events, and a CPU
+metric - reachable from the new "PaaS / Microservices" sidebar group.
+Phase B (Azure App Service + Deployment Slots + Swap) and Phase C
+(Cloud Run extension + cross-provider PaaS hub page) remain, not
+started.
