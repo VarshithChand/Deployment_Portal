@@ -877,6 +877,22 @@ public class CloudStatusService
     // Internal (not private) so CloudServiceManagementService's own ACR
     // calls can get an ARM/registry-scoped token the exact same way,
     // rather than duplicating this OAuth client-credentials exchange.
+    //
+    // On failure this THROWS (an HttpRequestException carrying AAD's own
+    // error_description, e.g. "AADSTS7000215: Invalid client secret
+    // provided...") rather than returning null - same fix, same reasoning
+    // as AzureDevOpsService's own EnsureAzureDevOpsSuccessAsync (Round 69):
+    // every caller already wraps its own work in a try/catch that hands
+    // the exception to CloudErrorSanitizer.Describe, which already has an
+    // HttpRequestException branch that surfaces .Message verbatim - so a
+    // wrong tenant, wrong client ID, or a pasted Secret ID instead of the
+    // actual Secret VALUE now shows AAD's own real reason instead of a
+    // generic "Azure sign-in failed" that gave no lead to chase. Callers
+    // that still null-check this method's result (from before this fix)
+    // are harmless dead code for the "token request itself failed" case -
+    // left in place rather than stripped everywhere, since this method
+    // can still legitimately return a null access_token if AAD's response
+    // body is shaped unexpectedly.
     internal static async Task<string?> GetAzureAccessTokenAsync(
         string tenantId, string clientId, string clientSecret, string scope = "https://management.azure.com/.default")
     {
@@ -893,7 +909,27 @@ public class CloudStatusService
         var response = await AzureHttpClient.PostAsync(url, form);
 
         if (!response.IsSuccessStatusCode)
-            return null;
+        {
+            var body = await response.Content.ReadAsStringAsync();
+            string? message = null;
+
+            try
+            {
+                var parsed = JObject.Parse(body);
+                message = parsed["error_description"]?.ToString() ?? parsed["error"]?.ToString();
+            }
+            catch
+            {
+                // AAD's error responses are always JSON in practice, but
+                // fall through to the raw body below rather than assume.
+            }
+
+            var detail = !string.IsNullOrWhiteSpace(message) ? message
+                : !string.IsNullOrWhiteSpace(body) ? body
+                : $"{(int)response.StatusCode} {response.StatusCode}";
+
+            throw new HttpRequestException(detail, null, response.StatusCode);
+        }
 
         var json = await response.Content.ReadAsStringAsync();
         return JObject.Parse(json)["access_token"]?.ToString();

@@ -114,7 +114,8 @@ export default function AzureLoginSection({ onCleared }) {
                 Powers the Environments page's live Azure Web App status. A service
                 principal (App Registration) with read access to the Web App is enough.
                 Add a Subscription ID too if you want to browse Azure Container Registry
-                from Container Registry — Web App status alone doesn't need one.
+                from Container Registry, or Cloud Services' own Azure page — Web App
+                status alone doesn't need one.
             </p>
 
             {loading ? (
@@ -159,6 +160,12 @@ export default function AzureLoginSection({ onCleared }) {
                             onClear={() => setForm({ ...form, clientSecret: "" })}
                             autoComplete="new-password"
                         />
+                        <p className="field-hint" style={{ marginTop: "6px" }}>
+                            Use the secret's <strong>Value</strong>, not its Secret ID — on the App
+                            Registration's "Certificates & secrets" page, the Value column is only
+                            shown once, right when you create the secret. If you saved the Secret ID
+                            (a shorter GUID) by mistake, create a new secret and copy the Value instead.
+                        </p>
                     </div>
 
                     <div className="form-group">
