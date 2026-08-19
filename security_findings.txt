@@ -10361,3 +10361,97 @@ grounded in ARM's documented REST API shapes, not in end-to-end
 verification, and Create VM in particular (6 chained resource
 creations with real cost) should be tested carefully and reported
 back on before being relied on.
+
+==================================================
+ROUND 79 - BUGFIX: DOCKER HUB SIGN-IN/IMAGE ERRORS,
+AND EVERY CONTAINER REGISTRY VIEW, NOW SURFACE THE
+REAL ERROR
+==================================================
+Date: 2026-08-19
+Trigger: verbatim ask: "fix the docker images tooo." No screenshot or
+error text was given, so scope was confirmed directly with the user
+first (AskUserQuestion): Docker Hub / GHCR / registry images
+specifically - not the separate, already-working Docker Engine
+"Images" tab (host containers/images/volumes, a materially different
+feature from a container registry - see Sidebar.jsx's own long-
+standing comment on why those two nav items are kept apart).
+
+Investigated with an Explore subagent first (no screenshot to go on)
+across every "images"-shaped surface in the app. Findings: the
+standalone Docker Engine page's own Images tab was already fully
+built and its one real bug (ExtractMessage falling back to the raw
+.NET exception message instead of Docker's own structured error) was
+already fixed in an earlier round (Finding 015). The real, still-open
+bug was in Container Registry: Docker Hub's own sign-in/list calls
+had the exact same "discard the real API error, always show one
+generic message" shape already fixed twice this session for Azure
+DevOps and Azure - GetDockerHubJwtAsync (ContainerRegistryService.cs)
+threw away Docker Hub's real login failure body and returned null,
+which every caller turned into the same static "Unable to
+authenticate with Docker Hub — check the username and access token."
+regardless of whether the real cause was a wrong username, a revoked
+Personal Access Token, or Docker Hub's own rate limiting; the
+repository/tag list calls did the same thing with a bare
+"Unable to reach Docker Hub ... ({statusCode})." on any non-success
+response.
+
+Fixed the same way as the Azure DevOps/Azure fixes: new
+DescribeDockerHubErrorAsync reads Docker Hub's own error envelope
+(tries {"message"}, falls back to {"detail"}, then the raw body, then
+a plain status line - Docker Hub uses both field names across
+different endpoints, confirmed by checking its own API docs rather
+than guessing one). GetDockerHubJwtAsync now throws an
+HttpRequestException carrying that real detail instead of returning
+null; every caller already wraps this in a try/catch that hands off
+to CloudErrorSanitizer.Describe, which already has the
+HttpRequestException branch (from the Azure DevOps fix) that surfaces
+.Message verbatim - no changes needed anywhere else on the backend.
+GHCR's own error path was checked and found already correct (it
+genuinely IS a GitHub API call, so HttpClientHelper's GitHub-specific
+friendly-error builder is the right tool there, not a bug the way
+reusing it for Azure DevOps was).
+
+Separately, the Explore agent surfaced a second, lower-severity but
+broadly repeated bug: all 9 Container Registry frontend views (ECR/
+ACR/Artifact Registry/Docker Hub/GHCR/GitLab Registry/JFrog/Harbor/
+Nexus) had `.catch()` blocks that discarded whatever real message the
+backend's own error response carried (err.response?.data?.message) in
+favor of a hardcoded generic string - only reachable when the backend
+call itself fails at the transport/HTTP level rather than returning
+its own handled .error field, but a real gap all the same, and
+trivial to fix once found. Fixed identically across all 9 files (24
+catch blocks total) - each now tries the real backend message first,
+falling back to its original generic text only when none is present.
+
+Verification performed:
+  - `dotnet build` (isolated scratchpad output dir): 0 errors, same 2
+    pre-existing warnings every prior round has seen.
+  - `npm run lint`/`npm run build` in deployment-ui/: no new warnings,
+    build succeeded.
+  - Grepped the whole containerRegistry/ folder afterward for the old
+    bare generic-string pattern to confirm all 9 files were actually
+    updated, not just the 2 (Docker Hub/GHCR) the user explicitly
+    named.
+  - Live check against the deployed Render backend after the push:
+    /api/bootstrap healthy (HTTP 200).
+  - Could NOT reproduce the original Docker Hub failure in this
+    sandboxed session (no real Docker Hub account/PAT available here)
+    - same standing limitation as every diagnostic fix this session,
+    grounded in reading the actual code path rather than reproducing
+    and confirming the fix end to end.
+
+Files changed: src/DeploymentAPI/Services/ContainerRegistryService.cs,
+deployment-ui/src/components/containerRegistry/AcrView.jsx,
+ArtifactRegistryView.jsx, DockerHubView.jsx, EcrView.jsx, GhcrView.jsx,
+GitLabRegistryView.jsx, HarborView.jsx, JfrogView.jsx, NexusView.jsx.
+Commit: 20b02d6.
+
+Status: Complete, pushed, live-verified the backend is up. Docker Hub
+sign-in and image/repository list failures now show Docker Hub's own
+real error text, and every one of the 9 Container Registry views
+surfaces the real backend error message instead of a hardcoded
+generic one when a call genuinely fails. Standing limitation, stated
+plainly: unverified against a real Docker Hub/GHCR account in this
+sandboxed session - if a real failure still shows something unhelpful,
+that message itself is now the actual lead to chase and worth
+reporting back.
