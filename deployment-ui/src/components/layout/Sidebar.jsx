@@ -39,6 +39,8 @@ import {
     AwsCloudIcon,
     AzureCloudIcon,
     GcpCloudIcon,
+    PaasMicroservicesIcon,
+    ElasticBeanstalkIcon,
     HostingProvidersIcon,
     ContainerRegistryIcon,
     EcrIcon,
@@ -186,6 +188,22 @@ export const TABS = [
             { key: "cloudServicesAws", label: "AWS", Icon: AwsCloudIcon },
             { key: "cloudServicesAzure", label: "Azure", Icon: AzureCloudIcon },
             { key: "cloudServicesGcp", label: "GCP", Icon: GcpCloudIcon }
+        ]
+    },
+    // PaaS/Microservices - lifecycle management for customer-deployed
+    // PaaS apps (AWS Elastic Beanstalk / Azure App Service + slots / GCP
+    // Cloud Run), NOT this portal's own hosting - see "Hosting
+    // Providers" below for that, a deliberately different feature kept
+    // under its own distinct nav item to avoid the exact naming
+    // confusion this app already fixed once for Docker Engine vs.
+    // Container Registry.
+    {
+        key: "paasMicroservicesGroup",
+        type: "group",
+        label: "PaaS / Microservices",
+        Icon: PaasMicroservicesIcon,
+        children: [
+            { key: "paasElasticBeanstalk", label: "Elastic Beanstalk", Icon: ElasticBeanstalkIcon }
         ]
     },
     // Session-scoped Render/Cloudflare/Netlify/Vercel connections (see

@@ -871,6 +871,31 @@ export function ZipkinIcon() {
     );
 }
 
+// PaaS/Microservices group - stacked "deployed app" boxes with an
+// upward arrow, distinct from CloudServicesIcon's cloud-shape so the two
+// groups read as different concepts at a glance.
+export function PaasMicroservicesIcon() {
+    return (
+        <svg {...common}>
+            <rect x="3" y="10.5" width="4.5" height="4.5" rx="1" fill="currentColor" />
+            <rect x="10.5" y="10.5" width="4.5" height="4.5" rx="1" fill="currentColor" />
+            <rect x="6.75" y="3" width="4.5" height="4.5" rx="1" fill="currentColor" />
+            <line x1="9" y1="8" x2="9" y2="10" stroke="currentColor" strokeWidth="1.2" />
+        </svg>
+    );
+}
+
+export function ElasticBeanstalkIcon() {
+    return (
+        <svg {...common}>
+            <rect x="3" y="3" width="12" height="12" rx="2" stroke="currentColor" strokeWidth="1.3" fill="none" />
+            <line x1="6" y1="7" x2="12" y2="7" stroke="currentColor" strokeWidth="1.2" />
+            <line x1="6" y1="10" x2="12" y2="10" stroke="currentColor" strokeWidth="1.2" />
+            <line x1="6" y1="13" x2="9.5" y2="13" stroke="currentColor" strokeWidth="1.2" />
+        </svg>
+    );
+}
+
 export function ChevronIcon({ direction = "left" }) {
     return (
         <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true"
