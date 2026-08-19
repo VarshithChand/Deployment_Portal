@@ -10152,3 +10152,60 @@ an AADSTS number) is the real lead to chase, and is worth reporting
 back directly. Given the screenshot already showed a client secret
 exists, the Secret ID vs. Value mix-up flagged in the new form hint
 is the most likely single cause worth checking first.
+
+==================================================
+ROUND 77 - BUGFIX: SURFACE ARM'S REAL ERROR ON CLOUD
+SERVICES' AZURE RESOURCE DISCOVERY
+==================================================
+Date: 2026-08-19
+Trigger: a follow-up screenshot after Round 76's fix - Cloud Services'
+Azure page now showed "Unable to reach Azure for resource discovery
+(403)." instead of the old generic sign-in message, confirmed real
+progress (sign-in itself now works) but still not diagnosable from a
+bare status code. Question: "what is the issue here."
+
+Diagnosis given directly to the user, grounded in what a 403 on ARM's
+generic resource-list endpoint almost always means: the App
+Registration authenticated fine (Azure AD identity), but has no Azure
+RBAC role assignment on the subscription at all (Azure AD identity
+and Azure RBAC authorization are two entirely separate systems -
+creating an App Registration + secret grants zero permissions on any
+resource by itself). Walked the user through Subscriptions -> Access
+control (IAM) -> Add role assignment -> Reader -> select the App
+Registration by name.
+
+Alongside that, fixed the same class of bug Round 76 just fixed for
+the AAD token step, one level further down the same request: on a
+non-success ARM response, GetAzureResourceInventoryAsync reduced the
+whole thing to a bare `Unable to reach Azure for resource discovery
+({statusCode}).`, discarding ARM's own error body entirely. New
+DescribeArmErrorAsync parses ARM's error envelope ({"error": {"code",
+"message"}}) - for the AuthorizationFailed case this diagnosis is
+built around, ARM's own message is already extremely explicit
+("The client '...' does not have authorization to perform action
+'Microsoft.Resources/subscriptions/resources/read' over scope
+'/subscriptions/...' ..."), removing any need to guess. Falls back to
+the raw response body, then a plain status line, if the body isn't
+the expected JSON shape - same defensive posture as every other error-
+surfacing fix in this app.
+
+Verification performed:
+  - `dotnet build` (isolated scratchpad output dir): 0 errors, same 2
+    pre-existing warnings every prior round has seen.
+  - Live check against the deployed Render backend after the push:
+    /api/bootstrap healthy (HTTP 200).
+  - Could NOT reproduce the original 403 in this sandboxed session (no
+    real Azure subscription/App Registration available here) - the
+    RBAC diagnosis is grounded in how ARM's authorization model
+    actually works, not in reproducing this specific account's error.
+    No frontend changes this round, so no npm lint/build was needed.
+
+Files changed: src/DeploymentAPI/Services/CloudStatusService.cs.
+Commit: 231a8cc.
+
+Status: Complete, pushed, live-verified the backend is up. Cloud
+Services' Azure resource discovery now surfaces ARM's own real error
+message (including its error code, e.g. AuthorizationFailed) instead
+of a bare HTTP status number - whether or not the RBAC role
+assignment above turns out to be the actual fix, whatever this shows
+next is now specific enough to act on directly.
