@@ -11783,3 +11783,135 @@ Status: Fixed, pushed, live-verified the backend is up. The CodeQL page
 no longer mislabels a scope problem as "not enabled" - recommend the
 user re-check the page and, if it still shows an error, check their
 GitHub token's security_events scope in Settings next.
+
+==================================================
+ROUND 89 - PAAS/MICROSERVICES CONSOLE PHASE C: GCP
+CLOUD RUN EXTENSION + CROSS-PROVIDER PAAS HUB
+==================================================
+Date: 2026-08-19
+Trigger: "continue with c", resuming the Round 86 roadmap's final phase
+after the CodeQL detour (Round 88) - work had already started (one DTO
+file edited, nothing committed) before the user's bug report
+interrupted it; picked back up from that exact point rather than
+restarting.
+
+GCP Cloud Run extension - section 21's revision list + traffic split,
+section 22's rollback, both using Cloud Run's REAL model rather than
+inventing an Azure-style slot abstraction (section 22's own explicit
+instruction):
+  - `GetCloudRunRevisionsAsync` - fetches the service's own `traffic[]`
+    array once and joins it onto the revision list by name, so the
+    frontend gets one flattened view (revision + created + image +
+    status + traffic%) instead of stitching two API calls together
+    itself.
+  - `UpdateCloudRunTrafficAsync` - real traffic-splitting via Cloud
+    Run's documented `updateMask=traffic` PATCH; rejects a submission
+    that doesn't sum to 100 before ever calling GCP, both client-side
+    (Apply Traffic stays disabled until the total is exactly 100) and
+    server-side.
+  - `RollbackCloudRunAsync` - implemented as exactly what Cloud Run's
+    real mechanism for this IS: send the target revision 100% of
+    traffic via the same traffic-update call above, not a fabricated
+    "revert" operation Cloud Run doesn't have.
+  - Frontend: `CloudRunDetailPage.jsx` (built in the earlier
+    infrastructure-console Phase 3) gained a Revisions card with an
+    editable per-revision traffic-percent input and a Roll Back action
+    per row with a before/after `ConfirmDialog`.
+
+Cross-provider PaaS hub (section 2's main application list, section
+14's bulk restart) - a new, deliberately thin
+`PaasAggregationService`/`PaasHubController` (`api/paas`) that adds NO
+new provider API calls of its own: it fetches the three provider
+services already built across Phases A-C
+(`ElasticBeanstalkService.GetEnvironmentsAsync`/
+`AzureAppServiceManagementService.GetAppServicesAsync`/
+`ContainerServiceManagementService.GetCloudRunServicesAsync`) in
+parallel via `Task.WhenAll` and maps each into one shared,
+provider-agnostic `PaasApplicationDto` - the same "one loose shape beats
+three near-identical DTOs" pattern already used for
+`SecurityRuleDto`/`MetricSeriesDto` in earlier phases.
+
+A real, deliberate scope decision on the bulk-actions side, stated
+explicitly rather than guessed past: section 14 asks for bulk Start/
+Stop/Restart, but only Azure App Service has a genuine Start/Stop
+operation among the three providers - Elastic Beanstalk environments
+and Cloud Run services have no such thing (confirmed and already
+documented in Phases A/C respectively). A hub-level "Stop Selected"
+button spanning all three providers would either silently no-op for
+two-thirds of a mixed selection or need per-item capability checks the
+frontend has no way to communicate before the user clicks - both worse
+than the alternative taken here: the hub only offers bulk Restart, the
+one operation with a real equivalent on all three (Elastic Beanstalk's
+RestartAppServer, Azure's site restart, Cloud Run's redeploy). Section
+41's "if a provider doesn't support an exact operation, expose the
+closest provider-native operation and clearly label it" applied at the
+UI-surface level, not just per-action.
+
+Frontend: new `pages/PaasHub.jsx`, wired as the FIRST child of the
+PaaS/Microservices sidebar group ("All Applications") - a unified
+table with global search (matching name/environment/region/status/
+version/URL per section 3's exact list), Provider and Status toggle
+filters (Region/Environment/Version deliberately left to the search box
+rather than given their own dropdown rows too, since section 3 already
+lists them as search targets and a 5-filter bar for what's realistically
+a few dozen rows across 3 providers would be more UI than the data
+warrants - a proportionate scope call, stated plainly rather than
+silently under-built), per-provider connection-status banner, and bulk
+restart with a full "you are about to restart N applications: [list]"
+confirmation and a per-app results list afterward. Rows aren't
+clickable into a full detail page from the hub - each provider's own
+dedicated page (already built in Phases A-C) is where real management
+happens; the hub is discovery + bulk restart only, a scope boundary
+stated in the page's own comment rather than left implicit. A "Cloud
+Run (GCP)" entry was also added to the same sidebar group, reusing the
+EXISTING `CloudServicesGcp.jsx` page (its own `?view=compute|cloudrun`
+sub-nav from Phase 1/3) rather than building a duplicate - the same
+"one implementation, two entry points" pattern Phase B already
+established for Azure App Service.
+
+Same `git add -p` + immediate-commit discipline carried forward from
+Rounds 85-88 for the one-line `PaasAggregationService` registration in
+Program.cs - verified via `git diff --cached` before commit, verified
+again via `git diff` afterward that the unrelated pre-existing
+Prometheus/docker-compose work is still untouched.
+
+Verification performed:
+  - `dotnet build`: succeeded on the first attempt for both the Cloud
+    Run extension and the hub aggregator, 0 errors.
+  - `npm run lint` in deployment-ui/: 0 new warnings.
+  - `npm run build` in deployment-ui/: succeeded.
+  - `git diff`/`git diff --cached` re-checked at each staging step -
+    Program.cs confirmed fully committed with zero remaining diff after
+    each commit; DeploymentAPI.csproj/docker-compose.yml confirmed
+    still showing only the unrelated pre-existing Prometheus changes.
+  - Live check against the deployed Render backend after the push:
+    /api/bootstrap healthy (HTTP 200).
+  - Standing limitation, stated as plainly as every prior round: no
+    real AWS/Azure/GCP credentials exist in this sandboxed session.
+    The traffic-join-by-name logic in GetCloudRunRevisionsAsync (joining
+    the service's traffic[] array onto the revision list) is this
+    round's single least-certain piece - worth testing first against a
+    real Cloud Run service with more than one active revision.
+
+Files changed: src/DeploymentAPI/DTOs/ContainerServiceDtos.cs,
+src/DeploymentAPI/DTOs/PaasHubDtos.cs (new),
+src/DeploymentAPI/Services/ContainerServiceManagementService.cs,
+src/DeploymentAPI/Services/PaasAggregationService.cs (new),
+src/DeploymentAPI/Controllers/ContainerServicesController.cs,
+src/DeploymentAPI/Controllers/PaasHubController.cs (new),
+src/DeploymentAPI/Program.cs,
+deployment-ui/src/services/containerServicesService.js,
+deployment-ui/src/components/cloudServices/CloudRunDetailPage.jsx,
+deployment-ui/src/api/paasHubApi.js (new),
+deployment-ui/src/services/paasHubService.js (new),
+deployment-ui/src/pages/PaasHub.jsx (new),
+deployment-ui/src/components/layout/Sidebar.jsx,
+deployment-ui/src/context/NavigationContext.jsx, App.jsx.
+Commits: d84772c (backend), b38bf09 (frontend).
+
+Status: Phase C complete, pushed, live-verified the backend is up. This
+closes out the full PaaS/Microservices console roadmap from Round 86:
+AWS Elastic Beanstalk (Phase A), Azure App Service + Deployment Slots +
+Swap (Phase B), and GCP Cloud Run's revisions/traffic/rollback plus a
+cross-provider discovery + bulk-restart hub (Phase C) are all live,
+reachable from one new "PaaS / Microservices" sidebar section.
