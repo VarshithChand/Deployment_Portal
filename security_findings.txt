@@ -11284,3 +11284,106 @@ Redeploy for Cloud Run - deliberately no fake Stop there), plus basic
 metrics for both. Only Phase 4 (sidebar/nav polish per section 39's
 tree, capability-model surfacing, connection-graph visualization on
 remaining resource types) remains from the original roadmap.
+
+==================================================
+ROUND 85 - HOTFIX: BROKEN RENDER DEPLOY FROM A
+CARELESS `git add` UNDOING A DELIBERATE `git add -p`
+==================================================
+Date: 2026-08-19
+Trigger: the user pasted a real Render build log showing the deploy
+failing outright - `/src/Program.cs(12,7): error CS0246: The type or
+namespace name 'Prometheus' could not be found`.
+
+Root cause, found immediately by checking `git show HEAD:src/
+DeploymentAPI/Program.cs` against `git show HEAD:src/DeploymentAPI/
+DeploymentAPI.csproj`: Round 84's commit (05b4d63) contained `using
+Prometheus;` plus `app.UseHttpMetrics()`/`app.MapMetrics()` in
+Program.cs, but NO corresponding `<PackageReference Include=
+"prometheus-net.AspNetCore">` in the .csproj - a namespace referenced
+with nothing providing it, which only ever fails at actual compile
+time (`dotnet publish` inside the Docker build), not at any check this
+session had already run locally before that point... except it WAS
+caught locally: `dotnet build` succeeded before the Round 84 commit
+specifically because this exact sandbox's own local build environment
+still had the stale package restored from whenever the Prometheus work
+was first (locally, never committed) added - the container image
+Render builds from a clean `dotnet restore` and has no such leftover,
+so the same source compiled successfully here and failed there. A real
+gap in this session's own "dotnet build succeeded" verification claim
+for that round - it verified the code compiled in an environment that
+wasn't actually equivalent to production's clean build.
+
+The actual mechanical mistake, traced precisely: Rounds 82-84 each
+correctly noted this repo already had unrelated, pre-existing
+uncommitted Prometheus instrumentation sitting in Program.cs/
+DeploymentAPI.csproj/docker-compose.yml before this session's work
+began, and each round's own commit deliberately excluded it - for
+Round 84 specifically, `git add -p src/DeploymentAPI/Program.cs` was
+used to interactively stage ONLY the one line this round actually
+added (`builder.Services.AddSingleton<ContainerServiceManagementService
+>();`), verified correct via `git diff --cached` immediately afterward.
+But the commit workflow's next step was a single combined `git add`
+listing every changed file BY PATH for this round, including `src/
+DeploymentAPI/Program.cs` again - a plain `git add <path>` restages
+the file's ENTIRE current working-tree content, silently overwriting
+the prior partial `git add -p` selection. That second, careless `git
+add` re-included the three Prometheus hunks that had been deliberately
+declined moments earlier, and the verification step after it
+(`git status`) only confirmed the RIGHT FILES were staged, not that
+the RIGHT CONTENT WITHIN THOSE FILES was staged - a real blind spot in
+that verification, now understood.
+
+Fix: removed the three Prometheus-related additions back out of
+Program.cs (the using directive, UseHttpMetrics(), MapMetrics()) -
+this session has no context on whether that work is finished, tested,
+or intended to ship, and reverting it is a decision within this
+session's own scope (undoing an accidental inclusion), unlike
+completing it (which would require also committing the .csproj package
+reference and understanding docker-compose.yml's own related changes -
+not this session's call to make unprompted). DeploymentAPI.csproj and
+docker-compose.yml were never touched by this fix, confirmed via `git
+status` before and after - they remain exactly as they were: local,
+uncommitted, untouched by any commit in this session, same as Rounds
+82-84 left them.
+
+Lesson recorded plainly for next time, since the underlying pattern
+(this repo carrying real pre-existing uncommitted work alongside this
+session's own changes across multiple rounds) is exactly the situation
+that made the mistake possible: after using `git add -p` to
+deliberately isolate a partial file, NEVER follow it with a plain
+`git add <same-path>` in a later combined command - either commit
+immediately after the `-p` step while the index is known-good, or
+build the file list for the later `git add` explicitly excluding any
+path already partially staged that way.
+
+Verification performed:
+  - `dotnet build` locally: succeeded (expected, given the root-cause
+    analysis above - this doesn't independently confirm the fix, only
+    that the Prometheus lines are gone).
+  - `grep -in prometheus src/DeploymentAPI/Program.cs`: zero matches,
+    confirming complete removal.
+  - `git status`/`git diff` re-checked before AND after committing the
+    fix - DeploymentAPI.csproj and docker-compose.yml both still show
+    as locally modified/uncommitted, untouched by this fix, exactly as
+    intended.
+  - Live check against the deployed Render backend after the push:
+    /api/bootstrap returned HTTP 200. Stated honestly: this does NOT
+    by itself prove the new build succeeded - Render likely kept the
+    previous good deployment live and serving traffic the whole time
+    the broken build was failing, so a 200 here is consistent with
+    either outcome. This session has no direct access to Render's
+    build log the way the user does; the user's own next deploy
+    check (or another pasted build log) is the real confirmation this
+    fix actually resolved it, not this bootstrap poll alone.
+
+Files changed: src/DeploymentAPI/Program.cs (3 blocks removed).
+Commit: def2988.
+
+Status: Fix pushed. The broken build's root cause is understood and
+corrected with reasonable confidence, but full confirmation depends on
+seeing this deploy's own build log succeed (or another /api/bootstrap
+check well after Render's build window has had time to complete) -
+recommend the user confirm directly rather than take this round's own
+bootstrap poll as sufficient proof, unlike every prior round's poll,
+which measured an already-live change rather than recovering from a
+failed one.
