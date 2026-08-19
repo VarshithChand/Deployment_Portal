@@ -37,7 +37,7 @@ export default function HarborView() {
             setLoading(false);
         }).catch((err) => {
             console.error(err);
-            setProjects({ configured: false, error: "Unable to reach the Deployment API." });
+            setProjects({ configured: false, error: err.response?.data?.message || "Unable to reach the Deployment API." });
             setLoading(false);
         });
 
@@ -55,7 +55,7 @@ export default function HarborView() {
             setReposLoading(false);
         }).catch((err) => {
             console.error(err);
-            setRepositories({ configured: false, error: "Unable to load repositories." });
+            setRepositories({ configured: false, error: err.response?.data?.message || "Unable to load repositories." });
             setReposLoading(false);
         });
 
@@ -78,7 +78,7 @@ export default function HarborView() {
             setArtifactsLoading(false);
         }).catch((err) => {
             console.error(err);
-            setArtifacts({ configured: false, error: "Unable to load artifacts." });
+            setArtifacts({ configured: false, error: err.response?.data?.message || "Unable to load artifacts." });
             setArtifactsLoading(false);
         });
 

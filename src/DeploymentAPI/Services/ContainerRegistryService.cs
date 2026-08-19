@@ -39,7 +39,43 @@ public class ContainerRegistryService
     // in this sandboxed environment - written defensively so a missing
     // field degrades to null rather than throwing.
 
-    private static async Task<string?> GetDockerHubJwtAsync(string username, string accessToken)
+    // Docker Hub's own error envelope is one of {"message": "..."} (most
+    // endpoints) or {"detail": "..."} (a handful of older ones) - same
+    // defensive "try known fields, fall back to the raw body, then a
+    // plain status line" layering as CloudStatusService's own
+    // DescribeArmErrorAsync/AzureDevOpsService's EnsureAzureDevOpsSuccessAsync,
+    // since a wrong username, an expired/revoked Personal Access Token, or
+    // Docker Hub's own rate limiting all used to collapse into the exact
+    // same generic "Unable to authenticate with Docker Hub..." message
+    // regardless of which one actually happened.
+    private static async Task<string> DescribeDockerHubErrorAsync(HttpResponseMessage response)
+    {
+        var body = await response.Content.ReadAsStringAsync();
+
+        try
+        {
+            var parsed = JObject.Parse(body);
+            var message = parsed["message"]?.ToString() ?? parsed["detail"]?.ToString();
+
+            if (!string.IsNullOrWhiteSpace(message))
+                return message;
+        }
+        catch
+        {
+            // Fall through to the raw body below.
+        }
+
+        return !string.IsNullOrWhiteSpace(body)
+            ? body
+            : $"Docker Hub returned {(int)response.StatusCode} {response.StatusCode}.";
+    }
+
+    // Throws on failure (carrying Docker Hub's own real error text) rather
+    // than returning null - every caller already wraps this in a try/catch
+    // that hands off to CloudErrorSanitizer.Describe, which already has an
+    // HttpRequestException branch that surfaces .Message verbatim (same
+    // fix already applied to Azure's own sign-in flow).
+    private static async Task<string> GetDockerHubJwtAsync(string username, string accessToken)
     {
         var body = new StringContent(
             JsonConvert.SerializeObject(new { username, password = accessToken }),
@@ -49,9 +85,14 @@ public class ContainerRegistryService
         var response = await DockerHubHttpClient.PostAsync("https://hub.docker.com/v2/users/login/", body);
 
         if (!response.IsSuccessStatusCode)
-            return null;
+            throw new HttpRequestException(await DescribeDockerHubErrorAsync(response), null, response.StatusCode);
 
-        return JObject.Parse(await response.Content.ReadAsStringAsync())["token"]?.ToString();
+        var token = JObject.Parse(await response.Content.ReadAsStringAsync())["token"]?.ToString();
+
+        if (string.IsNullOrWhiteSpace(token))
+            throw new HttpRequestException("Docker Hub didn't return an access token for these credentials.");
+
+        return token;
     }
 
     public async Task<DockerHubRepositoryListDto> GetDockerHubRepositoriesAsync(UserPaasCredentials credentials)
@@ -65,12 +106,6 @@ public class ContainerRegistryService
         {
             var token = await GetDockerHubJwtAsync(credentials.AccountId, credentials.Token!);
 
-            if (token == null)
-            {
-                result.Error = "Unable to authenticate with Docker Hub — check the username and access token.";
-                return result;
-            }
-
             var url = $"https://hub.docker.com/v2/repositories/{Uri.EscapeDataString(credentials.AccountId)}/?page_size=100";
 
             using var request = new HttpRequestMessage(HttpMethod.Get, url);
@@ -80,7 +115,7 @@ public class ContainerRegistryService
 
             if (!response.IsSuccessStatusCode)
             {
-                result.Error = $"Unable to reach Docker Hub for the repository list ({(int)response.StatusCode}).";
+                result.Error = await DescribeDockerHubErrorAsync(response);
                 return result;
             }
 
@@ -117,12 +152,6 @@ public class ContainerRegistryService
         {
             var token = await GetDockerHubJwtAsync(credentials.AccountId, credentials.Token!);
 
-            if (token == null)
-            {
-                result.Error = "Unable to authenticate with Docker Hub — check the username and access token.";
-                return result;
-            }
-
             var url = $"https://hub.docker.com/v2/repositories/{Uri.EscapeDataString(credentials.AccountId)}" +
                       $"/{Uri.EscapeDataString(repositoryName)}/tags?page_size=100";
 
@@ -133,7 +162,7 @@ public class ContainerRegistryService
 
             if (!response.IsSuccessStatusCode)
             {
-                result.Error = $"Unable to reach Docker Hub for the tag list ({(int)response.StatusCode}).";
+                result.Error = await DescribeDockerHubErrorAsync(response);
                 return result;
             }
 

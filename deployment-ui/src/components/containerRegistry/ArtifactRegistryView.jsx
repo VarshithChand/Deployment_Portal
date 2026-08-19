@@ -33,7 +33,7 @@ export default function ArtifactRegistryView() {
             setLoading(false);
         }).catch((err) => {
             console.error(err);
-            setList({ configured: false, error: "Unable to reach the Deployment API." });
+            setList({ configured: false, error: err.response?.data?.message || "Unable to reach the Deployment API." });
             setLoading(false);
         });
 
@@ -51,7 +51,7 @@ export default function ArtifactRegistryView() {
             setImagesLoading(false);
         }).catch((err) => {
             console.error(err);
-            setImages({ configured: false, error: "Unable to load images." });
+            setImages({ configured: false, error: err.response?.data?.message || "Unable to load images." });
             setImagesLoading(false);
         });
 

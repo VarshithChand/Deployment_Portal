@@ -34,7 +34,7 @@ export default function GitLabRegistryView() {
             setLoading(false);
         }).catch((err) => {
             console.error(err);
-            setList({ configured: false, error: "Unable to reach the Deployment API." });
+            setList({ configured: false, error: err.response?.data?.message || "Unable to reach the Deployment API." });
             setLoading(false);
         });
 
@@ -52,7 +52,7 @@ export default function GitLabRegistryView() {
             setTagsLoading(false);
         }).catch((err) => {
             console.error(err);
-            setTags({ configured: false, error: "Unable to load tags." });
+            setTags({ configured: false, error: err.response?.data?.message || "Unable to load tags." });
             setTagsLoading(false);
         });
 

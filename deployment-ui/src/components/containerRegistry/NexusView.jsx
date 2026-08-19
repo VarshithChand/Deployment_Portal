@@ -39,7 +39,7 @@ export default function NexusView() {
             setLoading(false);
         }).catch((err) => {
             console.error(err);
-            setRepositories({ configured: false, error: "Unable to reach the Deployment API." });
+            setRepositories({ configured: false, error: err.response?.data?.message || "Unable to reach the Deployment API." });
             setLoading(false);
         });
 
@@ -57,7 +57,7 @@ export default function NexusView() {
             setImagesLoading(false);
         }).catch((err) => {
             console.error(err);
-            setImages({ configured: false, error: "Unable to load images." });
+            setImages({ configured: false, error: err.response?.data?.message || "Unable to load images." });
             setImagesLoading(false);
         });
 
@@ -73,7 +73,7 @@ export default function NexusView() {
             setTagsLoading(false);
         }).catch((err) => {
             console.error(err);
-            setTags({ configured: false, error: "Unable to load tags." });
+            setTags({ configured: false, error: err.response?.data?.message || "Unable to load tags." });
             setTagsLoading(false);
         });
 

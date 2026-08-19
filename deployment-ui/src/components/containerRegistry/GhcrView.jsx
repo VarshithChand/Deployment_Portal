@@ -34,7 +34,7 @@ export default function GhcrView() {
             setLoading(false);
         }).catch((err) => {
             console.error(err);
-            setList({ configured: false, error: "Unable to reach the Deployment API." });
+            setList({ configured: false, error: err.response?.data?.message || "Unable to reach the Deployment API." });
             setLoading(false);
         });
 
@@ -52,7 +52,7 @@ export default function GhcrView() {
             setVersionsLoading(false);
         }).catch((err) => {
             console.error(err);
-            setVersions({ configured: false, error: "Unable to load versions." });
+            setVersions({ configured: false, error: err.response?.data?.message || "Unable to load versions." });
             setVersionsLoading(false);
         });
 
