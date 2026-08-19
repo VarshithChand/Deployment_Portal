@@ -10635,3 +10635,133 @@ round this session - all 4 CSP integrations are grounded in each
 provider's documented API shape, not in end-to-end verification
 against live AWS/Azure/GCP accounts, and are worth testing and
 reporting back on in the order noted above.
+
+==================================================
+ROUND 81 - UX: PIE/BAR CHART ANALYSIS FOR
+OBSERVABILITY'S 4 REAL CSP PAGES
+==================================================
+Date: 2026-08-19
+Trigger: verbatim ask, twice repeated for emphasis: "i need to see the
+graphs pages pie's and need the analysys of data in that" and "i need
+to see in every sub page of it the graphs & pie's & bar's on that
+pages then i should analyze the data and need the analysys of data in
+that there." Invoked the dataviz skill first for the form/color
+methodology (choosing-a-form.md, color-formula.md, marks-and-anatomy.md,
+palette.md all read directly rather than assumed) before writing any
+chart code.
+
+Scoped to the 4 pages that actually have real data to analyze
+(CloudWatch, X-Ray, Azure Monitor, Cloud Monitoring) - the other 10
+Observability pages (Prometheus/Datadog/ELK/OpenSearch/Loki/Fluent
+Bit/Fluentd/OpenTelemetry/Jaeger/Zipkin, added Round 80) only ever
+show connection status, never fetch live data (each tool's own query
+API is genuinely different, deliberately not built yet) - there is
+nothing there to chart yet, and building fake/placeholder data to
+satisfy "every sub page" would have violated this whole session's own
+established honesty-over-guessing posture. This limitation was
+communicated directly rather than silently worked around.
+
+Each of the 4 pages gained an "Analysis" section (stat tiles + a
+donut/pie breakdown + a bar chart), computed client-side from data the
+page already fetches - no new backend calls needed for any of this:
+  - CloudWatch: alarms by state (donut: OK/ALARM/INSUFFICIENT_DATA),
+    largest log groups by size (bar)
+  - X-Ray: traces by health (donut: OK/Error/Fault/Throttled),
+    slowest traces (bar)
+  - Azure Monitor: resource composition - Workspaces vs Application
+    Insights (donut), recent activity by status (donut), top
+    operations (bar)
+  - Cloud Monitoring: alert policies enabled vs disabled (donut),
+    uptime checks by resource type (bar)
+
+Per the dataviz skill's own choosing-a-form.md, a pie/donut is NOT the
+table's own default recommendation for part-to-whole (it recommends a
+stacked bar) - but the user asked for pie charts specifically, twice,
+and every actual use here is a genuinely low-cardinality (2-4 slice)
+composition, which is where a donut is least problematic; used donuts
+for composition/state breakdowns and bars for magnitude comparisons
+across named entities (log groups, operations, resource types),
+matching the skill's own "bar for magnitude, pie/donut only for small,
+real part-to-whole" reasoning rather than defaulting to pie
+everywhere.
+
+Colors follow the skill's color-formula exactly: state breakdowns
+(alarm state, trace health, activity status, enabled/disabled) use
+STATUS color assignment - reusing this app's own already-validated
+--viz-good/--viz-warning/--viz-critical/--viz-muted tokens (confirmed
+already in global.css, already used elsewhere - stat tiles, meters,
+timeline dots - this app had already onboarded the dataviz skill's own
+reference palette as CSS custom properties before this round). The one
+genuine nominal-categorical case (Workspaces vs Application Insights,
+2 slots) used --viz-series-1/--viz-series-2 and was run through the
+skill's own scripts/validate_palette.js against BOTH this app's real
+light surface (#eef2ff) and dark surface (#070b1a) rather than
+eyeballed - all checks pass in both modes (worst-pair CVD dE 26.5
+light / 27.3 dark, both far clear of the dE-8 target).
+
+New DonutChart.jsx fills the one real gap in this app's existing chart
+component set - BarChart.jsx/Meter.jsx/StatTile.jsx already existed
+(components/charts/, built in the app's very first commit) and are
+already in real use on the GitHub Analytics page, but no pie/donut
+component existed anywhere. Rather than inventing a divergent style,
+DonutChart.jsx was built to match BarChart's own established
+conventions exactly: native SVG <title> elements for hover (no custom
+tooltip/hover-state layer), plain <circle> stroke-dasharray segments
+(no hand-authored arc paths), --viz-* tokens for its data-ink. Every
+"Analysis" section reuses the pre-existing BarChart/StatTile
+components directly (via the same .stat-grid container Analytics.jsx
+already uses) rather than parallel bespoke ones.
+
+Two real mistakes caught and fixed during this round, worth recording
+plainly since it happened twice: a Write call to
+deployment-ui/src/components/charts/BarChart.jsx overwrote a real,
+pre-existing, already-in-use component (the same file/directory
+collision pattern as the observabilityApi.js mistake in Round 80,
+same root cause - writing to a path without checking it already
+existed and had real content first). Caught the same way: git status
+showed the file as modified rather than newly added. Reverted via git
+checkout, then rebuilt the Analysis sections to call the EXISTING
+BarChart.jsx/StatTile.jsx instead of freshly-written duplicates, and
+simplified the new DonutChart.jsx to match their established style
+rather than the more elaborate custom-tooltip version first written.
+The corrected lesson, stated for next time: check whether a
+plausible-sounding new file path already has real content BEFORE
+writing to it, every time - not just when a file feels obviously
+load-bearing.
+
+Verification performed:
+  - No backend changes this round - purely frontend (chart component +
+    4 page wirings + CSS), so no dotnet build was needed.
+  - `npm run lint` in deployment-ui/: fixed 8 new exhaustive-deps
+    warnings (useMemo depending on an inline `overview?.x || []`
+    fallback that created a fresh array reference every render) by
+    memoizing the base array extraction itself in all 4 pages: 0 new
+    warnings remaining after the fix.
+  - `npm run build` in deployment-ui/: succeeded.
+  - `node scripts/validate_palette.js` (dataviz skill): run twice
+    (light surface #eef2ff, dark surface #070b1a) against the one
+    genuine categorical color pair used - both passed every check.
+  - git status re-checked after each accidental-overwrite fix to
+    confirm the reverted files showed zero changes before staging.
+  - Live check against the deployed Render backend after the push:
+    /api/bootstrap healthy (HTTP 200).
+  - Could NOT verify against real AWS/Azure/GCP data in this
+    sandboxed session (same standing limitation as Round 80) - the
+    chart logic itself (grouping/counting/sorting already-fetched
+    arrays) is straightforward and low-risk regardless of what the
+    underlying API data looks like, but the underlying data it charts
+    is still unverified end-to-end.
+
+Files changed: deployment-ui/src/components/charts/DonutChart.jsx (new),
+deployment-ui/src/pages/CloudWatch.jsx, XRay.jsx, AzureMonitor.jsx,
+CloudMonitoring.jsx, deployment-ui/src/styles/global.css.
+Commit: 351cdae.
+
+Status: Complete, pushed, live-verified the backend is up. CloudWatch,
+X-Ray, Azure Monitor, and Cloud Monitoring each now show a real
+Analysis section (stat tiles, a donut/pie breakdown, a bar chart) built
+from already-fetched data, using this app's own existing, validated
+chart components and color tokens rather than a parallel new system.
+The other 10 Observability tools still have nothing to chart, stated
+plainly rather than faked - they'll gain analysis sections once (if)
+each gets its own real data integration.
