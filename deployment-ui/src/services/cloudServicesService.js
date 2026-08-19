@@ -33,6 +33,45 @@ export const scaleEcsService = async (cluster, service, desiredCount) => {
     return response.data;
 };
 
+// ================= ECS detail / tasks / logs / metrics / bulk scale / running image =================
+// Phase 2 of the multi-cloud infrastructure console - the fuller ECS
+// console beyond the desired-count scale above.
+
+export const getEcsServiceDetail = async (cluster, service) => {
+    const response = await api.get(`/ecs/${encodeURIComponent(cluster)}/${encodeURIComponent(service)}/detail`);
+    return response.data;
+};
+
+export const restartEcsService = async (cluster, service) => {
+    const response = await api.post(`/ecs/${encodeURIComponent(cluster)}/${encodeURIComponent(service)}/restart`);
+    return response.data;
+};
+
+export const stopEcsTask = async (cluster, taskId) => {
+    const response = await api.post(`/ecs/${encodeURIComponent(cluster)}/tasks/${encodeURIComponent(taskId)}/stop`);
+    return response.data;
+};
+
+export const bulkScaleEcsServices = async (services, desiredCount) => {
+    const response = await api.post("/ecs/scale/bulk", { services, desiredCount });
+    return response.data;
+};
+
+export const getEcsMetrics = async (cluster, service, rangeMinutes) => {
+    const response = await api.get(`/ecs/${encodeURIComponent(cluster)}/${encodeURIComponent(service)}/metrics`, { params: { rangeMinutes } });
+    return response.data;
+};
+
+export const getEcsTaskLogs = async (cluster, taskId, container, rangeMinutes) => {
+    const response = await api.get(`/ecs/${encodeURIComponent(cluster)}/tasks/${encodeURIComponent(taskId)}/logs`, { params: { container, rangeMinutes } });
+    return response.data;
+};
+
+export const getEcsRunningImage = async (cluster, service) => {
+    const response = await api.get(`/ecs/${encodeURIComponent(cluster)}/${encodeURIComponent(service)}/image`);
+    return response.data;
+};
+
 // ================= ECR =================
 
 export const getEcrRepositories = async () => {

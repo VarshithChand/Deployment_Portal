@@ -4,6 +4,8 @@ using System.Text;
 using Amazon;
 using Amazon.CloudWatch;
 using Amazon.CloudWatch.Model;
+using Amazon.CloudWatchLogs;
+using Amazon.CloudWatchLogs.Model;
 using Amazon.EC2;
 using Amazon.EC2.Model;
 using Amazon.ECR;
@@ -2342,6 +2344,450 @@ public class CloudServiceManagementService
         catch (Exception ex)
         {
             result.Error = CloudErrorSanitizer.Describe(ex, "GCP", "Compute Engine metrics");
+        }
+
+        return result;
+    }
+
+    // ================= ECS — service detail, tasks, logs, metrics, bulk scale, running image =================
+    //
+    // Phase 2 of the multi-cloud infrastructure console. Environment
+    // variables live on the task DEFINITION, not the running task instance
+    // (ECS has no per-task env API) - fetched once per service detail call
+    // and redacted before ever leaving this method, never the real value
+    // for anything that looks like a secret (section 12's "WITHOUT
+    // secrets"). Log line redaction (RedactLogLine below) is best-effort
+    // pattern matching, not exhaustive - stated plainly, matching this
+    // app's own posture on every other "can't be perfectly certain" piece.
+
+    private static readonly HashSet<string> SecretEnvKeyMarkers = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "SECRET", "PASSWORD", "PASSWD", "PWD", "TOKEN", "KEY", "CREDENTIAL", "CONNSTR", "CONNECTIONSTRING"
+    };
+
+    private static bool LooksLikeSecretKey(string key) =>
+        SecretEnvKeyMarkers.Any(marker => key.Contains(marker, StringComparison.OrdinalIgnoreCase));
+
+    private static readonly System.Text.RegularExpressions.Regex[] SecretLinePatterns =
+    {
+        new(@"AKIA[0-9A-Z]{16}", System.Text.RegularExpressions.RegexOptions.Compiled),
+        new(@"(?i)(password|passwd|secret|token|api[_-]?key)\s*[:=]\s*\S+", System.Text.RegularExpressions.RegexOptions.Compiled)
+    };
+
+    private static string RedactLogLine(string line)
+    {
+        foreach (var pattern in SecretLinePatterns)
+            line = pattern.Replace(line, "***redacted***");
+
+        return line;
+    }
+
+    public async Task<EcsServiceDetailDto> GetEcsServiceDetailAsync(UserAwsCredentials credentials, string? region, string cluster, string service)
+    {
+        var result = new EcsServiceDetailDto { Configured = credentials.IsConfigured, ClusterName = cluster, ServiceName = service };
+        var (ok, endpoint, error) = ResolveRegion(credentials, region);
+
+        if (!credentials.IsConfigured)
+            return result;
+
+        if (!ok)
+        {
+            result.Error = error;
+            return result;
+        }
+
+        try
+        {
+            using var client = new AmazonECSClient(BuildCredentials(credentials), endpoint);
+
+            var svcResponse = await client.DescribeServicesAsync(new DescribeServicesRequest { Cluster = cluster, Services = new List<string> { service } });
+            var svc = svcResponse.Services?.FirstOrDefault();
+
+            if (svc == null)
+            {
+                result.Error = $"Service \"{service}\" not found in cluster \"{cluster}\".";
+                return result;
+            }
+
+            result.Status = svc.Status;
+            result.DesiredCount = svc.DesiredCount ?? 0;
+            result.RunningCount = svc.RunningCount ?? 0;
+            result.PendingCount = svc.PendingCount ?? 0;
+            result.TaskDefinition = svc.TaskDefinition;
+            result.DeploymentStatus = svc.Deployments?.FirstOrDefault()?.RolloutState?.Value;
+
+            var envByContainer = new Dictionary<string, Dictionary<string, string>>();
+
+            if (!string.IsNullOrWhiteSpace(svc.TaskDefinition))
+            {
+                try
+                {
+                    var tdResponse = await client.DescribeTaskDefinitionAsync(new DescribeTaskDefinitionRequest { TaskDefinition = svc.TaskDefinition });
+
+                    foreach (var containerDef in tdResponse.TaskDefinition.ContainerDefinitions ?? new List<Amazon.ECS.Model.ContainerDefinition>())
+                    {
+                        var env = new Dictionary<string, string>();
+
+                        foreach (var kv in containerDef.Environment ?? new List<Amazon.ECS.Model.KeyValuePair>())
+                            env[kv.Name] = LooksLikeSecretKey(kv.Name) ? "***redacted***" : kv.Value;
+
+                        envByContainer[containerDef.Name] = env;
+                    }
+                }
+                catch
+                {
+                    // Best-effort - task detail is still useful without env vars.
+                }
+            }
+
+            var taskArns = (await client.ListTasksAsync(new Amazon.ECS.Model.ListTasksRequest { Cluster = cluster, ServiceName = service, MaxResults = 50 })).TaskArns
+                ?? new List<string>();
+
+            if (taskArns.Count > 0)
+            {
+                var tasksResponse = await client.DescribeTasksAsync(new Amazon.ECS.Model.DescribeTasksRequest { Cluster = cluster, Tasks = taskArns });
+
+                result.Tasks = (tasksResponse.Tasks ?? new List<Amazon.ECS.Model.Task>()).Select(t => new EcsTaskDto
+                {
+                    TaskArn = t.TaskArn,
+                    TaskId = t.TaskArn.Contains('/') ? t.TaskArn[(t.TaskArn.LastIndexOf('/') + 1)..] : t.TaskArn,
+                    LastStatus = t.LastStatus,
+                    HealthStatus = t.HealthStatus?.Value,
+                    StartedAt = t.StartedAt,
+                    Cpu = t.Cpu,
+                    Memory = t.Memory,
+                    AvailabilityZone = t.AvailabilityZone,
+                    Containers = (t.Containers ?? new List<Amazon.ECS.Model.Container>()).Select(c => new EcsContainerDto
+                    {
+                        Name = c.Name,
+                        Image = c.Image,
+                        ImageDigest = c.ImageDigest,
+                        LastStatus = c.LastStatus,
+                        HealthStatus = c.HealthStatus?.Value,
+                        ExitCode = c.ExitCode,
+                        Ports = c.NetworkBindings?.Select(nb => $"{nb.ContainerPort}->{nb.HostPort} {nb.Protocol}").ToList() ?? new List<string>(),
+                        Environment = envByContainer.TryGetValue(c.Name, out var env) ? env : new Dictionary<string, string>()
+                    }).ToList()
+                }).ToList();
+            }
+        }
+        catch (Exception ex)
+        {
+            result.Error = CloudErrorSanitizer.Describe(ex, "AWS", "ECS service detail");
+        }
+
+        return result;
+    }
+
+    // Stops one task - the service scheduler replaces it if the service's
+    // desired count still calls for one (ECS's normal reconciliation, not
+    // something this method has to orchestrate itself).
+    public async Task<CloudServiceActionResultDto> StopEcsTaskAsync(UserAwsCredentials credentials, string? region, string cluster, string taskId)
+    {
+        var (ok, endpoint, error) = ResolveRegion(credentials, region);
+
+        if (!ok)
+            return new CloudServiceActionResultDto { Success = false, Error = error ?? "AWS is not configured." };
+
+        try
+        {
+            using var client = new AmazonECSClient(BuildCredentials(credentials), endpoint);
+
+            await client.StopTaskAsync(new Amazon.ECS.Model.StopTaskRequest
+            {
+                Cluster = cluster,
+                Task = taskId,
+                Reason = "Stopped from the Deployment Portal"
+            });
+
+            return new CloudServiceActionResultDto { Success = true, Message = "Stop requested — the service scheduler will replace this task if its desired count still calls for one." };
+        }
+        catch (Exception ex)
+        {
+            return new CloudServiceActionResultDto { Success = false, Error = CloudErrorSanitizer.Describe(ex, "AWS", "ECS task stop") };
+        }
+    }
+
+    // Section 9's "Restart Tasks" - ECS's own mechanism for this is
+    // forcing a new deployment of the current task definition, which
+    // replaces every running task with a fresh one; there's no separate
+    // "restart" API call on ECS itself.
+    public async Task<CloudServiceActionResultDto> RestartEcsServiceAsync(UserAwsCredentials credentials, string? region, string cluster, string service)
+    {
+        var (ok, endpoint, error) = ResolveRegion(credentials, region);
+
+        if (!ok)
+            return new CloudServiceActionResultDto { Success = false, Error = error ?? "AWS is not configured." };
+
+        try
+        {
+            using var client = new AmazonECSClient(BuildCredentials(credentials), endpoint);
+
+            await client.UpdateServiceAsync(new UpdateServiceRequest
+            {
+                Cluster = cluster,
+                Service = service,
+                ForceNewDeployment = true
+            });
+
+            return new CloudServiceActionResultDto { Success = true, Message = "Restart requested — ECS is replacing every task with a fresh one from the current task definition." };
+        }
+        catch (Exception ex)
+        {
+            return new CloudServiceActionResultDto { Success = false, Error = CloudErrorSanitizer.Describe(ex, "AWS", "ECS service restart") };
+        }
+    }
+
+    // Section 11's bulk scaling - each service is scaled independently and
+    // its own success/failure is recorded, so a partial failure across a
+    // selected set never gets reported as a single pass/fail (section 27).
+    public async Task<EcsBulkActionResultDto> BulkScaleEcsServicesAsync(UserAwsCredentials credentials, string? region, List<EcsServiceRefDto> services, int desiredCount)
+    {
+        var result = new EcsBulkActionResultDto();
+
+        foreach (var svc in services)
+        {
+            var scaleResult = await ScaleEcsServiceAsync(credentials, region, svc.Cluster, svc.Service, desiredCount);
+
+            result.Results.Add(new EcsBulkActionItemResultDto
+            {
+                Cluster = svc.Cluster,
+                Service = svc.Service,
+                Success = scaleResult.Success,
+                Error = scaleResult.Error
+            });
+        }
+
+        return result;
+    }
+
+    public async Task<ResourceMetricsDto> GetEcsMetricsAsync(UserAwsCredentials credentials, string? region, string cluster, string service, int rangeMinutes)
+    {
+        var result = new ResourceMetricsDto { Configured = credentials.IsConfigured };
+        var (ok, endpoint, error) = ResolveRegion(credentials, region);
+
+        if (!credentials.IsConfigured)
+            return result;
+
+        if (!ok)
+        {
+            result.Error = error;
+            return result;
+        }
+
+        try
+        {
+            using var client = new AmazonCloudWatchClient(BuildCredentials(credentials), endpoint);
+
+            var end = DateTime.UtcNow;
+            var start = end.AddMinutes(-Math.Max(15, rangeMinutes));
+            var periodSeconds = rangeMinutes <= 60 ? 60 : rangeMinutes <= 360 ? 300 : rangeMinutes <= 1440 ? 900 : 3600;
+
+            var metrics = new (string Id, string MetricName, string Label, string Unit)[]
+            {
+                ("cpu", "CPUUtilization", "CPU Utilization", "%"),
+                ("mem", "MemoryUtilization", "Memory Utilization", "%")
+            };
+
+            var response = await client.GetMetricDataAsync(new GetMetricDataRequest
+            {
+                StartTime = start,
+                EndTime = end,
+                MetricDataQueries = metrics.Select(m => new MetricDataQuery
+                {
+                    Id = m.Id,
+                    MetricStat = new MetricStat
+                    {
+                        Metric = new Amazon.CloudWatch.Model.Metric
+                        {
+                            Namespace = "AWS/ECS",
+                            MetricName = m.MetricName,
+                            Dimensions = new List<Amazon.CloudWatch.Model.Dimension>
+                            {
+                                new() { Name = "ClusterName", Value = cluster },
+                                new() { Name = "ServiceName", Value = service }
+                            }
+                        },
+                        Period = periodSeconds,
+                        Stat = "Average"
+                    }
+                }).ToList()
+            });
+
+            foreach (var m in metrics)
+            {
+                var series = response.MetricDataResults?.FirstOrDefault(r => r.Id == m.Id);
+
+                result.Series.Add(new MetricSeriesDto
+                {
+                    Label = m.Label,
+                    Unit = m.Unit,
+                    Points = series?.Timestamps == null
+                        ? new List<MetricPointDto>()
+                        : series.Timestamps.Zip(series.Values, (t, v) => new MetricPointDto { Timestamp = t, Value = v })
+                            .OrderBy(p => p.Timestamp).ToList()
+                });
+            }
+        }
+        catch (Exception ex)
+        {
+            result.Error = CloudErrorSanitizer.Describe(ex, "AWS", "ECS metrics");
+        }
+
+        return result;
+    }
+
+    // A glance at recent log lines for one container of one task (last N
+    // minutes, matching this app's own "glance, not a full query builder"
+    // posture already used for CloudWatch/X-Ray/Azure Monitor), not a
+    // stream/time-range explorer. Resolves the log group/stream from the
+    // task definition's own awslogs configuration - ECS doesn't expose
+    // this any other way.
+    public async Task<EcsLogsDto> GetEcsTaskLogsAsync(UserAwsCredentials credentials, string? region, string cluster, string taskId, string containerName, int rangeMinutes)
+    {
+        var result = new EcsLogsDto { Configured = credentials.IsConfigured };
+        var (ok, endpoint, error) = ResolveRegion(credentials, region);
+
+        if (!credentials.IsConfigured)
+            return result;
+
+        if (!ok)
+        {
+            result.Error = error;
+            return result;
+        }
+
+        try
+        {
+            using var ecsClient = new AmazonECSClient(BuildCredentials(credentials), endpoint);
+
+            var taskResponse = await ecsClient.DescribeTasksAsync(new Amazon.ECS.Model.DescribeTasksRequest { Cluster = cluster, Tasks = new List<string> { taskId } });
+            var task = taskResponse.Tasks?.FirstOrDefault();
+
+            if (task == null)
+            {
+                result.Error = $"Task \"{taskId}\" not found.";
+                return result;
+            }
+
+            var tdResponse = await ecsClient.DescribeTaskDefinitionAsync(new DescribeTaskDefinitionRequest { TaskDefinition = task.TaskDefinitionArn });
+            var containerDef = tdResponse.TaskDefinition.ContainerDefinitions?.FirstOrDefault(c => c.Name == containerName);
+
+            if (containerDef?.LogConfiguration?.LogDriver?.Value != "awslogs")
+            {
+                result.Error = "This container isn't configured with the awslogs log driver - logs aren't reachable through this console.";
+                return result;
+            }
+
+            var options = containerDef.LogConfiguration.Options ?? new Dictionary<string, string>();
+            options.TryGetValue("awslogs-group", out var logGroup);
+            options.TryGetValue("awslogs-stream-prefix", out var streamPrefix);
+
+            if (string.IsNullOrWhiteSpace(logGroup) || string.IsNullOrWhiteSpace(streamPrefix))
+            {
+                result.Error = "This container's log configuration is missing awslogs-group or awslogs-stream-prefix.";
+                return result;
+            }
+
+            var shortTaskId = taskId.Contains('/') ? taskId[(taskId.LastIndexOf('/') + 1)..] : taskId;
+            var logStream = $"{streamPrefix}/{containerName}/{shortTaskId}";
+
+            using var logsClient = new AmazonCloudWatchLogsClient(BuildCredentials(credentials), endpoint);
+
+            var logsResponse = await logsClient.GetLogEventsAsync(new GetLogEventsRequest
+            {
+                LogGroupName = logGroup,
+                LogStreamName = logStream,
+                StartTime = DateTime.UtcNow.AddMinutes(-Math.Max(15, rangeMinutes)),
+                StartFromHead = false,
+                Limit = 500
+            });
+
+            result.Lines = (logsResponse.Events ?? new List<OutputLogEvent>())
+                .Select(e => new LogLineDto
+                {
+                    Timestamp = e.Timestamp ?? DateTime.UtcNow,
+                    Message = RedactLogLine(e.Message)
+                })
+                .OrderBy(l => l.Timestamp)
+                .ToList();
+        }
+        catch (Exception ex)
+        {
+            result.Error = CloudErrorSanitizer.Describe(ex, "AWS", "ECS task logs");
+        }
+
+        return result;
+    }
+
+    // Section 15's "which image/repository is running" - parses the task
+    // definition's container image URI; if it matches this account's ECR
+    // registry pattern, correlates it against a real DescribeImages call
+    // for that exact tag's digest/push time/size rather than guessing.
+    public async Task<EcsRunningImageDto> GetEcsRunningImageAsync(UserAwsCredentials credentials, string? region, string cluster, string service)
+    {
+        var result = new EcsRunningImageDto { Configured = credentials.IsConfigured };
+        var (ok, endpoint, error) = ResolveRegion(credentials, region);
+
+        if (!credentials.IsConfigured)
+            return result;
+
+        if (!ok)
+        {
+            result.Error = error;
+            return result;
+        }
+
+        try
+        {
+            using var ecsClient = new AmazonECSClient(BuildCredentials(credentials), endpoint);
+
+            var svcResponse = await ecsClient.DescribeServicesAsync(new DescribeServicesRequest { Cluster = cluster, Services = new List<string> { service } });
+            var svc = svcResponse.Services?.FirstOrDefault();
+
+            if (svc == null || string.IsNullOrWhiteSpace(svc.TaskDefinition))
+            {
+                result.Error = "Service or task definition not found.";
+                return result;
+            }
+
+            var tdResponse = await ecsClient.DescribeTaskDefinitionAsync(new DescribeTaskDefinitionRequest { TaskDefinition = svc.TaskDefinition });
+            var image = tdResponse.TaskDefinition.ContainerDefinitions?.FirstOrDefault()?.Image;
+
+            result.Image = image;
+
+            if (string.IsNullOrWhiteSpace(image))
+                return result;
+
+            var ecrMatch = System.Text.RegularExpressions.Regex.Match(image, @"^\d+\.dkr\.ecr\.[a-z0-9-]+\.amazonaws\.com/([^:]+):?(.*)$");
+
+            if (!ecrMatch.Success)
+                return result;
+
+            result.IsEcr = true;
+            result.Repository = ecrMatch.Groups[1].Value;
+            result.Tag = string.IsNullOrEmpty(ecrMatch.Groups[2].Value) ? "latest" : ecrMatch.Groups[2].Value;
+
+            using var ecrClient = new AmazonECRClient(BuildCredentials(credentials), endpoint);
+
+            var described = await ecrClient.DescribeImagesAsync(new Amazon.ECR.Model.DescribeImagesRequest
+            {
+                RepositoryName = result.Repository,
+                ImageIds = new List<Amazon.ECR.Model.ImageIdentifier> { new() { ImageTag = result.Tag } }
+            });
+
+            var found = described.ImageDetails?.FirstOrDefault();
+
+            if (found != null)
+            {
+                result.Digest = found.ImageDigest;
+                result.PushedAt = found.ImagePushedAt;
+                result.SizeBytes = found.ImageSizeInBytes;
+            }
+        }
+        catch (Exception ex)
+        {
+            result.Error = CloudErrorSanitizer.Describe(ex, "AWS", "ECS running image");
         }
 
         return result;

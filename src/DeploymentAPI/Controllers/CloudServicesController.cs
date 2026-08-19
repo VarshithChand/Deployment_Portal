@@ -201,6 +201,93 @@ public class CloudServicesController : ControllerBase
         return Ok(result);
     }
 
+    // ================= ECS detail / tasks / logs / metrics / bulk scale / running image =================
+    // Phase 2 of the multi-cloud infrastructure console - same self-
+    // service posture as every route above, no AdminGate.
+
+    [HttpGet("ecs/{cluster}/{service}/detail")]
+    public async Task<IActionResult> GetEcsServiceDetail(string cluster, string service, [FromQuery] string? region)
+    {
+        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var creds = await _settings.GetUserAwsCredentialsAsync(key);
+
+        return Ok(await _management.GetEcsServiceDetailAsync(creds, region, cluster, service));
+    }
+
+    [HttpPost("ecs/{cluster}/{service}/restart")]
+    public async Task<IActionResult> RestartEcsService(string cluster, string service, [FromQuery] string? region)
+    {
+        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var creds = await _settings.GetUserAwsCredentialsAsync(key);
+        var actor = await ResolveActorLabelAsync(key, creds);
+
+        var result = await _management.RestartEcsServiceAsync(creds, region, cluster, service);
+        AppendAuditLog(actor, "Restart", "ECS", $"{cluster}/{service}", result.Success, result.Error);
+
+        return Ok(result);
+    }
+
+    [HttpPost("ecs/{cluster}/tasks/{taskId}/stop")]
+    public async Task<IActionResult> StopEcsTask(string cluster, string taskId, [FromQuery] string? region)
+    {
+        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var creds = await _settings.GetUserAwsCredentialsAsync(key);
+        var actor = await ResolveActorLabelAsync(key, creds);
+
+        var result = await _management.StopEcsTaskAsync(creds, region, cluster, taskId);
+        AppendAuditLog(actor, "StopTask", "ECS", $"{cluster}/{taskId}", result.Success, result.Error);
+
+        return Ok(result);
+    }
+
+    [HttpPost("ecs/scale/bulk")]
+    public async Task<IActionResult> BulkScaleEcs([FromBody] EcsBulkScaleRequestDto request, [FromQuery] string? region)
+    {
+        if (request.Services == null || request.Services.Count == 0)
+            return BadRequest("At least one service is required.");
+
+        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var creds = await _settings.GetUserAwsCredentialsAsync(key);
+        var actor = await ResolveActorLabelAsync(key, creds);
+
+        var result = await _management.BulkScaleEcsServicesAsync(creds, region, request.Services, request.DesiredCount);
+
+        foreach (var item in result.Results)
+            AppendAuditLog(actor, $"BulkScale to {request.DesiredCount}", "ECS", $"{item.Cluster}/{item.Service}", item.Success, item.Error);
+
+        return Ok(result);
+    }
+
+    [HttpGet("ecs/{cluster}/{service}/metrics")]
+    public async Task<IActionResult> GetEcsMetrics(string cluster, string service, [FromQuery] string? region, [FromQuery] int rangeMinutes = 60)
+    {
+        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var creds = await _settings.GetUserAwsCredentialsAsync(key);
+
+        return Ok(await _management.GetEcsMetricsAsync(creds, region, cluster, service, rangeMinutes));
+    }
+
+    [HttpGet("ecs/{cluster}/tasks/{taskId}/logs")]
+    public async Task<IActionResult> GetEcsTaskLogs(string cluster, string taskId, [FromQuery] string container, [FromQuery] string? region, [FromQuery] int rangeMinutes = 30)
+    {
+        if (string.IsNullOrWhiteSpace(container))
+            return BadRequest("container is required.");
+
+        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var creds = await _settings.GetUserAwsCredentialsAsync(key);
+
+        return Ok(await _management.GetEcsTaskLogsAsync(creds, region, cluster, taskId, container, rangeMinutes));
+    }
+
+    [HttpGet("ecs/{cluster}/{service}/image")]
+    public async Task<IActionResult> GetEcsRunningImage(string cluster, string service, [FromQuery] string? region)
+    {
+        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var creds = await _settings.GetUserAwsCredentialsAsync(key);
+
+        return Ok(await _management.GetEcsRunningImageAsync(creds, region, cluster, service));
+    }
+
     // ================= ECR =================
 
     [HttpGet("ecr")]
