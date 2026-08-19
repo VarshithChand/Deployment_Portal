@@ -1072,7 +1072,7 @@ public class CloudStatusService
 
                 if (!response.IsSuccessStatusCode)
                 {
-                    result.Error = $"Unable to reach Azure for resource discovery ({(int)response.StatusCode}).";
+                    result.Error = await DescribeArmErrorAsync(response);
                     return result;
                 }
 
@@ -1117,5 +1117,39 @@ public class CloudStatusService
         }
 
         return result;
+    }
+
+    // ARM's own error envelope ({"error": {"code": "AuthorizationFailed",
+    // "message": "The client '...' does not have authorization to perform
+    // action '...' over scope '...'..."}}) is almost always specific enough
+    // to self-diagnose - a 403 here overwhelmingly means the App
+    // Registration authenticated fine (see GetAzureAccessTokenAsync) but
+    // has no RBAC role assignment on the subscription at all, which is a
+    // completely separate step from creating the App Registration/secret
+    // in the first place (Azure AD identity vs. Azure RBAC authorization
+    // are two different systems). Same reasoning as GetAzureAccessTokenAsync's
+    // own fix: read the real body instead of reducing it to a bare status
+    // code.
+    private static async Task<string> DescribeArmErrorAsync(HttpResponseMessage response)
+    {
+        var body = await response.Content.ReadAsStringAsync();
+
+        try
+        {
+            var error = JObject.Parse(body)["error"];
+            var code = error?["code"]?.ToString();
+            var message = error?["message"]?.ToString();
+
+            if (!string.IsNullOrWhiteSpace(message))
+                return string.IsNullOrWhiteSpace(code) ? message : $"{code}: {message}";
+        }
+        catch
+        {
+            // Fall through to the raw body below.
+        }
+
+        return !string.IsNullOrWhiteSpace(body)
+            ? body
+            : $"Azure returned {(int)response.StatusCode} {response.StatusCode}.";
     }
 }
