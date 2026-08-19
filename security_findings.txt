@@ -10455,3 +10455,183 @@ plainly: unverified against a real Docker Hub/GHCR account in this
 sandboxed session - if a real failure still shows something unhelpful,
 that message itself is now the actual lead to chase and worth
 reporting back.
+
+==================================================
+ROUND 80 - FEATURE: OBSERVABILITY SIDEBAR GROUP -
+4 REAL CSP INTEGRATIONS + 10 CONNECTABLE TOOLS
+==================================================
+Date: 2026-08-19
+Trigger: a reference image titled "OBSERVABILITY" listing 14 tools
+across three categories (Monitoring: Prometheus/CloudWatch/Azure
+Monitor/Cloud Monitoring/Datadog; Logging: ELK/OpenSearch/Loki/Fluent
+Bit/Fluentd; Tracing: OpenTelemetry/Jaeger/Zipkin/AWS X-Ray), with the
+ask: "create an monitering page in side bar just create the pages for
+other's for csp's connect them." Scope confirmed directly with the
+user via two rounds of AskUserQuestion before writing any code, given
+how large and how many real architectural decisions this spans:
+  1. Which CSP-native tools get REAL live connections this round
+     (reusing this app's already-working AWS/Azure credentials) versus
+     an honest "not built yet" placeholder like GCP's own Cloud
+     Services page already uses elsewhere: user chose ALL FOUR
+     (CloudWatch, AWS X-Ray, Azure Monitor, and GCP Cloud Monitoring -
+     including GCP, which needed genuinely new work since no GCP
+     monitoring API was used anywhere in this app before this round).
+  2. For the other 10 tools, each a separate self-hosted/third-party
+     service needing its own credential (same shape as Docker Hub/
+     GHCR/JFrog in Container Registry): user chose to build real
+     credential forms for all 10 now, not defer them.
+
+Part 1 - 4 real CSP-native integrations (new ObservabilityService.cs):
+  - CloudWatch: alarms + log groups in one call, via new
+    AWSSDK.CloudWatch/AWSSDK.CloudWatchLogs NuGet packages (verified
+    they didn't already exist in the project's AWS SDK reference list
+    before adding them) - same AWSCredentials/BuildCredentials/region-
+    resolution plumbing every other AWS feature in this app already
+    uses.
+  - AWS X-Ray: trace summaries from the last 6 hours (GetTraceSummariesAsync
+    with a bounded time window - X-Ray's own API requires one), via new
+    AWSSDK.XRay package.
+  - Azure Monitor: Log Analytics Workspaces + Application Insights
+    components are NOT re-fetched - they're pulled straight out of the
+    account-wide ARM resource inventory Cloud Services' own Azure page
+    already builds (GetAzureResourceInventoryAsync, Round 74), since
+    both resource types were already in that inventory's own label
+    dictionary. A new, separate call hits ARM's own Activity Log API
+    (Microsoft.Insights/eventtypes/management/values) for a 24h recent-
+    activity feed, which the generic resource inventory has no way to
+    cover (it's an event stream, not a resource) - if that one call
+    fails independently, the already-loaded workspace/Insights data is
+    still shown rather than being discarded.
+  - GCP Cloud Monitoring: alert policies + uptime checks, reusing the
+    exact same service-account JWT-bearer OAuth2 exchange
+    (GetGcpAccessTokenAsync) Artifact Registry already built - that
+    method's access modifier changed from private to internal (same
+    "internal, not private, so another service in this assembly can
+    reuse it" pattern already used for GetAzureAccessTokenAsync) so
+    ObservabilityService could call it without duplicating the JWT
+    signing logic. Same broad cloud-platform OAuth scope Artifact
+    Registry already requests already covers Cloud Monitoring's read
+    APIs, so no new scope was needed.
+
+Part 2 - 10 connectable standalone tools (Prometheus/Datadog/ELK/
+OpenSearch/Loki/Fluent Bit/Fluentd/OpenTelemetry/Jaeger/Zipkin):
+Each gets a real, working credential connection - NOT ten new bespoke
+credential DTOs/backend methods. Investigated first (via a research
+subagent) whether Harbor/Nexus's existing generic host-credential
+mechanism (PortalHostCredentials: HostUrl/Username/Password, stored as
+a provider-keyed dictionary in SettingsService, already fully generic
+by provider string with zero per-provider backend code) could be
+reused as-is - confirmed yes, zero backend service-layer changes
+needed for 10 more provider keys. HostCredentialLoginSection.jsx
+(previously hardcoded to Container Registry's own Harbor/Nexus calls)
+gained optional statusFn/saveFn/clearFn props, defaulting to those
+exact existing calls (zero behavior change for Harbor/Nexus), so it
+could be reused for these 10 with a different set of calls instead of
+forking a near-identical component - the same injectable-function
+pattern PortalRegistryLoginSection already used for Azure DevOps/
+Docker Hub/GHCR. A live data view for any of these 10 isn't built -
+each tool's own query/metrics API is genuinely different (PromQL vs.
+Datadog's REST API vs. Elasticsearch's query DSL vs. Loki's LogQL vs.
+...), so there's no single generic page the way the credential storage
+itself is generic - an honest, real, connectable page with a "not
+built yet" data view once connected, same posture GitLab/Bitbucket
+already use in this app for a real feature gap.
+
+A real mistake caught and fixed during this round, worth recording
+plainly: the new backend routes were originally placed at
+api/observability/..., which turned out to already belong to
+HostingObservabilityController.cs - a completely unrelated, pre-
+existing, super-admin-only feature (the portal's own frontend/backend/
+database health dashboard, reached via Settings → Hosting
+Observability). Caught via git status showing deployment-ui/src/api/
+observabilityApi.js as modified rather than newly added - a Write call
+had overwritten that already-existing file's real content (a 2-line
+AdminGate comment) without reading it first, in violation of this
+session's own tool-safety convention. Fixed by reverting that file via
+git checkout, renaming the new feature's own routes to
+api/observabilitytools/... instead, and creating a distinctly-named
+deployment-ui/src/api/observabilityToolsApi.js rather than reusing
+the collided path - both controllers' own comments now cross-reference
+this so a future reader isn't left wondering why two "Observability"
+things exist under different route prefixes.
+
+Part 3 - Sidebar/navigation wiring: new "Observability" group (14
+children, following the exact flat-children pattern Container
+Registry's own group already established) inserted right after
+Container Registry in Sidebar.jsx; 14 new hand-drawn icons (geometric
+shapes only - rect/circle/line/polygon/polyline, no curve paths, same
+convention every existing icon in this file follows) plus one group
+icon, each checked against its nearest neighbors for a genuinely
+distinct silhouette (e.g. FluentBitIcon/FluentdIcon are both diamond
+"droplets" but one outlined/small and one filled/larger, matching the
+same "same family, still distinguishable" reasoning
+AzureDevOpsBranchesIcon/PullRequestIcon already established for their
+own two-node shapes); 14 new tab keys added to NavigationContext's
+TABS whitelist; 14 new lazy imports/routes in App.jsx.
+
+Verification performed:
+  - dotnet restore, then dotnet build (isolated scratchpad output
+    dir), specifically BEFORE writing any code depending on the 3 new
+    AWS SDK packages, to fail fast on any package resolution issue
+    rather than discovering it after writing a few hundred lines
+    against types that might not exist. 0 errors on every subsequent
+    build, same 2-3 pre-existing warnings every prior round has seen.
+    One real compile error caught and fixed along the way (CloudWatch
+    LogGroup.CreationTime is already a DateTime, not a Unix-epoch
+    long, contrary to the initial assumption) - confirms the AWS SDK
+    property names used elsewhere were checked against the compiler,
+    not just assumed.
+  - npm run lint/npm run build in deployment-ui/: one new warning
+    (HostCredentialLoginSection's useEffect missing statusFn from its
+    dependency array) - confirmed this exactly mirrors an already-
+    accepted identical warning on PortalRegistryLoginSection.jsx, not
+    a new class of problem.
+  - Grepped the whole Controllers/ folder after the route rename to
+    confirm exactly one controller now claims api/observability and
+    exactly one claims api/observabilitytools - no remaining collision.
+  - git status re-checked after the fix to confirm
+    deployment-ui/src/api/observabilityApi.js shows zero changes
+    (fully reverted) before staging anything.
+  - Live check against the deployed Render backend after the push:
+    /api/bootstrap healthy (HTTP 200).
+  - Could NOT exercise ANY of the 4 real CSP integrations against a
+    real AWS/Azure/GCP account in this sandboxed session (same
+    standing limitation as every cloud-provider round this session) -
+    this is the least-verified integration in this app to date by
+    sheer surface area (4 separate live API integrations built in one
+    round). Recommend testing CloudWatch and X-Ray first (both reuse
+    already-verified AWS credential plumbing), then Azure Monitor
+    (partially reuses already-verified Round 74 code), then GCP Cloud
+    Monitoring (the newest GCP surface, most worth double-checking).
+
+Files changed: src/DeploymentAPI/DeploymentAPI.csproj,
+src/DeploymentAPI/Program.cs, src/DeploymentAPI/Helpers/CredentialGate.cs,
+src/DeploymentAPI/Services/CloudServiceManagementService.cs,
+src/DeploymentAPI/DTOs/ObservabilityDtos.cs (new),
+src/DeploymentAPI/Services/ObservabilityService.cs (new),
+src/DeploymentAPI/Controllers/ObservabilityController.cs (new),
+deployment-ui/src/App.jsx, deployment-ui/src/context/NavigationContext.jsx,
+deployment-ui/src/components/layout/Sidebar.jsx,
+deployment-ui/src/components/layout/SidebarIcons.jsx,
+deployment-ui/src/components/settings/CredentialsView.jsx,
+deployment-ui/src/components/settings/credentials/HostCredentialLoginSection.jsx,
+deployment-ui/src/api/observabilityToolsApi.js (new),
+deployment-ui/src/services/observabilityService.js (new),
+deployment-ui/src/components/observability/ObservabilityHostView.jsx (new),
+deployment-ui/src/pages/CloudWatch.jsx, XRay.jsx, AzureMonitor.jsx,
+CloudMonitoring.jsx, Prometheus.jsx, Datadog.jsx, Elk.jsx, OpenSearch.jsx,
+Loki.jsx, FluentBit.jsx, Fluentd.jsx, OpenTelemetry.jsx, Jaeger.jsx,
+Zipkin.jsx (all new).
+Commit: 579d5ac.
+
+Status: Complete, pushed, live-verified the backend is up. The
+Sidebar has a new Observability group with 14 real, navigable pages -
+4 with genuine live data from this session's existing AWS/Azure/GCP
+credentials, 10 with real, working credential connections and an
+honest "not built yet" for their data view specifically. Standing
+limitation, stated as plainly as possible: this is the largest single
+amount of unverified-against-real-accounts surface shipped in one
+round this session - all 4 CSP integrations are grounded in each
+provider's documented API shape, not in end-to-end verification
+against live AWS/Azure/GCP accounts, and are worth testing and
+reporting back on in the order noted above.
