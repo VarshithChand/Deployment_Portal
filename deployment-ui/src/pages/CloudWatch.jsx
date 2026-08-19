@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { getCloudWatchOverview } from "../services/observabilityService";
 import AWS_REGIONS from "../data/awsRegions";
@@ -8,8 +8,27 @@ import PageLayout from "../components/layout/PageLayout";
 import ComboBox from "../components/common/ComboBox";
 import Pagination from "../components/common/Pagination";
 import StateBadge from "../components/cloudServices/StateBadge";
+import StatTile from "../components/charts/StatTile";
+import DonutChart from "../components/charts/DonutChart";
+import BarChart from "../components/charts/BarChart";
 
 const PAGE_SIZE = 10;
+
+// Alarm state -> the app's own status color, not a hand-picked hue - OK is
+// good, ALARM is critical, INSUFFICIENT_DATA is a real "can't tell" state
+// (warning, not silently folded into either extreme), anything else falls
+// to the neutral/unknown token.
+function alarmStateColor(state) {
+
+    const value = (state || "").toLowerCase();
+
+    if (value === "ok") return "var(--viz-good)";
+    if (value === "alarm") return "var(--viz-critical)";
+    if (value === "insufficient_data") return "var(--viz-warning)";
+
+    return "var(--viz-muted)";
+
+}
 
 // Observability's AWS CloudWatch page - real data, reusing this
 // session's existing AWS credential exactly like Cloud Services' own AWS
@@ -45,8 +64,35 @@ export default function CloudWatch() {
         load(region || null);
     }
 
-    const alarms = overview?.alarms || [];
-    const logGroups = overview?.logGroups || [];
+    const alarms = useMemo(() => overview?.alarms || [], [overview]);
+    const logGroups = useMemo(() => overview?.logGroups || [], [overview]);
+
+    const alarmStateBreakdown = useMemo(() => {
+
+        const counts = new Map();
+
+        alarms.forEach((a) => {
+            const state = a.state || "UNKNOWN";
+            counts.set(state, (counts.get(state) || 0) + 1);
+        });
+
+        return Array.from(counts.entries()).map(([label, value]) => ({
+            label, value, color: alarmStateColor(label)
+        }));
+
+    }, [alarms]);
+
+    const topLogGroupsBySize = useMemo(() => {
+
+        return [...logGroups]
+            .filter((g) => g.storedBytes != null)
+            .sort((a, b) => b.storedBytes - a.storedBytes)
+            .slice(0, 5)
+            .map((g) => ({ label: g.name, value: g.storedBytes, detail: formatBytes(g.storedBytes) }));
+
+    }, [logGroups]);
+
+    const totalStoredBytes = logGroups.reduce((sum, g) => sum + (g.storedBytes || 0), 0);
 
     const {
         page: alarmsPage, setPage: setAlarmsPage, pageCount: alarmsPageCount, pageItems: alarmsPageItems,
@@ -100,7 +146,34 @@ export default function CloudWatch() {
 
                     <>
 
-                        <h3 className="settings-subhead" style={{ marginTop: 0 }}>Alarms</h3>
+                        <h3 className="settings-subhead" style={{ marginTop: 0 }}>Analysis</h3>
+
+                        <div className="stat-grid" style={{ marginBottom: "18px" }}>
+                            <StatTile label="Total alarms" value={alarms.length} />
+                            <StatTile
+                                label="In alarm"
+                                value={alarms.filter((a) => (a.state || "").toLowerCase() === "alarm").length}
+                                tone={alarms.some((a) => (a.state || "").toLowerCase() === "alarm") ? "critical" : "default"}
+                            />
+                            <StatTile label="Log groups" value={logGroups.length} />
+                            <StatTile label="Total log volume" value={formatBytes(totalStoredBytes)} />
+                        </div>
+
+                        <div className="chart-analysis-grid">
+
+                            <div className="chart-analysis-card">
+                                <h4>Alarms by State</h4>
+                                <DonutChart data={alarmStateBreakdown} />
+                            </div>
+
+                            <div className="chart-analysis-card">
+                                <h4>Largest Log Groups</h4>
+                                <BarChart data={topLogGroupsBySize} showValues formatValue={formatBytes} />
+                            </div>
+
+                        </div>
+
+                        <h3 className="settings-subhead" style={{ marginTop: "24px" }}>Alarms</h3>
 
                         {alarms.length === 0 ? (
 

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { getXRayOverview } from "../services/observabilityService";
 import AWS_REGIONS from "../data/awsRegions";
@@ -6,8 +6,18 @@ import usePagination from "../hooks/usePagination";
 import PageLayout from "../components/layout/PageLayout";
 import ComboBox from "../components/common/ComboBox";
 import Pagination from "../components/common/Pagination";
+import StatTile from "../components/charts/StatTile";
+import DonutChart from "../components/charts/DonutChart";
+import BarChart from "../components/charts/BarChart";
 
 const PAGE_SIZE = 10;
+
+function traceHealth(trace) {
+    if (trace.hasFault) return "Fault";
+    if (trace.hasError) return "Error";
+    if (trace.hasThrottle) return "Throttled";
+    return "OK";
+}
 
 function TraceFlags({ trace }) {
 
@@ -16,6 +26,20 @@ function TraceFlags({ trace }) {
     if (trace.hasThrottle) return <span className="badge badge-secondary">Throttled</span>;
 
     return <span className="badge badge-success">OK</span>;
+
+}
+
+// Same status color job as CloudWatch's own alarm states - OK is good,
+// Error is warning, Fault is critical (a fault is a 5xx/server-side
+// failure, more severe than a 4xx client error), Throttled is neutral
+// (rate-limited, not necessarily broken).
+function healthColor(health) {
+
+    if (health === "OK") return "var(--viz-good)";
+    if (health === "Error") return "var(--viz-warning)";
+    if (health === "Fault") return "var(--viz-critical)";
+
+    return "var(--viz-muted)";
 
 }
 
@@ -51,7 +75,44 @@ export default function XRay() {
         load(region || null);
     }
 
-    const traces = overview?.traces || [];
+    const traces = useMemo(() => overview?.traces || [], [overview]);
+
+    const healthBreakdown = useMemo(() => {
+
+        const counts = new Map();
+
+        traces.forEach((t) => {
+            const health = traceHealth(t);
+            counts.set(health, (counts.get(health) || 0) + 1);
+        });
+
+        return Array.from(counts.entries()).map(([label, value]) => ({
+            label, value, color: healthColor(label)
+        }));
+
+    }, [traces]);
+
+    const slowestTraces = useMemo(() => {
+
+        return [...traces]
+            .filter((t) => t.responseTime != null)
+            .sort((a, b) => b.responseTime - a.responseTime)
+            .slice(0, 5)
+            .map((t) => ({
+                label: t.url || t.id.slice(0, 12),
+                value: t.responseTime * 1000,
+                detail: `${(t.responseTime * 1000).toFixed(0)}ms`
+            }));
+
+    }, [traces]);
+
+    const errorRate = traces.length > 0
+        ? (traces.filter((t) => t.hasError || t.hasFault).length / traces.length * 100).toFixed(1)
+        : "0.0";
+
+    const avgResponseMs = traces.length > 0
+        ? (traces.reduce((sum, t) => sum + (t.responseTime || 0), 0) / traces.length * 1000).toFixed(0)
+        : "0";
 
     const { page, setPage, pageCount, pageItems, totalCount, startIndex, endIndex } = usePagination(traces, PAGE_SIZE);
 
@@ -100,6 +161,34 @@ export default function XRay() {
                 ) : (
 
                     <>
+
+                        <h3 className="settings-subhead" style={{ marginTop: 0 }}>Analysis</h3>
+
+                        <div className="stat-grid" style={{ marginBottom: "18px" }}>
+                            <StatTile label="Total traces" value={traces.length} />
+                            <StatTile
+                                label="Error rate"
+                                value={`${errorRate}%`}
+                                tone={Number(errorRate) > 0 ? "critical" : "good"}
+                            />
+                            <StatTile label="Avg response time" value={`${avgResponseMs}ms`} />
+                        </div>
+
+                        <div className="chart-analysis-grid">
+
+                            <div className="chart-analysis-card">
+                                <h4>Traces by Health</h4>
+                                <DonutChart data={healthBreakdown} />
+                            </div>
+
+                            <div className="chart-analysis-card">
+                                <h4>Slowest Traces</h4>
+                                <BarChart data={slowestTraces} showValues formatValue={(v) => `${v.toFixed(0)}ms`} />
+                            </div>
+
+                        </div>
+
+                        <h3 className="settings-subhead" style={{ marginTop: "24px" }}>Recent Traces</h3>
 
                         <div className="table-scroll">
 
