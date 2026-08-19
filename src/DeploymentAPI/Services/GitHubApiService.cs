@@ -842,12 +842,24 @@ public class GitHubApiService
     //===========================================================
 
     // No separate credential - reuses this session's already-connected
-    // GitHub token, same as GetArtifacts above. GitHub returns 404 for a
-    // repo with code scanning not enabled and 403 for a token missing the
-    // security_events/repo scope this endpoint needs - both surfaced as a
-    // friendly Error rather than the generic DescribeGitHubError fallback,
-    // since "not enabled"/"missing scope" are specific, actionable states
-    // here that a raw 404/403 message wouldn't convey on their own.
+    // GitHub token, same as GetArtifacts above.
+    //
+    // GitHub deliberately returns 404 (not 403) for this endpoint both
+    // when code scanning has genuinely never been configured for the
+    // repo AND when the token simply lacks the "security_events" scope
+    // needed to read it - the same privacy-by-obscurity 404 pattern this
+    // app already documents for private-repo visibility elsewhere
+    // (avoids confirming a private repo's code-scanning status to an
+    // unauthorized caller). This method used to treat every 404 as
+    // "not enabled" via HttpClientHelper.GetAsync's pre-built generic
+    // message, which is exactly the failure mode a real user hit: a
+    // scope-insufficient token got mislabeled as "you haven't turned
+    // this on" when scanning was actually already running. Fixed by
+    // calling the HttpClient directly for this one call (bypassing
+    // HttpClientHelper.GetAsync, which discards the raw body before this
+    // method ever sees it) so the real GitHub response body can be
+    // inspected and both real possibilities are named rather than
+    // asserting confidently which one it is.
     public Task<CodeQlOverviewDto> GetCodeQlAlertsAsync(bool forceRefresh = false) =>
         GetCachedAsync($"codeql:{_auth.Owner}/{_auth.Repository}", async () =>
         {
@@ -861,7 +873,43 @@ public class GitHubApiService
 
             try
             {
-                var json = await HttpClientHelper.GetAsync(client, url);
+                var response = await client.GetAsync(url);
+
+                if (response.StatusCode == HttpStatusCode.NotFound)
+                {
+                    var body = await response.Content.ReadAsStringAsync();
+                    string? githubMessage = null;
+
+                    try { githubMessage = JObject.Parse(body)["message"]?.ToString(); }
+                    catch { /* fall through to the generic wording below */ }
+
+                    result.Error = string.IsNullOrWhiteSpace(githubMessage)
+                        ? "GitHub isn't returning any code scanning alerts for this repository. Either code " +
+                          "scanning genuinely isn't enabled yet (Settings → Code security → Code scanning on " +
+                          "GitHub), or this connected GitHub token is missing the \"security_events\" scope " +
+                          "needed to read them — GitHub returns the exact same response for both cases, so " +
+                          "if you've already enabled scanning, check the token's scope in Settings."
+                        : $"GitHub: {githubMessage}. If you've already enabled code scanning, this could also " +
+                          "mean the connected GitHub token is missing the \"security_events\" scope needed to " +
+                          "read alerts — check it in Settings.";
+
+                    return result;
+                }
+
+                if (response.StatusCode == HttpStatusCode.Forbidden)
+                {
+                    result.Error = "This GitHub token doesn't have permission to read code scanning alerts — " +
+                        "it needs the \"security_events\" scope (or \"repo\" for a classic token).";
+                    return result;
+                }
+
+                if (!response.IsSuccessStatusCode)
+                {
+                    result.Error = await HttpClientHelper.BuildFriendlyMessageAsync(response);
+                    return result;
+                }
+
+                var json = await response.Content.ReadAsStringAsync();
                 var alerts = JArray.Parse(json);
 
                 result.Alerts = alerts.Select(a => new CodeQlAlertDto
@@ -881,16 +929,6 @@ public class GitHubApiService
                 result.ErrorCount = result.Alerts.Count(x => x.Severity == "error");
                 result.WarningCount = result.Alerts.Count(x => x.Severity == "warning");
                 result.NoteCount = result.Alerts.Count(x => x.Severity == "note");
-            }
-            catch (HttpRequestException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
-            {
-                result.Error = "Code scanning isn't enabled for this repository. Enable CodeQL analysis " +
-                    "under the repo's Settings → Code security → Code scanning to see results here.";
-            }
-            catch (HttpRequestException ex) when (ex.StatusCode == HttpStatusCode.Forbidden)
-            {
-                result.Error = "This GitHub token doesn't have permission to read code scanning alerts — " +
-                    "it needs the \"security_events\" scope (or \"repo\" for a classic token).";
             }
             catch (HttpRequestException ex)
             {
