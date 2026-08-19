@@ -10062,3 +10062,93 @@ together), and every provider section inside either one hides itself
 completely rather than showing an empty placeholder when that
 provider isn't configured. Standing limitation, stated plainly:
 unverified in a real browser in this sandboxed session.
+
+==================================================
+ROUND 76 - BUGFIX: AZURE SIGN-IN NOW SURFACES ITS
+REAL ERROR INSTEAD OF A GENERIC MESSAGE
+==================================================
+Date: 2026-08-19
+Trigger: two screenshots - Cloud Services' new Azure page (Round 74)
+showing "Azure sign-in failed — check the tenant, client ID, and
+client secret." under Services You're Using, and the user's own real
+Azure Portal App Registration overview (Application/client ID,
+Directory/tenant ID, "Client credentials: 0 certificate, 1 secret"
+already present) - with the message "i had already given but the
+error is comming."
+
+Root cause: GetAzureAccessTokenAsync (CloudStatusService.cs), the one
+shared AAD client-credentials token exchange every Azure feature in
+this app goes through (Web App status, ACR, and Round 74's new Cloud
+Services inventory), discarded the real response body on a failed
+token request and just returned null. Every caller then had no real
+information to work with beyond "it failed," so each one showed the
+exact same generic, static message regardless of the actual cause -
+a wrong Tenant ID, a wrong Client ID, an expired secret, or (the
+single most common real-world mistake, given the screenshot showed a
+secret already existed) pasting Azure Portal's Secret ID column
+instead of its Value column, since Value is only ever shown once at
+creation time. This is the identical shape of bug already fixed for
+Azure DevOps in an earlier round - a diagnostic layer that had no way
+to tell the user anything more specific than "something went wrong."
+
+Fixed the same way that one was: GetAzureAccessTokenAsync now throws
+an HttpRequestException carrying AAD's own error_description (falling
+back to its error field, then the raw response body) instead of
+silently returning null. No changes were needed anywhere else -
+GetAzureWebAppStatusAsync, GetAzureResourceInventoryAsync, and
+CloudServiceManagementService's GetAcrAccessTokenAsync (and its own
+callers) all already wrap their calls in a try/catch that hands the
+exception to CloudErrorSanitizer.Describe, which already has an
+HttpRequestException branch (added for the Azure DevOps fix) that
+surfaces .Message verbatim. GetAzureIdentityLabelAsync's own existing
+broad catch-and-return-null (a deliberately best-effort, non-critical
+lookup) swallows the new exception exactly as it did the old null
+return, unchanged.
+
+Also added a hint directly under the Client Secret field in Settings
+-> Credentials -> Azure, since the Secret ID/Value mix-up is common
+enough to warn about proactively rather than only after a failed
+sign-in: "Use the secret's Value, not its Secret ID... If you saved
+the Secret ID by mistake, create a new secret and copy the Value
+instead." Also updated that section's own intro paragraph, which
+still only mentioned Container Registry as needing a Subscription ID
+- Cloud Services' own Azure page needs one too as of Round 74, and the
+old text didn't mention it.
+
+Verification performed:
+  - `dotnet build` (isolated scratchpad output dir): 0 errors, same 2
+    pre-existing warnings every prior round has seen.
+  - Grepped every remaining call site of GetAzureAccessTokenAsync
+    (GetAzureWebAppStatusAsync, GetAzureIdentityLabelAsync,
+    GetAzureResourceInventoryAsync, and CloudServiceManagementService's
+    GetAcrAccessTokenAsync) to confirm each already has a try/catch (or,
+    for the identity-label lookup, an intentionally silent one) that
+    correctly handles the new throw-instead-of-null-return contract -
+    not just the one call site the screenshot happened to show.
+  - `npm run lint`/`npm run build` in deployment-ui/: no new warnings,
+    build succeeded.
+  - Live check against the deployed Render backend after the push:
+    /api/bootstrap healthy (HTTP 200).
+  - Could NOT reproduce the original sign-in failure in this sandboxed
+    session (no real Azure App Registration/tenant available here) -
+    same standing limitation as the analogous Azure DevOps fix. This
+    is grounded in reading the actual code path that produced the
+    generic message, not in reproducing and confirming the fix
+    resolves it end to end.
+
+Files changed: src/DeploymentAPI/Services/CloudStatusService.cs,
+deployment-ui/src/components/settings/credentials/AzureLoginSection.jsx.
+Commit: 91e206a.
+
+Status: Complete, pushed, live-verified the backend is up. Every
+Azure feature that signs in via an App Registration (Web App status,
+ACR, Cloud Services' Azure inventory) now surfaces its own real AAD
+failure reason instead of one generic, always-the-same message.
+Standing limitation, stated as plainly as possible: this is a
+diagnostic fix, not a confirmed root-cause fix for why THIS
+particular App Registration's sign-in is failing - if it still fails,
+the next message it shows (now including AAD's own error code, e.g.
+an AADSTS number) is the real lead to chase, and is worth reporting
+back directly. Given the screenshot already showed a client secret
+exists, the Secret ID vs. Value mix-up flagged in the new form hint
+is the most likely single cause worth checking first.
