@@ -10765,3 +10765,219 @@ chart components and color tokens rather than a parallel new system.
 The other 10 Observability tools still have nothing to chart, stated
 plainly rather than faked - they'll gain analysis sections once (if)
 each gets its own real data integration.
+
+==================================================
+ROUND 82 - PHASE 1 OF MULTI-CLOUD INFRASTRUCTURE
+CONSOLE: EC2 / AZURE VM / GCP COMPUTE ENGINE
+DETAIL PAGES
+==================================================
+Date: 2026-08-19
+Trigger: a 39-section, extremely detailed spec pasted verbatim, asking
+to upgrade Cloud Services into a full multi-cloud infrastructure
+console - view/start/stop/restart/delete resources, public/private IP,
+SSH/RDP connection info, firewall/security-group rule management with
+inbound/outbound add/remove and dangerous-port warnings, CPU/memory/
+network metrics with time ranges, logs, ECS task/container drill-down
+with bulk scaling, Azure Container Apps, GCP Cloud Run, connection
+graphs, capability model, audit logging, all gated by the existing
+MFA/authorization - "mka it as based on our application" (make it
+match this app's existing architecture, not a rebuild). The spec's own
+section 36 explicitly asked for inspection before implementation and a
+written architecture plan, so this went through plan mode rather than
+straight to code: three parallel Explore passes over the existing
+backend (CloudServiceManagementService/CloudStatusService/Observability
+Service, every controller route, DTOs, MFA/auth/audit mechanisms, NuGet
+packages), the existing frontend (every Cloud Services/Container
+Registry/Observability page and component, Sidebar/NavigationContext,
+usePagination/Pagination, the chart component set, ConfirmDialog/
+TypedConfirmDialog), and the credential model (UserAwsCredentials/
+UserAzureCredentials/UserGcpCredentials field shapes, CredentialGate,
+PortalIdentity, the global MFA middleware) - all read-only research,
+no edits, before a plan was written and approved.
+
+Scope decision, made explicit in the plan rather than guessed: this is
+comparable to 4-5 further "Rounds" of work bundled into one ask, and
+was phased rather than attempted in one pass. Phase 1 (this round):
+real per-resource detail pages for AWS EC2, Azure VM, and GCP Compute
+Engine (Compute Engine going from a "not built yet" stub to a fully
+managed resource type). Phase 2 (not built): AWS ECS full console with
+task/container drill-down, logs, bulk scaling. Phase 3 (not built):
+Azure Container Apps + GCP Cloud Run, both entirely new backend
+integrations with no existing code to build on. Phase 4 (not built):
+sidebar/nav polish, capability-model surfacing, connection-graph
+visualization on remaining resource types. Each remaining phase is a
+separate future round, not started here.
+
+A real architectural deviation from the spec's literal text, flagged
+explicitly in the plan for review rather than silently applied: section
+24 asks for "Delete: Admin or explicitly authorized user" and
+"Firewall changes: Admin or explicitly authorized user." This app's
+EC2 and Azure VM actions already established, in an earlier round, the
+opposite precedent - no AdminGate on Delete or Create, only the
+session's own cloud credentials plus the cloud provider's real IAM/RBAC
+as the authorization boundary - with an explicit code comment
+reasoning through why (this app is single-user-per-session by design,
+see the "one user per device" project convention; gating a visitor's
+own Delete button behind a separate portal-Admin role would lock most
+users out of managing resources they personally connected credentials
+for). Phase 1 kept that existing precedent for the new firewall
+add/remove routes too, for consistency with Delete on the same two
+resource types, rather than introducing an inconsistent gate. Surfaced
+plainly here in case the user wants it overridden.
+
+Backend (new file DTOs/InfrastructureDetailDtos.cs; extended
+CloudServiceManagementService.cs and CloudServicesController.cs, no
+other files touched):
+  - Ec2InstanceDetailDto/SecurityRuleDto/MetricSeriesDto/
+    ResourceMetricsDto - SecurityRuleDto and MetricSeriesDto are
+    deliberately provider-agnostic (one shape covers AWS security-group
+    rules, Azure NSG rules, and GCP VPC firewall rules; one shape
+    covers EC2 CloudWatch, Azure Monitor, and GCP Cloud Monitoring
+    metrics) so the frontend renders identically for all three
+    providers rather than needing per-provider branching.
+  - AWS EC2: GetEc2InstanceDetailAsync (one DescribeInstances call -
+    name/type/OS/state/launch time/public+private IPv4/public IPv6/
+    VPC/subnet/security groups/tags), GetEc2SecurityGroupsAsync/
+    AddEc2SecurityGroupRuleAsync/RemoveEc2SecurityGroupRuleAsync (AWS
+    SG rules have no opaque ID - identified by their full tuple, which
+    the DTOs document; operates on the instance's primary/first-
+    attached security group, stated as a real simplification for
+    multi-SG instances rather than hidden), GetEc2MetricsAsync (reuses
+    the AmazonCloudWatchClient package already installed for
+    Observability's own CloudWatch page - CPUUtilization/NetworkIn/
+    NetworkOut via GetMetricData, period scaled to the requested time
+    range).
+  - Azure VM: GetAzureVmDetailAsync (follows the NIC -> IPConfig ->
+    PublicIP/Subnet/NSG chain - several ARM calls, unavoidable since
+    ARM doesn't flatten this the way EC2's DescribeInstances does),
+    GetAzureNsgRulesAsync/AddAzureNsgRuleAsync/RemoveAzureNsgRuleAsync
+    (Azure NSG rules DO have names, simpler than AWS's tuple-based
+    approach), GetAzureVmMetricsAsync (ARM Monitor Metrics REST API -
+    Percentage CPU/Network In Total/Network Out Total).
+  - GCP Compute Engine (net new, replacing the stub):
+    GetGcpComputeInstancesAsync (one aggregatedList call across every
+    zone rather than polling zone by zone), Start/Stop/Reset/
+    DeleteGcpVmAsync, GetGcpFirewallRulesAsync/AddGcpFirewallRuleAsync/
+    RemoveGcpFirewallRuleAsync (GCP firewall rules are VPC-global, NOT
+    attached to one instance the way an AWS security group or Azure
+    NSG is - a real, documented difference from AWS/Azure, surfaced
+    honestly via SecurityRuleListDto.Scope="network" rather than
+    pretending GCP's model matches), GetGcpVmMetricsAsync (Cloud
+    Monitoring timeSeries query API - flagged as the least-certain part
+    of this round, same posture as this app's other GCP integrations,
+    since it requires the numeric instance ID rather than the name and
+    is entirely unverified against a real project). All three
+    providers reuse existing auth exactly as before: BuildCredentials/
+    CloudStatusService.GetAzureAccessTokenAsync/GetGcpAccessTokenAsync
+    - zero new auth code anywhere in this round.
+  - New routes on CloudServicesController, same self-service posture
+    (no AdminGate) as every existing EC2/Azure VM/ACR/Artifact Registry
+    route: GET/POST/DELETE ec2/{id}/firewall, GET ec2/{id}/metrics, GET
+    azurevm/{rg}/{vm}/detail, GET/POST/DELETE azurevm/{rg}/{vm}/
+    firewall, GET azurevm/{rg}/{vm}/metrics, GET gcpvm + start/stop/
+    reset/delete + metrics, GET/POST/DELETE gcpfirewall. Every mutation
+    (firewall add/remove, GCP start/stop/reset/delete) calls the
+    existing AppendAuditLog helper, same as EC2/Azure VM already did -
+    no new audit infrastructure, the same in-memory/best-effort
+    ActivityLogService as before.
+  - New GET api/cloudservices/audit?resource= endpoint backing each
+    detail page's "Audit History" section - filters the SAME in-memory
+    ActivityLogService every mutation already writes to, by a substring
+    match on resource name. Documented plainly as best-effort (in-
+    memory, resets on restart, substring match rather than a real
+    resource link) rather than building a new persisted audit store,
+    which the spec's section 26 gestures at but which is a materially
+    bigger change than this phase's scope.
+
+Frontend (new components under deployment-ui/src/components/
+cloudServices/): ConnectionInfoCard.jsx (SSH/RDP display, entirely
+client-side - built from PublicIp + OS already in the detail response,
+a guessed default SSH username per OS family for AWS with an explicit
+disclaimer, no backend call, no key/password material ever requested
+or stored, matching section 5/6's explicit requirement), Firewall
+RulesCard.jsx (one component rendering all three providers' rules via
+the shared SecurityRuleDto shape; Add Rule form with a client-side
+warning + a stronger ConfirmDialog step when the port is in the
+sensitive list - 22/3389/5432/3306/6379/9200 - or the source is
+0.0.0.0/0 or ::/0, per section 7's explicit requirement not to default
+to or silently allow an open rule), RelationshipDiagram.jsx (a plain
+flex arrow-chain, not a diagramming library - this app has none and
+one linear VPC/Subnet/SecurityGroup/Instance chain doesn't need one),
+Ec2InstanceDetailPage.jsx/AzureVmDetailPage.jsx/GcpVmDetailPage.jsx +
+GcpVmManagementPage.jsx (replaces CloudServicesGcp.jsx's old "not
+built yet" stub with a real list+detail page). Row clicks in the
+existing Ec2ManagementPage.jsx/AzureVmManagementPage.jsx now open
+these detail pages via local component state (not a new URL/tab -
+matches how AzureServiceDetailPage.jsx's own resource-type switch
+already works) rather than a new route, so NavigationContext.jsx's
+TABS whitelist needed no changes this round. Every metrics chart reuses
+the pre-existing LineChart.jsx/RangeSelector.jsx components (already
+built for Hosting Observability, wired into a second feature area for
+the first time) - zero new chart code. TypedConfirmDialog.jsx (type-
+the-resource-name-to-confirm) is reused for every Delete action exactly
+as it already was for EC2 Terminate/Azure VM Delete - section 35's
+"type to confirm" requirement was already built, not new this round.
+
+One dead-end worth recording: a data/resourceCapabilities.js file was
+drafted per the plan's own section-33 capability-model idea, but each
+detail page already computes its own valid actions from live resource
+state (the same actionsForState pattern Ec2ManagementPage/
+AzureVmManagementPage already used before this round) - the separate
+capability map added nothing beyond what was already true and would
+have shipped as unreferenced dead code. Deleted rather than force an
+unnecessary integration; a real capability model is worth building once
+Phase 2/3 add resource types with genuinely different capability sets
+(e.g. Cloud Run has no true "stop"), not for three resource types that
+already all support the same four actions.
+
+Verification performed:
+  - `dotnet build` (isolated output dir): 0 errors. One real compile
+    error caught and fixed along the way - 'Metric' was ambiguous
+    between Amazon.EC2.Metric and Amazon.CloudWatch.Model.Metric once
+    both namespaces were in scope in the same file; fully qualified the
+    CloudWatch one rather than removing either using.
+  - `npm run lint` in deployment-ui/: 0 new warnings (one warning
+    introduced by FirewallRulesCard.jsx's unused `scope` parameter was
+    caught and removed before the final check).
+  - `npm run build` in deployment-ui/: succeeded.
+  - git status re-checked before staging - this repo's working tree
+    already had unrelated, pre-existing uncommitted changes (a
+    Prometheus metrics integration in Program.cs/docker-compose.yml,
+    not part of this request) sitting in it from before this
+    conversation; only this round's own files were staged and
+    committed, the unrelated changes were left untouched rather than
+    swept in.
+  - Live check against the deployed Render backend after the push:
+    /api/bootstrap healthy (HTTP 200).
+  - Standing limitation, stated as plainly as every prior round: no
+    real AWS/Azure/GCP credentials exist in this sandboxed session.
+    EC2/Azure VM detail reuse already-verified list-call patterns, but
+    the new security-group/NSG/firewall calls and all three providers'
+    metrics calls are entirely unverified against real accounts - GCP's
+    metrics call in particular (numeric instance ID requirement) is the
+    single least-certain piece of this round. Recommend testing, in
+    this order: EC2 firewall add/remove against a real security group,
+    Azure NSG add/remove, GCP Compute Engine start/stop/reset/delete,
+    then all three providers' metrics charts.
+
+Files changed: src/DeploymentAPI/DTOs/InfrastructureDetailDtos.cs (new),
+src/DeploymentAPI/Services/CloudServiceManagementService.cs,
+src/DeploymentAPI/Controllers/CloudServicesController.cs,
+deployment-ui/src/components/cloudServices/ConnectionInfoCard.jsx (new),
+FirewallRulesCard.jsx (new), RelationshipDiagram.jsx (new),
+Ec2InstanceDetailPage.jsx (new), AzureVmDetailPage.jsx (new),
+GcpVmDetailPage.jsx (new), GcpVmManagementPage.jsx (new),
+AzureVmManagementPage.jsx, Ec2ManagementPage.jsx,
+deployment-ui/src/pages/CloudServicesGcp.jsx,
+deployment-ui/src/services/cloudServicesService.js,
+deployment-ui/src/styles/global.css.
+Commit: 6d40818.
+
+Status: Phase 1 complete, pushed, live-verified the backend is up. EC2,
+Azure VM, and GCP Compute Engine instances now each have a real detail
+page - connection info, firewall/NSG/VPC-firewall rule management with
+safety warnings, CPU/network metrics, a relationship chain, and
+best-effort audit history - reachable by clicking a row in their
+existing management lists. GCP Compute Engine went from an explicit
+stub to fully managed. ECS's fuller console, Azure Container Apps, GCP
+Cloud Run, and nav/capability polish remain as Phases 2-4, not started.
