@@ -5,6 +5,9 @@ import PageLayout from "../components/layout/PageLayout";
 import AllRepositoriesCard from "../components/dashboard/AllRepositoriesCard";
 import AzureDevOpsCard from "../components/dashboard/AzureDevOpsCard";
 import CloudServicesCard from "../components/dashboard/CloudServicesCard";
+import PaasSummaryCard from "../components/dashboard/PaasSummaryCard";
+import ContainerRegistrySummaryCard from "../components/dashboard/ContainerRegistrySummaryCard";
+import ObservabilitySummaryCard from "../components/dashboard/ObservabilitySummaryCard";
 import EnvironmentsCard from "../components/dashboard/EnvironmentsCard";
 import QuickAccessCard from "../components/dashboard/QuickAccessCard";
 
@@ -50,6 +53,18 @@ export default function Dashboard() {
             <br />
 
             <CloudServicesCard />
+
+            <br />
+
+            <PaasSummaryCard />
+
+            <br />
+
+            <ContainerRegistrySummaryCard />
+
+            <br />
+
+            <ObservabilitySummaryCard />
 
             <br />
 
