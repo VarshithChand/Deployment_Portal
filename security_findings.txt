@@ -11567,3 +11567,159 @@ metric - reachable from the new "PaaS / Microservices" sidebar group.
 Phase B (Azure App Service + Deployment Slots + Swap) and Phase C
 (Cloud Run extension + cross-provider PaaS hub page) remain, not
 started.
+
+==================================================
+ROUND 87 - PAAS/MICROSERVICES CONSOLE PHASE B:
+AZURE APP SERVICE + DEPLOYMENT SLOTS + SWAP
+==================================================
+Date: 2026-08-19
+Trigger: "continue" (user pasted back the prior turn's own "Want me to
+continue with Phase B?" question and confirmed) - a brief dashboard-
+redesign idea was floated in between and answered with a short
+recommendation per the exploratory-question convention, then the user
+redirected straight back to the roadmap. Proceeded directly from the
+already-approved Round 86 roadmap without a new planning cycle, same as
+how Phases 2/3 of the earlier infrastructure-console request proceeded
+after their own "yes" confirmations - Phase B's shape was already
+detailed enough in that plan (app list, slot list per app, slot
+actions, swap, bulk swap, configuration, app settings, metrics).
+
+Design mirrors Round 84's Azure Container Apps work closely (same raw
+ARM HttpClient/JObject pattern, same subscription-wide
+Microsoft.Web/sites listing approach already validated for VMs/
+Container Apps) - built as its own
+`AzureAppServiceManagementService.cs`/`AzureAppServiceController.cs`
+pair (`api/paas/azure/appservices`), same "PaaS provider gets its own
+service class" precedent as Elastic Beanstalk/Container Services.
+
+Backend:
+  - `GetAppServicesAsync` - subscription-wide Microsoft.Web/sites
+    listing, filtered to `kind` starting with "app" and excluding
+    "functionapp" so Function Apps (which share the same resource type)
+    don't show up mislabeled as App Service applications. Deployment
+    slots are NOT included in this list (they're child resources, not
+    part of the subscription-wide listing) - fetched per-app only once
+    a specific app's detail page is actually open, avoiding the N+1
+    slot-count fetch section 36 warns against.
+  - `GetAppServiceDetailAsync` - site + `config/web` (runtime/alwaysOn,
+    a curated read-only slice, not full config editing) + the app's
+    real `/slots` list, with the main site synthesized as a
+    `"production"` pseudo-slot row so the frontend renders one uniform
+    table for every slot including the one that isn't a real child
+    resource.
+  - `StartAsync`/`StopAsync`/`RestartAsync` - one shared
+    `RunLifecycleActionAsync` helper parameterized by an optional slot
+    (null/`"production"` routes to the base site, anything else appends
+    `/slots/{slot}`) - real Azure operations, not simulated.
+  - `SwapSlotAsync` - Azure's real "Swap Slot with Production" operation
+    (`POST .../sites/{name}/slotsswap`, body `{targetSlot: "<slot
+    being swapped in>"}`) for the production-target case (the spec's
+    own worked example, Staging -> Production) - the well-documented,
+    high-confidence path. The slot-to-slot case (neither side is
+    production) uses the sibling `.../slots/{source}/slotsswap`
+    operation and is flagged explicitly as this round's single least-
+    certain piece, since Azure's own body-parameter naming for this
+    operation is genuinely easy to get backwards without testing
+    against a real subscription.
+  - `BulkSwapAsync` - section 13's bulk swap, each app's swap
+    attempted independently with its own recorded success/error, same
+    "never a blended pass/fail" contract as ECS's bulk scale.
+  - `GetEnvVarsAsync`/`UpdateEnvVarAsync` - Azure's `config/appsettings/
+    list` (a POST, not a GET - Azure's own real API shape for this,
+    treating app settings as sensitive-by-default even though it
+    returns plaintext) and a PUT-replaces-everything update, real
+    read-modify-write against current settings. Redacted via the SAME
+    `SecretRedaction.LooksLikeSecretKey` helper Elastic Beanstalk
+    already uses (promoted to a shared helper specifically so this
+    round wouldn't need a third copy) - applied by THIS APP on top of
+    Azure's own plaintext response, section 16's "never return secret
+    values unnecessarily" enforced regardless of what the provider
+    itself would allow through.
+  - `ScalePlanAsync` - PATCHes the App Service PLAN
+    (`Microsoft.Web/serverfarms`) this app runs on, not the app in
+    isolation - Azure's real model (instance count is a plan property,
+    shared by every app on that plan) - surfaced honestly in the
+    frontend's own field-hint rather than implying per-app isolation
+    that doesn't exist, per section 41's explicit "do not claim an
+    operation is supported unless the underlying cloud API actually
+    supports it [that way]".
+  - `DeleteAppAsync`/`DeleteSlotAsync` - real deletes, gated on the
+    frontend by `TypedConfirmDialog` with `resourceName="DELETE
+    {name}"` (the exact same composed-string pattern Phase A already
+    established for Elastic Beanstalk).
+  - `GetMetricsAsync` - CpuPercentage/MemoryPercentage/Requests via
+    ARM Monitor Metrics, same pattern as Container Apps/Azure VM,
+    higher confidence here since these are well-documented standard
+    App Service metrics (unlike Container Apps' own metric names,
+    which were themselves flagged uncertain in Round 84).
+  - Backend build succeeded on the first attempt, no compile errors.
+
+Frontend: a new "App Service" child under the "PaaS / Microservices"
+sidebar group AND the pre-existing Cloud Services -> Azure -> "App
+Service" catalog tile now both render the SAME
+`AzureAppServiceManagementPage.jsx` component (one implementation, two
+entry points) - the catalog tile previously fell back to the generic
+read-only ARM dialog like every other unbuilt Azure service, same
+"give it real management" treatment Round 84 gave "container-apps".
+List page gained checkbox selection + a bulk-swap bar (source/target
+slot text inputs rather than a fixed enum, since slot names are
+provider-defined free text, not a closed set) + a confirmation listing
+every selected app by name (section 13's exact mockup) + a per-app
+results list afterward. App detail: overview, plan-wide scaling with
+an explicit shared-impact field-hint, and a slots table. Slot detail
+(`AzureAppServiceSlotDetailPage.jsx`): lifecycle actions, Swap (a
+target-slot dropdown appears only when more than one sibling slot
+exists, otherwise the single other slot is pre-selected), app settings,
+and a performance chart. Every chart/dialog/pagination component reused
+unchanged from prior rounds - zero new UI primitives.
+
+Same process discipline carried forward from Round 85's hotfix and
+Round 86's own reinforcement of it: the one-line Program.cs service
+registration was staged via `git add -p`, verified via `git diff
+--cached`, and committed immediately - before any other file in this
+round was staged - so the unrelated pre-existing Prometheus/docker-
+compose work (still sitting untouched in the tree since Round 85)
+couldn't be swept in again.
+
+Verification performed:
+  - `dotnet build`: succeeded on the first attempt, 0 errors.
+  - `npm run lint` in deployment-ui/: 0 new warnings.
+  - `npm run build` in deployment-ui/: succeeded (confirmed
+    `AzureAppServiceManagementPage` bundles as one shared chunk
+    referenced from both entry points, not duplicated).
+  - `git diff`/`git diff --cached` re-checked at each staging step -
+    Program.cs confirmed fully committed with zero remaining diff;
+    DeploymentAPI.csproj/docker-compose.yml confirmed still showing
+    only the unrelated pre-existing Prometheus changes, untouched by
+    this round.
+  - Live check against the deployed Render backend after the push:
+    /api/bootstrap healthy (HTTP 200).
+  - Standing limitation, stated as plainly as every prior round: no
+    real Azure App Service/subscription exists in this sandboxed
+    session. Every call here is new, unverified surface area - the
+    slot-to-slot swap body parameter (flagged above) and the app-
+    settings read-modify-write are the two pieces most worth testing
+    first against a real subscription.
+
+Files changed: src/DeploymentAPI/DTOs/AppServiceDtos.cs (new),
+src/DeploymentAPI/Services/AzureAppServiceManagementService.cs (new),
+src/DeploymentAPI/Controllers/AzureAppServiceController.cs (new),
+src/DeploymentAPI/Program.cs,
+deployment-ui/src/api/azureAppServiceApi.js (new),
+deployment-ui/src/services/azureAppServiceService.js (new),
+deployment-ui/src/components/paas/AzureAppServiceManagementPage.jsx
+(new), AzureAppServiceDetailPage.jsx (new),
+AzureAppServiceSlotDetailPage.jsx (new),
+deployment-ui/src/components/cloudServices/AzureServiceDetailPage.jsx,
+deployment-ui/src/pages/PaasAzureAppService.jsx (new),
+deployment-ui/src/components/layout/Sidebar.jsx,
+deployment-ui/src/context/NavigationContext.jsx, App.jsx.
+Commits: c1b4a8c (backend), 627e090 (frontend).
+
+Status: Phase B complete, pushed, live-verified the backend is up.
+Azure App Service now has real application + deployment-slot
+management - lifecycle actions, Swap (single and bulk), app settings
+(secret-safe), plan-wide scaling, delete, and metrics - reachable from
+both the new PaaS/Microservices section and the existing Cloud Services
+Azure catalog. Phase C (Cloud Run extension with revisions/traffic/
+rollback + the cross-provider PaaS hub page) remains, not started.
