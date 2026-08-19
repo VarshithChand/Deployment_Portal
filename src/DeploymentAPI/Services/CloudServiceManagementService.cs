@@ -2356,31 +2356,9 @@ public class CloudServiceManagementService
     // (ECS has no per-task env API) - fetched once per service detail call
     // and redacted before ever leaving this method, never the real value
     // for anything that looks like a secret (section 12's "WITHOUT
-    // secrets"). Log line redaction (RedactLogLine below) is best-effort
-    // pattern matching, not exhaustive - stated plainly, matching this
-    // app's own posture on every other "can't be perfectly certain" piece.
-
-    private static readonly HashSet<string> SecretEnvKeyMarkers = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "SECRET", "PASSWORD", "PASSWD", "PWD", "TOKEN", "KEY", "CREDENTIAL", "CONNSTR", "CONNECTIONSTRING"
-    };
-
-    private static bool LooksLikeSecretKey(string key) =>
-        SecretEnvKeyMarkers.Any(marker => key.Contains(marker, StringComparison.OrdinalIgnoreCase));
-
-    private static readonly System.Text.RegularExpressions.Regex[] SecretLinePatterns =
-    {
-        new(@"AKIA[0-9A-Z]{16}", System.Text.RegularExpressions.RegexOptions.Compiled),
-        new(@"(?i)(password|passwd|secret|token|api[_-]?key)\s*[:=]\s*\S+", System.Text.RegularExpressions.RegexOptions.Compiled)
-    };
-
-    private static string RedactLogLine(string line)
-    {
-        foreach (var pattern in SecretLinePatterns)
-            line = pattern.Replace(line, "***redacted***");
-
-        return line;
-    }
+    // secrets"). Redaction logic itself lives in Helpers/SecretRedaction.cs
+    // - shared with Elastic Beanstalk (and, later, Azure App Service)
+    // rather than duplicated per feature.
 
     public async Task<EcsServiceDetailDto> GetEcsServiceDetailAsync(UserAwsCredentials credentials, string? region, string cluster, string service)
     {
@@ -2429,7 +2407,7 @@ public class CloudServiceManagementService
                         var env = new Dictionary<string, string>();
 
                         foreach (var kv in containerDef.Environment ?? new List<Amazon.ECS.Model.KeyValuePair>())
-                            env[kv.Name] = LooksLikeSecretKey(kv.Name) ? "***redacted***" : kv.Value;
+                            env[kv.Name] = SecretRedaction.LooksLikeSecretKey(kv.Name) ? "***redacted***" : kv.Value;
 
                         envByContainer[containerDef.Name] = env;
                     }
@@ -2707,7 +2685,7 @@ public class CloudServiceManagementService
                 .Select(e => new LogLineDto
                 {
                     Timestamp = e.Timestamp ?? DateTime.UtcNow,
-                    Message = RedactLogLine(e.Message)
+                    Message = SecretRedaction.RedactLogLine(e.Message)
                 })
                 .OrderBy(l => l.Timestamp)
                 .ToList();
