@@ -11126,3 +11126,161 @@ confirmation and results, Restart Tasks, per-task Stop, and ECR image
 correlation. Phase 3 (Azure Container Apps + GCP Cloud Run, both net-
 new backend integrations) and Phase 4 (nav/capability polish) remain,
 not started.
+
+==================================================
+ROUND 84 - PHASE 3 OF MULTI-CLOUD INFRASTRUCTURE
+CONSOLE: AZURE CONTAINER APPS + GCP CLOUD RUN
+==================================================
+Date: 2026-08-19
+Trigger: "yes", confirming continuation into Phase 3 of the Round 82
+roadmap (spec sections 16-19). Unlike Phase 1/2, which extended AWS/
+Azure/GCP compute surfaces that already partially existed in this
+codebase, both of these are entirely new integrations with zero
+existing precedent - no Container Apps or Cloud Run code anywhere in
+this app before this round.
+
+Architectural decision, made explicit rather than folded silently into
+the existing services: a new ContainerServiceManagementService +
+ContainerServicesController (api/containerservices), kept SEPARATE from
+CloudServiceManagementService/CloudServicesController rather than
+appended to them. Reasoning: CloudServiceManagementService was already
+~2900 lines after Phases 1-2, and this app already has a precedent for
+splitting "container services" out from "VM/compute services" -
+ContainerRegistryService is already its own file, separate from
+CloudServiceManagementService, for the exact same kind of reason. Same
+self-service posture as everywhere else in this feature area (no
+AdminGate) - this session's own Azure/GCP credentials plus the cloud
+provider's own IAM/RBAC remain the authorization boundary, unchanged
+from every prior round's precedent.
+
+A real, deliberate asymmetry between the two providers, stated
+explicitly per section 18's own instruction ("do NOT pretend Cloud Run
+behaves exactly like ECS" / "use the actual GCP model"):
+  - Azure Container Apps DOES have real Start/Stop operations
+    (POST .../containerApps/{name}/start|stop) - these are used as-is,
+    a real provider mechanism, not invented.
+  - GCP Cloud Run has NO stop operation at all - a service is either
+    deployed (serving per its autoscaling config) or deleted. Rather
+    than fake one (e.g. clamping min/max instances to 0, which isn't
+    even a valid Cloud Run configuration), CloudRunDetailPage.jsx has
+    NO Stop button, with a field-hint explaining why and pointing at
+    minInstances=0 as the closest real equivalent for scaling down.
+    What Cloud Run gets instead of "Restart": a Redeploy action that
+    forces a new revision by touching a template annotation
+    (deployment-portal/restarted-at) - the standard, documented
+    real-world Cloud Run pattern for exactly this, not a workaround
+    invented for this app. Section 38's "do not fake success" applied
+    to a whole missing operation, not just to error handling.
+
+Backend (new files DTOs/ContainerServiceDtos.cs,
+Services/ContainerServiceManagementService.cs,
+Controllers/ContainerServicesController.cs; one-line registration added
+to Program.cs, staged via `git add -p` to pull in only that hunk since
+Program.cs already had unrelated pre-existing uncommitted changes - see
+below):
+  - Azure Container Apps: GetAzureContainerAppsAsync (subscription-wide
+    list via the generic Microsoft.App/containerApps?api-version=
+    2024-03-01 listing endpoint, same "list-by-resource-type" pattern
+    Phase 1 already used for Azure VMs), GetAzureContainerAppDetailAsync
+    (app properties + revisions list in two calls),
+    ScaleAzureContainerAppAsync (PATCH template.scale.minReplicas/
+    maxReplicas - ARM partial-update semantics, not a full PUT),
+    Start/StopAzureContainerAppAsync (the real start/stop operations
+    above), RestartAzureContainerAppRevisionAsync (POST .../revisions/
+    {name}/restart, Container Apps' own real per-revision restart),
+    DeleteAzureContainerAppAsync, GetAzureContainerAppMetricsAsync
+    (reuses Phase 1's ResourceMetricsDto/MetricSeriesDto unchanged -
+    Requests/RestartCount, Container Apps' own documented system
+    metrics; CPU/Memory percentages are deliberately NOT guessed at
+    here since they aren't exposed through this same metrics endpoint
+    the straightforward way Azure VM's are).
+  - GCP Cloud Run: GetCloudRunServicesAsync (Cloud Run Admin API v2,
+    list under the credential's configured Location - the same GCP
+    credential field Phase 1's Artifact Registry already added,
+    reused unchanged rather than adding a new location field),
+    ScaleCloudRunServiceAsync (PATCH with an explicit updateMask
+    query param, Cloud Run's own partial-update mechanism),
+    RedeployCloudRunServiceAsync (the annotation-touch trick above),
+    DeleteCloudRunServiceAsync, GetCloudRunMetricsAsync (Cloud
+    Monitoring timeSeries - request_count and instance_count only,
+    both simple GAUGE/DELTA metrics; latency/error-rate/CPU/memory are
+    explicitly left out and explained in the DTO's own comment and the
+    frontend's field-hint, since those are DISTRIBUTION-typed metrics
+    in Cloud Monitoring - percentile buckets, not one number per point
+    - and guessing at a reduction risked misrepresenting them rather
+    than just not charting them yet).
+  - Every mutation on both providers calls the same AppendAuditLog
+    helper pattern already used everywhere else - no new audit
+    infrastructure.
+  - Backend build succeeded on the first attempt with no compile
+    errors - unlike Phases 1-2 (which each hit at least one AWS SDK
+    type mismatch caught by the build-fix loop), this round is raw
+    HttpClient/JObject code with no vendor SDK types to guess wrong,
+    the same posture already established for every other Azure/GCP
+    integration in this app.
+
+Frontend: AzureContainerAppsManagementPage.jsx/
+AzureContainerAppDetailPage.jsx (list + detail, wired into the EXISTING
+azureServiceCatalog.js "container-apps" catalog entry via
+AzureServiceDetailPage.jsx's service.id switch - the catalog entry
+already existed before this round, just fell back to the generic
+read-only ARM detail dialog like every other non-VM service; this round
+gives it real management the same way Phase 1 did for "virtual-
+machines"), CloudRunManagementPage.jsx/CloudRunDetailPage.jsx (list +
+detail). CloudServicesGcp.jsx gained a "?view=compute|cloudrun" sub-nav
+(mirrors PaasHosting.jsx/Settings.jsx's own page-owned sub-nav pattern,
+replaceState not pushState, siblings not a drill-down) rather than a
+separate top-level page, since GCP still has no ~100-service catalog
+the way AWS's page does - just these two real, managed resource types
+sitting side by side. New api/containerServicesApi.js +
+services/containerServicesService.js follow the same createApiClient
+convention as every other feature area's API client.
+
+Verification performed:
+  - `dotnet build`: 0 errors, first attempt (see above).
+  - `npm run lint` in deployment-ui/: 0 new warnings.
+  - `npm run build` in deployment-ui/: succeeded.
+  - git status/git diff re-checked before staging - Program.cs had
+    both this round's one-line service registration AND the same
+    unrelated, pre-existing uncommitted Prometheus integration noted
+    in Rounds 82-83; `git add -p` was used to stage only the
+    registration hunk (verified via `git diff --cached` showing
+    exactly that one line, and `git diff` afterward showing the three
+    Prometheus hunks still unstaged) - the unrelated work is still
+    sitting in the tree, still untouched, still not part of any
+    round's commits.
+  - Live check against the deployed Render backend after the push:
+    /api/bootstrap healthy (HTTP 200).
+  - Standing limitation, stated as plainly as every prior round: no
+    real Azure or GCP credentials exist in this sandboxed session.
+    Every route in this round is new surface area, entirely unverified
+    against a real Container App or Cloud Run service. The Cloud Run
+    JSON field paths (template.scaling.min/maxInstanceCount, the
+    conditions array's "Ready" type/state fields, the resource name's
+    location-by-index-3 parsing) are the single most novel, least-
+    certain part of this round - recommend testing Cloud Run's list/
+    detail rendering first, then Container Apps (which follows the
+    same well-trodden ARM listing pattern Phase 1 already validated
+    the shape of for Azure VMs), then the mutations on both.
+
+Files changed: src/DeploymentAPI/DTOs/ContainerServiceDtos.cs (new),
+src/DeploymentAPI/Services/ContainerServiceManagementService.cs (new),
+src/DeploymentAPI/Controllers/ContainerServicesController.cs (new),
+src/DeploymentAPI/Program.cs,
+deployment-ui/src/api/containerServicesApi.js (new),
+deployment-ui/src/services/containerServicesService.js (new),
+deployment-ui/src/components/cloudServices/AzureContainerAppDetailPage.jsx
+(new), AzureContainerAppsManagementPage.jsx (new),
+CloudRunDetailPage.jsx (new), CloudRunManagementPage.jsx (new),
+AzureServiceDetailPage.jsx,
+deployment-ui/src/pages/CloudServicesGcp.jsx.
+Commit: 05b4d63.
+
+Status: Phase 3 complete, pushed, live-verified the backend is up.
+Azure Container Apps and GCP Cloud Run both went from zero existing
+code to real management: list, detail, scale, and provider-appropriate
+lifecycle actions (Start/Stop/Restart-revision for Container Apps,
+Redeploy for Cloud Run - deliberately no fake Stop there), plus basic
+metrics for both. Only Phase 4 (sidebar/nav polish per section 39's
+tree, capability-model surfacing, connection-graph visualization on
+remaining resource types) remains from the original roadmap.
