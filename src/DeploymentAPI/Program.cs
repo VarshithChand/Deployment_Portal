@@ -208,6 +208,7 @@ builder.Services.AddSingleton<PaasProviderService>();
 builder.Services.AddSingleton<CloudServiceManagementService>();
 builder.Services.AddSingleton<ContainerServiceManagementService>();
 builder.Services.AddSingleton<ElasticBeanstalkService>();
+builder.Services.AddSingleton<AzureAppServiceManagementService>();
 // Docker Hub/GHCR browsing for the Container Registry hub - same
 // statelessness as CloudServiceManagementService above (credential passed
 // in per-call, its two shared HttpClients never carry per-caller state on
