@@ -12099,3 +12099,100 @@ confirmed live anywhere per the deploy-visibility gap noted above - this
 is the first round this session where that gap was actually surfaced
 and acted on, rather than silently assumed covered by the usual
 bootstrap poll.
+
+==================================================
+ROUND 92 - DASHBOARD V2: REAL STAT ROW, DEPLOYMENT
+ACTIVITY, AND CROSS-PROVIDER APPLICATIONS TABLE
+==================================================
+Date: 2026-08-19
+Trigger: after Round 91's summary-card redesign, the user pushed
+further with a reference mockup image ("try to make like this") - a
+polished dashboard showing a top stat row, a multi-line deployment
+chart, an environment-health donut, Recent Deployments/Cost Overview/
+System Health panels, a searchable All Applications table, and Recent
+Alerts. Flagged one hard constraint up front rather than silently
+working around it or silently fabricating around it: the Cost Overview
+panel's rupee figures and the System Health panel's uptime percentages
+have no real backing data anywhere in this app (no AWS Cost Explorer/
+Azure Cost Management/GCP Billing integration exists, and no historical
+uptime/SLA tracking exists either) - both were adapted to real
+equivalents rather than reproduced with invented numbers, stated
+plainly rather than silently dropped without mention.
+
+Three new Dashboard sections, all real data, all reusing endpoints that
+already existed elsewhere in this app - zero new backend routes this
+round:
+  - `OverviewStats.jsx` - 6 stat tiles (PaaS applications, AWS/Azure/GCP
+    resource counts, active GitHub Actions deployments, open issues).
+    "Open Issues" = failed workflow runs (real, from GitHub Actions run
+    history) + provider connection errors already surfaced elsewhere
+    (aws/azure/gcpVms `.error` fields) - a real "needs attention" count,
+    not a fabricated alerts feed. Deliberately no week-over-week delta
+    indicators (the mockup's own "+12 this week" style badges) - this
+    app keeps no historical snapshots to compute a real one from, so
+    none were added.
+  - `DeploymentActivityCard.jsx` - real GitHub Actions run history for
+    the last 7 days, fetched via the SAME `getAccountRepositories` +
+    `getRepoRunsBulk` calls `AllRepositoriesCard.jsx` already uses (a
+    second independent fetch, not shared state - matches this
+    Dashboard's established "each card fetches its own data"
+    convention rather than a new cross-card cache layer). Renders as a
+    runs-per-day BarChart + a success/failed/in-progress DonutChart +
+    a recent-deployments list, instead of the mockup's own multi-line
+    chart - `LineChart.jsx` only ever plots one series (no dual-axis,
+    an existing rule this app's own chart components already follow),
+    so two existing, UNMODIFIED chart components cover the same
+    information rather than a new multi-series component built for one
+    card.
+  - `AllApplicationsTable.jsx` - a searchable, paginated table over the
+    exact same `GET /api/paas/applications` aggregation endpoint the
+    dedicated "All Applications" hub page (Round 89) already uses - row
+    click and "View All" both route to that same hub page for real
+    management, not a second detail view.
+
+`Dashboard.jsx` reordered to "glance stats -> activity -> applications
+-> per-area detail cards" (Source Control, Cloud Services, PaaS,
+Container Registry, Observability, Environments, Quick Access) -
+matching the mockup's own "overview first, drill in after" structure -
+while every existing card keeps its own fetch/hide-if-unconfigured
+logic completely unchanged.
+
+Given the interrupted, direct nature of the user's own message ("try to
+make like this") mid-conversation, this round skipped a formal plan-
+mode cycle (the third one in a row would have read as stalling rather
+than helping) and instead did a handful of precise, targeted lookups
+before writing any code - exact `WorkflowDto` field names (Status/
+Conclusion/CreatedAt), `getRepoRunsBulk`'s request/response shape, and
+`StatusBadge.jsx`'s existing status-to-badge mapping - specifically to
+avoid guessing at data shapes for a chart/table that would otherwise
+render wrong or crash against real GitHub data.
+
+Verification performed:
+  - `npm run lint` in deployment-ui/: 0 new warnings.
+  - `npm run build` in deployment-ui/: succeeded.
+  - No backend changes this round - purely frontend, no `dotnet build`
+    needed.
+  - Did NOT launch a browser to visually confirm rendering (no browser-
+    automation tool available in this session, and no real GitHub/AWS/
+    Azure/GCP credentials in this sandboxed environment to populate the
+    new sections with meaningfully - most would render their own hidden/
+    empty states regardless) - stated plainly rather than claimed,
+    consistent with this session's standing verification posture for
+    every UI round.
+  - Same deploy-visibility gap as Round 91: this push does not auto-
+    deploy the frontend anywhere on its own - the user needs to
+    redeploy through whatever their normal process is (Cloudflare
+    Worker via `wrangler deploy`, or however GitHub Pages/Render's own
+    frontend service gets rebuilt) before the new Dashboard is visible.
+
+Files changed: deployment-ui/src/pages/Dashboard.jsx,
+deployment-ui/src/components/dashboard/OverviewStats.jsx (new),
+DeploymentActivityCard.jsx (new), AllApplicationsTable.jsx (new).
+Commit: 229c0ec.
+
+Status: Committed and pushed; build-verified locally, not yet confirmed
+live per the same deploy-visibility gap as Round 91. The Dashboard now
+answers "what's going on" (real stat row + activity chart) and "let me
+get to it" (applications table + existing per-area summary cards +
+Quick Access) with entirely real data - no fabricated cost or uptime
+figures anywhere.
