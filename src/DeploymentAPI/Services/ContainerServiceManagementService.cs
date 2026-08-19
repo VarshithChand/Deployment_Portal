@@ -640,4 +640,150 @@ public class ContainerServiceManagementService
 
         return result;
     }
+
+    // ================= GCP Cloud Run — revisions, traffic, rollback =================
+    //
+    // Phase C of the PaaS/Microservices console. Cloud Run's real model
+    // (revisions + traffic percentages) - section 22's explicit "do not
+    // invent a slot swap abstraction for GCP". Traffic percentages live
+    // on the SERVICE resource's own `traffic[]` array, not on each
+    // revision - fetched once here and joined onto the revision list by
+    // name so the frontend gets one flattened view instead of stitching
+    // two calls together itself.
+
+    public async Task<GcpCloudRunRevisionListDto> GetCloudRunRevisionsAsync(UserGcpCredentials credentials, string serviceName)
+    {
+        var result = new GcpCloudRunRevisionListDto { Configured = credentials.IsConfigured };
+
+        if (!credentials.IsConfigured)
+            return result;
+
+        var (ok, token, error) = await GetGcpTokenAsync(credentials);
+
+        if (!ok)
+        {
+            result.Error = error;
+            return result;
+        }
+
+        try
+        {
+            using var serviceRequest = new HttpRequestMessage(HttpMethod.Get, CloudRunServiceUrl(credentials, serviceName));
+            serviceRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+            var serviceResponse = await GcpHttpClient.SendAsync(serviceRequest);
+
+            if (!serviceResponse.IsSuccessStatusCode)
+            {
+                result.Error = $"Unable to reach GCP for this service ({(int)serviceResponse.StatusCode}).";
+                return result;
+            }
+
+            var serviceJson = JObject.Parse(await serviceResponse.Content.ReadAsStringAsync());
+            var trafficByRevision = (serviceJson["traffic"] as JArray ?? new JArray())
+                .Where(t => t["revision"] != null)
+                .GroupBy(t => t["revision"]!.ToString())
+                .ToDictionary(g => g.Key, g => g.Sum(t => t["percent"]?.Value<int?>() ?? 0));
+
+            var listUrl = $"{CloudRunServiceUrl(credentials, serviceName)}/revisions";
+
+            using var revisionsRequest = new HttpRequestMessage(HttpMethod.Get, listUrl);
+            revisionsRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+            var revisionsResponse = await GcpHttpClient.SendAsync(revisionsRequest);
+
+            if (!revisionsResponse.IsSuccessStatusCode)
+            {
+                result.Error = $"Unable to reach GCP for this service's revisions ({(int)revisionsResponse.StatusCode}).";
+                return result;
+            }
+
+            var revisionsJson = JObject.Parse(await revisionsResponse.Content.ReadAsStringAsync());
+            var revisions = revisionsJson["revisions"] as JArray ?? new JArray();
+
+            result.Revisions = revisions.Select(r =>
+            {
+                var shortName = r["name"]?.ToString()?.Split('/').LastOrDefault() ?? string.Empty;
+                var readyCondition = (r["conditions"] as JArray)?.FirstOrDefault(c => c["type"]?.ToString() == "Ready");
+
+                return new GcpCloudRunRevisionDto
+                {
+                    Name = shortName,
+                    CreatedAt = DateTime.TryParse(r["createTime"]?.ToString(), out var created) ? created : null,
+                    Image = (r["containers"] as JArray)?.FirstOrDefault()?["image"]?.ToString(),
+                    Status = readyCondition?["state"]?.ToString(),
+                    TrafficPercent = trafficByRevision.TryGetValue(shortName, out var pct) ? pct : 0
+                };
+            })
+            .OrderByDescending(r => r.CreatedAt)
+            .ToList();
+        }
+        catch (Exception ex)
+        {
+            result.Error = CloudErrorSanitizer.Describe(ex, "GCP", "Cloud Run revision list");
+        }
+
+        return result;
+    }
+
+    // Real Cloud Run traffic-splitting - PATCH with updateMask=traffic,
+    // the same partial-update mechanism ScaleCloudRunServiceAsync above
+    // already uses for scaling.
+    public async Task<CloudServiceActionResultDto> UpdateCloudRunTrafficAsync(UserGcpCredentials credentials, string serviceName, List<GcpCloudRunTrafficEntryDto> traffic)
+    {
+        var (ok, token, error) = await GetGcpTokenAsync(credentials);
+
+        if (!ok)
+            return new CloudServiceActionResultDto { Success = false, Error = error };
+
+        if (traffic == null || traffic.Count == 0)
+            return new CloudServiceActionResultDto { Success = false, Error = "At least one traffic entry is required." };
+
+        if (traffic.Sum(t => t.Percent) != 100)
+            return new CloudServiceActionResultDto { Success = false, Error = "Traffic percentages must add up to 100." };
+
+        try
+        {
+            var url = $"{CloudRunServiceUrl(credentials, serviceName)}?updateMask=traffic";
+
+            var body = new JObject
+            {
+                ["traffic"] = new JArray(traffic.Select(t => new JObject { ["revision"] = t.Revision, ["percent"] = t.Percent }))
+            };
+
+            using var request = new HttpRequestMessage(new HttpMethod("PATCH"), url)
+            {
+                Content = new StringContent(body.ToString(), Encoding.UTF8, "application/json")
+            };
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+            var response = await GcpHttpClient.SendAsync(request);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                var errorBody = await response.Content.ReadAsStringAsync();
+                string? message = null;
+
+                try { message = JObject.Parse(errorBody)["error"]?["message"]?.ToString(); }
+                catch { /* fall through to the generic message below */ }
+
+                return new CloudServiceActionResultDto { Success = false, Error = message ?? $"GCP returned {(int)response.StatusCode}." };
+            }
+
+            return new CloudServiceActionResultDto { Success = true, Message = "Traffic allocation updated." };
+        }
+        catch (Exception ex)
+        {
+            return new CloudServiceActionResultDto { Success = false, Error = CloudErrorSanitizer.Describe(ex, "GCP", "Cloud Run traffic update") };
+        }
+    }
+
+    // Section 22's rollback - Cloud Run's real mechanism for this IS
+    // traffic allocation, so rollback is just "send 100% of traffic to
+    // an older revision" via the same UpdateCloudRunTrafficAsync above,
+    // not a separate/fabricated "revert" operation Cloud Run doesn't
+    // actually have.
+    public Task<CloudServiceActionResultDto> RollbackCloudRunAsync(UserGcpCredentials credentials, string serviceName, string revisionName) =>
+        UpdateCloudRunTrafficAsync(credentials, serviceName, new List<GcpCloudRunTrafficEntryDto>
+        {
+            new() { Revision = revisionName, Percent = 100 }
+        });
 }

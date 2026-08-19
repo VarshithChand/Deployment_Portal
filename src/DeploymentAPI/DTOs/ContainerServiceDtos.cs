@@ -123,3 +123,50 @@ public class GcpCloudRunScaleRequestDto
 
     public int MaxInstances { get; set; }
 }
+
+// Phase C extension - section 21's revision list + traffic split,
+// section 22's rollback. Cloud Run's real model (revisions + traffic
+// percentages), not an invented "slot" abstraction - section 22's
+// explicit "do not invent a slot swap abstraction for GCP".
+public class GcpCloudRunRevisionDto
+{
+    public string Name { get; set; } = string.Empty;
+
+    public DateTime? CreatedAt { get; set; }
+
+    public string? Image { get; set; }
+
+    // Ready/NotReady/Unknown, from the revision's own "Ready" condition.
+    public string? Status { get; set; }
+
+    public int TrafficPercent { get; set; }
+}
+
+public class GcpCloudRunRevisionListDto
+{
+    public bool Configured { get; set; }
+
+    public string? Error { get; set; }
+
+    public List<GcpCloudRunRevisionDto> Revisions { get; set; } = new();
+}
+
+public class GcpCloudRunTrafficEntryDto
+{
+    public string Revision { get; set; } = string.Empty;
+
+    public int Percent { get; set; }
+}
+
+public class GcpCloudRunTrafficUpdateRequestDto
+{
+    public List<GcpCloudRunTrafficEntryDto> Traffic { get; set; } = new();
+}
+
+// Rollback is Cloud Run's real traffic model applied as a convenience -
+// set the target revision to 100% traffic, not a fabricated "revert"
+// operation Cloud Run doesn't actually have.
+public class GcpCloudRunRollbackRequestDto
+{
+    public string RevisionName { get; set; } = string.Empty;
+}

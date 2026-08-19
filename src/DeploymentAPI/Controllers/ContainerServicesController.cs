@@ -196,4 +196,39 @@ public class ContainerServicesController : ControllerBase
 
         return Ok(await _management.GetCloudRunMetricsAsync(creds, name, rangeMinutes));
     }
+
+    // ================= Cloud Run revisions / traffic / rollback (Phase C) =================
+
+    [HttpGet("cloudrun/{name}/revisions")]
+    public async Task<IActionResult> GetCloudRunRevisions(string name)
+    {
+        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var creds = await _settings.GetUserGcpCredentialsAsync(key);
+
+        return Ok(await _management.GetCloudRunRevisionsAsync(creds, name));
+    }
+
+    [HttpPost("cloudrun/{name}/traffic")]
+    public async Task<IActionResult> UpdateCloudRunTraffic(string name, [FromBody] GcpCloudRunTrafficUpdateRequestDto request)
+    {
+        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var creds = await _settings.GetUserGcpCredentialsAsync(key);
+
+        var result = await _management.UpdateCloudRunTrafficAsync(creds, name, request.Traffic);
+        AppendAuditLog($"session {key[..Math.Min(8, key.Length)]}", "UpdateTraffic", "GCP Cloud Run", name, result.Success, result.Error);
+
+        return Ok(result);
+    }
+
+    [HttpPost("cloudrun/{name}/rollback")]
+    public async Task<IActionResult> RollbackCloudRun(string name, [FromBody] GcpCloudRunRollbackRequestDto request)
+    {
+        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var creds = await _settings.GetUserGcpCredentialsAsync(key);
+
+        var result = await _management.RollbackCloudRunAsync(creds, name, request.RevisionName);
+        AppendAuditLog($"session {key[..Math.Min(8, key.Length)]}", $"Rollback to {request.RevisionName}", "GCP Cloud Run", name, result.Success, result.Error);
+
+        return Ok(result);
+    }
 }
