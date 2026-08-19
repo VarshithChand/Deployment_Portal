@@ -223,6 +223,118 @@ public class CloudServicesController : ControllerBase
         return Ok(await _management.GetAcrTagsAsync(creds, loginServer, repositoryName));
     }
 
+    // ================= Azure Virtual Machines =================
+    // Real write access (start/stop/restart/delete/create), same
+    // self-service posture as EC2 above - this session's own Azure
+    // credentials, and Azure RBAC's own permission check, are the auth
+    // boundary, no AdminGate. Audit-logged the same way EC2 actions are.
+
+    private async Task<string> ResolveAzureActorLabelAsync(string sessionKey, UserAzureCredentials creds)
+    {
+        var identity = creds.IsConfigured ? await _cloud.GetAzureIdentityLabelAsync(creds) : null;
+        return identity ?? $"session {sessionKey[..Math.Min(8, sessionKey.Length)]}";
+    }
+
+    [HttpGet("azurevm")]
+    public async Task<IActionResult> GetAzureVms()
+    {
+        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var creds = await _settings.GetUserAzureCredentialsAsync(key);
+
+        return Ok(await _management.GetAzureVmsAsync(creds));
+    }
+
+    [HttpPost("azurevm/{resourceGroup}/{vmName}/start")]
+    public async Task<IActionResult> StartAzureVm(string resourceGroup, string vmName)
+    {
+        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var creds = await _settings.GetUserAzureCredentialsAsync(key);
+        var actor = await ResolveAzureActorLabelAsync(key, creds);
+
+        var result = await _management.StartAzureVmAsync(creds, resourceGroup, vmName);
+        AppendAuditLog(actor, "Start", "Azure VM", vmName, result.Success, result.Error);
+
+        return Ok(result);
+    }
+
+    [HttpPost("azurevm/{resourceGroup}/{vmName}/stop")]
+    public async Task<IActionResult> StopAzureVm(string resourceGroup, string vmName)
+    {
+        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var creds = await _settings.GetUserAzureCredentialsAsync(key);
+        var actor = await ResolveAzureActorLabelAsync(key, creds);
+
+        var result = await _management.StopAzureVmAsync(creds, resourceGroup, vmName);
+        AppendAuditLog(actor, "Stop", "Azure VM", vmName, result.Success, result.Error);
+
+        return Ok(result);
+    }
+
+    [HttpPost("azurevm/{resourceGroup}/{vmName}/restart")]
+    public async Task<IActionResult> RestartAzureVm(string resourceGroup, string vmName)
+    {
+        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var creds = await _settings.GetUserAzureCredentialsAsync(key);
+        var actor = await ResolveAzureActorLabelAsync(key, creds);
+
+        var result = await _management.RestartAzureVmAsync(creds, resourceGroup, vmName);
+        AppendAuditLog(actor, "Restart", "Azure VM", vmName, result.Success, result.Error);
+
+        return Ok(result);
+    }
+
+    [HttpDelete("azurevm/{resourceGroup}/{vmName}")]
+    public async Task<IActionResult> DeleteAzureVm(string resourceGroup, string vmName)
+    {
+        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var creds = await _settings.GetUserAzureCredentialsAsync(key);
+        var actor = await ResolveAzureActorLabelAsync(key, creds);
+
+        var result = await _management.DeleteAzureVmAsync(creds, resourceGroup, vmName);
+        AppendAuditLog(actor, "Delete", "Azure VM", vmName, result.Success, result.Error);
+
+        return Ok(result);
+    }
+
+    [HttpPost("azurevm")]
+    public async Task<IActionResult> CreateAzureVm([FromBody] AzureCreateVmRequestDto request)
+    {
+        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var creds = await _settings.GetUserAzureCredentialsAsync(key);
+        var actor = await ResolveAzureActorLabelAsync(key, creds);
+
+        var result = await _management.CreateAzureVmAsync(creds, request);
+        AppendAuditLog(actor, "Create", "Azure VM", request.Name, result.Success, result.Error);
+
+        return Ok(result);
+    }
+
+    [HttpGet("azurevm/catalog")]
+    public IActionResult GetAzureVmCatalog()
+    {
+        return Ok(new
+        {
+            Sizes = CloudServiceManagementService.VmSizeCatalog.Select(kv => new { value = kv.Key, label = kv.Value }),
+            Images = CloudServiceManagementService.VmImageCatalog.Select(kv => new { value = kv.Key, label = kv.Value.Label, isWindows = kv.Value.IsWindows })
+        });
+    }
+
+    // ================= Azure resource detail (generic view/read) =================
+    // Cloud Services' Azure page's "click into any resource, not just a
+    // VM" detail panel - see AzureResourceDetailDto's own comment.
+    // resourceId comes straight from the account-wide inventory's own
+    // ResourceId field (see GetAzureResourceInventoryAsync), so this never
+    // needs to guess or reconstruct one from a name.
+
+    [HttpGet("azureresource")]
+    public async Task<IActionResult> GetAzureResourceDetail([FromQuery] string resourceId, [FromQuery] string resourceType)
+    {
+        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var creds = await _settings.GetUserAzureCredentialsAsync(key);
+
+        return Ok(await _cloud.GetAzureResourceDetailAsync(creds, resourceId, resourceType));
+    }
+
     // ================= GCP Artifact Registry =================
     // Same self-service posture as ECR/ACR above - this session's own GCP
     // credentials are the auth boundary, no AdminGate.

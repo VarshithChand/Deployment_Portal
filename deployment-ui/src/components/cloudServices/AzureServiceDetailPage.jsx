@@ -1,23 +1,32 @@
+import { useState } from "react";
+
 import AZURE_SERVICES from "../../data/azureServiceCatalog";
 import { getLiveStatusForAzureService } from "../../utils/cloudServiceLiveStatus";
 import usePagination from "../../hooks/usePagination";
 import Pagination from "../common/Pagination";
 import CloudServiceBreadcrumbs from "./CloudServiceBreadcrumbs";
+import AzureResourceDetailDialog from "./AzureResourceDetailDialog";
+import AzureVmManagementPage from "./AzureVmManagementPage";
 
 const PAGE_SIZE = 10;
 
 // Azure's own service detail page - the Azure equivalent of
-// CloudServiceDetailPage.jsx, but deliberately simpler: none of Azure's
-// catalog entries have a dedicated per-service management page the way
-// AWS's EC2/ECS/ECR/Lambda/RDS/S3/VPC do (real start/stop/create/delete
-// actions against a live AWS API) - building that same depth for Azure
-// would mean a from-scratch Compute/Storage/SQL/etc. management
-// integration per service, not just a catalog page. This is the honest
-// version: every entry gets the same generic body - whatever the
-// account-wide ARM resource inventory already knows about that resource
-// type (see settingsService.getMyAzureResources), plus a direct link out
-// to the real Azure Portal for anything requiring an actual action.
+// CloudServiceDetailPage.jsx. One shell (breadcrumbs, header, Refresh,
+// Open Azure Portal) shared by every service; which body renders below it
+// comes from a small per-service switch, same shape as AWS's own
+// ServiceBody. Virtual Machines are the one catalog entry with a real
+// management page (list + start/stop/restart/delete/create - see
+// AzureVmManagementPage.jsx); every other entry falls back to the generic
+// body below - a click into any one resource opens
+// AzureResourceDetailDialog for real view/read (ARM's own full property
+// bag, not just the inventory list's name+location), plus a direct link
+// out to the real Azure Portal for anything requiring an actual create/
+// edit/delete action (deliberately not built per resource type - see
+// Round 78's own scoping note).
 export default function AzureServiceDetailPage({ service, inventory, onBack }) {
+
+    const [refreshToken, setRefreshToken] = useState(0);
+    const [detailItem, setDetailItem] = useState(null);
 
     const related = (service.relatedServices || [])
         .map((id) => AZURE_SERVICES.find((s) => s.id === id))
@@ -28,6 +37,12 @@ export default function AzureServiceDetailPage({ service, inventory, onBack }) {
     return (
 
         <>
+
+            <AzureResourceDetailDialog
+                resourceId={detailItem?.resourceId}
+                resourceType={service.resourceType}
+                onClose={() => setDetailItem(null)}
+            />
 
             <CloudServiceBreadcrumbs items={[{ label: "Azure Services", onClick: onBack }, { label: service.name }]} />
 
@@ -49,6 +64,12 @@ export default function AzureServiceDetailPage({ service, inventory, onBack }) {
                 </div>
 
                 <div className="cloud-service-detail-page-header-actions">
+
+                    {service.id === "virtual-machines" && (
+                        <button type="button" className="btn btn-secondary" onClick={() => setRefreshToken((t) => t + 1)}>
+                            Refresh
+                        </button>
+                    )}
 
                     <a href={service.consoleUrl} target="_blank" rel="noreferrer" className="btn btn-primary">
                         Open Azure Portal →
@@ -90,48 +111,61 @@ export default function AzureServiceDetailPage({ service, inventory, onBack }) {
 
             )}
 
-            <div className="card">
+            {service.id === "virtual-machines" ? (
 
-                <h2 className="card-title">Resources</h2>
+                <AzureVmManagementPage refreshToken={refreshToken} />
 
-                {!inventory ? (
+            ) : (
 
-                    <p className="empty-state">Loading Azure resources...</p>
+                <>
 
-                ) : !inventory.configured ? (
+                    <div className="card">
 
-                    <p className="empty-state" style={{ textAlign: "left" }}>
-                        Enter your Azure credentials (including a Subscription ID) in Settings → Credentials → Azure
-                        to see live status here.
+                        <h2 className="card-title">Resources</h2>
+
+                        {!inventory ? (
+
+                            <p className="empty-state">Loading Azure resources...</p>
+
+                        ) : !inventory.configured ? (
+
+                            <p className="empty-state" style={{ textAlign: "left" }}>
+                                Enter your Azure credentials (including a Subscription ID) in Settings → Credentials → Azure
+                                to see live status here.
+                            </p>
+
+                        ) : inventory.error ? (
+
+                            <>
+                                <p className="error-message">Unable to load Azure resources.</p>
+                                <p className="field-hint">{inventory.error}</p>
+                            </>
+
+                        ) : !status ? (
+
+                            <p className="empty-state" style={{ textAlign: "left" }}>
+                                {service.resourceType
+                                    ? `Nothing of this type found in your subscription. Open Azure Portal above for advanced management of ${service.name}.`
+                                    : `${service.name} isn't a single trackable resource type - open Azure Portal above to manage it.`}
+                            </p>
+
+                        ) : (
+
+                            <AzureResourceTable status={status} onSelect={setDetailItem} />
+
+                        )}
+
+                    </div>
+
+                    <p className="field-hint">
+                        Click a resource above to view its full detail. Create/edit/delete for {service.name}{" "}
+                        isn't implemented in the Deployment Portal yet - use <strong>Open Azure Portal</strong>{" "}
+                        above for that.
                     </p>
 
-                ) : inventory.error ? (
+                </>
 
-                    <>
-                        <p className="error-message">Unable to load Azure resources.</p>
-                        <p className="field-hint">{inventory.error}</p>
-                    </>
-
-                ) : !status ? (
-
-                    <p className="empty-state" style={{ textAlign: "left" }}>
-                        {service.resourceType
-                            ? `Nothing of this type found in your subscription. Open Azure Portal above for advanced management of ${service.name}.`
-                            : `${service.name} isn't a single trackable resource type - open Azure Portal above to manage it.`}
-                    </p>
-
-                ) : (
-
-                    <AzureResourceTable status={status} />
-
-                )}
-
-            </div>
-
-            <p className="field-hint">
-                Management actions for {service.name} aren't implemented in the Deployment Portal -
-                use <strong>Open Azure Portal</strong> above for create/delete and deeper configuration.
-            </p>
+            )}
 
         </>
 
@@ -139,7 +173,7 @@ export default function AzureServiceDetailPage({ service, inventory, onBack }) {
 
 }
 
-function AzureResourceTable({ status }) {
+function AzureResourceTable({ status, onSelect }) {
 
     const { page, setPage, pageCount, pageItems, totalCount, startIndex, endIndex } =
         usePagination(status.items || [], PAGE_SIZE);
@@ -175,7 +209,11 @@ function AzureResourceTable({ status }) {
 
                                 {pageItems.map((item, index) => (
 
-                                    <tr key={startIndex + index}>
+                                    <tr
+                                        key={startIndex + index}
+                                        className={item.resourceId ? "table-row-clickable" : ""}
+                                        onClick={item.resourceId ? () => onSelect(item) : undefined}
+                                    >
                                         <td>{item.name}</td>
                                         <td className="field-hint">{item.detail || "—"}</td>
                                     </tr>

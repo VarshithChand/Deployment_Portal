@@ -5456,6 +5456,35 @@ textarea{
 
 }
 
+/* AzureResourceDetailDialog's own nested-object/array property values -
+   ARM's property shape differs per resource type, so a nested value falls
+   back to formatted JSON rather than a bespoke layout per type. */
+.cloud-service-detail-json{
+
+    margin:0;
+
+    padding:8px 10px;
+
+    background:var(--bg);
+
+    border:1px solid var(--border);
+
+    border-radius:6px;
+
+    font-size:12px;
+
+    line-height:1.5;
+
+    max-height:220px;
+
+    overflow:auto;
+
+    white-space:pre-wrap;
+
+    word-break:break-word;
+
+}
+
 /* ---- Breadcrumbs + detail-page header (CloudServiceDetailPage) ---- */
 
 .cloud-service-breadcrumbs{

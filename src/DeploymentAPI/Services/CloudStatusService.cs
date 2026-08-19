@@ -1097,7 +1097,8 @@ public class CloudStatusService
                     group.Items.Add(new AwsResourceItemDto
                     {
                         Name = r["name"]?.ToString() ?? string.Empty,
-                        Detail = r["location"]?.ToString()
+                        Detail = r["location"]?.ToString(),
+                        ResourceId = r["id"]?.ToString()
                     });
                     group.Count++;
                 }
@@ -1130,7 +1131,10 @@ public class CloudStatusService
     // are two different systems). Same reasoning as GetAzureAccessTokenAsync's
     // own fix: read the real body instead of reducing it to a bare status
     // code.
-    private static async Task<string> DescribeArmErrorAsync(HttpResponseMessage response)
+    // Internal (not private) so CloudServiceManagementService's own Azure
+    // VM calls can surface ARM errors the exact same way, rather than
+    // duplicating this parsing.
+    internal static async Task<string> DescribeArmErrorAsync(HttpResponseMessage response)
     {
         var body = await response.Content.ReadAsStringAsync();
 
@@ -1151,5 +1155,150 @@ public class CloudStatusService
         return !string.IsNullOrWhiteSpace(body)
             ? body
             : $"Azure returned {(int)response.StatusCode} {response.StatusCode}.";
+    }
+
+    // Cloud Services' Azure sub-page - generic "view/read" detail for any
+    // ONE resource (see AzureResourceDetailDto's own comment on why every
+    // resource type falls back to this instead of a typed DTO per type).
+    // ARM has no single api-version that works for every resource type -
+    // each resource provider (Microsoft.Storage, Microsoft.Compute, ...)
+    // declares its own supported versions, so this resolves the right one
+    // dynamically (GET /subscriptions/{sub}/providers/{namespace}) rather
+    // than hand-maintaining a growing, inevitably-stale lookup table - the
+    // same approach Azure CLI and the Azure Portal itself use under the
+    // hood.
+    public async Task<AzureResourceDetailDto> GetAzureResourceDetailAsync(UserAzureCredentials credentials, string resourceId, string resourceType)
+    {
+        var result = new AzureResourceDetailDto { Configured = credentials.IsConfigured };
+
+        if (!credentials.IsConfigured)
+            return result;
+
+        if (string.IsNullOrWhiteSpace(credentials.SubscriptionId))
+        {
+            result.Error = "No Subscription ID configured — set one in Settings → Credentials → Azure.";
+            return result;
+        }
+
+        try
+        {
+            var token = await GetAzureAccessTokenAsync(credentials.TenantId!, credentials.ClientId!, credentials.ClientSecret!);
+
+            if (token == null)
+            {
+                result.Error = "Azure sign-in failed — check the tenant, client ID, and client secret.";
+                return result;
+            }
+
+            var apiVersion = await ResolveArmApiVersionAsync(token, credentials.SubscriptionId, resourceType);
+
+            if (apiVersion == null)
+            {
+                result.Error = $"Azure doesn't recognize the resource type \"{resourceType}\".";
+                return result;
+            }
+
+            var url = $"https://management.azure.com{resourceId}?api-version={Uri.EscapeDataString(apiVersion)}";
+
+            using var request = new HttpRequestMessage(HttpMethod.Get, url);
+            request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+
+            var response = await AzureHttpClient.SendAsync(request);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                result.Error = await DescribeArmErrorAsync(response);
+                return result;
+            }
+
+            var json = JObject.Parse(await response.Content.ReadAsStringAsync());
+
+            result.Name = json["name"]?.ToString() ?? string.Empty;
+            result.Type = json["type"]?.ToString() ?? resourceType;
+            result.Location = json["location"]?.ToString() ?? string.Empty;
+            result.ResourceGroup = ExtractResourceGroup(resourceId);
+            result.PortalUrl = $"https://portal.azure.com/#@{credentials.TenantId}/resource{resourceId}";
+            result.Tags = json["tags"]?.ToObject<Dictionary<string, string>>();
+
+            if (json["properties"] is JObject properties)
+            {
+                foreach (var prop in properties.Properties())
+                    result.Properties[prop.Name] = FlattenJsonValue(prop.Value);
+            }
+        }
+        catch (Exception ex)
+        {
+            result.Error = CloudErrorSanitizer.Describe(ex, "Azure", "resource detail");
+        }
+
+        return result;
+    }
+
+    // A resource's provider namespace + the api-version(s) it supports are
+    // looked up fresh per detail request rather than cached - this
+    // endpoint is cheap and stable, and this is only ever called from a
+    // click into one resource's own detail view, not a bulk list.
+    private static async Task<string?> ResolveArmApiVersionAsync(string token, string subscriptionId, string resourceType)
+    {
+        var slashIndex = resourceType.IndexOf('/');
+
+        if (slashIndex <= 0)
+            return null;
+
+        var @namespace = resourceType[..slashIndex];
+        var type = resourceType[(slashIndex + 1)..];
+
+        var url = $"https://management.azure.com/subscriptions/{Uri.EscapeDataString(subscriptionId)}/providers/{Uri.EscapeDataString(@namespace)}?api-version=2021-04-01";
+
+        using var request = new HttpRequestMessage(HttpMethod.Get, url);
+        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+
+        var response = await AzureHttpClient.SendAsync(request);
+
+        if (!response.IsSuccessStatusCode)
+            return null;
+
+        var json = JObject.Parse(await response.Content.ReadAsStringAsync());
+        var resourceTypes = json["resourceTypes"] as JArray ?? new JArray();
+
+        var match = resourceTypes.FirstOrDefault(rt =>
+            string.Equals(rt["resourceType"]?.ToString(), type, StringComparison.OrdinalIgnoreCase));
+
+        var apiVersions = (match?["apiVersions"] as JArray)?.Select(v => v.ToString()).ToList();
+
+        if (apiVersions == null || apiVersions.Count == 0)
+            return null;
+
+        // ARM lists these newest-first; prefer a stable one over a preview
+        // when both exist, same preference Azure's own tooling defaults to.
+        return apiVersions.FirstOrDefault(v => !v.Contains("preview", StringComparison.OrdinalIgnoreCase))
+            ?? apiVersions.First();
+    }
+
+    // Internal (not private) - same reasoning as DescribeArmErrorAsync above.
+    internal static string? ExtractResourceGroup(string resourceId)
+    {
+        var parts = resourceId.Split('/', StringSplitOptions.RemoveEmptyEntries);
+        var index = Array.FindIndex(parts, p => string.Equals(p, "resourceGroups", StringComparison.OrdinalIgnoreCase));
+
+        return index >= 0 && index + 1 < parts.Length ? parts[index + 1] : null;
+    }
+
+    // ARM property values are arbitrarily nested JSON - flattened to plain
+    // CLR types (string/number/bool/List/Dictionary) so this can serialize
+    // through System.Text.Json on the way out without a Newtonsoft JToken
+    // leaking into the API response shape.
+    private static object? FlattenJsonValue(JToken? token)
+    {
+        if (token == null)
+            return null;
+
+        return token.Type switch
+        {
+            JTokenType.Object => ((JObject)token).Properties().ToDictionary(p => p.Name, p => FlattenJsonValue(p.Value)),
+            JTokenType.Array => ((JArray)token).Select(FlattenJsonValue).ToList(),
+            JTokenType.Null => null,
+            _ => token.ToObject<object>()
+        };
     }
 }

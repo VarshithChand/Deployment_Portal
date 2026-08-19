@@ -185,11 +185,21 @@ public class EcrImageDto
 // loose strings rather than a shape per AWS service, since Name/Detail
 // already covers "instance name + type/state", "bucket name + created",
 // "function name + runtime", etc. without six near-identical DTOs.
+//
+// ResourceId is populated only by GetAzureResourceInventoryAsync (ARM's
+// own full resource ID, e.g. "/subscriptions/.../resourceGroups/.../
+// providers/Microsoft.Storage/storageAccounts/foo") - AWS's own callers
+// leave it null, since ARN identifiers already live in Detail there and
+// this app's AWS resource pages don't have a generic "click through to
+// full detail" feature the way Cloud Services' Azure page now does (see
+// AzureServiceDetailPage.jsx / GetAzureResourceDetailAsync).
 public class AwsResourceItemDto
 {
     public string Name { get; set; } = string.Empty;
 
     public string? Detail { get; set; }
+
+    public string? ResourceId { get; set; }
 }
 
 // One AWS service's slice of the Dashboard's "AWS Services" inventory —

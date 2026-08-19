@@ -875,4 +875,453 @@ public class CloudServiceManagementService
 
         return result;
     }
+
+    // ================= Azure Virtual Machines =================
+    //
+    // Real VM management (list/start/stop/restart/delete/create) - unlike
+    // ACR above (control-plane list + registry data-plane calls) or every
+    // other Azure feature in this app so far (read-only), this is genuine
+    // write access against ARM's compute/network resource providers,
+    // parallel to what AWS's own EC2 management already does in this app
+    // (see StartEc2InstanceAsync above) but through raw ARM REST calls
+    // instead of an SDK - same "no vendor SDK, raw HttpClient" convention
+    // ACR already established for Azure.
+    //
+    // CreateAzureVmAsync in particular goes further than this app's own
+    // AWS EC2 page (which explicitly does NOT implement instance creation
+    // - see Ec2ManagementPage.jsx's own comment) because a VM cannot exist
+    // without a network interface, which cannot exist without a subnet,
+    // which cannot exist without a virtual network - unlike EC2, there is
+    // no "just launch it, AWS infers the rest" shortcut on Azure. This
+    // mirrors what `az vm create` itself does by default: auto-create a
+    // new VNet/Subnet/NSG/Public IP/NIC per VM with sensible defaults
+    // rather than requiring the caller to already have networking set up
+    // (see Round 78's own scoping decision - confirmed with the user
+    // directly rather than guessed).
+
+    private static readonly HttpClient AzureArmHttpClient = new();
+
+    private const string ComputeApiVersion = "2024-07-01";
+    private const string NetworkApiVersion = "2023-09-01";
+    private const string ResourceGroupApiVersion = "2021-04-01";
+
+    // A small, curated set rather than every Azure VM size/marketplace
+    // image (there are hundreds of each, and most need a per-region
+    // availability check this app has no reason to build) - same
+    // reasoning as data/awsRegions.js being a curated, not exhaustive,
+    // list. Image references match Azure's own long-stable "gen2" Ubuntu
+    // 22.04 LTS and Windows Server 2022 Datacenter marketplace listings at
+    // time of writing - if Microsoft/Canonical ever retire these specific
+    // publisher/offer/sku strings, VM creation fails with ARM's own real
+    // "image not found" error (surfaced via DescribeArmErrorAsync), not a
+    // silent wrong image.
+    public static readonly Dictionary<string, string> VmSizeCatalog = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["Standard_B1s"] = "B1s — 1 vCPU, 1 GiB RAM (burstable, smallest)",
+        ["Standard_B2s"] = "B2s — 2 vCPU, 4 GiB RAM (burstable)",
+        ["Standard_D2s_v3"] = "D2s v3 — 2 vCPU, 8 GiB RAM (general purpose)",
+        ["Standard_D4s_v3"] = "D4s v3 — 4 vCPU, 16 GiB RAM (general purpose)"
+    };
+
+    public record VmImageRef(string Publisher, string Offer, string Sku, string Version, bool IsWindows, string Label);
+
+    public static readonly Dictionary<string, VmImageRef> VmImageCatalog = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["ubuntu-22-04"] = new VmImageRef("Canonical", "0001-com-ubuntu-server-jammy", "22_04-lts-gen2", "latest", false, "Ubuntu Server 22.04 LTS"),
+        ["windows-server-2022"] = new VmImageRef("MicrosoftWindowsServer", "WindowsServer", "2022-datacenter-azure-edition", "latest", true, "Windows Server 2022 Datacenter")
+    };
+
+    // Every VM in the subscription, in one call - statusOnly=true asks
+    // ARM to include each VM's instanceView (which is where PowerState
+    // actually lives) directly in the list response, rather than needing
+    // a second GET per VM the way a plain list would. PrivateIp/PublicIp
+    // are deliberately left blank here - resolving them needs a follow-up
+    // NIC (and, for the public one, a further public-IP) lookup per VM,
+    // which this list intentionally doesn't fan out to keep this call
+    // count bounded regardless of how many VMs exist; click into a VM's
+    // own resource detail (GetAzureResourceDetailAsync) for its full
+    // networkProfile.
+    public async Task<AzureVmListDto> GetAzureVmsAsync(UserAzureCredentials credentials)
+    {
+        var result = new AzureVmListDto { Configured = credentials.IsConfigured };
+
+        if (!credentials.IsConfigured)
+            return result;
+
+        if (string.IsNullOrWhiteSpace(credentials.SubscriptionId))
+        {
+            result.Error = "No Subscription ID configured — set one in Settings → Credentials → Azure.";
+            return result;
+        }
+
+        try
+        {
+            var token = await CloudStatusService.GetAzureAccessTokenAsync(credentials.TenantId!, credentials.ClientId!, credentials.ClientSecret!);
+
+            if (token == null)
+            {
+                result.Error = "Azure sign-in failed — check the tenant, client ID, and client secret.";
+                return result;
+            }
+
+            var url = $"https://management.azure.com/subscriptions/{Uri.EscapeDataString(credentials.SubscriptionId)}" +
+                      $"/providers/Microsoft.Compute/virtualMachines?statusOnly=true&api-version={ComputeApiVersion}";
+
+            using var request = new HttpRequestMessage(HttpMethod.Get, url);
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+            var response = await AzureArmHttpClient.SendAsync(request);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                result.Error = await CloudStatusService.DescribeArmErrorAsync(response);
+                return result;
+            }
+
+            var json = JObject.Parse(await response.Content.ReadAsStringAsync());
+            var vms = json["value"] as JArray ?? new JArray();
+
+            result.Vms = vms.Select(v =>
+            {
+                var props = v["properties"];
+                var statuses = props?["extended"]?["instanceView"]?["statuses"] as JArray ?? new JArray();
+
+                var powerStatus = statuses.FirstOrDefault(s => (s["code"]?.ToString() ?? "").StartsWith("PowerState/", StringComparison.OrdinalIgnoreCase));
+                var powerState = powerStatus?["code"]?.ToString()?.Replace("PowerState/", "", StringComparison.OrdinalIgnoreCase) ?? "unknown";
+
+                var resourceId = v["id"]?.ToString() ?? string.Empty;
+
+                return new AzureVmDto
+                {
+                    Name = v["name"]?.ToString() ?? string.Empty,
+                    ResourceGroup = CloudStatusService.ExtractResourceGroup(resourceId) ?? string.Empty,
+                    Location = v["location"]?.ToString() ?? string.Empty,
+                    Size = props?["hardwareProfile"]?["vmSize"]?.ToString() ?? string.Empty,
+                    OsType = props?["storageProfile"]?["osDisk"]?["osType"]?.ToString() ?? string.Empty,
+                    PowerState = powerState
+                };
+            }).ToList();
+        }
+        catch (Exception ex)
+        {
+            result.Error = CloudErrorSanitizer.Describe(ex, "Azure", "VM list");
+        }
+
+        return result;
+    }
+
+    // Start/stop/restart/delete are all real ARM long-running operations
+    // (a 200/202 here means "accepted," not "already done") - same "never
+    // claims the new state itself, the frontend re-fetches" contract as
+    // every AWS action above. Stop uses ARM's deallocate action, not the
+    // separate (rarely useful) "power off but keep billing for compute"
+    // stop - matches what the Azure Portal's own "Stop" button does, and
+    // what a visitor actually wants when they click "Stop" here.
+    private async Task<CloudServiceActionResultDto> RunVmActionAsync(UserAzureCredentials credentials, string resourceGroup, string vmName, string action, string verbFriendly)
+    {
+        if (!credentials.IsConfigured)
+            return new CloudServiceActionResultDto { Success = false, Error = "Azure is not configured." };
+
+        try
+        {
+            var token = await CloudStatusService.GetAzureAccessTokenAsync(credentials.TenantId!, credentials.ClientId!, credentials.ClientSecret!);
+
+            if (token == null)
+                return new CloudServiceActionResultDto { Success = false, Error = "Azure sign-in failed — check the tenant, client ID, and client secret." };
+
+            var url = $"https://management.azure.com/subscriptions/{Uri.EscapeDataString(credentials.SubscriptionId ?? string.Empty)}" +
+                      $"/resourceGroups/{Uri.EscapeDataString(resourceGroup)}/providers/Microsoft.Compute/virtualMachines/{Uri.EscapeDataString(vmName)}/{action}?api-version={ComputeApiVersion}";
+
+            using var request = new HttpRequestMessage(HttpMethod.Post, url);
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+            var response = await AzureArmHttpClient.SendAsync(request);
+
+            if (!response.IsSuccessStatusCode)
+                return new CloudServiceActionResultDto { Success = false, Error = await CloudStatusService.DescribeArmErrorAsync(response) };
+
+            return new CloudServiceActionResultDto { Success = true, Message = $"{verbFriendly} requested — refresh to see the current state." };
+        }
+        catch (Exception ex)
+        {
+            return new CloudServiceActionResultDto { Success = false, Error = CloudErrorSanitizer.Describe(ex, "Azure", $"VM {verbFriendly.ToLowerInvariant()}") };
+        }
+    }
+
+    public Task<CloudServiceActionResultDto> StartAzureVmAsync(UserAzureCredentials credentials, string resourceGroup, string vmName) =>
+        RunVmActionAsync(credentials, resourceGroup, vmName, "start", "Start");
+
+    public Task<CloudServiceActionResultDto> StopAzureVmAsync(UserAzureCredentials credentials, string resourceGroup, string vmName) =>
+        RunVmActionAsync(credentials, resourceGroup, vmName, "deallocate", "Stop");
+
+    public Task<CloudServiceActionResultDto> RestartAzureVmAsync(UserAzureCredentials credentials, string resourceGroup, string vmName) =>
+        RunVmActionAsync(credentials, resourceGroup, vmName, "restart", "Restart");
+
+    // Deletes the VM resource only - its OS disk, NIC, and public IP (all
+    // separate ARM resources, same ones CreateAzureVmAsync below creates)
+    // are NOT deleted along with it and keep billing until removed
+    // separately. Surfaced as a field-hint in the frontend rather than
+    // silently cascading a delete across resources the caller never
+    // explicitly asked to remove - same "no surprise blast radius"
+    // reasoning as this app's other destructive actions.
+    public async Task<CloudServiceActionResultDto> DeleteAzureVmAsync(UserAzureCredentials credentials, string resourceGroup, string vmName)
+    {
+        if (!credentials.IsConfigured)
+            return new CloudServiceActionResultDto { Success = false, Error = "Azure is not configured." };
+
+        try
+        {
+            var token = await CloudStatusService.GetAzureAccessTokenAsync(credentials.TenantId!, credentials.ClientId!, credentials.ClientSecret!);
+
+            if (token == null)
+                return new CloudServiceActionResultDto { Success = false, Error = "Azure sign-in failed — check the tenant, client ID, and client secret." };
+
+            var url = $"https://management.azure.com/subscriptions/{Uri.EscapeDataString(credentials.SubscriptionId ?? string.Empty)}" +
+                      $"/resourceGroups/{Uri.EscapeDataString(resourceGroup)}/providers/Microsoft.Compute/virtualMachines/{Uri.EscapeDataString(vmName)}?api-version={ComputeApiVersion}";
+
+            using var request = new HttpRequestMessage(HttpMethod.Delete, url);
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+            var response = await AzureArmHttpClient.SendAsync(request);
+
+            if (!response.IsSuccessStatusCode)
+                return new CloudServiceActionResultDto { Success = false, Error = await CloudStatusService.DescribeArmErrorAsync(response) };
+
+            return new CloudServiceActionResultDto { Success = true, Message = "Delete requested — the VM's disk, network interface, and public IP were NOT deleted and may still be billing; remove them separately if you don't need them." };
+        }
+        catch (Exception ex)
+        {
+            return new CloudServiceActionResultDto { Success = false, Error = CloudErrorSanitizer.Describe(ex, "Azure", "VM delete") };
+        }
+    }
+
+    // One ARM PUT, JSON body in, expects 2xx back - every step of
+    // CreateAzureVmAsync below is this same shape, so it's factored out
+    // once rather than repeated per resource type.
+    private static async Task<(bool Success, string? Error, JObject? Body)> PutArmResourceAsync(string token, string url, object body)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Put, url)
+        {
+            Content = new StringContent(JObject.FromObject(body).ToString(), Encoding.UTF8, "application/json")
+        };
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        var response = await AzureArmHttpClient.SendAsync(request);
+        var responseBody = await response.Content.ReadAsStringAsync();
+
+        if (!response.IsSuccessStatusCode)
+            return (false, await CloudStatusService.DescribeArmErrorAsync(response), null);
+
+        JObject? parsed = null;
+
+        try { parsed = JObject.Parse(responseBody); }
+        catch { /* some PUTs (e.g. resource group) return a body this app doesn't need to read */ }
+
+        return (true, null, parsed);
+    }
+
+    // Auto-creates a whole new VNet/Subnet/NSG/Public IP/NIC per VM, named
+    // off the VM's own name, then the VM itself - see this section's own
+    // top comment for why (unlike EC2, Azure has no "launch and let the
+    // platform infer the network" shortcut). Each dependent resource's
+    // own PUT is awaited (not fired in parallel) since the VM's own
+    // creation genuinely depends on the NIC existing first, which depends
+    // on the subnet and public IP existing first - a real dependency
+    // chain, not an arbitrary ordering choice.
+    public async Task<CloudServiceActionResultDto> CreateAzureVmAsync(UserAzureCredentials credentials, AzureCreateVmRequestDto request)
+    {
+        if (!credentials.IsConfigured)
+            return new CloudServiceActionResultDto { Success = false, Error = "Azure is not configured." };
+
+        if (string.IsNullOrWhiteSpace(credentials.SubscriptionId))
+            return new CloudServiceActionResultDto { Success = false, Error = "No Subscription ID configured — set one in Settings → Credentials → Azure." };
+
+        if (!VmSizeCatalog.ContainsKey(request.Size))
+            return new CloudServiceActionResultDto { Success = false, Error = $"Unknown VM size \"{request.Size}\"." };
+
+        if (!VmImageCatalog.TryGetValue(request.Image, out var image))
+            return new CloudServiceActionResultDto { Success = false, Error = $"Unknown VM image \"{request.Image}\"." };
+
+        var hasPassword = !string.IsNullOrWhiteSpace(request.AdminPassword);
+        var hasSshKey = !string.IsNullOrWhiteSpace(request.SshPublicKey);
+
+        if (image.IsWindows && !hasPassword)
+            return new CloudServiceActionResultDto { Success = false, Error = "Windows images require an admin password — an SSH key alone isn't enough." };
+
+        if (!image.IsWindows && !hasPassword && !hasSshKey)
+            return new CloudServiceActionResultDto { Success = false, Error = "Provide an admin password or an SSH public key." };
+
+        try
+        {
+            var token = await CloudStatusService.GetAzureAccessTokenAsync(credentials.TenantId!, credentials.ClientId!, credentials.ClientSecret!);
+
+            if (token == null)
+                return new CloudServiceActionResultDto { Success = false, Error = "Azure sign-in failed — check the tenant, client ID, and client secret." };
+
+            var sub = Uri.EscapeDataString(credentials.SubscriptionId);
+            var rg = Uri.EscapeDataString(request.ResourceGroup);
+            var name = request.Name;
+            var baseUrl = $"https://management.azure.com/subscriptions/{sub}/resourceGroups/{rg}/providers";
+
+            // 1. Resource group (idempotent - a no-op if it already exists
+            // with the same location).
+            var rgUrl = $"https://management.azure.com/subscriptions/{sub}/resourceGroups/{rg}?api-version={ResourceGroupApiVersion}";
+            var rgResult = await PutArmResourceAsync(token, rgUrl, new { location = request.Location });
+
+            if (!rgResult.Success)
+                return new CloudServiceActionResultDto { Success = false, Error = $"Resource group: {rgResult.Error}" };
+
+            // 2. Public IP.
+            var pipUrl = $"{baseUrl}/Microsoft.Network/publicIPAddresses/{Uri.EscapeDataString(name)}-pip?api-version={NetworkApiVersion}";
+            var pipResult = await PutArmResourceAsync(token, pipUrl, new
+            {
+                location = request.Location,
+                sku = new { name = "Standard" },
+                properties = new { publicIPAllocationMethod = "Static" }
+            });
+
+            if (!pipResult.Success)
+                return new CloudServiceActionResultDto { Success = false, Error = $"Public IP: {pipResult.Error}" };
+
+            var publicIpId = pipResult.Body?["id"]?.ToString()
+                ?? $"/subscriptions/{credentials.SubscriptionId}/resourceGroups/{request.ResourceGroup}/providers/Microsoft.Network/publicIPAddresses/{name}-pip";
+
+            // 3. Virtual network + one subnet, in one call.
+            var vnetUrl = $"{baseUrl}/Microsoft.Network/virtualNetworks/{Uri.EscapeDataString(name)}-vnet?api-version={NetworkApiVersion}";
+            var vnetResult = await PutArmResourceAsync(token, vnetUrl, new
+            {
+                location = request.Location,
+                properties = new
+                {
+                    addressSpace = new { addressPrefixes = new[] { "10.0.0.0/16" } },
+                    subnets = new[] { new { name = "default", properties = new { addressPrefix = "10.0.0.0/24" } } }
+                }
+            });
+
+            if (!vnetResult.Success)
+                return new CloudServiceActionResultDto { Success = false, Error = $"Virtual network: {vnetResult.Error}" };
+
+            var vnetId = vnetResult.Body?["id"]?.ToString()
+                ?? $"/subscriptions/{credentials.SubscriptionId}/resourceGroups/{request.ResourceGroup}/providers/Microsoft.Network/virtualNetworks/{name}-vnet";
+            var subnetId = $"{vnetId}/subnets/default";
+
+            // 4. Network security group - opens SSH (22) for Linux images
+            // or RDP (3389) for Windows, since a NIC with no NSG accepts
+            // no inbound traffic from the internet by default (matches
+            // what `az vm create` itself opens automatically).
+            var nsgUrl = $"{baseUrl}/Microsoft.Network/networkSecurityGroups/{Uri.EscapeDataString(name)}-nsg?api-version={NetworkApiVersion}";
+            var remotePort = image.IsWindows ? "3389" : "22";
+            var nsgResult = await PutArmResourceAsync(token, nsgUrl, new
+            {
+                location = request.Location,
+                properties = new
+                {
+                    securityRules = new[]
+                    {
+                        new
+                        {
+                            name = "Allow-Remote-Access",
+                            properties = new
+                            {
+                                priority = 1000,
+                                direction = "Inbound",
+                                access = "Allow",
+                                protocol = "Tcp",
+                                sourceAddressPrefix = "*",
+                                sourcePortRange = "*",
+                                destinationAddressPrefix = "*",
+                                destinationPortRange = remotePort
+                            }
+                        }
+                    }
+                }
+            });
+
+            if (!nsgResult.Success)
+                return new CloudServiceActionResultDto { Success = false, Error = $"Network security group: {nsgResult.Error}" };
+
+            var nsgId = nsgResult.Body?["id"]?.ToString()
+                ?? $"/subscriptions/{credentials.SubscriptionId}/resourceGroups/{request.ResourceGroup}/providers/Microsoft.Network/networkSecurityGroups/{name}-nsg";
+
+            // 5. Network interface, tying the subnet + public IP + NSG
+            // together.
+            var nicUrl = $"{baseUrl}/Microsoft.Network/networkInterfaces/{Uri.EscapeDataString(name)}-nic?api-version={NetworkApiVersion}";
+            var nicResult = await PutArmResourceAsync(token, nicUrl, new
+            {
+                location = request.Location,
+                properties = new
+                {
+                    ipConfigurations = new[]
+                    {
+                        new
+                        {
+                            name = "ipconfig1",
+                            properties = new
+                            {
+                                subnet = new { id = subnetId },
+                                publicIPAddress = new { id = publicIpId },
+                                privateIPAllocationMethod = "Dynamic"
+                            }
+                        }
+                    },
+                    networkSecurityGroup = new { id = nsgId }
+                }
+            });
+
+            if (!nicResult.Success)
+                return new CloudServiceActionResultDto { Success = false, Error = $"Network interface: {nicResult.Error}" };
+
+            var nicId = nicResult.Body?["id"]?.ToString()
+                ?? $"/subscriptions/{credentials.SubscriptionId}/resourceGroups/{request.ResourceGroup}/providers/Microsoft.Network/networkInterfaces/{name}-nic";
+
+            // 6. The VM itself.
+            object osProfile = image.IsWindows
+                ? new { computerName = name, adminUsername = request.AdminUsername, adminPassword = request.AdminPassword }
+                : hasSshKey
+                    ? new
+                    {
+                        computerName = name,
+                        adminUsername = request.AdminUsername,
+                        adminPassword = request.AdminPassword,
+                        linuxConfiguration = new
+                        {
+                            disablePasswordAuthentication = !hasPassword,
+                            ssh = new
+                            {
+                                publicKeys = new[]
+                                {
+                                    new { path = $"/home/{request.AdminUsername}/.ssh/authorized_keys", keyData = request.SshPublicKey }
+                                }
+                            }
+                        }
+                    }
+                    : new { computerName = name, adminUsername = request.AdminUsername, adminPassword = request.AdminPassword };
+
+            var vmUrl = $"{baseUrl}/Microsoft.Compute/virtualMachines/{Uri.EscapeDataString(name)}?api-version={ComputeApiVersion}";
+            var vmResult = await PutArmResourceAsync(token, vmUrl, new
+            {
+                location = request.Location,
+                properties = new
+                {
+                    hardwareProfile = new { vmSize = request.Size },
+                    storageProfile = new
+                    {
+                        imageReference = new { publisher = image.Publisher, offer = image.Offer, sku = image.Sku, version = image.Version },
+                        osDisk = new { createOption = "FromImage", managedDisk = new { storageAccountType = "Standard_LRS" } }
+                    },
+                    osProfile,
+                    networkProfile = new { networkInterfaces = new[] { new { id = nicId, properties = new { primary = true } } } }
+                }
+            });
+
+            if (!vmResult.Success)
+                return new CloudServiceActionResultDto { Success = false, Error = $"Virtual machine: {vmResult.Error} (its network resources were created and may still be billing even though the VM itself failed - resource group \"{request.ResourceGroup}\")" };
+
+            return new CloudServiceActionResultDto { Success = true, Message = $"\"{name}\" is being created — refresh in a minute to see it." };
+        }
+        catch (Exception ex)
+        {
+            return new CloudServiceActionResultDto { Success = false, Error = CloudErrorSanitizer.Describe(ex, "Azure", "VM creation") };
+        }
+    }
 }

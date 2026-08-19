@@ -66,3 +66,52 @@ export const getRdsInstances = async () => {
     const response = await api.get("/rds");
     return response.data;
 };
+
+// ================= Azure Virtual Machines =================
+// Real write access (start/stop/restart/delete/create) - the Azure
+// equivalent of the EC2 actions above.
+
+export const getAzureVms = async () => {
+    const response = await api.get("/azurevm");
+    return response.data;
+};
+
+export const startAzureVm = async (resourceGroup, vmName) => {
+    const response = await api.post(`/azurevm/${encodeURIComponent(resourceGroup)}/${encodeURIComponent(vmName)}/start`);
+    return response.data;
+};
+
+export const stopAzureVm = async (resourceGroup, vmName) => {
+    const response = await api.post(`/azurevm/${encodeURIComponent(resourceGroup)}/${encodeURIComponent(vmName)}/stop`);
+    return response.data;
+};
+
+export const restartAzureVm = async (resourceGroup, vmName) => {
+    const response = await api.post(`/azurevm/${encodeURIComponent(resourceGroup)}/${encodeURIComponent(vmName)}/restart`);
+    return response.data;
+};
+
+export const deleteAzureVm = async (resourceGroup, vmName) => {
+    const response = await api.delete(`/azurevm/${encodeURIComponent(resourceGroup)}/${encodeURIComponent(vmName)}`);
+    return response.data;
+};
+
+export const createAzureVm = async (payload) => {
+    const response = await api.post("/azurevm", payload);
+    return response.data;
+};
+
+export const getAzureVmCatalog = async () => {
+    const response = await api.get("/azurevm/catalog");
+    return response.data;
+};
+
+// ================= Azure resource detail (generic view/read) =================
+// Cloud Services' Azure page's "click into any resource, not just a VM"
+// detail panel - resourceId/resourceType come straight off an inventory
+// item (see getMyAzureResources in settingsService.js).
+
+export const getAzureResourceDetail = async (resourceId, resourceType) => {
+    const response = await api.get("/azureresource", { params: { resourceId, resourceType } });
+    return response.data;
+};
