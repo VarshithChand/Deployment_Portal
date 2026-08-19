@@ -71,3 +71,20 @@ export const getCloudRunMetrics = async (name, rangeMinutes) => {
     const response = await api.get(`/cloudrun/${encodeURIComponent(name)}/metrics`, { params: { rangeMinutes } });
     return response.data;
 };
+
+// ================= Cloud Run revisions / traffic / rollback (Phase C) =================
+
+export const getCloudRunRevisions = async (name) => {
+    const response = await api.get(`/cloudrun/${encodeURIComponent(name)}/revisions`);
+    return response.data;
+};
+
+export const updateCloudRunTraffic = async (name, traffic) => {
+    const response = await api.post(`/cloudrun/${encodeURIComponent(name)}/traffic`, { traffic });
+    return response.data;
+};
+
+export const rollbackCloudRun = async (name, revisionName) => {
+    const response = await api.post(`/cloudrun/${encodeURIComponent(name)}/rollback`, { revisionName });
+    return response.data;
+};

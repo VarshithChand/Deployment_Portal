@@ -2,7 +2,7 @@ import { createContext, useCallback, useEffect, useState } from "react";
 
 import { getSidebarAccess } from "../services/settingsService";
 
-const TABS = ["dashboard", "deploy", "approvals", "pullRequests", "storage", "analytics", "timeline", "history", "environments", "templates", "azureDevOpsBranches", "azureDevOpsPipelines", "azureDevOpsHistory", "azureDevOpsArtifacts", "azureDevOpsPullRequests", "azureDevOpsFeeds", "codeCommit", "gitlab", "bitbucket", "cloudServicesAws", "cloudServicesAzure", "cloudServicesGcp", "paasElasticBeanstalk", "paasAzureAppService", "services", "paasHosting", "ecr", "acr", "artifactRegistry", "dockerHub", "ghcr", "gitlabRegistry", "jfrog", "harbor", "nexus",
+const TABS = ["dashboard", "deploy", "approvals", "pullRequests", "storage", "analytics", "timeline", "history", "environments", "templates", "azureDevOpsBranches", "azureDevOpsPipelines", "azureDevOpsHistory", "azureDevOpsArtifacts", "azureDevOpsPullRequests", "azureDevOpsFeeds", "codeCommit", "gitlab", "bitbucket", "cloudServicesAws", "cloudServicesAzure", "cloudServicesGcp", "paasHub", "paasElasticBeanstalk", "paasAzureAppService", "services", "paasHosting", "ecr", "acr", "artifactRegistry", "dockerHub", "ghcr", "gitlabRegistry", "jfrog", "harbor", "nexus",
 "cloudwatch", "xray", "azuremonitor", "cloudmonitoring", "prometheus", "datadog", "elk", "opensearch",
 "loki", "fluentbit", "fluentd", "opentelemetry", "jaeger", "zipkin",
 "docker", "codeQuality", "sonarcloud", "codeql", "eslint", "pylint", "checkstyle", "settings"];
