@@ -211,6 +211,9 @@ builder.Services.AddSingleton<CloudServiceManagementService>();
 // in per-call, its two shared HttpClients never carry per-caller state on
 // themselves - see ContainerRegistryService's own comment on that).
 builder.Services.AddSingleton<ContainerRegistryService>();
+// Observability's 4 CSP-native tools (CloudWatch/X-Ray/Azure Monitor/GCP
+// Cloud Monitoring) - same statelessness as the services above.
+builder.Services.AddSingleton<ObservabilityService>();
 // Source Control's AWS CodeCommit sub-page - same statelessness as
 // ContainerRegistryService/CloudServiceManagementService above (every
 // credential is passed in per-call).

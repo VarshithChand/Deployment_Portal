@@ -60,6 +60,20 @@ const GitLabRegistry = lazy(() => import("./pages/GitLabRegistry"));
 const Jfrog = lazy(() => import("./pages/Jfrog"));
 const Harbor = lazy(() => import("./pages/Harbor"));
 const Nexus = lazy(() => import("./pages/Nexus"));
+const CloudWatch = lazy(() => import("./pages/CloudWatch"));
+const XRay = lazy(() => import("./pages/XRay"));
+const AzureMonitor = lazy(() => import("./pages/AzureMonitor"));
+const CloudMonitoring = lazy(() => import("./pages/CloudMonitoring"));
+const Prometheus = lazy(() => import("./pages/Prometheus"));
+const Datadog = lazy(() => import("./pages/Datadog"));
+const Elk = lazy(() => import("./pages/Elk"));
+const OpenSearch = lazy(() => import("./pages/OpenSearch"));
+const Loki = lazy(() => import("./pages/Loki"));
+const FluentBit = lazy(() => import("./pages/FluentBit"));
+const Fluentd = lazy(() => import("./pages/Fluentd"));
+const OpenTelemetry = lazy(() => import("./pages/OpenTelemetry"));
+const Jaeger = lazy(() => import("./pages/Jaeger"));
+const Zipkin = lazy(() => import("./pages/Zipkin"));
 const Services = lazy(() => import("./pages/Services"));
 const Docker = lazy(() => import("./pages/Docker"));
 const CodeQuality = lazy(() => import("./pages/CodeQuality"));
@@ -266,6 +280,20 @@ function App(){
                             {tab === "jfrog" && <Jfrog/>}
                             {tab === "harbor" && <Harbor/>}
                             {tab === "nexus" && <Nexus/>}
+                            {tab === "cloudwatch" && <CloudWatch/>}
+                            {tab === "xray" && <XRay/>}
+                            {tab === "azuremonitor" && <AzureMonitor/>}
+                            {tab === "cloudmonitoring" && <CloudMonitoring/>}
+                            {tab === "prometheus" && <Prometheus/>}
+                            {tab === "datadog" && <Datadog/>}
+                            {tab === "elk" && <Elk/>}
+                            {tab === "opensearch" && <OpenSearch/>}
+                            {tab === "loki" && <Loki/>}
+                            {tab === "fluentbit" && <FluentBit/>}
+                            {tab === "fluentd" && <Fluentd/>}
+                            {tab === "opentelemetry" && <OpenTelemetry/>}
+                            {tab === "jaeger" && <Jaeger/>}
+                            {tab === "zipkin" && <Zipkin/>}
                             {tab === "services" && <Services/>}
                             {tab === "docker" && <Docker/>}
                             {tab === "codeQuality" && <CodeQuality/>}

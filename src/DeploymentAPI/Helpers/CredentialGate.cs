@@ -26,7 +26,11 @@ public static class CredentialGate
     {
         "github", "aws", "azure", "gcp", "apikey", "docker", "github-oauth", "sonarqube", "sonarcloud", "ai",
         "render", "cloudflare", "netlify", "vercel", "dockerhub", "ghcr", "gitlab-registry", "jfrog",
-        "harbor", "nexus", "azureDevOps"
+        "harbor", "nexus", "azureDevOps",
+        // Observability's 10 standalone tools - same generic PortalHostCredentials
+        // gate as Harbor/Nexus above, just a different provider set.
+        "prometheus", "datadog", "elk", "opensearch", "loki", "fluentbit", "fluentd",
+        "opentelemetry", "jaeger", "zipkin"
     };
 
     public static async Task<IActionResult?> DenyUnlessUnlockedAsync(

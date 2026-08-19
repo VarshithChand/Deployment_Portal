@@ -32,6 +32,9 @@ import {
 import {
     getAzureDevOpsStatus, saveAzureDevOpsCredentials, clearAzureDevOpsCredentials
 } from "../../services/azureDevOpsService";
+import {
+    getObservabilityHostStatus, saveObservabilityHostCredentials, clearObservabilityHostCredentials
+} from "../../services/observabilityService";
 
 const MODES = [
     { key: "github", label: "GitHub" },
@@ -50,6 +53,16 @@ const MODES = [
     { key: "jfrog", label: "JFrog" },
     { key: "harbor", label: "Harbor" },
     { key: "nexus", label: "Nexus" },
+    { key: "prometheus", label: "Prometheus" },
+    { key: "datadog", label: "Datadog" },
+    { key: "elk", label: "ELK" },
+    { key: "opensearch", label: "OpenSearch" },
+    { key: "loki", label: "Loki" },
+    { key: "fluentbit", label: "Fluent Bit" },
+    { key: "fluentd", label: "Fluentd" },
+    { key: "opentelemetry", label: "OpenTelemetry" },
+    { key: "jaeger", label: "Jaeger" },
+    { key: "zipkin", label: "Zipkin" },
     { key: "oauth", label: "GitHub OAuth" },
     { key: "ai", label: "AI Assistant" },
     { key: "render", label: "Render" },
@@ -68,7 +81,9 @@ const MODES = [
 const ALL_CREDENTIAL_PROVIDERS = [
     "github", "aws", "azure", "gcp", "apikey", "docker", "github-oauth", "sonarqube", "sonarcloud", "ai",
     "render", "cloudflare", "netlify", "vercel", "dockerhub", "ghcr", "gitlab-registry", "jfrog",
-    "harbor", "nexus", "azureDevOps"
+    "harbor", "nexus", "azureDevOps",
+    "prometheus", "datadog", "elk", "opensearch", "loki", "fluentbit", "fluentd", "opentelemetry",
+    "jaeger", "zipkin"
 ];
 
 // Purely a display grouping for the tab bar below - mirrors the Sidebar's
@@ -85,7 +100,11 @@ const CREDENTIAL_GROUPS = [
     { key: "sourceControl", label: "Source Control", modes: ["github", "azureDevOps"] },
     { key: "codeQuality", label: "Code Quality", modes: ["sonarqube", "sonarcloud"] },
     { key: "containerRegistry", label: "Container Registry", modes: ["dockerhub", "ghcr", "gitlab-registry", "jfrog", "harbor", "nexus"] },
-    { key: "hostingProviders", label: "Hosting Providers", modes: ["render", "cloudflare", "netlify", "vercel"] }
+    { key: "hostingProviders", label: "Hosting Providers", modes: ["render", "cloudflare", "netlify", "vercel"] },
+    {
+        key: "observability", label: "Observability",
+        modes: ["prometheus", "datadog", "elk", "opensearch", "loki", "fluentbit", "fluentd", "opentelemetry", "jaeger", "zipkin"]
+    }
 ];
 
 // A convenience picker, not a restriction — GEMINI_MODEL is still whatever
@@ -224,8 +243,22 @@ export default function CredentialsView({
             getHostRegistryStatus("nexus").catch(() => null),
             getSonarStatus("sonarqube").catch(() => null),
             getSonarStatus("sonarcloud").catch(() => null),
-            getAzureDevOpsStatus().catch(() => null)
-        ]).then(([aws, azure, gcp, apiKeysRes, render, cloudflare, netlify, vercel, dockerhub, ghcr, gitlabRegistry, jfrog, harbor, nexus, sonarqube, sonarcloud, azureDevOps]) => {
+            getAzureDevOpsStatus().catch(() => null),
+            getObservabilityHostStatus("prometheus").catch(() => null),
+            getObservabilityHostStatus("datadog").catch(() => null),
+            getObservabilityHostStatus("elk").catch(() => null),
+            getObservabilityHostStatus("opensearch").catch(() => null),
+            getObservabilityHostStatus("loki").catch(() => null),
+            getObservabilityHostStatus("fluentbit").catch(() => null),
+            getObservabilityHostStatus("fluentd").catch(() => null),
+            getObservabilityHostStatus("opentelemetry").catch(() => null),
+            getObservabilityHostStatus("jaeger").catch(() => null),
+            getObservabilityHostStatus("zipkin").catch(() => null)
+        ]).then(([
+            aws, azure, gcp, apiKeysRes, render, cloudflare, netlify, vercel, dockerhub, ghcr, gitlabRegistry,
+            jfrog, harbor, nexus, sonarqube, sonarcloud, azureDevOps,
+            prometheus, datadog, elk, opensearch, loki, fluentbit, fluentd, opentelemetry, jaeger, zipkin
+        ]) => {
 
             const activeKeyCount = Array.isArray(apiKeysRes?.data)
                 ? apiKeysRes.data.filter((k) => !k.revoked).length
@@ -248,7 +281,17 @@ export default function CredentialsView({
                 nexus: nexus?.configured,
                 sonarqube: sonarqube?.configured,
                 sonarcloud: sonarcloud?.configured,
-                azureDevOps: azureDevOps?.configured
+                azureDevOps: azureDevOps?.configured,
+                prometheus: prometheus?.configured,
+                datadog: datadog?.configured,
+                elk: elk?.configured,
+                opensearch: opensearch?.configured,
+                loki: loki?.configured,
+                fluentbit: fluentbit?.configured,
+                fluentd: fluentd?.configured,
+                opentelemetry: opentelemetry?.configured,
+                jaeger: jaeger?.configured,
+                zipkin: zipkin?.configured
             });
 
         });
@@ -713,6 +756,186 @@ export default function CredentialsView({
                     passwordLabel="Password"
                     helpText="Powers the Container Registry hub's Nexus tab — your Nexus Repository instance's URL and a user with read access to its docker-format repositories."
                     onCleared={() => removeUnlocked("nexus")}
+                />
+            </CredentialPinGate>
+
+            )}
+
+            {mode === "prometheus" && (
+
+            <CredentialPinGate provider="prometheus" unlocked={unlockedProviders.has("prometheus")} onUnlocked={markAllUnlocked}>
+                <HostCredentialLoginSection
+                    provider="prometheus"
+                    label="Prometheus"
+                    hostPlaceholder="http://localhost:9090"
+                    passwordLabel="Password (only if your instance sits behind basic auth)"
+                    helpText="Powers the Observability hub's Prometheus tab — your Prometheus server's URL. Username/Password are optional; leave both blank if your instance has no auth in front of it."
+                    statusFn={getObservabilityHostStatus}
+                    saveFn={saveObservabilityHostCredentials}
+                    clearFn={clearObservabilityHostCredentials}
+                    onCleared={() => removeUnlocked("prometheus")}
+                />
+            </CredentialPinGate>
+
+            )}
+
+            {mode === "datadog" && (
+
+            <CredentialPinGate provider="datadog" unlocked={unlockedProviders.has("datadog")} onUnlocked={markAllUnlocked}>
+                <HostCredentialLoginSection
+                    provider="datadog"
+                    label="Datadog"
+                    hostPlaceholder="https://api.datadoghq.com"
+                    passwordLabel="API Key"
+                    helpText="Powers the Observability hub's Datadog tab — your Datadog site's API URL. Username here is your Datadog Application Key, Password is your Datadog API Key (Datadog needs both together, not a plain username/password)."
+                    statusFn={getObservabilityHostStatus}
+                    saveFn={saveObservabilityHostCredentials}
+                    clearFn={clearObservabilityHostCredentials}
+                    onCleared={() => removeUnlocked("datadog")}
+                />
+            </CredentialPinGate>
+
+            )}
+
+            {mode === "elk" && (
+
+            <CredentialPinGate provider="elk" unlocked={unlockedProviders.has("elk")} onUnlocked={markAllUnlocked}>
+                <HostCredentialLoginSection
+                    provider="elk"
+                    label="ELK"
+                    hostPlaceholder="https://localhost:9200"
+                    passwordLabel="Password"
+                    helpText="Powers the Observability hub's ELK tab — your Elasticsearch endpoint's URL and a user with read access."
+                    statusFn={getObservabilityHostStatus}
+                    saveFn={saveObservabilityHostCredentials}
+                    clearFn={clearObservabilityHostCredentials}
+                    onCleared={() => removeUnlocked("elk")}
+                />
+            </CredentialPinGate>
+
+            )}
+
+            {mode === "opensearch" && (
+
+            <CredentialPinGate provider="opensearch" unlocked={unlockedProviders.has("opensearch")} onUnlocked={markAllUnlocked}>
+                <HostCredentialLoginSection
+                    provider="opensearch"
+                    label="OpenSearch"
+                    hostPlaceholder="https://localhost:9200"
+                    passwordLabel="Password"
+                    helpText="Powers the Observability hub's OpenSearch tab — your OpenSearch endpoint's URL and a user with read access."
+                    statusFn={getObservabilityHostStatus}
+                    saveFn={saveObservabilityHostCredentials}
+                    clearFn={clearObservabilityHostCredentials}
+                    onCleared={() => removeUnlocked("opensearch")}
+                />
+            </CredentialPinGate>
+
+            )}
+
+            {mode === "loki" && (
+
+            <CredentialPinGate provider="loki" unlocked={unlockedProviders.has("loki")} onUnlocked={markAllUnlocked}>
+                <HostCredentialLoginSection
+                    provider="loki"
+                    label="Loki"
+                    hostPlaceholder="http://localhost:3100"
+                    passwordLabel="Password / API key (e.g. Grafana Cloud Loki)"
+                    helpText="Powers the Observability hub's Loki tab — your Loki instance's URL. Username/Password are optional; leave both blank for a self-hosted instance with no auth."
+                    statusFn={getObservabilityHostStatus}
+                    saveFn={saveObservabilityHostCredentials}
+                    clearFn={clearObservabilityHostCredentials}
+                    onCleared={() => removeUnlocked("loki")}
+                />
+            </CredentialPinGate>
+
+            )}
+
+            {mode === "fluentbit" && (
+
+            <CredentialPinGate provider="fluentbit" unlocked={unlockedProviders.has("fluentbit")} onUnlocked={markAllUnlocked}>
+                <HostCredentialLoginSection
+                    provider="fluentbit"
+                    label="Fluent Bit"
+                    hostPlaceholder="http://localhost:2020"
+                    passwordLabel="Password (if applicable)"
+                    helpText="Powers the Observability hub's Fluent Bit tab — your Fluent Bit instance's HTTP monitoring endpoint URL."
+                    statusFn={getObservabilityHostStatus}
+                    saveFn={saveObservabilityHostCredentials}
+                    clearFn={clearObservabilityHostCredentials}
+                    onCleared={() => removeUnlocked("fluentbit")}
+                />
+            </CredentialPinGate>
+
+            )}
+
+            {mode === "fluentd" && (
+
+            <CredentialPinGate provider="fluentd" unlocked={unlockedProviders.has("fluentd")} onUnlocked={markAllUnlocked}>
+                <HostCredentialLoginSection
+                    provider="fluentd"
+                    label="Fluentd"
+                    hostPlaceholder="http://localhost:24220"
+                    passwordLabel="Password (if applicable)"
+                    helpText="Powers the Observability hub's Fluentd tab — your Fluentd instance's monitor agent endpoint URL."
+                    statusFn={getObservabilityHostStatus}
+                    saveFn={saveObservabilityHostCredentials}
+                    clearFn={clearObservabilityHostCredentials}
+                    onCleared={() => removeUnlocked("fluentd")}
+                />
+            </CredentialPinGate>
+
+            )}
+
+            {mode === "opentelemetry" && (
+
+            <CredentialPinGate provider="opentelemetry" unlocked={unlockedProviders.has("opentelemetry")} onUnlocked={markAllUnlocked}>
+                <HostCredentialLoginSection
+                    provider="opentelemetry"
+                    label="OpenTelemetry"
+                    hostPlaceholder="http://localhost:4318"
+                    passwordLabel="Password (if applicable)"
+                    helpText="Powers the Observability hub's OpenTelemetry tab — your OpenTelemetry Collector's endpoint URL."
+                    statusFn={getObservabilityHostStatus}
+                    saveFn={saveObservabilityHostCredentials}
+                    clearFn={clearObservabilityHostCredentials}
+                    onCleared={() => removeUnlocked("opentelemetry")}
+                />
+            </CredentialPinGate>
+
+            )}
+
+            {mode === "jaeger" && (
+
+            <CredentialPinGate provider="jaeger" unlocked={unlockedProviders.has("jaeger")} onUnlocked={markAllUnlocked}>
+                <HostCredentialLoginSection
+                    provider="jaeger"
+                    label="Jaeger"
+                    hostPlaceholder="http://localhost:16686"
+                    passwordLabel="Password (if applicable)"
+                    helpText="Powers the Observability hub's Jaeger tab — your Jaeger Query UI/API endpoint URL."
+                    statusFn={getObservabilityHostStatus}
+                    saveFn={saveObservabilityHostCredentials}
+                    clearFn={clearObservabilityHostCredentials}
+                    onCleared={() => removeUnlocked("jaeger")}
+                />
+            </CredentialPinGate>
+
+            )}
+
+            {mode === "zipkin" && (
+
+            <CredentialPinGate provider="zipkin" unlocked={unlockedProviders.has("zipkin")} onUnlocked={markAllUnlocked}>
+                <HostCredentialLoginSection
+                    provider="zipkin"
+                    label="Zipkin"
+                    hostPlaceholder="http://localhost:9411"
+                    passwordLabel="Password (if applicable)"
+                    helpText="Powers the Observability hub's Zipkin tab — your Zipkin instance's URL."
+                    statusFn={getObservabilityHostStatus}
+                    saveFn={saveObservabilityHostCredentials}
+                    clearFn={clearObservabilityHostCredentials}
+                    onCleared={() => removeUnlocked("zipkin")}
                 />
             </CredentialPinGate>
 

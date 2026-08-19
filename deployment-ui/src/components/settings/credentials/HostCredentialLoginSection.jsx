@@ -11,7 +11,21 @@ const EMPTY_FORM = { hostUrl: "", username: "", password: "" };
 // always self-hosted, plain-username-and-password (Basic auth) registries,
 // so one generic component covers both rather than two near-identical
 // bespoke ones (see PortalHostCredentials' own comment).
-export default function HostCredentialLoginSection({ provider, label, hostPlaceholder, passwordLabel, helpText, onCleared }) {
+//
+// statusFn/saveFn/clearFn default to Container Registry's own Harbor/
+// Nexus calls (containerRegistryService.js, /api/containerregistry/...) -
+// every existing caller keeps working unchanged. Observability's 10
+// standalone tools pass observabilityService.js's own calls instead
+// (/api/observability/...) - same PortalHostCredentials storage shape on
+// the backend either way, just a different route family, same
+// "injectable statusFn/saveFn/clearFn" pattern PortalRegistryLoginSection
+// already uses for Azure DevOps/Docker Hub/GHCR.
+export default function HostCredentialLoginSection({
+    provider, label, hostPlaceholder, passwordLabel, helpText, onCleared,
+    statusFn = getHostRegistryStatus,
+    saveFn = saveHostRegistryCredentials,
+    clearFn = clearHostRegistryCredentials
+}) {
 
     const toast = useToast();
 
@@ -24,7 +38,7 @@ export default function HostCredentialLoginSection({ provider, label, hostPlaceh
 
         setLoading(true);
 
-        getHostRegistryStatus(provider).then((result) => {
+        statusFn(provider).then((result) => {
             setStatus(result);
             setLoading(false);
         });
@@ -40,7 +54,7 @@ export default function HostCredentialLoginSection({ provider, label, hostPlaceh
 
         try {
 
-            await saveHostRegistryCredentials(provider, form);
+            await saveFn(provider, form);
             toast.show(`${label} credentials saved for this session.`, "success");
             setForm(EMPTY_FORM);
             refresh();
@@ -64,7 +78,7 @@ export default function HostCredentialLoginSection({ provider, label, hostPlaceh
 
         try {
 
-            await clearHostRegistryCredentials(provider);
+            await clearFn(provider);
             toast.show(`${label} credentials cleared.`, "success");
             refresh();
             onCleared?.();

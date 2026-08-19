@@ -686,6 +686,191 @@ export function NexusIcon() {
     );
 }
 
+// Observability's 14 tools (3 categories - Monitoring/Logging/Tracing) -
+// each its own distinct silhouette, same "no two adjacent siblings read
+// the same at 18px" discipline as every other nested Sidebar group.
+
+// Group icon - three uneven vertical bars, a small dashboard/metrics
+// glyph distinct from CloudServicesIcon's cloud silhouette and
+// ContainerRegistryIcon's own shape.
+export function ObservabilityIcon() {
+    return (
+        <svg {...common}>
+            <rect x="2.5" y="9" width="3.4" height="6.5" rx="0.6" stroke="currentColor" strokeWidth="1.3" />
+            <rect x="7.3" y="4.5" width="3.4" height="11" rx="0.6" stroke="currentColor" strokeWidth="1.3" />
+            <rect x="12.1" y="7" width="3.4" height="8.5" rx="0.6" stroke="currentColor" strokeWidth="1.3" />
+        </svg>
+    );
+}
+
+// CloudWatch - a circle (the "watch" face) with clock hands, distinct
+// from AwsCloudIcon's own cloud+box shape.
+export function CloudWatchIcon() {
+    return (
+        <svg {...common}>
+            <circle cx="9" cy="9" r="6.5" stroke="currentColor" strokeWidth="1.4" />
+            <line x1="9" y1="9" x2="9" y2="5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+            <line x1="9" y1="9" x2="12" y2="10.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+        </svg>
+    );
+}
+
+// AWS X-Ray - a crossing X with a small circle marking the traced point,
+// distinct from CloudWatchIcon's round watch-face shape.
+export function XRayIcon() {
+    return (
+        <svg {...common}>
+            <line x1="3" y1="3" x2="15" y2="15" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+            <line x1="15" y1="3" x2="3" y2="15" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+            <circle cx="9" cy="9" r="2" fill="currentColor" />
+        </svg>
+    );
+}
+
+// Azure Monitor - a monitor/screen with a pulse line, distinct from
+// AzureCloudIcon's own diamond shape and CloudWatchIcon's round face.
+export function AzureMonitorIcon() {
+    return (
+        <svg {...common}>
+            <rect x="2" y="3" width="14" height="9.5" rx="1.2" stroke="currentColor" strokeWidth="1.3" />
+            <polyline points="4.5,8.5 7,8.5 8,6 10,11 11.3,8.5 13.5,8.5" fill="none" stroke="currentColor" strokeWidth="1.1" strokeLinejoin="round" />
+            <line x1="9" y1="12.5" x2="9" y2="15" stroke="currentColor" strokeWidth="1.3" />
+            <line x1="5.5" y1="15" x2="12.5" y2="15" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+        </svg>
+    );
+}
+
+// GCP Cloud Monitoring - a cloud silhouette (overlapping filled circles,
+// same technique CloudServicesIcon/MoonIcon already use) with a small
+// pulse dot, distinct from GcpCloudIcon's own triangle-in-circle shape.
+export function CloudMonitoringIcon() {
+    return (
+        <svg {...common}>
+            <circle cx="6" cy="8" r="2.6" fill="currentColor" />
+            <circle cx="9.5" cy="6.3" r="3.2" fill="currentColor" />
+            <rect x="3.5" y="7.5" width="10.5" height="3.6" rx="1.8" fill="currentColor" />
+            <polyline points="4.5,13.5 7,13.5 8,11.5 10,15.5 11.5,13.5 14,13.5" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" />
+        </svg>
+    );
+}
+
+// Prometheus - a flame, approximated with two overlapping polygons (no
+// hand-authored curve paths, same constraint every icon here follows).
+export function PrometheusIcon() {
+    return (
+        <svg {...common}>
+            <polygon points="9,2 12.5,8 10.5,8 13,15 5,15 7,9.5 5.5,9.5" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
+        </svg>
+    );
+}
+
+// Datadog - a paw print (one large pad + three small toes), a distinct
+// filled-circle-cluster silhouette unlike anything else in this group.
+export function DatadogIcon() {
+    return (
+        <svg {...common}>
+            <circle cx="9" cy="11.5" r="3.2" fill="currentColor" />
+            <circle cx="4.5" cy="6.5" r="1.6" fill="currentColor" />
+            <circle cx="9" cy="4.5" r="1.7" fill="currentColor" />
+            <circle cx="13.5" cy="6.5" r="1.6" fill="currentColor" />
+        </svg>
+    );
+}
+
+// ELK (Elasticsearch/Logstash/Kibana) - three stacked bars of decreasing
+// width, a "layered stack" silhouette.
+export function ElkIcon() {
+    return (
+        <svg {...common}>
+            <rect x="2" y="3" width="14" height="3" rx="1" fill="currentColor" />
+            <rect x="3.5" y="7.5" width="11" height="3" rx="1" fill="currentColor" />
+            <rect x="5" y="12" width="8" height="3" rx="1" fill="currentColor" />
+        </svg>
+    );
+}
+
+// OpenSearch - a magnifying glass, distinct from ElkIcon's stacked bars.
+export function OpenSearchIcon() {
+    return (
+        <svg {...common}>
+            <circle cx="7.5" cy="7.5" r="4.5" stroke="currentColor" strokeWidth="1.4" />
+            <line x1="10.8" y1="10.8" x2="15.5" y2="15.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+        </svg>
+    );
+}
+
+// Loki - a funnel (log aggregation narrowing to one stream), distinct
+// from OpenSearchIcon's round lens shape.
+export function LokiIcon() {
+    return (
+        <svg {...common}>
+            <polygon points="2.5,3 15.5,3 10.5,10 10.5,15 7.5,15 7.5,10" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
+        </svg>
+    );
+}
+
+// Fluent Bit - a small light droplet (diamond), distinct from FluentdIcon's
+// larger one below despite the shared "droplet" family resemblance -
+// same reasoning AzureDevOpsBranchesIcon/PullRequestIcon's own dual-node
+// shapes stay distinct even though both are "two nodes."
+export function FluentBitIcon() {
+    return (
+        <svg {...common}>
+            <polygon points="9,2.5 13,9 9,15.5 5,9" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
+        </svg>
+    );
+}
+
+// Fluentd - a larger, filled droplet - the heavier/bolder sibling of
+// FluentBitIcon's outline-only one.
+export function FluentdIcon() {
+    return (
+        <svg {...common}>
+            <polygon points="9,1.5 14,9.5 9,16.5 4,9.5" fill="currentColor" />
+        </svg>
+    );
+}
+
+// OpenTelemetry - two overlapping ring outlines (the real OTel logo's own
+// two-circle motif), distinct from DatadogIcon's filled paw-print cluster.
+export function OpenTelemetryIcon() {
+    return (
+        <svg {...common}>
+            <circle cx="6.5" cy="9" r="4" stroke="currentColor" strokeWidth="1.3" />
+            <circle cx="11.5" cy="9" r="4" stroke="currentColor" strokeWidth="1.3" />
+        </svg>
+    );
+}
+
+// Jaeger - a crosshair/target (concentric rings + center dot), a "tracer"
+// silhouette distinct from OpenSearchIcon's magnifying glass.
+export function JaegerIcon() {
+    return (
+        <svg {...common}>
+            <circle cx="9" cy="9" r="6.5" stroke="currentColor" strokeWidth="1.3" />
+            <circle cx="9" cy="9" r="3.2" stroke="currentColor" strokeWidth="1.2" />
+            <circle cx="9" cy="9" r="1" fill="currentColor" />
+            <line x1="9" y1="0.8" x2="9" y2="3.2" stroke="currentColor" strokeWidth="1.2" />
+            <line x1="9" y1="14.8" x2="9" y2="17.2" stroke="currentColor" strokeWidth="1.2" />
+        </svg>
+    );
+}
+
+// Zipkin - a zigzag chain of connected spans (distributed trace timeline),
+// distinct from CodeCommitIcon's own diagonal 3-dot chain (that one is a
+// straight diagonal; this one zigzags up and down).
+export function ZipkinIcon() {
+    return (
+        <svg {...common}>
+            <circle cx="2.5" cy="13.5" r="1.6" fill="currentColor" />
+            <circle cx="9" cy="4.5" r="1.6" fill="currentColor" />
+            <circle cx="15.5" cy="13.5" r="1.6" fill="currentColor" />
+            <line x1="3.7" y1="12.3" x2="7.8" y2="5.7" stroke="currentColor" strokeWidth="1.2" />
+            <line x1="10.2" y1="5.7" x2="14.3" y2="12.3" stroke="currentColor" strokeWidth="1.2" />
+        </svg>
+    );
+}
+
 export function ChevronIcon({ direction = "left" }) {
     return (
         <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true"

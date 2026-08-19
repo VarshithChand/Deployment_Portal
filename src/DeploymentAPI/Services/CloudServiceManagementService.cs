@@ -594,7 +594,10 @@ public class CloudServiceManagementService
     private static string Base64UrlEncode(byte[] bytes) =>
         Convert.ToBase64String(bytes).TrimEnd('=').Replace('+', '-').Replace('/', '_');
 
-    private static async Task<string?> GetGcpAccessTokenAsync(string serviceAccountKeyJson, string scope = "https://www.googleapis.com/auth/cloud-platform")
+    // Internal (not private) so ObservabilityService's own GCP Cloud
+    // Monitoring calls can reuse the exact same service-account JWT
+    // exchange rather than duplicating it.
+    internal static async Task<string?> GetGcpAccessTokenAsync(string serviceAccountKeyJson, string scope = "https://www.googleapis.com/auth/cloud-platform")
     {
         JObject key;
 

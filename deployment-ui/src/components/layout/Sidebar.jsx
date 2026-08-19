@@ -50,6 +50,21 @@ import {
     JfrogIcon,
     HarborIcon,
     NexusIcon,
+    ObservabilityIcon,
+    CloudWatchIcon,
+    XRayIcon,
+    AzureMonitorIcon,
+    CloudMonitoringIcon,
+    PrometheusIcon,
+    DatadogIcon,
+    ElkIcon,
+    OpenSearchIcon,
+    LokiIcon,
+    FluentBitIcon,
+    FluentdIcon,
+    OpenTelemetryIcon,
+    JaegerIcon,
+    ZipkinIcon,
     ChevronIcon,
     SunIcon,
     MoonIcon,
@@ -212,6 +227,40 @@ export const TABS = [
             { key: "jfrog", label: "JFrog Artifactory", Icon: JfrogIcon },
             { key: "harbor", label: "Harbor", Icon: HarborIcon },
             { key: "nexus", label: "Nexus", Icon: NexusIcon }
+        ]
+    },
+    // Observability - 4 CSP-native tools (CloudWatch/X-Ray/Azure Monitor/
+    // Cloud Monitoring) with real, live data reusing this session's
+    // already-connected AWS/Azure/GCP credential (same self-service
+    // posture as Cloud Services/Container Registry's own cloud-native
+    // providers above - no separate connect step); 10 standalone tools
+    // (Prometheus/Datadog/ELK/OpenSearch/Loki/Fluent Bit/Fluentd/
+    // OpenTelemetry/Jaeger/Zipkin) each with their own session-scoped
+    // credential, reusing PortalHostCredentials' generic (Host URL/
+    // Username/Password) storage - the exact same mechanism Harbor/Nexus
+    // already use above, just under Observability's own provider set and
+    // routes (see ObservabilityController.cs) rather than Container
+    // Registry's, since none of these 10 are a container registry.
+    {
+        key: "observabilityGroup",
+        type: "group",
+        label: "Observability",
+        Icon: ObservabilityIcon,
+        children: [
+            { key: "cloudwatch", label: "CloudWatch", Icon: CloudWatchIcon },
+            { key: "xray", label: "AWS X-Ray", Icon: XRayIcon },
+            { key: "azuremonitor", label: "Azure Monitor", Icon: AzureMonitorIcon },
+            { key: "cloudmonitoring", label: "Cloud Monitoring", Icon: CloudMonitoringIcon },
+            { key: "prometheus", label: "Prometheus", Icon: PrometheusIcon },
+            { key: "datadog", label: "Datadog", Icon: DatadogIcon },
+            { key: "elk", label: "ELK", Icon: ElkIcon },
+            { key: "opensearch", label: "OpenSearch", Icon: OpenSearchIcon },
+            { key: "loki", label: "Loki", Icon: LokiIcon },
+            { key: "fluentbit", label: "Fluent Bit", Icon: FluentBitIcon },
+            { key: "fluentd", label: "Fluentd", Icon: FluentdIcon },
+            { key: "opentelemetry", label: "OpenTelemetry", Icon: OpenTelemetryIcon },
+            { key: "jaeger", label: "Jaeger", Icon: JaegerIcon },
+            { key: "zipkin", label: "Zipkin", Icon: ZipkinIcon }
         ]
     },
     { key: "services", label: "Services", Icon: ServicesIcon },
