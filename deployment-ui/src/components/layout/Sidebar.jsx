@@ -203,7 +203,8 @@ export const TABS = [
         label: "PaaS / Microservices",
         Icon: PaasMicroservicesIcon,
         children: [
-            { key: "paasElasticBeanstalk", label: "Elastic Beanstalk", Icon: ElasticBeanstalkIcon }
+            { key: "paasElasticBeanstalk", label: "Elastic Beanstalk", Icon: ElasticBeanstalkIcon },
+            { key: "paasAzureAppService", label: "App Service", Icon: AzureCloudIcon }
         ]
     },
     // Session-scoped Render/Cloudflare/Netlify/Vercel connections (see

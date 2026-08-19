@@ -8,6 +8,7 @@ import CloudServiceBreadcrumbs from "./CloudServiceBreadcrumbs";
 import AzureResourceDetailDialog from "./AzureResourceDetailDialog";
 import AzureVmManagementPage from "./AzureVmManagementPage";
 import AzureContainerAppsManagementPage from "./AzureContainerAppsManagementPage";
+import AzureAppServiceManagementPage from "../paas/AzureAppServiceManagementPage";
 
 const PAGE_SIZE = 10;
 
@@ -119,6 +120,10 @@ export default function AzureServiceDetailPage({ service, inventory, onBack }) {
             ) : service.id === "container-apps" ? (
 
                 <AzureContainerAppsManagementPage />
+
+            ) : service.id === "app-service" ? (
+
+                <AzureAppServiceManagementPage />
 
             ) : (
 

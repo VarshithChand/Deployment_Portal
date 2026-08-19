@@ -51,6 +51,7 @@ const CloudServicesAws = lazy(() => import("./pages/CloudServicesAws"));
 const CloudServicesAzure = lazy(() => import("./pages/CloudServicesAzure"));
 const CloudServicesGcp = lazy(() => import("./pages/CloudServicesGcp"));
 const PaasElasticBeanstalk = lazy(() => import("./pages/PaasElasticBeanstalk"));
+const PaasAzureAppService = lazy(() => import("./pages/PaasAzureAppService"));
 const PaasHosting = lazy(() => import("./pages/PaasHosting"));
 const Ecr = lazy(() => import("./pages/Ecr"));
 const Acr = lazy(() => import("./pages/Acr"));
@@ -272,6 +273,7 @@ function App(){
                             {tab === "cloudServicesAzure" && <CloudServicesAzure/>}
                             {tab === "cloudServicesGcp" && <CloudServicesGcp/>}
                             {tab === "paasElasticBeanstalk" && <PaasElasticBeanstalk/>}
+                            {tab === "paasAzureAppService" && <PaasAzureAppService/>}
                             {tab === "paasHosting" && <PaasHosting/>}
                             {tab === "ecr" && <Ecr/>}
                             {tab === "acr" && <Acr/>}
