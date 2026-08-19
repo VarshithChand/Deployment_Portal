@@ -11723,3 +11723,63 @@ management - lifecycle actions, Swap (single and bulk), app settings
 both the new PaaS/Microservices section and the existing Cloud Services
 Azure catalog. Phase C (Cloud Run extension with revisions/traffic/
 rollback + the cross-provider PaaS hub page) remains, not started.
+
+==================================================
+ROUND 88 - BUG FIX: CODEQL PAGE MISLABELED A SCOPE-
+INSUFFICIENT TOKEN AS "NOT ENABLED"
+==================================================
+Date: 2026-08-19
+Trigger: user report, with two screenshots - the portal's Code Quality
+-> CodeQL page showed "Code scanning isn't enabled for this repository"
+while GitHub's own repo Settings -> Code security page (second
+screenshot) showed CodeQL's default setup actively configured with a
+scan completed one minute earlier. Interrupted mid-way through Phase C
+implementation (only one DTO file edited, nothing committed yet) to
+investigate; Phase C resumed immediately after this fix shipped.
+
+Root cause, found via a targeted Explore pass over the frontend CodeQL
+page/service, the backend controller/service method it calls, and how
+this app's shared `HttpClientHelper` builds error messages:
+`GitHubApiService.GetCodeQlAlertsAsync` called GitHub's
+`GET /repos/{owner}/{repo}/code-scanning/alerts` through
+`HttpClientHelper.GetAsync`, which pre-builds one generic friendly
+message per HTTP status code and discards the real response body before
+throwing. Every 404 from that call was hard-coded to "Code scanning
+isn't enabled for this repository..." - but GitHub deliberately returns
+404 (not 403) for this specific endpoint both when scanning has
+genuinely never been configured AND when the token simply lacks the
+"security_events" scope needed to read it, a privacy-by-obscurity
+pattern this app already relies on and documents elsewhere for private-
+repo visibility. The user's GitHub-side scanning was real and running;
+their connected token most likely just lacks that one scope - and the
+old message actively told them the opposite of what was actually true.
+
+Fix: `GetCodeQlAlertsAsync` now calls the HttpClient directly for this
+one request (bypassing `HttpClientHelper.GetAsync`, which was the piece
+discarding the real body) so the 404 branch can read GitHub's actual
+response and its `message` field before deciding what to show. Since
+GitHub's own 404 genuinely can't always be told apart between "not
+configured" and "wrong scope" from the outside, the new message names
+BOTH real possibilities explicitly and points at Settings to check the
+token's scope, rather than confidently asserting the wrong one the way
+the old message did.
+
+Verification performed:
+  - `dotnet build`: succeeded, 0 errors.
+  - Standard commit -> push -> Render redeploy -> /api/bootstrap poll:
+    healthy (HTTP 200).
+  - Could not verify against the user's actual GitHub token/repository
+    in this sandboxed session (no live credential here) - recommend the
+    user check their connected token's scope in Settings (classic PAT:
+    "security_events"; fine-grained PAT: "Code scanning alerts" repo
+    permission) as the most likely next step, now that the page will
+    surface a permission-shaped message instead of a misleading "go
+    enable this" one if that's indeed the cause.
+
+Files changed: src/DeploymentAPI/Services/GitHubApiService.cs.
+Commit: 47428dc.
+
+Status: Fixed, pushed, live-verified the backend is up. The CodeQL page
+no longer mislabels a scope problem as "not enabled" - recommend the
+user re-check the page and, if it still shows an error, check their
+GitHub token's security_events scope in Settings next.
