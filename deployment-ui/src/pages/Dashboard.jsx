@@ -2,6 +2,9 @@ import { useGithubResources } from "../hooks/useGithubResources";
 
 import PageLayout from "../components/layout/PageLayout";
 
+import OverviewStats from "../components/dashboard/OverviewStats";
+import DeploymentActivityCard from "../components/dashboard/DeploymentActivityCard";
+import AllApplicationsTable from "../components/dashboard/AllApplicationsTable";
 import AllRepositoriesCard from "../components/dashboard/AllRepositoriesCard";
 import AzureDevOpsCard from "../components/dashboard/AzureDevOpsCard";
 import CloudServicesCard from "../components/dashboard/CloudServicesCard";
@@ -11,6 +14,15 @@ import ObservabilitySummaryCard from "../components/dashboard/ObservabilitySumma
 import EnvironmentsCard from "../components/dashboard/EnvironmentsCard";
 import QuickAccessCard from "../components/dashboard/QuickAccessCard";
 
+// "At a glance, then drill in" ordering (see security_findings.txt's own
+// Round entry for this redesign): a real top-line stat row, real
+// deployment activity, a real cross-provider application table, THEN
+// the per-area cards (Source Control, Cloud Services, PaaS, Container
+// Registry, Observability, Environments) for anyone who wants the detail
+// behind any one of those numbers, and Quick Access last as a standing
+// navigation aid. Every section still owns its own fetch/hide-if-
+// unconfigured logic - Dashboard itself stays a plain composition, same
+// as before.
 export default function Dashboard() {
 
     // Only `repository` is still needed here - it tells AllRepositoriesCard
@@ -45,6 +57,18 @@ export default function Dashboard() {
                 </div>
 
             }
+
+            <OverviewStats />
+
+            <br />
+
+            <DeploymentActivityCard />
+
+            <br />
+
+            <AllApplicationsTable />
+
+            <br />
 
             <AllRepositoriesCard repository={repository}>
                 <AzureDevOpsCard />
