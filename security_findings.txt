@@ -11915,3 +11915,187 @@ AWS Elastic Beanstalk (Phase A), Azure App Service + Deployment Slots +
 Swap (Phase B), and GCP Cloud Run's revisions/traffic/rollback plus a
 cross-provider discovery + bulk-restart hub (Phase C) are all live,
 reachable from one new "PaaS / Microservices" sidebar section.
+
+==================================================
+ROUND 90 - CLOUDFLARE WORKER RENAME + CORS
+TROUBLESHOOTING
+==================================================
+Date: 2026-08-19
+Trigger: "https://yaml.v-varshith-2004.workers.dev/ can you change the
+name for that" - a live infrastructure request, not a codebase feature.
+
+Found the config: `wrangler.jsonc` at the repo root had `"name":
+"yaml"` (an unchanged default from whenever the worker was first
+created via `wrangler init`) - distinct from `deployment-ui/wrangler.
+toml`'s own already-proper `"deployment-portal-ui"` name. Renamed to
+`"deployment-portal"` (Cloudflare Worker names must be lowercase/
+hyphenated - they become part of the `*.workers.dev` subdomain, so
+"Deployment Portal" as typed by the user was converted to a valid slug
+and confirmed with them before applying).
+
+Explicitly flagged before doing anything further, twice: (1) I have no
+Cloudflare account access - `npx wrangler deploy` needs either an
+interactive OAuth login or an API token, neither of which I can supply,
+and (2) Cloudflare Workers don't rename in place - changing `name` and
+redeploying creates a NEW worker at a new subdomain, the old one keeps
+running untouched until manually deleted. When the user pasted what
+looked like a live GitHub PAT into chat (in an unrelated exchange about
+the CodeQL bug a few messages earlier) it was flagged immediately as
+compromised and never used - same posture applied here preemptively:
+explicitly told the user not to paste a Cloudflare API token either,
+and to run `wrangler login` themselves in their own terminal instead so
+no credential ever needed to cross into this conversation.
+
+Once the user confirmed `wrangler login` had been run (session shared
+via the same on-disk Wrangler config, since both the user's terminal
+and this session's Bash tool operate on the same actual machine),
+`npx wrangler deploy` was run directly - succeeded, new worker live at
+`deployment-portal.v-varshith-2004.workers.dev`. A `curl -o /dev/null
+-w "%{http_code}"` check against it returned 404 immediately after
+deploy but 200 moments later on a plain `curl -s` (the actual HTML came
+back fine even during the "404" check) - CDN edge-propagation lag, not
+a real failure; re-checked and confirmed 200 before telling the user it
+was live.
+
+**Second, real problem, reported by the user as "but it is not
+working"**: the static shell loaded but the app was non-functional.
+Diagnosed by checking the ACTUAL backend response headers with `curl -i
+-H "Origin: https://deployment-portal.v-varshith-2004.workers.dev"`
+against `/api/bootstrap` - no `Access-Control-Allow-Origin` header at
+all, confirming a CORS block rather than guessing. Root cause: `Program.
+cs`'s CORS policy reads its allowed-origin list from `Cors:
+AllowedOrigins` configuration, which is NOT in any committed
+appsettings file (only `localhost:5173` is) - the real production list
+is set directly as Render environment variables (`Cors__AllowedOrigins
+__0`/`__1`, ASP.NET Core's double-underscore array-binding convention),
+which this session has no access to. Walked the user through Render's
+own dashboard (confirmed via a screenshot showing `Cors__AllowedOrigins
+__0` = the old `yaml.v-varshith-2004.workers.dev` and `__1` = the
+existing GitHub Pages origin, both already occupied) to add a THIRD
+entry, `Cors__AllowedOrigins__2` = the new worker URL, without removing
+either existing one. Polled for the new CORS header to appear after
+Render's env-var-triggered redeploy, confirmed present
+(`access-control-allow-origin: https://deployment-portal.v-varshith-
+2004.workers.dev`), confirmed the fix worked.
+
+Logged out of the Wrangler CLI session (`npx wrangler logout`) once the
+user confirmed they were done, rather than leaving an authenticated
+Cloudflare session sitting in this environment indefinitely.
+
+No code changes beyond the one `wrangler.jsonc` line - everything else
+in this round was live infrastructure diagnosis/configuration, not a
+commit. Old `yaml.v-varshith-2004.workers.dev` worker was NOT deleted
+(explicitly left for the user to remove once they're satisfied, per the
+same "don't take destructive action without being asked" posture used
+throughout this session).
+
+Files changed: wrangler.jsonc.
+Commit: 5cae642.
+
+Status: New worker live and confirmed working end-to-end (deploy + CORS
+both verified with real HTTP checks, not assumed). Old worker still
+exists, not deleted. Render env vars now have 3 allowed CORS origins
+instead of 2.
+
+==================================================
+ROUND 91 - DASHBOARD REDESIGN: SURFACE EVERY
+SERVICE AREA BUILT THIS SESSION
+==================================================
+Date: 2026-08-19
+Trigger: "i was thinking to redesing the dashboard based on all our
+services" - an exploratory idea, answered first with a short
+recommendation (extend the existing card pattern rather than a full
+visual overhaul) per this app's own "don't implement an exploratory
+question, present a recommendation and let the user redirect"
+convention. The user came back to it later ("what we will do about the
+dashboard") and then explicitly confirmed the direction: "desing an new
+dashboard when we integrate all the services."
+
+Re-entered plan mode for this (a genuinely new, unrelated task from the
+in-progress PaaS console plan file, which was overwritten... actually
+NOT overwritten this round - plan mode was exited automatically by the
+harness after the research phase, before a formal plan document was
+ever written or presented for approval. Proceeded directly to
+implementation from the research findings rather than re-entering plan
+mode a third time, since "continue"/"continue" (the user's own next two
+messages) read as wanting forward progress, not more process.
+
+Three parallel Explore passes first (current Dashboard.jsx/card
+structure and hide-if-unconfigured conventions; what summary data is
+already cheaply available per new service area vs. what would need a
+new backend endpoint; existing chart/tile/icon components and CSS
+patterns) - confirmed a critical constraint before writing any code:
+**no new backend aggregation endpoints were needed anywhere in this
+round**. Every one of the 3 new areas already had exactly what a
+summary tile needs, reachable from existing frontend service functions:
+  - PaaS/Microservices: the Phase C `GET /api/paas/applications`
+    aggregation endpoint already returns AwsConfigured/AzureConfigured/
+    GcpConfigured + a flat application list - reused verbatim.
+  - Container Registry (9 providers) and Observability (14 tools):
+    QuickAccessCard.jsx and CredentialsView.jsx already made the exact
+    same lightweight per-provider status calls this round needed - the
+    new cards just re-run a scoped subset of those same calls, no new
+    endpoint, no new frontend service function.
+  - GCP Compute Engine + Cloud Run counts (closing CloudServicesCard's
+    own long-standing "GCP has no live inventory built yet" comment):
+    reused the exact `getGcpVms()`/`getCloudRunServices()` calls
+    already built and used on their own dedicated management pages.
+
+New cards (`PaasSummaryCard.jsx`, `ContainerRegistrySummaryCard.jsx`,
+`ObservabilitySummaryCard.jsx`, `GcpCloudSection.jsx`) all follow
+`CloudServicesCard.jsx`'s own established "hide entirely if nothing is
+configured" convention (a deliberate choice over `QuickAccessCard`'s
+"always show, with an empty state" alternative, since these are
+provider-integration summaries like Cloud Services, not a standing
+navigation aid). Visual language reused throughout, nothing invented:
+`.aws-service-tile`/`.aws-service-grid` (count-badge tiles, used for
+PaaS provider counts and the new GCP section) and `.quick-access-tile`/
+`.quick-access-grid` (icon+label navigation tiles, used for Container
+Registry and Observability, reusing the exact icon components already
+built for each sidebar entry across earlier rounds).
+
+Scope deliberately trimmed and stated plainly rather than silently
+under-built: the outer Dashboard layout keeps its existing `<br/>`-
+stacked single-column card list rather than introducing a new grid
+wrapper - a bigger, riskier CSS change than this round's actual goal
+(surfacing missing data, not restructuring the page shell) warranted
+this late in an already-long session. Container Registry's tile grid
+shows configured-or-not only (no per-registry repository/image counts,
+which would mean either 9 more list-endpoint calls per dashboard load
+or a new backend aggregation endpoint - neither justified for a summary
+tile whose job is "which registries are connected," not "how many
+images are in each").
+
+Verification performed:
+  - `npm run lint` in deployment-ui/: 0 new warnings.
+  - `npm run build` in deployment-ui/: succeeded.
+  - No backend changes this round - purely frontend, no `dotnet build`
+    needed.
+  - **Standing limitation, stated honestly rather than assumed away**:
+    this round's push does NOT auto-deploy the frontend anywhere -
+    confirmed by checking for a GitHub Actions workflow that builds/
+    publishes deployment-ui (none exists in this repo) and by finding
+    `deployment-ui` has its own separate `Dockerfile`/docker-compose
+    service, distinct from the backend's. The `/api/bootstrap` poll
+    this session has used as its deploy-verification signal for every
+    prior round only ever confirmed the BACKEND was up - it says
+    nothing about whether a frontend-only change like this one is live
+    anywhere the user can see it (Cloudflare Worker needs another
+    manual `wrangler deploy`; GitHub Pages' actual build/publish
+    mechanism for `varshithchand.github.io` was not established this
+    round). Recommend the user redeploy the frontend through whatever
+    their normal process is and confirm the new Dashboard cards render
+    as expected.
+
+Files changed: deployment-ui/src/pages/Dashboard.jsx,
+deployment-ui/src/components/dashboard/CloudServicesCard.jsx,
+GcpCloudSection.jsx (new), PaasSummaryCard.jsx (new),
+ContainerRegistrySummaryCard.jsx (new), ObservabilitySummaryCard.jsx
+(new).
+Commit: 46d86ff.
+
+Status: Committed and pushed; frontend build verified locally, but NOT
+confirmed live anywhere per the deploy-visibility gap noted above - this
+is the first round this session where that gap was actually surfaced
+and acted on, rather than silently assumed covered by the usual
+bootstrap poll.
