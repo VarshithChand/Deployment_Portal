@@ -9,6 +9,7 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.IdentityModel.Tokens;
+using Prometheus;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -206,6 +207,7 @@ builder.Services.AddSingleton<PaasProviderService>();
 // Same statelessness as CloudStatusService above - every credential is
 // passed in per-call.
 builder.Services.AddSingleton<CloudServiceManagementService>();
+builder.Services.AddSingleton<ContainerServiceManagementService>();
 // Docker Hub/GHCR browsing for the Container Registry hub - same
 // statelessness as CloudServiceManagementService above (credential passed
 // in per-call, its two shared HttpClients never carry per-caller state on
@@ -367,6 +369,18 @@ var forwardedHeaderOptions = new ForwardedHeadersOptions
 forwardedHeaderOptions.KnownNetworks.Clear();
 forwardedHeaderOptions.KnownProxies.Clear();
 app.UseForwardedHeaders(forwardedHeaderOptions);
+
+//
+// Prometheus — request duration/count histograms for every request this
+// app handles, tagged by method/path/status code. Placed this early so it
+// wraps requests short-circuited by later middleware too (blocked
+// sessions, MFA gate, etc.), not just ones that reach a controller.
+// /metrics itself isn't published to the host (see docker-compose.yml —
+// deployment-api only `expose`s 8080 inside portal-network), so it's
+// reachable from the Prometheus container but not the public internet;
+// no separate auth gate needed the way Swagger has one.
+//
+app.UseHttpMetrics();
 
 //
 // Correlation ID — stamped on every response (success or failure) so a
@@ -625,6 +639,11 @@ app.MapWhen(
 // Controllers
 //
 app.MapControllers();
+
+//
+// Prometheus scrape endpoint — paired with UseHttpMetrics() above.
+//
+app.MapMetrics();
 
 //
 // Startup checks

@@ -7,6 +7,7 @@ import Pagination from "../common/Pagination";
 import CloudServiceBreadcrumbs from "./CloudServiceBreadcrumbs";
 import AzureResourceDetailDialog from "./AzureResourceDetailDialog";
 import AzureVmManagementPage from "./AzureVmManagementPage";
+import AzureContainerAppsManagementPage from "./AzureContainerAppsManagementPage";
 
 const PAGE_SIZE = 10;
 
@@ -114,6 +115,10 @@ export default function AzureServiceDetailPage({ service, inventory, onBack }) {
             {service.id === "virtual-machines" ? (
 
                 <AzureVmManagementPage refreshToken={refreshToken} />
+
+            ) : service.id === "container-apps" ? (
+
+                <AzureContainerAppsManagementPage />
 
             ) : (
 
