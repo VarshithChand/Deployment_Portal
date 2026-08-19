@@ -9957,3 +9957,108 @@ link, matching how ~90 of AWS's own ~100 catalog entries already
 behave. Recommend the user connect a real Azure App Registration
 (with a Subscription ID) and confirm the live inventory populates as
 expected against their actual subscription.
+
+==================================================
+ROUND 75 - UX: DASHBOARD DOWN TO ONE SOURCE CONTROL
++ ONE CLOUD SERVICES CONTAINER; HIDE WHEN UNCONFIGURED
+==================================================
+Date: 2026-08-19
+Trigger: a screenshot of the live Dashboard (All Repositories, AWS
+Services, Azure DevOps + Running Pipelines, Environments, Quick
+Access all stacked as separate cards) with the verbatim ask: "in
+dashboard keep source control in all repos container no need for
+going and creating the other conaier same for the aws aslo i need
+cloud services therre ... if i configured they can be dispalyed in
+the dashboard other vize hide them or don't allow them to dashboard."
+Read as two related but distinct requests: (1) stop giving each
+source-control/cloud provider its own separate card - fold them into
+one shared container per category, and (2) apply a hard rule across
+the Dashboard: a provider's section only ever appears once it's
+actually configured, never as an empty "connect your credentials"
+placeholder.
+
+Part 1 - Source Control, one container:
+AzureDevOpsCard (Round 72's Dashboard-merged Azure DevOps project
+picker + running pipelines) no longer renders its own separate card.
+AllRepositoriesCard gained one additive prop, `children`, rendered
+right after its own repo grid/pagination and before its ConfirmDialog
+- Dashboard.jsx now does `<AllRepositoriesCard>
+<AzureDevOpsCard/></AllRepositoriesCard>` instead of two adjacent
+top-level cards. AzureDevOpsCard's own JSX was stripped of its two
+outer `.card` wrappers (the project picker card and the "Running
+Pipelines" card) and now flows as a `<hr className="dashboard-section-
+divider">` + `<h3 className="settings-subhead">` sub-section inside
+whichever card embeds it - all of its fetch/state logic is completely
+unchanged, only the outer markup changed shape.
+
+Part 2 - Cloud Services, one container:
+The old standalone AwsServicesCard.jsx was moved (not duplicated,
+git recorded it as a 51% rename) to AwsCloudSection.jsx with the same
+outer-.card-stripping treatment as AzureDevOpsCard above. A new sibling,
+AzureCloudSection.jsx, gives Azure the same Dashboard summary tile grid
+AWS already had - built on the exact same GetAzureResourceInventoryAsync/
+getMyAzureResources inventory Round 74 just added for Cloud Services'
+own Azure sub-page, reusing AWS's own aws-service-grid/aws-service-tile
+CSS classes (already provider-agnostic in shape) rather than a parallel
+Azure-named class set. Its tiles aren't individually clickable the way
+AWS's are (AWS deep-links a tile straight into that one service's detail
+page via NavigationContext's existing pendingCloudService hand-off;
+wiring the same for Azure was out of scope here) - instead one "View all
+Azure services" link at the bottom sends you to the full Cloud Services
+Azure catalog page. A new CloudServicesCard wraps both sections in one
+outer `.card` titled "Cloud Services", with its own lightweight
+getMyAwsSettings/getMyAzureSettings check (the same cheap calls
+QuickAccessCard already makes) deciding whether the WHOLE card is worth
+rendering at all - hidden entirely if neither AWS nor Azure is
+configured, matching Part 2 below. GCP isn't part of this card yet -
+there's no live GCP inventory built (Cloud Services' own GCP sub-page is
+still the honest "not built yet" placeholder), so there's nothing to
+summarize there.
+
+Part 2 - hide when unconfigured:
+Every provider slice touched by this round now returns null instead of
+a placeholder once it's clear that provider isn't configured -
+AzureDevOpsCard (no more "Connect your Azure DevOps credentials..."
+hint), AwsCloudSection (no more "Enter your AWS credentials..." hint).
+A real error once a provider IS configured (the request itself failing)
+is still shown - that's actionable feedback, not the same as "never
+set up." GitHub itself is the one exception, left as it already was:
+RequireGitHubSetup gates the entire app on it, so a visitor without a
+GitHub token can't reach the Dashboard to see AllRepositoriesCard's
+placeholder in the first place - there was never an "unconfigured
+GitHub" state to hide.
+
+Verification performed:
+  - No backend changes - frontend-only, so no dotnet build was needed.
+  - `npm run lint` in deployment-ui/: no new warnings from any
+    touched/new/moved file.
+  - `npm run build` in deployment-ui/: succeeded.
+  - Live check against the deployed Render backend after the push:
+    /api/bootstrap healthy (HTTP 200).
+  - Could NOT click through this in a real browser against real
+    connected credentials in this sandboxed session (same standing
+    limitation as every prior round touching this app's UI) -
+    recommend the user reload the Dashboard and confirm: the Azure
+    DevOps section now sits inside the same bordered box as All
+    Repositories rather than below it as its own card, the AWS/Azure
+    tiles now sit inside one "Cloud Services" box, and that clearing
+    a credential (e.g. Azure DevOps, or both AWS and Azure) makes its
+    section/card disappear from the Dashboard entirely rather than
+    showing a connect-hint.
+
+Files changed: deployment-ui/src/components/dashboard/AllRepositoriesCard.jsx,
+deployment-ui/src/components/dashboard/AzureDevOpsCard.jsx,
+deployment-ui/src/components/dashboard/AwsCloudSection.jsx (renamed
+from AwsServicesCard.jsx), deployment-ui/src/components/dashboard/
+AzureCloudSection.jsx (new), deployment-ui/src/components/dashboard/
+CloudServicesCard.jsx (new), deployment-ui/src/pages/Dashboard.jsx,
+deployment-ui/src/styles/global.css.
+Commit: f3bfd51.
+
+Status: Complete, pushed, live-verified the backend is up. The
+Dashboard now has exactly one Source Control container (GitHub +
+Azure DevOps together) and one Cloud Services container (AWS + Azure
+together), and every provider section inside either one hides itself
+completely rather than showing an empty placeholder when that
+provider isn't configured. Standing limitation, stated plainly:
+unverified in a real browser in this sandboxed session.
