@@ -3,23 +3,20 @@ import { useEffect, useMemo, useState } from "react";
 import { getAzureDevOpsProjects, getAzureDevOpsRunningBuilds } from "../../services/azureDevOpsService";
 import useAzureDevOpsProject from "../../hooks/useAzureDevOpsProject";
 import SearchBox from "../common/SearchBox";
-import useNavigation from "../../hooks/useNavigation";
 
-// Was its own separate "Azure DevOps Dashboard" sub-page (see git history
-// for components/sourceControl/AzureDevOpsDashboardView.jsx, now retired,
-// no tab key survives it) - moved onto the main Dashboard by explicit
-// request, alongside AwsServicesCard/EnvironmentsCard, rather than making
-// a visitor leave the portal's own Overview to pick an Azure DevOps
-// project. Content is otherwise unchanged: pick a project here once, and
-// it applies across every other Azure DevOps sub-page that needs one
-// (Pipelines, History, Build Artifacts, Pull Requests - see
-// AzureDevOpsProjectContext.jsx), the same "pick a project, everything
-// else follows" shape the real Azure DevOps portal itself uses. Branches
-// and Package Feeds aren't affected - both are already org-wide and never
-// asked for a project to begin with.
+// Embedded inside AllRepositoriesCard's own Source Control container as
+// `children` (see Dashboard.jsx) rather than its own separate card - by
+// explicit request, one Source Control container on the Dashboard, not a
+// second one sitting below it. Renders nothing at all (not even a
+// "connect your credentials" hint) until Azure DevOps is actually
+// configured - same request applied here: an unconfigured provider is
+// hidden from the Dashboard, not shown as an empty placeholder. Content
+// otherwise unchanged from its original standalone-card version: pick a
+// project here once, and it applies across every other Azure DevOps
+// sub-page that needs one (Pipelines, History, Build Artifacts, Pull
+// Requests - see AzureDevOpsProjectContext.jsx).
 export default function AzureDevOpsCard() {
 
-    const { setTab } = useNavigation();
     const { project, setProject } = useAzureDevOpsProject();
 
     const [projects, setProjects] = useState(null);
@@ -80,72 +77,134 @@ export default function AzureDevOpsCard() {
 
     }, [projects, search]);
 
-    if (loading) {
-        return <div className="card"><p className="empty-state">Loading Azure DevOps projects...</p></div>;
-    }
-
-    if (!projects?.configured) {
-
-        return (
-            <div className="card">
-                <h2 className="card-title">Azure DevOps</h2>
-                <p className="empty-state" style={{ textAlign: "left" }}>
-                    Connect your Azure DevOps credentials in{" "}
-                    <a href="#" onClick={(e) => { e.preventDefault(); setTab("settings"); }}>Settings → Credentials → Azure DevOps</a>
-                    {" "}to browse this.
-                </p>
-            </div>
-        );
-
+    // Loading and "not configured" both render nothing - a loading flash or
+    // a connect-hint paragraph inside someone else's card would read as
+    // that card's own content stuttering, and an unconfigured provider
+    // should just not appear at all per the Dashboard's own "configured ->
+    // shown, otherwise hidden" rule. A real error (configured, but the
+    // request itself failed) is still worth surfacing.
+    if (loading || !projects?.configured) {
+        return null;
     }
 
     if (projects.error) {
-        return <div className="card"><h2 className="card-title">Azure DevOps</h2><p className="error-message">{projects.error}</p></div>;
+
+        return (
+            <>
+                <hr className="dashboard-section-divider" />
+                <h3 className="settings-subhead">Azure DevOps</h3>
+                <p className="error-message">{projects.error}</p>
+            </>
+        );
+
     }
 
     return (
 
         <>
 
-        <div className="card" style={{ marginBottom: "20px" }}>
+        <hr className="dashboard-section-divider" />
 
-            <h2 className="card-title">Azure DevOps</h2>
+        <h3 className="settings-subhead">Azure DevOps</h3>
 
-            {project && (
-                <p className="field-hint field-hint-good">
-                    Currently working in <strong>{project.name}</strong> — every Azure DevOps
-                    page (Pipelines, History, Build Artifacts, Pull Requests) uses this same project.
-                </p>
-            )}
+        {project && (
+            <p className="field-hint field-hint-good">
+                Currently working in <strong>{project.name}</strong> — every Azure DevOps
+                page (Pipelines, History, Build Artifacts, Pull Requests) uses this same project.
+            </p>
+        )}
 
-            <SearchBox placeholder="Search projects..." value={search} onChange={setSearch} />
+        <SearchBox placeholder="Search projects..." value={search} onChange={setSearch} />
 
-            {filteredProjects.length === 0 ? (
+        {filteredProjects.length === 0 ? (
 
-                <p className="empty-state" style={{ textAlign: "left", marginTop: "12px" }}>No projects found.</p>
+            <p className="empty-state" style={{ textAlign: "left", marginTop: "12px" }}>No projects found.</p>
+
+        ) : (
+
+            <div className="table-scroll" style={{ marginTop: "12px" }}>
+
+                <table className="table">
+
+                    <thead>
+                        <tr>
+                            <th>Project</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+
+                    <tbody>
+
+                        {filteredProjects.map((p) => (
+
+                            <tr key={p.id} className="table-row-clickable" onClick={() => setProject(p)}>
+                                <td>{p.name}</td>
+                                <td>
+                                    {project?.id === p.id && <span className="badge badge-success">Selected</span>}
+                                </td>
+                            </tr>
+
+                        ))}
+
+                    </tbody>
+
+                </table>
+
+            </div>
+
+        )}
+
+        {project && (
+
+            <>
+
+            <div className="button-row" style={{ justifyContent: "space-between", margin: "16px 0 12px" }}>
+                <h4 className="settings-subhead" style={{ margin: 0 }}>Running Pipelines</h4>
+                <button type="button" className="btn btn-secondary btn-sm" onClick={() => loadRunningBuilds(project)}>
+                    Refresh
+                </button>
+            </div>
+
+            {runningBuildsLoading ? (
+
+                <p className="field-hint">Loading running pipelines...</p>
+
+            ) : !runningBuilds?.configured || runningBuilds.error ? (
+
+                <p className="error-message">{runningBuilds?.error || "Unable to load running pipelines."}</p>
+
+            ) : runningBuilds.builds.length === 0 ? (
+
+                <p className="empty-state" style={{ textAlign: "left" }}>Nothing is running in this project right now.</p>
 
             ) : (
 
-                <div className="table-scroll" style={{ marginTop: "12px" }}>
+                <div className="table-scroll">
 
                     <table className="table">
 
                         <thead>
                             <tr>
-                                <th>Project</th>
-                                <th></th>
+                                <th>Pipeline</th>
+                                <th>Build</th>
+                                <th>Branch</th>
+                                <th>Started</th>
                             </tr>
                         </thead>
 
                         <tbody>
 
-                            {filteredProjects.map((p) => (
+                            {runningBuilds.builds.map((build) => (
 
-                                <tr key={p.id} className="table-row-clickable" onClick={() => setProject(p)}>
-                                    <td>{p.name}</td>
+                                <tr key={build.id}>
                                     <td>
-                                        {project?.id === p.id && <span className="badge badge-success">Selected</span>}
+                                        {build.webUrl ? (
+                                            <a href={build.webUrl} target="_blank" rel="noreferrer">{build.pipelineName}</a>
+                                        ) : build.pipelineName}
                                     </td>
+                                    <td>{build.buildNumber}</td>
+                                    <td>{build.sourceBranch || "—"}</td>
+                                    <td>{build.startTime ? new Date(build.startTime).toLocaleString() : "—"}</td>
                                 </tr>
 
                             ))}
@@ -158,72 +217,7 @@ export default function AzureDevOpsCard() {
 
             )}
 
-        </div>
-
-        {project && (
-
-            <div className="card">
-
-                <div className="button-row" style={{ justifyContent: "space-between", marginBottom: "12px" }}>
-                    <h2 className="card-title" style={{ marginBottom: 0 }}>Azure DevOps — Running Pipelines</h2>
-                    <button type="button" className="btn btn-secondary btn-sm" onClick={() => loadRunningBuilds(project)}>
-                        Refresh
-                    </button>
-                </div>
-
-                {runningBuildsLoading ? (
-
-                    <p className="field-hint">Loading running pipelines...</p>
-
-                ) : !runningBuilds?.configured || runningBuilds.error ? (
-
-                    <p className="error-message">{runningBuilds?.error || "Unable to load running pipelines."}</p>
-
-                ) : runningBuilds.builds.length === 0 ? (
-
-                    <p className="empty-state" style={{ textAlign: "left" }}>Nothing is running in this project right now.</p>
-
-                ) : (
-
-                    <div className="table-scroll">
-
-                        <table className="table">
-
-                            <thead>
-                                <tr>
-                                    <th>Pipeline</th>
-                                    <th>Build</th>
-                                    <th>Branch</th>
-                                    <th>Started</th>
-                                </tr>
-                            </thead>
-
-                            <tbody>
-
-                                {runningBuilds.builds.map((build) => (
-
-                                    <tr key={build.id}>
-                                        <td>
-                                            {build.webUrl ? (
-                                                <a href={build.webUrl} target="_blank" rel="noreferrer">{build.pipelineName}</a>
-                                            ) : build.pipelineName}
-                                        </td>
-                                        <td>{build.buildNumber}</td>
-                                        <td>{build.sourceBranch || "—"}</td>
-                                        <td>{build.startTime ? new Date(build.startTime).toLocaleString() : "—"}</td>
-                                    </tr>
-
-                                ))}
-
-                            </tbody>
-
-                        </table>
-
-                    </div>
-
-                )}
-
-            </div>
+            </>
 
         )}
 

@@ -4972,6 +4972,22 @@ textarea{
 }
 
 /* ==========================================
+   DASHBOARD MULTI-PROVIDER CONTAINERS
+   (Source Control: AllRepositoriesCard + AzureDevOpsCard,
+   Cloud Services: CloudServicesCard's Aws/AzureCloudSection)
+========================================== */
+
+.dashboard-section-divider{
+
+    border:none;
+
+    border-top:1px solid var(--border);
+
+    margin:20px 0 16px;
+
+}
+
+/* ==========================================
    AWS SERVICES CARD (Dashboard)
 ========================================== */
 

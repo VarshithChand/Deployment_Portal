@@ -21,15 +21,7 @@ const SERVICES = [
 ];
 
 // A tile only ever renders for a service that's actually got something
-// running (status.count > 0) or one that errored trying to check (still
-// worth surfacing — that's a real problem, not "nothing running"). A
-// clean zero-count service is deliberately not a tile at all; see
-// hasSomethingToShow below for the empty-account case.
-//
-// onSelect is omitted for the synthetic "Other AWS Resources" error tile
-// (see the otherError push below) - it doesn't correspond to any one real
-// service on the Cloud Services page, so there's nowhere for a click on it
-// to actually go.
+// running (status.count > 0) or one that errored trying to check.
 function AwsServiceTile({ label, status, onSelect }) {
 
     const clickable = typeof onSelect === "function";
@@ -96,16 +88,15 @@ function AwsServiceTile({ label, status, onSelect }) {
 
 }
 
-// Dashboard's account-wide AWS tracker — every AWS service this session's
-// saved credentials (see AwsLoginSection) can see resources in, for the
-// configured region. EC2/ECR/VPC/S3/Lambda/Route53/SNS are hand-checked
-// (accurate semantics, e.g. EC2 filtered to actually-running instances);
-// everything else comes from a broader Resource Groups Tagging API scan
-// (see CloudStatusService.DescribeOtherResourcesAsync), one tile per AWS
-// service namespace actually found. Independent of the Environments
-// feature's ECS/ECR panel, which only ever showed the one cluster/service/
-// repository a specific environment happens to be wired to.
-export default function AwsServicesCard() {
+// AWS's own slice of the Dashboard's "Cloud Services" container - moved
+// out of what used to be its own standalone card (AwsServicesCard) so it
+// can live inside one shared container alongside Azure's slice (see
+// CloudServicesCard.jsx). Content is unchanged from the original: every
+// AWS service this session's saved credentials can see resources in, for
+// the configured region. Renders nothing at all once it's clear AWS isn't
+// configured - CloudServicesCard itself decides whether the whole
+// container is worth showing.
+export default function AwsCloudSection() {
 
     const { githubTokenConfigured, awsIdentityLabel } = useAuth();
     const { goToCloudService } = useNavigation();
@@ -113,18 +104,10 @@ export default function AwsServicesCard() {
     const [inventory, setInventory] = useState(null);
     const [loading, setLoading] = useState(true);
 
-    // null = "use whatever region is saved with the AWS credential" - the
-    // backend's own default. Only becomes a real value once the region
-    // picker below is touched.
     const [selectedRegion, setSelectedRegion] = useState(null);
 
     async function loadInventory(region) {
 
-        // Same reasoning as every other Dashboard card — this mounts even
-        // behind RequireGitHubSetup's popup, so without this guard it
-        // polled before a token was even connected. Gated on the token,
-        // not a chosen repo (this card has nothing to do with which repo
-        // is selected) - RequireGitHubSetup itself no longer requires one.
         if (!githubTokenConfigured) {
             setLoading(false);
             return;
@@ -146,34 +129,22 @@ export default function AwsServicesCard() {
 
     }
 
-    if (!githubTokenConfigured) {
+    if (loading || !inventory?.configured) {
         return null;
     }
 
-    // "Running services" only — a service sitting at zero isn't shown at
-    // all, rather than rendering tiles that just say "0/None found". An
-    // error still renders (that's "couldn't check", not "nothing running")
-    // since silently hiding it would read as "all clear" when it might not
-    // be. The seven hand-checked services above come first; anything else
-    // this access key has in the region — RDS, DynamoDB, SQS, whatever —
-    // comes from inventory.other (see CloudStatusService.
-    // DescribeOtherResourcesAsync), one dynamic tile per AWS service found.
-    const visibleKnown = inventory?.configured
-        ? SERVICES.filter((service) => {
-            const status = inventory[service.key];
-            return status && (status.error || status.count > 0);
-        }).map((service) => ({ key: service.key, label: service.label, status: inventory[service.key] }))
-        : [];
+    const visibleKnown = SERVICES.filter((service) => {
+        const status = inventory[service.key];
+        return status && (status.error || status.count > 0);
+    }).map((service) => ({ key: service.key, label: service.label, status: inventory[service.key] }));
 
-    const otherTiles = inventory?.configured
-        ? (inventory.other || []).map((group) => ({
-            key: group.key,
-            label: group.label,
-            status: { count: group.count, items: group.items }
-        }))
-        : [];
+    const otherTiles = (inventory.other || []).map((group) => ({
+        key: group.key,
+        label: group.label,
+        status: { count: group.count, items: group.items }
+    }));
 
-    if (inventory?.configured && inventory.otherError) {
+    if (inventory.otherError) {
         otherTiles.push({
             key: "other-error",
             label: "Other AWS Resources",
@@ -185,45 +156,24 @@ export default function AwsServicesCard() {
 
     return (
 
-        <div className="card">
+        <>
 
-            <h2 className="card-title">
-                AWS Services
-            </h2>
+            <h3 className="settings-subhead" style={{ marginTop: 0 }}>AWS</h3>
 
-            {inventory?.configured && (
+            <div className="form-group cloud-provider-select-group">
 
-                <div className="form-group" style={{ maxWidth: "280px" }}>
+                <label>Region</label>
 
-                    <label>Region</label>
+                <ComboBox
+                    options={AWS_REGIONS}
+                    value={selectedRegion || inventory.region || ""}
+                    onChange={handleRegionChange}
+                    placeholder={inventory.region || "us-east-1"}
+                />
 
-                    <ComboBox
-                        options={AWS_REGIONS}
-                        value={selectedRegion || inventory.region || ""}
-                        onChange={handleRegionChange}
-                        placeholder={inventory.region || "us-east-1"}
-                    />
+            </div>
 
-                </div>
-
-            )}
-
-            {loading ? (
-
-                // min-height approximates a loaded tile grid's typical size
-                // (see AllRepositoriesCard's own version of this) - reduces
-                // how far the page below jumps once the real inventory (up
-                // to several rows of tiles) arrives.
-                <p className="empty-state" style={{ minHeight: "96px" }}>Checking your AWS account...</p>
-
-            ) : !inventory?.configured ? (
-
-                <p className="empty-state" style={{ textAlign: "left" }}>
-                    Enter your AWS credentials in Settings → Credentials → AWS to see every AWS
-                    service this access key has resources in, for the configured region.
-                </p>
-
-            ) : visibleTiles.length === 0 ? (
+            {visibleTiles.length === 0 ? (
 
                 <p className="empty-state" style={{ textAlign: "left" }}>
                     Nothing currently running in {inventory.region || "your AWS account"} across any
@@ -258,7 +208,7 @@ export default function AwsServicesCard() {
 
             )}
 
-        </div>
+        </>
 
     );
 

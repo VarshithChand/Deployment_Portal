@@ -147,7 +147,14 @@ function ReconnectPrompt({ owner, repository }) {
 // reload switch pattern, but lives on the page itself instead of behind a
 // modal, and additionally shows each visible repo's latest workflow run so
 // a pipeline running on a repo you're not looking at doesn't go unnoticed.
-export default function AllRepositoriesCard({ repository }) {
+//
+// `children` is the Dashboard's other Source Control providers (currently
+// just AzureDevOpsCard) rendered INSIDE this same card - by explicit
+// request, one "Source Control" container on the Dashboard rather than a
+// separate card per provider. Each child manages its own visibility
+// (renders nothing when that provider isn't configured), so this stays a
+// plain pass-through with no idea which providers exist.
+export default function AllRepositoriesCard({ repository, children }) {
 
     const {
         githubTokenConfigured, githubOwner, githubRepository,
@@ -440,6 +447,8 @@ export default function AllRepositoriesCard({ repository }) {
                 />
 
             )}
+
+            {children}
 
             <ConfirmDialog
 

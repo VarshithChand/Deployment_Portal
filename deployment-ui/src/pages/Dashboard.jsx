@@ -3,9 +3,9 @@ import { useGithubResources } from "../hooks/useGithubResources";
 import PageLayout from "../components/layout/PageLayout";
 
 import AllRepositoriesCard from "../components/dashboard/AllRepositoriesCard";
-import AwsServicesCard from "../components/dashboard/AwsServicesCard";
-import EnvironmentsCard from "../components/dashboard/EnvironmentsCard";
 import AzureDevOpsCard from "../components/dashboard/AzureDevOpsCard";
+import CloudServicesCard from "../components/dashboard/CloudServicesCard";
+import EnvironmentsCard from "../components/dashboard/EnvironmentsCard";
 import QuickAccessCard from "../components/dashboard/QuickAccessCard";
 
 export default function Dashboard() {
@@ -43,15 +43,13 @@ export default function Dashboard() {
 
             }
 
-            <AllRepositoriesCard repository={repository} />
+            <AllRepositoriesCard repository={repository}>
+                <AzureDevOpsCard />
+            </AllRepositoriesCard>
 
             <br />
 
-            <AwsServicesCard />
-
-            <br />
-
-            <AzureDevOpsCard />
+            <CloudServicesCard />
 
             <br />
 
