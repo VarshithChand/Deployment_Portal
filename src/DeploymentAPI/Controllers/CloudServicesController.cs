@@ -124,6 +124,65 @@ public class CloudServicesController : ControllerBase
         return Ok(result);
     }
 
+    // ================= EC2 detail / firewall / metrics =================
+    // Phase 1 of the multi-cloud infrastructure console - real per-
+    // resource detail beyond the management list above (connection info
+    // is computed client-side, no backend call - see section 5/6). Same
+    // self-service posture as the actions above, no AdminGate.
+
+    [HttpGet("ec2/{instanceId}")]
+    public async Task<IActionResult> GetEc2Detail(string instanceId, [FromQuery] string? region)
+    {
+        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var creds = await _settings.GetUserAwsCredentialsAsync(key);
+
+        return Ok(await _management.GetEc2InstanceDetailAsync(creds, region, instanceId));
+    }
+
+    [HttpGet("ec2/{instanceId}/firewall")]
+    public async Task<IActionResult> GetEc2Firewall(string instanceId, [FromQuery] string? region)
+    {
+        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var creds = await _settings.GetUserAwsCredentialsAsync(key);
+
+        return Ok(await _management.GetEc2SecurityGroupsAsync(creds, region, instanceId));
+    }
+
+    [HttpPost("ec2/{instanceId}/firewall")]
+    public async Task<IActionResult> AddEc2FirewallRule(string instanceId, [FromBody] AddSecurityRuleRequestDto request, [FromQuery] string? region)
+    {
+        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var creds = await _settings.GetUserAwsCredentialsAsync(key);
+        var actor = await ResolveActorLabelAsync(key, creds);
+
+        var result = await _management.AddEc2SecurityGroupRuleAsync(creds, region, instanceId, request);
+        AppendAuditLog(actor, "FirewallRuleAdded", "EC2", instanceId, result.Success, result.Error);
+
+        return Ok(result);
+    }
+
+    [HttpDelete("ec2/{instanceId}/firewall")]
+    public async Task<IActionResult> RemoveEc2FirewallRule(string instanceId, [FromBody] RemoveSecurityRuleRequestDto request, [FromQuery] string? region)
+    {
+        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var creds = await _settings.GetUserAwsCredentialsAsync(key);
+        var actor = await ResolveActorLabelAsync(key, creds);
+
+        var result = await _management.RemoveEc2SecurityGroupRuleAsync(creds, region, instanceId, request);
+        AppendAuditLog(actor, "FirewallRuleRemoved", "EC2", instanceId, result.Success, result.Error);
+
+        return Ok(result);
+    }
+
+    [HttpGet("ec2/{instanceId}/metrics")]
+    public async Task<IActionResult> GetEc2Metrics(string instanceId, [FromQuery] string? region, [FromQuery] int rangeMinutes = 60)
+    {
+        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var creds = await _settings.GetUserAwsCredentialsAsync(key);
+
+        return Ok(await _management.GetEc2MetricsAsync(creds, region, instanceId, rangeMinutes));
+    }
+
     // ================= ECS actions =================
 
     [HttpPost("ecs/scale")]
@@ -319,6 +378,63 @@ public class CloudServicesController : ControllerBase
         });
     }
 
+    // ================= Azure VM detail / NSG rules / metrics =================
+    // Phase 1 of the multi-cloud infrastructure console - same self-
+    // service posture as the VM actions above, no AdminGate.
+
+    [HttpGet("azurevm/{resourceGroup}/{vmName}/detail")]
+    public async Task<IActionResult> GetAzureVmDetail(string resourceGroup, string vmName)
+    {
+        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var creds = await _settings.GetUserAzureCredentialsAsync(key);
+
+        return Ok(await _management.GetAzureVmDetailAsync(creds, resourceGroup, vmName));
+    }
+
+    [HttpGet("azurevm/{resourceGroup}/{vmName}/firewall")]
+    public async Task<IActionResult> GetAzureVmFirewall(string resourceGroup, string vmName, [FromQuery] string? nsgId)
+    {
+        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var creds = await _settings.GetUserAzureCredentialsAsync(key);
+
+        return Ok(await _management.GetAzureNsgRulesAsync(creds, nsgId));
+    }
+
+    [HttpPost("azurevm/{resourceGroup}/{vmName}/firewall")]
+    public async Task<IActionResult> AddAzureVmFirewallRule(string resourceGroup, string vmName, [FromBody] AddSecurityRuleRequestDto request, [FromQuery] string? nsgId)
+    {
+        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var creds = await _settings.GetUserAzureCredentialsAsync(key);
+        var actor = await ResolveAzureActorLabelAsync(key, creds);
+
+        var result = await _management.AddAzureNsgRuleAsync(creds, nsgId, request);
+        AppendAuditLog(actor, "FirewallRuleAdded", "Azure VM", vmName, result.Success, result.Error);
+
+        return Ok(result);
+    }
+
+    [HttpDelete("azurevm/{resourceGroup}/{vmName}/firewall/{ruleName}")]
+    public async Task<IActionResult> RemoveAzureVmFirewallRule(string resourceGroup, string vmName, string ruleName, [FromQuery] string? nsgId)
+    {
+        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var creds = await _settings.GetUserAzureCredentialsAsync(key);
+        var actor = await ResolveAzureActorLabelAsync(key, creds);
+
+        var result = await _management.RemoveAzureNsgRuleAsync(creds, nsgId, ruleName);
+        AppendAuditLog(actor, "FirewallRuleRemoved", "Azure VM", vmName, result.Success, result.Error);
+
+        return Ok(result);
+    }
+
+    [HttpGet("azurevm/{resourceGroup}/{vmName}/metrics")]
+    public async Task<IActionResult> GetAzureVmMetrics(string resourceGroup, string vmName, [FromQuery] int rangeMinutes = 60)
+    {
+        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var creds = await _settings.GetUserAzureCredentialsAsync(key);
+
+        return Ok(await _management.GetAzureVmMetricsAsync(creds, resourceGroup, vmName, rangeMinutes));
+    }
+
     // ================= Azure resource detail (generic view/read) =================
     // Cloud Services' Azure page's "click into any resource, not just a
     // VM" detail panel - see AzureResourceDetailDto's own comment.
@@ -355,6 +471,135 @@ public class CloudServicesController : ControllerBase
         var creds = await _settings.GetUserGcpCredentialsAsync(key);
 
         return Ok(await _management.GetArtifactRegistryImagesAsync(creds, repositoryName));
+    }
+
+    // ================= GCP Compute Engine =================
+    // Phase 1 of the multi-cloud infrastructure console - same self-
+    // service posture as EC2/Azure VM above, no AdminGate. Actor label
+    // for the audit log falls back to the session-key prefix (no GCP
+    // equivalent of STS GetCallerIdentity/Graph wired up here).
+
+    [HttpGet("gcpvm")]
+    public async Task<IActionResult> GetGcpVms()
+    {
+        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var creds = await _settings.GetUserGcpCredentialsAsync(key);
+
+        return Ok(await _management.GetGcpComputeInstancesAsync(creds));
+    }
+
+    [HttpPost("gcpvm/{zone}/{instanceName}/start")]
+    public async Task<IActionResult> StartGcpVm(string zone, string instanceName)
+    {
+        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var creds = await _settings.GetUserGcpCredentialsAsync(key);
+
+        var result = await _management.StartGcpVmAsync(creds, zone, instanceName);
+        AppendAuditLog($"session {key[..Math.Min(8, key.Length)]}", "Start", "GCP VM", instanceName, result.Success, result.Error);
+
+        return Ok(result);
+    }
+
+    [HttpPost("gcpvm/{zone}/{instanceName}/stop")]
+    public async Task<IActionResult> StopGcpVm(string zone, string instanceName)
+    {
+        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var creds = await _settings.GetUserGcpCredentialsAsync(key);
+
+        var result = await _management.StopGcpVmAsync(creds, zone, instanceName);
+        AppendAuditLog($"session {key[..Math.Min(8, key.Length)]}", "Stop", "GCP VM", instanceName, result.Success, result.Error);
+
+        return Ok(result);
+    }
+
+    [HttpPost("gcpvm/{zone}/{instanceName}/reset")]
+    public async Task<IActionResult> ResetGcpVm(string zone, string instanceName)
+    {
+        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var creds = await _settings.GetUserGcpCredentialsAsync(key);
+
+        var result = await _management.ResetGcpVmAsync(creds, zone, instanceName);
+        AppendAuditLog($"session {key[..Math.Min(8, key.Length)]}", "Reset", "GCP VM", instanceName, result.Success, result.Error);
+
+        return Ok(result);
+    }
+
+    [HttpDelete("gcpvm/{zone}/{instanceName}")]
+    public async Task<IActionResult> DeleteGcpVm(string zone, string instanceName)
+    {
+        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var creds = await _settings.GetUserGcpCredentialsAsync(key);
+
+        var result = await _management.DeleteGcpVmAsync(creds, zone, instanceName);
+        AppendAuditLog($"session {key[..Math.Min(8, key.Length)]}", "Delete", "GCP VM", instanceName, result.Success, result.Error);
+
+        return Ok(result);
+    }
+
+    [HttpGet("gcpvm/{zone}/{instanceName}/metrics")]
+    public async Task<IActionResult> GetGcpVmMetrics(string zone, string instanceName, [FromQuery] string? instanceId, [FromQuery] int rangeMinutes = 60)
+    {
+        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var creds = await _settings.GetUserGcpCredentialsAsync(key);
+
+        if (string.IsNullOrWhiteSpace(instanceId))
+            return Ok(new ResourceMetricsDto { Configured = creds.IsConfigured, Error = "Missing instance ID." });
+
+        return Ok(await _management.GetGcpVmMetricsAsync(creds, instanceId, rangeMinutes));
+    }
+
+    [HttpGet("gcpfirewall")]
+    public async Task<IActionResult> GetGcpFirewall()
+    {
+        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var creds = await _settings.GetUserGcpCredentialsAsync(key);
+
+        return Ok(await _management.GetGcpFirewallRulesAsync(creds));
+    }
+
+    [HttpPost("gcpfirewall")]
+    public async Task<IActionResult> AddGcpFirewallRule([FromBody] AddSecurityRuleRequestDto request)
+    {
+        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var creds = await _settings.GetUserGcpCredentialsAsync(key);
+
+        var result = await _management.AddGcpFirewallRuleAsync(creds, request);
+        AppendAuditLog($"session {key[..Math.Min(8, key.Length)]}", "FirewallRuleAdded", "GCP Network", "global", result.Success, result.Error);
+
+        return Ok(result);
+    }
+
+    [HttpDelete("gcpfirewall/{ruleName}")]
+    public async Task<IActionResult> RemoveGcpFirewallRule(string ruleName)
+    {
+        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var creds = await _settings.GetUserGcpCredentialsAsync(key);
+
+        var result = await _management.RemoveGcpFirewallRuleAsync(creds, ruleName);
+        AppendAuditLog($"session {key[..Math.Min(8, key.Length)]}", "FirewallRuleRemoved", "GCP Network", ruleName, result.Success, result.Error);
+
+        return Ok(result);
+    }
+
+    // ================= Audit history (best-effort) =================
+    // Backs the resource detail pages' "Audit History" tab - filters the
+    // same in-memory ActivityLogService every mutation above already
+    // writes to, by a substring match on the resource name. In-memory,
+    // resets on restart, substring match rather than a real resource
+    // link - a known, already-accepted limitation (see ActivityLogService's
+    // own comment), not a persisted audit store.
+
+    [HttpGet("audit")]
+    public IActionResult GetResourceAuditHistory([FromQuery] string resource)
+    {
+        if (string.IsNullOrWhiteSpace(resource))
+            return Ok(new List<LogEntryDto>());
+
+        var matches = _log.GetRecent()
+            .Where(e => e.Category == "Cloud Services" && e.Message.Contains(resource, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        return Ok(matches);
     }
 
     // ================= Lambda (read-only) =================

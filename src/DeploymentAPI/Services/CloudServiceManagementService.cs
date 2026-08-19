@@ -2,6 +2,8 @@ using System.Net.Http.Headers;
 using System.Security.Cryptography;
 using System.Text;
 using Amazon;
+using Amazon.CloudWatch;
+using Amazon.CloudWatch.Model;
 using Amazon.EC2;
 using Amazon.EC2.Model;
 using Amazon.ECR;
@@ -1326,5 +1328,1022 @@ public class CloudServiceManagementService
         {
             return new CloudServiceActionResultDto { Success = false, Error = CloudErrorSanitizer.Describe(ex, "Azure", "VM creation") };
         }
+    }
+
+    // ================= AWS EC2 — instance detail, security groups, metrics =================
+    //
+    // Phase 1 of the multi-cloud infrastructure console (see
+    // security_findings.txt). Connection info (SSH command) is computed
+    // client-side from PublicIp/Os below - no backend call, no key
+    // material ever crosses this API (section 5/6 of the request this
+    // came from).
+
+    public async Task<Ec2InstanceDetailDto> GetEc2InstanceDetailAsync(UserAwsCredentials credentials, string? region, string instanceId)
+    {
+        var result = new Ec2InstanceDetailDto { Configured = credentials.IsConfigured, InstanceId = instanceId };
+        var (ok, endpoint, error) = ResolveRegion(credentials, region);
+
+        if (!credentials.IsConfigured)
+            return result;
+
+        if (!ok)
+        {
+            result.Error = error;
+            return result;
+        }
+
+        try
+        {
+            using var client = new AmazonEC2Client(BuildCredentials(credentials), endpoint);
+
+            var response = await client.DescribeInstancesAsync(new DescribeInstancesRequest
+            {
+                InstanceIds = new List<string> { instanceId }
+            });
+
+            var instance = response.Reservations?.SelectMany(r => r.Instances ?? new List<Instance>()).FirstOrDefault();
+
+            if (instance == null)
+            {
+                result.Error = $"Instance \"{instanceId}\" not found.";
+                return result;
+            }
+
+            result.Name = instance.Tags?.FirstOrDefault(t => t.Key == "Name")?.Value ?? instanceId;
+            result.Region = endpoint!.SystemName;
+            result.AvailabilityZone = instance.Placement?.AvailabilityZone;
+            result.InstanceType = instance.InstanceType?.Value ?? string.Empty;
+            result.Os = instance.PlatformDetails ?? (instance.Platform == PlatformValues.Windows ? "Windows" : "Linux/UNIX");
+            result.State = instance.State?.Name?.Value ?? "unknown";
+            result.LaunchTime = instance.LaunchTime;
+            result.PublicIp = instance.PublicIpAddress;
+            result.PrivateIp = instance.PrivateIpAddress;
+            result.PublicIpv6 = instance.NetworkInterfaces?
+                .SelectMany(n => n.Ipv6Addresses ?? new List<InstanceIpv6Address>())
+                .FirstOrDefault()?.Ipv6Address;
+            result.VpcId = instance.VpcId;
+            result.SubnetId = instance.SubnetId;
+            result.SecurityGroupIds = instance.SecurityGroups?.Select(g => g.GroupId).ToList() ?? new List<string>();
+            result.Tags = instance.Tags?.ToDictionary(t => t.Key, t => t.Value) ?? new Dictionary<string, string>();
+        }
+        catch (Exception ex)
+        {
+            result.Error = CloudErrorSanitizer.Describe(ex, "AWS", "EC2 instance detail");
+        }
+
+        return result;
+    }
+
+    private static SecurityRuleDto MapEc2Rule(IpPermission perm, string direction, string cidr, string? description) => new()
+    {
+        Direction = direction,
+        Protocol = perm.IpProtocol == "-1" ? "all" : perm.IpProtocol,
+        FromPort = perm.IpProtocol == "-1" ? null : perm.FromPort,
+        ToPort = perm.IpProtocol == "-1" ? null : perm.ToPort,
+        Cidr = cidr,
+        Description = description
+    };
+
+    private static IEnumerable<SecurityRuleDto> FlattenEc2Permissions(List<IpPermission> permissions, string direction)
+    {
+        foreach (var perm in permissions)
+        {
+            foreach (var range in perm.Ipv4Ranges ?? new List<IpRange>())
+                yield return MapEc2Rule(perm, direction, range.CidrIp, range.Description);
+
+            foreach (var range in perm.Ipv6Ranges ?? new List<Ipv6Range>())
+                yield return MapEc2Rule(perm, direction, range.CidrIpv6, range.Description);
+        }
+    }
+
+    public async Task<SecurityRuleListDto> GetEc2SecurityGroupsAsync(UserAwsCredentials credentials, string? region, string instanceId)
+    {
+        var result = new SecurityRuleListDto { Configured = credentials.IsConfigured, Scope = "instance" };
+        var (ok, endpoint, error) = ResolveRegion(credentials, region);
+
+        if (!credentials.IsConfigured)
+            return result;
+
+        if (!ok)
+        {
+            result.Error = error;
+            return result;
+        }
+
+        try
+        {
+            using var client = new AmazonEC2Client(BuildCredentials(credentials), endpoint);
+
+            var instanceResponse = await client.DescribeInstancesAsync(new DescribeInstancesRequest { InstanceIds = new List<string> { instanceId } });
+            var instance = instanceResponse.Reservations?.SelectMany(r => r.Instances ?? new List<Instance>()).FirstOrDefault();
+            var groupIds = instance?.SecurityGroups?.Select(g => g.GroupId).ToList() ?? new List<string>();
+
+            if (groupIds.Count == 0)
+            {
+                result.Error = instance == null ? $"Instance \"{instanceId}\" not found." : "This instance has no security groups attached.";
+                return result;
+            }
+
+            var sgResponse = await client.DescribeSecurityGroupsAsync(new DescribeSecurityGroupsRequest { GroupIds = groupIds });
+
+            foreach (var group in sgResponse.SecurityGroups ?? new List<SecurityGroup>())
+            {
+                result.Inbound.AddRange(FlattenEc2Permissions(group.IpPermissions ?? new List<IpPermission>(), "Inbound"));
+                result.Outbound.AddRange(FlattenEc2Permissions(group.IpPermissionsEgress ?? new List<IpPermission>(), "Outbound"));
+            }
+        }
+        catch (Exception ex)
+        {
+            result.Error = CloudErrorSanitizer.Describe(ex, "AWS", "EC2 security group list");
+        }
+
+        return result;
+    }
+
+    // Applies to the instance's primary (first-attached) security group -
+    // most single-purpose instances only have one; an instance with
+    // several SGs attached needs the AWS Console for anything beyond the
+    // first (the frontend's own field-hint says so, this isn't hidden).
+    private static async Task<(bool ok, string? groupId, string? error)> ResolvePrimarySecurityGroupAsync(AmazonEC2Client client, string instanceId)
+    {
+        var instanceResponse = await client.DescribeInstancesAsync(new DescribeInstancesRequest { InstanceIds = new List<string> { instanceId } });
+        var instance = instanceResponse.Reservations?.SelectMany(r => r.Instances ?? new List<Instance>()).FirstOrDefault();
+        var groupId = instance?.SecurityGroups?.FirstOrDefault()?.GroupId;
+
+        if (instance == null)
+            return (false, null, $"Instance \"{instanceId}\" not found.");
+
+        if (groupId == null)
+            return (false, null, "This instance has no security group attached.");
+
+        return (true, groupId, null);
+    }
+
+    public async Task<CloudServiceActionResultDto> AddEc2SecurityGroupRuleAsync(UserAwsCredentials credentials, string? region, string instanceId, AddSecurityRuleRequestDto request)
+    {
+        var (ok, endpoint, error) = ResolveRegion(credentials, region);
+
+        if (!ok)
+            return new CloudServiceActionResultDto { Success = false, Error = error ?? "AWS is not configured." };
+
+        try
+        {
+            using var client = new AmazonEC2Client(BuildCredentials(credentials), endpoint);
+            var (resolved, groupId, resolveError) = await ResolvePrimarySecurityGroupAsync(client, instanceId);
+
+            if (!resolved)
+                return new CloudServiceActionResultDto { Success = false, Error = resolveError };
+
+            var permission = new IpPermission
+            {
+                IpProtocol = request.Protocol,
+                FromPort = request.FromPort,
+                ToPort = request.ToPort,
+                Ipv4Ranges = new List<IpRange> { new() { CidrIp = request.Cidr, Description = request.Description } }
+            };
+
+            if (string.Equals(request.Direction, "Outbound", StringComparison.OrdinalIgnoreCase))
+            {
+                await client.AuthorizeSecurityGroupEgressAsync(new AuthorizeSecurityGroupEgressRequest
+                {
+                    GroupId = groupId,
+                    IpPermissions = new List<IpPermission> { permission }
+                });
+            }
+            else
+            {
+                await client.AuthorizeSecurityGroupIngressAsync(new AuthorizeSecurityGroupIngressRequest
+                {
+                    GroupId = groupId,
+                    IpPermissions = new List<IpPermission> { permission }
+                });
+            }
+
+            return new CloudServiceActionResultDto { Success = true, Message = "Rule added." };
+        }
+        catch (Exception ex)
+        {
+            return new CloudServiceActionResultDto { Success = false, Error = CloudErrorSanitizer.Describe(ex, "AWS", "security group rule add") };
+        }
+    }
+
+    public async Task<CloudServiceActionResultDto> RemoveEc2SecurityGroupRuleAsync(UserAwsCredentials credentials, string? region, string instanceId, RemoveSecurityRuleRequestDto request)
+    {
+        var (ok, endpoint, error) = ResolveRegion(credentials, region);
+
+        if (!ok)
+            return new CloudServiceActionResultDto { Success = false, Error = error ?? "AWS is not configured." };
+
+        try
+        {
+            using var client = new AmazonEC2Client(BuildCredentials(credentials), endpoint);
+            var (resolved, groupId, resolveError) = await ResolvePrimarySecurityGroupAsync(client, instanceId);
+
+            if (!resolved)
+                return new CloudServiceActionResultDto { Success = false, Error = resolveError };
+
+            var permission = new IpPermission
+            {
+                IpProtocol = request.Protocol,
+                FromPort = request.FromPort,
+                ToPort = request.ToPort,
+                Ipv4Ranges = new List<IpRange> { new() { CidrIp = request.Cidr } }
+            };
+
+            if (string.Equals(request.Direction, "Outbound", StringComparison.OrdinalIgnoreCase))
+            {
+                await client.RevokeSecurityGroupEgressAsync(new RevokeSecurityGroupEgressRequest
+                {
+                    GroupId = groupId,
+                    IpPermissions = new List<IpPermission> { permission }
+                });
+            }
+            else
+            {
+                await client.RevokeSecurityGroupIngressAsync(new RevokeSecurityGroupIngressRequest
+                {
+                    GroupId = groupId,
+                    IpPermissions = new List<IpPermission> { permission }
+                });
+            }
+
+            return new CloudServiceActionResultDto { Success = true, Message = "Rule removed." };
+        }
+        catch (Exception ex)
+        {
+            return new CloudServiceActionResultDto { Success = false, Error = CloudErrorSanitizer.Describe(ex, "AWS", "security group rule removal") };
+        }
+    }
+
+    public async Task<ResourceMetricsDto> GetEc2MetricsAsync(UserAwsCredentials credentials, string? region, string instanceId, int rangeMinutes)
+    {
+        var result = new ResourceMetricsDto { Configured = credentials.IsConfigured };
+        var (ok, endpoint, error) = ResolveRegion(credentials, region);
+
+        if (!credentials.IsConfigured)
+            return result;
+
+        if (!ok)
+        {
+            result.Error = error;
+            return result;
+        }
+
+        try
+        {
+            using var client = new AmazonCloudWatchClient(BuildCredentials(credentials), endpoint);
+
+            var end = DateTime.UtcNow;
+            var start = end.AddMinutes(-Math.Max(15, rangeMinutes));
+            var periodSeconds = rangeMinutes <= 60 ? 60 : rangeMinutes <= 360 ? 300 : rangeMinutes <= 1440 ? 900 : 3600;
+
+            var metrics = new (string Id, string MetricName, string Label, string Unit)[]
+            {
+                ("cpu", "CPUUtilization", "CPU Utilization", "%"),
+                ("netin", "NetworkIn", "Network In", "bytes"),
+                ("netout", "NetworkOut", "Network Out", "bytes")
+            };
+
+            var response = await client.GetMetricDataAsync(new GetMetricDataRequest
+            {
+                StartTime = start,
+                EndTime = end,
+                MetricDataQueries = metrics.Select(m => new MetricDataQuery
+                {
+                    Id = m.Id,
+                    MetricStat = new MetricStat
+                    {
+                        Metric = new Amazon.CloudWatch.Model.Metric
+                        {
+                            Namespace = "AWS/EC2",
+                            MetricName = m.MetricName,
+                            Dimensions = new List<Dimension> { new() { Name = "InstanceId", Value = instanceId } }
+                        },
+                        Period = periodSeconds,
+                        Stat = "Average"
+                    }
+                }).ToList()
+            });
+
+            foreach (var m in metrics)
+            {
+                var series = response.MetricDataResults?.FirstOrDefault(r => r.Id == m.Id);
+
+                result.Series.Add(new MetricSeriesDto
+                {
+                    Label = m.Label,
+                    Unit = m.Unit,
+                    Points = series?.Timestamps == null
+                        ? new List<MetricPointDto>()
+                        : series.Timestamps.Zip(series.Values, (t, v) => new MetricPointDto { Timestamp = t, Value = v })
+                            .OrderBy(p => p.Timestamp).ToList()
+                });
+            }
+        }
+        catch (Exception ex)
+        {
+            result.Error = CloudErrorSanitizer.Describe(ex, "AWS", "EC2 metrics");
+        }
+
+        return result;
+    }
+
+    // ================= Azure VM — detail, NSG rules, metrics =================
+    //
+    // GetAzureVmDetailAsync follows the NIC -> IPConfig -> PublicIP/
+    // Subnet/NSG chain (several ARM calls, unavoidable - ARM doesn't
+    // flatten this into the VM response the way EC2's DescribeInstances
+    // does).
+
+    public async Task<AzureVmDetailDto> GetAzureVmDetailAsync(UserAzureCredentials credentials, string resourceGroup, string vmName)
+    {
+        var result = new AzureVmDetailDto { Configured = credentials.IsConfigured, Name = vmName, ResourceGroup = resourceGroup };
+
+        if (!credentials.IsConfigured)
+            return result;
+
+        try
+        {
+            var token = await CloudStatusService.GetAzureAccessTokenAsync(credentials.TenantId!, credentials.ClientId!, credentials.ClientSecret!);
+
+            if (token == null)
+            {
+                result.Error = "Azure sign-in failed — check the tenant, client ID, and client secret.";
+                return result;
+            }
+
+            var sub = Uri.EscapeDataString(credentials.SubscriptionId ?? string.Empty);
+            var rg = Uri.EscapeDataString(resourceGroup);
+            var vmUrl = $"https://management.azure.com/subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.Compute/virtualMachines/{Uri.EscapeDataString(vmName)}?$expand=instanceView&api-version={ComputeApiVersion}";
+
+            using var vmRequest = new HttpRequestMessage(HttpMethod.Get, vmUrl);
+            vmRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+            var vmResponse = await AzureArmHttpClient.SendAsync(vmRequest);
+
+            if (!vmResponse.IsSuccessStatusCode)
+            {
+                result.Error = await CloudStatusService.DescribeArmErrorAsync(vmResponse);
+                return result;
+            }
+
+            var vmJson = JObject.Parse(await vmResponse.Content.ReadAsStringAsync());
+            var props = vmJson["properties"];
+
+            result.Location = vmJson["location"]?.ToString() ?? string.Empty;
+            result.Size = props?["hardwareProfile"]?["vmSize"]?.ToString() ?? string.Empty;
+            result.OsType = props?["storageProfile"]?["osDisk"]?["osType"]?.ToString();
+            result.Tags = vmJson["tags"]?.ToObject<Dictionary<string, string>>() ?? new Dictionary<string, string>();
+
+            var statuses = props?["instanceView"]?["statuses"] as JArray ?? new JArray();
+            var powerStatus = statuses.FirstOrDefault(s => (s["code"]?.ToString() ?? "").StartsWith("PowerState/", StringComparison.OrdinalIgnoreCase));
+            result.PowerState = powerStatus?["code"]?.ToString()?.Replace("PowerState/", "", StringComparison.OrdinalIgnoreCase) ?? "unknown";
+
+            var nicRef = (props?["networkProfile"]?["networkInterfaces"] as JArray)?.FirstOrDefault();
+            var nicId = nicRef?["id"]?.ToString();
+
+            if (!string.IsNullOrWhiteSpace(nicId))
+            {
+                var nicUrl = $"https://management.azure.com{nicId}?api-version={NetworkApiVersion}";
+                using var nicRequest = new HttpRequestMessage(HttpMethod.Get, nicUrl);
+                nicRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+                var nicResponse = await AzureArmHttpClient.SendAsync(nicRequest);
+
+                if (nicResponse.IsSuccessStatusCode)
+                {
+                    var nicJson = JObject.Parse(await nicResponse.Content.ReadAsStringAsync());
+                    var ipConfig = (nicJson["properties"]?["ipConfigurations"] as JArray)?.FirstOrDefault();
+
+                    result.PrivateIp = ipConfig?["properties"]?["privateIPAddress"]?.ToString();
+                    result.SubnetId = ipConfig?["properties"]?["subnet"]?["id"]?.ToString();
+                    result.NsgId = nicJson["properties"]?["networkSecurityGroup"]?["id"]?.ToString();
+
+                    if (!string.IsNullOrWhiteSpace(result.SubnetId) && result.SubnetId.Contains("/subnets/"))
+                        result.VNetId = result.SubnetId[..result.SubnetId.IndexOf("/subnets/", StringComparison.Ordinal)];
+
+                    var publicIpId = ipConfig?["properties"]?["publicIPAddress"]?["id"]?.ToString();
+
+                    if (!string.IsNullOrWhiteSpace(publicIpId))
+                    {
+                        var pipUrl = $"https://management.azure.com{publicIpId}?api-version={NetworkApiVersion}";
+                        using var pipRequest = new HttpRequestMessage(HttpMethod.Get, pipUrl);
+                        pipRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+                        var pipResponse = await AzureArmHttpClient.SendAsync(pipRequest);
+
+                        if (pipResponse.IsSuccessStatusCode)
+                        {
+                            var pipJson = JObject.Parse(await pipResponse.Content.ReadAsStringAsync());
+                            result.PublicIp = pipJson["properties"]?["ipAddress"]?.ToString();
+                        }
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            result.Error = CloudErrorSanitizer.Describe(ex, "Azure", "VM detail");
+        }
+
+        return result;
+    }
+
+    private static SecurityRuleDto MapNsgRule(JToken rule)
+    {
+        var props = rule["properties"];
+        var portRangeText = props?["destinationPortRange"]?.ToString();
+        var hasPort = int.TryParse(portRangeText, out var port);
+
+        return new SecurityRuleDto
+        {
+            Id = rule["name"]?.ToString(),
+            Direction = props?["direction"]?.ToString() ?? "Inbound",
+            Protocol = props?["protocol"]?.ToString() ?? "*",
+            FromPort = hasPort ? port : null,
+            ToPort = hasPort ? port : null,
+            Cidr = props?["sourceAddressPrefix"]?.ToString() ?? "*",
+            Description = props?["description"]?.ToString()
+        };
+    }
+
+    public async Task<SecurityRuleListDto> GetAzureNsgRulesAsync(UserAzureCredentials credentials, string? nsgResourceId)
+    {
+        var result = new SecurityRuleListDto { Configured = credentials.IsConfigured, Scope = "instance" };
+
+        if (!credentials.IsConfigured)
+            return result;
+
+        if (string.IsNullOrWhiteSpace(nsgResourceId))
+        {
+            result.Error = "This VM has no network security group attached.";
+            return result;
+        }
+
+        try
+        {
+            var token = await CloudStatusService.GetAzureAccessTokenAsync(credentials.TenantId!, credentials.ClientId!, credentials.ClientSecret!);
+
+            if (token == null)
+            {
+                result.Error = "Azure sign-in failed — check the tenant, client ID, and client secret.";
+                return result;
+            }
+
+            var url = $"https://management.azure.com{nsgResourceId}?api-version={NetworkApiVersion}";
+            using var request = new HttpRequestMessage(HttpMethod.Get, url);
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+            var response = await AzureArmHttpClient.SendAsync(request);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                result.Error = await CloudStatusService.DescribeArmErrorAsync(response);
+                return result;
+            }
+
+            var json = JObject.Parse(await response.Content.ReadAsStringAsync());
+            var rules = json["properties"]?["securityRules"] as JArray ?? new JArray();
+
+            foreach (var rule in rules)
+            {
+                var mapped = MapNsgRule(rule);
+
+                if (string.Equals(mapped.Direction, "Outbound", StringComparison.OrdinalIgnoreCase))
+                    result.Outbound.Add(mapped);
+                else
+                    result.Inbound.Add(mapped);
+            }
+        }
+        catch (Exception ex)
+        {
+            result.Error = CloudErrorSanitizer.Describe(ex, "Azure", "NSG rule list");
+        }
+
+        return result;
+    }
+
+    public async Task<CloudServiceActionResultDto> AddAzureNsgRuleAsync(UserAzureCredentials credentials, string? nsgResourceId, AddSecurityRuleRequestDto request)
+    {
+        if (!credentials.IsConfigured)
+            return new CloudServiceActionResultDto { Success = false, Error = "Azure is not configured." };
+
+        if (string.IsNullOrWhiteSpace(nsgResourceId))
+            return new CloudServiceActionResultDto { Success = false, Error = "This VM has no network security group attached." };
+
+        try
+        {
+            var token = await CloudStatusService.GetAzureAccessTokenAsync(credentials.TenantId!, credentials.ClientId!, credentials.ClientSecret!);
+
+            if (token == null)
+                return new CloudServiceActionResultDto { Success = false, Error = "Azure sign-in failed — check the tenant, client ID, and client secret." };
+
+            var ruleName = $"portal-{DateTimeOffset.UtcNow.ToUnixTimeSeconds()}";
+            var url = $"https://management.azure.com{nsgResourceId}/securityRules/{ruleName}?api-version={NetworkApiVersion}";
+            var isInbound = string.Equals(request.Direction, "Inbound", StringComparison.OrdinalIgnoreCase);
+            var portRange = request.FromPort == request.ToPort ? request.FromPort.ToString() : $"{request.FromPort}-{request.ToPort}";
+
+            var result = await PutArmResourceAsync(token, url, new
+            {
+                properties = new
+                {
+                    priority = 1000 + Random.Shared.Next(0, 3000),
+                    direction = isInbound ? "Inbound" : "Outbound",
+                    access = "Allow",
+                    protocol = request.Protocol.Equals("tcp", StringComparison.OrdinalIgnoreCase) ? "Tcp"
+                        : request.Protocol.Equals("udp", StringComparison.OrdinalIgnoreCase) ? "Udp" : "*",
+                    sourceAddressPrefix = isInbound ? request.Cidr : "*",
+                    sourcePortRange = "*",
+                    destinationAddressPrefix = isInbound ? "*" : request.Cidr,
+                    destinationPortRange = portRange,
+                    description = request.Description
+                }
+            });
+
+            return result.Success
+                ? new CloudServiceActionResultDto { Success = true, Message = "Rule added." }
+                : new CloudServiceActionResultDto { Success = false, Error = result.Error };
+        }
+        catch (Exception ex)
+        {
+            return new CloudServiceActionResultDto { Success = false, Error = CloudErrorSanitizer.Describe(ex, "Azure", "NSG rule add") };
+        }
+    }
+
+    public async Task<CloudServiceActionResultDto> RemoveAzureNsgRuleAsync(UserAzureCredentials credentials, string? nsgResourceId, string ruleName)
+    {
+        if (!credentials.IsConfigured)
+            return new CloudServiceActionResultDto { Success = false, Error = "Azure is not configured." };
+
+        if (string.IsNullOrWhiteSpace(nsgResourceId))
+            return new CloudServiceActionResultDto { Success = false, Error = "This VM has no network security group attached." };
+
+        try
+        {
+            var token = await CloudStatusService.GetAzureAccessTokenAsync(credentials.TenantId!, credentials.ClientId!, credentials.ClientSecret!);
+
+            if (token == null)
+                return new CloudServiceActionResultDto { Success = false, Error = "Azure sign-in failed — check the tenant, client ID, and client secret." };
+
+            var url = $"https://management.azure.com{nsgResourceId}/securityRules/{Uri.EscapeDataString(ruleName)}?api-version={NetworkApiVersion}";
+
+            using var request = new HttpRequestMessage(HttpMethod.Delete, url);
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+            var response = await AzureArmHttpClient.SendAsync(request);
+
+            if (!response.IsSuccessStatusCode)
+                return new CloudServiceActionResultDto { Success = false, Error = await CloudStatusService.DescribeArmErrorAsync(response) };
+
+            return new CloudServiceActionResultDto { Success = true, Message = "Rule removed." };
+        }
+        catch (Exception ex)
+        {
+            return new CloudServiceActionResultDto { Success = false, Error = CloudErrorSanitizer.Describe(ex, "Azure", "NSG rule removal") };
+        }
+    }
+
+    public async Task<ResourceMetricsDto> GetAzureVmMetricsAsync(UserAzureCredentials credentials, string resourceGroup, string vmName, int rangeMinutes)
+    {
+        var result = new ResourceMetricsDto { Configured = credentials.IsConfigured };
+
+        if (!credentials.IsConfigured)
+            return result;
+
+        try
+        {
+            var token = await CloudStatusService.GetAzureAccessTokenAsync(credentials.TenantId!, credentials.ClientId!, credentials.ClientSecret!);
+
+            if (token == null)
+            {
+                result.Error = "Azure sign-in failed — check the tenant, client ID, and client secret.";
+                return result;
+            }
+
+            var sub = Uri.EscapeDataString(credentials.SubscriptionId ?? string.Empty);
+            var rg = Uri.EscapeDataString(resourceGroup);
+            var resourceId = $"/subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.Compute/virtualMachines/{Uri.EscapeDataString(vmName)}";
+
+            var end = DateTimeOffset.UtcNow;
+            var start = end.AddMinutes(-Math.Max(15, rangeMinutes));
+            var timespan = $"{start:O}/{end:O}";
+            var interval = rangeMinutes <= 60 ? "PT1M" : rangeMinutes <= 360 ? "PT5M" : rangeMinutes <= 1440 ? "PT15M" : "PT1H";
+
+            var url = $"https://management.azure.com{resourceId}/providers/microsoft.insights/metrics" +
+                      "?api-version=2019-07-01&metricnames=Percentage CPU,Network In Total,Network Out Total" +
+                      $"&timespan={Uri.EscapeDataString(timespan)}&interval={interval}&aggregation=Average";
+
+            using var request = new HttpRequestMessage(HttpMethod.Get, url);
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+            var response = await AzureArmHttpClient.SendAsync(request);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                result.Error = await CloudStatusService.DescribeArmErrorAsync(response);
+                return result;
+            }
+
+            var json = JObject.Parse(await response.Content.ReadAsStringAsync());
+            var values = json["value"] as JArray ?? new JArray();
+
+            foreach (var metric in values)
+            {
+                var name = metric["name"]?["value"]?.ToString() ?? "metric";
+                var unit = metric["unit"]?.ToString() ?? "";
+                var timeseries = (metric["timeseries"] as JArray)?.FirstOrDefault();
+                var data = timeseries?["data"] as JArray ?? new JArray();
+
+                result.Series.Add(new MetricSeriesDto
+                {
+                    Label = name,
+                    Unit = unit,
+                    Points = data
+                        .Where(d => d["average"] != null)
+                        .Select(d => new MetricPointDto
+                        {
+                            Timestamp = DateTime.Parse(d["timeStamp"]!.ToString()),
+                            Value = d["average"]!.Value<double>()
+                        })
+                        .ToList()
+                });
+            }
+        }
+        catch (Exception ex)
+        {
+            result.Error = CloudErrorSanitizer.Describe(ex, "Azure", "VM metrics");
+        }
+
+        return result;
+    }
+
+    // ================= GCP Compute Engine =================
+    //
+    // Real VM management (list/start/stop/reset/delete) + VPC firewall
+    // rules + metrics via Cloud Monitoring - replaces the "not built yet"
+    // stub (CloudServicesGcp.jsx). Reuses GetGcpAccessTokenAsync above -
+    // zero new auth code. GCP firewall rules are VPC-global, not attached
+    // to one instance the way an AWS security group or Azure NSG is -
+    // SecurityRuleListDto.Scope surfaces this honestly.
+
+    public async Task<GcpVmListDto> GetGcpComputeInstancesAsync(UserGcpCredentials credentials)
+    {
+        var result = new GcpVmListDto { Configured = credentials.IsConfigured };
+
+        if (!credentials.IsConfigured)
+            return result;
+
+        try
+        {
+            var token = await GetGcpAccessTokenAsync(credentials.ServiceAccountKeyJson!);
+
+            if (token == null)
+            {
+                result.Error = "Unable to authenticate with GCP.";
+                return result;
+            }
+
+            // One aggregatedList call across every zone rather than
+            // polling zone by zone (section 29 - bounded call count
+            // regardless of how many zones a project actually uses).
+            var url = $"https://compute.googleapis.com/compute/v1/projects/{Uri.EscapeDataString(credentials.ProjectId!)}/aggregated/instances";
+
+            using var request = new HttpRequestMessage(HttpMethod.Get, url);
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+            var response = await GcpHttpClient.SendAsync(request);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                result.Error = $"Unable to reach GCP for Compute Engine's instance list ({(int)response.StatusCode}).";
+                return result;
+            }
+
+            var json = JObject.Parse(await response.Content.ReadAsStringAsync());
+            var items = json["items"] as JObject ?? new JObject();
+
+            foreach (var zoneEntry in items.Properties())
+            {
+                var instances = zoneEntry.Value["instances"] as JArray;
+
+                if (instances == null)
+                    continue;
+
+                foreach (var instance in instances)
+                {
+                    var netInterface = (instance["networkInterfaces"] as JArray)?.FirstOrDefault();
+                    var accessConfig = (netInterface?["accessConfigs"] as JArray)?.FirstOrDefault();
+
+                    result.Instances.Add(new GcpVmInstanceDto
+                    {
+                        Name = instance["name"]?.ToString() ?? string.Empty,
+                        Zone = instance["zone"]?.ToString()?.Split('/').LastOrDefault() ?? string.Empty,
+                        MachineType = instance["machineType"]?.ToString()?.Split('/').LastOrDefault() ?? string.Empty,
+                        Status = instance["status"]?.ToString() ?? "UNKNOWN",
+                        PrivateIp = netInterface?["networkIP"]?.ToString(),
+                        PublicIp = accessConfig?["natIP"]?.ToString(),
+                        InstanceId = instance["id"]?.ToString(),
+                        Labels = instance["labels"]?.ToObject<Dictionary<string, string>>() ?? new Dictionary<string, string>()
+                    });
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            result.Error = CloudErrorSanitizer.Describe(ex, "GCP", "Compute Engine instance list");
+        }
+
+        return result;
+    }
+
+    private async Task<CloudServiceActionResultDto> RunGcpVmActionAsync(UserGcpCredentials credentials, string zone, string instanceName, string action, string verbFriendly)
+    {
+        if (!credentials.IsConfigured)
+            return new CloudServiceActionResultDto { Success = false, Error = "GCP is not configured." };
+
+        try
+        {
+            var token = await GetGcpAccessTokenAsync(credentials.ServiceAccountKeyJson!);
+
+            if (token == null)
+                return new CloudServiceActionResultDto { Success = false, Error = "Unable to authenticate with GCP." };
+
+            var url = $"https://compute.googleapis.com/compute/v1/projects/{Uri.EscapeDataString(credentials.ProjectId!)}" +
+                      $"/zones/{Uri.EscapeDataString(zone)}/instances/{Uri.EscapeDataString(instanceName)}/{action}";
+
+            using var request = new HttpRequestMessage(HttpMethod.Post, url);
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+            var response = await GcpHttpClient.SendAsync(request);
+
+            if (!response.IsSuccessStatusCode)
+                return new CloudServiceActionResultDto { Success = false, Error = $"GCP returned {(int)response.StatusCode} for {verbFriendly.ToLowerInvariant()}." };
+
+            return new CloudServiceActionResultDto { Success = true, Message = $"{verbFriendly} requested — refresh to see the current state." };
+        }
+        catch (Exception ex)
+        {
+            return new CloudServiceActionResultDto { Success = false, Error = CloudErrorSanitizer.Describe(ex, "GCP", $"VM {verbFriendly.ToLowerInvariant()}") };
+        }
+    }
+
+    public Task<CloudServiceActionResultDto> StartGcpVmAsync(UserGcpCredentials credentials, string zone, string instanceName) =>
+        RunGcpVmActionAsync(credentials, zone, instanceName, "start", "Start");
+
+    public Task<CloudServiceActionResultDto> StopGcpVmAsync(UserGcpCredentials credentials, string zone, string instanceName) =>
+        RunGcpVmActionAsync(credentials, zone, instanceName, "stop", "Stop");
+
+    public Task<CloudServiceActionResultDto> ResetGcpVmAsync(UserGcpCredentials credentials, string zone, string instanceName) =>
+        RunGcpVmActionAsync(credentials, zone, instanceName, "reset", "Reset");
+
+    public async Task<CloudServiceActionResultDto> DeleteGcpVmAsync(UserGcpCredentials credentials, string zone, string instanceName)
+    {
+        if (!credentials.IsConfigured)
+            return new CloudServiceActionResultDto { Success = false, Error = "GCP is not configured." };
+
+        try
+        {
+            var token = await GetGcpAccessTokenAsync(credentials.ServiceAccountKeyJson!);
+
+            if (token == null)
+                return new CloudServiceActionResultDto { Success = false, Error = "Unable to authenticate with GCP." };
+
+            var url = $"https://compute.googleapis.com/compute/v1/projects/{Uri.EscapeDataString(credentials.ProjectId!)}" +
+                      $"/zones/{Uri.EscapeDataString(zone)}/instances/{Uri.EscapeDataString(instanceName)}";
+
+            using var request = new HttpRequestMessage(HttpMethod.Delete, url);
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+            var response = await GcpHttpClient.SendAsync(request);
+
+            if (!response.IsSuccessStatusCode)
+                return new CloudServiceActionResultDto { Success = false, Error = $"GCP returned {(int)response.StatusCode} for delete." };
+
+            return new CloudServiceActionResultDto { Success = true, Message = "Delete requested — refresh to see the current state." };
+        }
+        catch (Exception ex)
+        {
+            return new CloudServiceActionResultDto { Success = false, Error = CloudErrorSanitizer.Describe(ex, "GCP", "VM deletion") };
+        }
+    }
+
+    private static SecurityRuleDto MapGcpFirewallRule(JToken rule)
+    {
+        var allowed = (rule["allowed"] as JArray)?.FirstOrDefault();
+        var denied = allowed == null ? (rule["denied"] as JArray)?.FirstOrDefault() : null;
+        var spec = allowed ?? denied;
+        var ports = (spec?["ports"] as JArray)?.Select(p => p.ToString()).ToList() ?? new List<string>();
+        var portRange = ports.FirstOrDefault() ?? "all";
+        var parts = portRange.Split('-');
+        var hasFrom = int.TryParse(parts[0], out var from);
+        var hasTo = int.TryParse(parts.Length > 1 ? parts[1] : parts[0], out var to);
+
+        return new SecurityRuleDto
+        {
+            Id = rule["name"]?.ToString(),
+            Direction = string.Equals(rule["direction"]?.ToString(), "EGRESS", StringComparison.OrdinalIgnoreCase) ? "Outbound" : "Inbound",
+            Protocol = spec?["IPProtocol"]?.ToString() ?? "all",
+            FromPort = hasFrom ? from : null,
+            ToPort = hasTo ? to : null,
+            Cidr = (rule["sourceRanges"] as JArray)?.FirstOrDefault()?.ToString()
+                ?? (rule["destinationRanges"] as JArray)?.FirstOrDefault()?.ToString() ?? "*",
+            Description = rule["description"]?.ToString()
+        };
+    }
+
+    public async Task<SecurityRuleListDto> GetGcpFirewallRulesAsync(UserGcpCredentials credentials)
+    {
+        var result = new SecurityRuleListDto { Configured = credentials.IsConfigured, Scope = "network" };
+
+        if (!credentials.IsConfigured)
+            return result;
+
+        try
+        {
+            var token = await GetGcpAccessTokenAsync(credentials.ServiceAccountKeyJson!);
+
+            if (token == null)
+            {
+                result.Error = "Unable to authenticate with GCP.";
+                return result;
+            }
+
+            var url = $"https://compute.googleapis.com/compute/v1/projects/{Uri.EscapeDataString(credentials.ProjectId!)}/global/firewalls";
+
+            using var request = new HttpRequestMessage(HttpMethod.Get, url);
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+            var response = await GcpHttpClient.SendAsync(request);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                result.Error = $"Unable to reach GCP for the firewall rule list ({(int)response.StatusCode}).";
+                return result;
+            }
+
+            var json = JObject.Parse(await response.Content.ReadAsStringAsync());
+            var rules = json["items"] as JArray ?? new JArray();
+
+            foreach (var rule in rules)
+            {
+                var mapped = MapGcpFirewallRule(rule);
+
+                if (mapped.Direction == "Outbound")
+                    result.Outbound.Add(mapped);
+                else
+                    result.Inbound.Add(mapped);
+            }
+        }
+        catch (Exception ex)
+        {
+            result.Error = CloudErrorSanitizer.Describe(ex, "GCP", "firewall rule list");
+        }
+
+        return result;
+    }
+
+    public async Task<CloudServiceActionResultDto> AddGcpFirewallRuleAsync(UserGcpCredentials credentials, AddSecurityRuleRequestDto request)
+    {
+        if (!credentials.IsConfigured)
+            return new CloudServiceActionResultDto { Success = false, Error = "GCP is not configured." };
+
+        try
+        {
+            var token = await GetGcpAccessTokenAsync(credentials.ServiceAccountKeyJson!);
+
+            if (token == null)
+                return new CloudServiceActionResultDto { Success = false, Error = "Unable to authenticate with GCP." };
+
+            var ruleName = $"portal-{DateTimeOffset.UtcNow.ToUnixTimeSeconds()}";
+            var url = $"https://compute.googleapis.com/compute/v1/projects/{Uri.EscapeDataString(credentials.ProjectId!)}/global/firewalls";
+            var isEgress = string.Equals(request.Direction, "Outbound", StringComparison.OrdinalIgnoreCase);
+            var portRange = request.FromPort == request.ToPort ? request.FromPort.ToString() : $"{request.FromPort}-{request.ToPort}";
+
+            var body = new JObject
+            {
+                ["name"] = ruleName,
+                ["direction"] = isEgress ? "EGRESS" : "INGRESS",
+                ["allowed"] = new JArray { new JObject { ["IPProtocol"] = request.Protocol, ["ports"] = new JArray { portRange } } },
+                ["description"] = request.Description ?? string.Empty
+            };
+
+            body[isEgress ? "destinationRanges" : "sourceRanges"] = new JArray { request.Cidr };
+
+            using var httpRequest = new HttpRequestMessage(HttpMethod.Post, url)
+            {
+                Content = new StringContent(body.ToString(), Encoding.UTF8, "application/json")
+            };
+            httpRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+            var response = await GcpHttpClient.SendAsync(httpRequest);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                var errorBody = await response.Content.ReadAsStringAsync();
+                string? message = null;
+
+                try { message = JObject.Parse(errorBody)["error"]?["message"]?.ToString(); }
+                catch { /* fall through to the generic message below */ }
+
+                return new CloudServiceActionResultDto { Success = false, Error = message ?? $"GCP returned {(int)response.StatusCode}." };
+            }
+
+            return new CloudServiceActionResultDto { Success = true, Message = "Firewall rule added." };
+        }
+        catch (Exception ex)
+        {
+            return new CloudServiceActionResultDto { Success = false, Error = CloudErrorSanitizer.Describe(ex, "GCP", "firewall rule add") };
+        }
+    }
+
+    public async Task<CloudServiceActionResultDto> RemoveGcpFirewallRuleAsync(UserGcpCredentials credentials, string ruleName)
+    {
+        if (!credentials.IsConfigured)
+            return new CloudServiceActionResultDto { Success = false, Error = "GCP is not configured." };
+
+        try
+        {
+            var token = await GetGcpAccessTokenAsync(credentials.ServiceAccountKeyJson!);
+
+            if (token == null)
+                return new CloudServiceActionResultDto { Success = false, Error = "Unable to authenticate with GCP." };
+
+            var url = $"https://compute.googleapis.com/compute/v1/projects/{Uri.EscapeDataString(credentials.ProjectId!)}/global/firewalls/{Uri.EscapeDataString(ruleName)}";
+
+            using var request = new HttpRequestMessage(HttpMethod.Delete, url);
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+            var response = await GcpHttpClient.SendAsync(request);
+
+            if (!response.IsSuccessStatusCode)
+                return new CloudServiceActionResultDto { Success = false, Error = $"GCP returned {(int)response.StatusCode}." };
+
+            return new CloudServiceActionResultDto { Success = true, Message = "Firewall rule removed." };
+        }
+        catch (Exception ex)
+        {
+            return new CloudServiceActionResultDto { Success = false, Error = CloudErrorSanitizer.Describe(ex, "GCP", "firewall rule removal") };
+        }
+    }
+
+    // GCP's gce_instance monitored resource type filters on the numeric
+    // instance ID, not its human-readable name - see GcpVmInstanceDto.
+    // InstanceId's own comment. Best-effort, least-certain part of this
+    // integration (same posture as this app's other GCP work) - untested
+    // against a real project.
+    public async Task<ResourceMetricsDto> GetGcpVmMetricsAsync(UserGcpCredentials credentials, string numericInstanceId, int rangeMinutes)
+    {
+        var result = new ResourceMetricsDto { Configured = credentials.IsConfigured };
+
+        if (!credentials.IsConfigured)
+            return result;
+
+        try
+        {
+            var token = await GetGcpAccessTokenAsync(credentials.ServiceAccountKeyJson!, "https://www.googleapis.com/auth/monitoring.read");
+
+            if (token == null)
+            {
+                result.Error = "Unable to authenticate with GCP.";
+                return result;
+            }
+
+            var end = DateTimeOffset.UtcNow;
+            var start = end.AddMinutes(-Math.Max(15, rangeMinutes));
+
+            var metrics = new (string Type, string Label, string Unit)[]
+            {
+                ("compute.googleapis.com/instance/cpu/utilization", "CPU Utilization", "%"),
+                ("compute.googleapis.com/instance/network/received_bytes_count", "Network In", "bytes"),
+                ("compute.googleapis.com/instance/network/sent_bytes_count", "Network Out", "bytes")
+            };
+
+            foreach (var m in metrics)
+            {
+                var filter = $"metric.type=\"{m.Type}\" AND resource.labels.instance_id=\"{numericInstanceId}\"";
+                var url = $"https://monitoring.googleapis.com/v3/projects/{Uri.EscapeDataString(credentials.ProjectId!)}/timeSeries" +
+                          $"?filter={Uri.EscapeDataString(filter)}" +
+                          $"&interval.startTime={Uri.EscapeDataString(start.ToString("O"))}" +
+                          $"&interval.endTime={Uri.EscapeDataString(end.ToString("O"))}";
+
+                using var request = new HttpRequestMessage(HttpMethod.Get, url);
+                request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+                var response = await GcpHttpClient.SendAsync(request);
+
+                var series = new MetricSeriesDto { Label = m.Label, Unit = m.Unit };
+
+                if (response.IsSuccessStatusCode)
+                {
+                    var json = JObject.Parse(await response.Content.ReadAsStringAsync());
+                    var points = (json["timeSeries"] as JArray)?.FirstOrDefault()?["points"] as JArray ?? new JArray();
+
+                    series.Points = points
+                        .Select(p => new MetricPointDto
+                        {
+                            Timestamp = DateTime.Parse(p["interval"]?["endTime"]?.ToString() ?? DateTime.UtcNow.ToString("O")),
+                            Value = p["value"]?["doubleValue"]?.Value<double?>() ?? p["value"]?["int64Value"]?.Value<double?>() ?? 0
+                        })
+                        .OrderBy(p => p.Timestamp)
+                        .ToList();
+                }
+
+                result.Series.Add(series);
+            }
+        }
+        catch (Exception ex)
+        {
+            result.Error = CloudErrorSanitizer.Describe(ex, "GCP", "Compute Engine metrics");
+        }
+
+        return result;
     }
 }

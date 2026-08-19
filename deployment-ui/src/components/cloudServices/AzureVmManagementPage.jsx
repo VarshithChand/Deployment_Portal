@@ -12,6 +12,7 @@ import SearchBox from "../common/SearchBox";
 import ComboBox from "../common/ComboBox";
 import StateBadge from "./StateBadge";
 import TypedConfirmDialog from "./TypedConfirmDialog";
+import AzureVmDetailPage from "./AzureVmDetailPage";
 
 const PAGE_SIZE = 10;
 
@@ -203,6 +204,7 @@ export default function AzureVmManagementPage({ refreshToken }) {
     const [catalog, setCatalog] = useState(null);
     const [createOpen, setCreateOpen] = useState(false);
     const [creating, setCreating] = useState(false);
+    const [selectedVm, setSelectedVm] = useState(null);
 
     async function load() {
 
@@ -346,6 +348,18 @@ export default function AzureVmManagementPage({ refreshToken }) {
 
     }
 
+    if (selectedVm) {
+
+        return (
+            <AzureVmDetailPage
+                resourceGroup={selectedVm.resourceGroup}
+                vmName={selectedVm.name}
+                onBack={() => { setSelectedVm(null); load(); }}
+            />
+        );
+
+    }
+
     if (loading) {
 
         return (
@@ -449,14 +463,14 @@ export default function AzureVmManagementPage({ refreshToken }) {
 
                                     return (
 
-                                        <tr key={`${vm.resourceGroup}/${vm.name}`}>
+                                        <tr key={`${vm.resourceGroup}/${vm.name}`} className="table-row-clickable" onClick={() => setSelectedVm(vm)}>
                                             <td>{vm.name}</td>
                                             <td>{vm.resourceGroup}</td>
                                             <td>{vm.location}</td>
                                             <td>{vm.size}</td>
                                             <td>{vm.osType || "—"}</td>
                                             <td><StateBadge state={vm.powerState} /></td>
-                                            <td>
+                                            <td onClick={(e) => e.stopPropagation()}>
 
                                                 {busy ? (
 

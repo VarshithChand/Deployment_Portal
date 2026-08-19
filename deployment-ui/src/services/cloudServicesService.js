@@ -115,3 +115,115 @@ export const getAzureResourceDetail = async (resourceId, resourceType) => {
     const response = await api.get("/azureresource", { params: { resourceId, resourceType } });
     return response.data;
 };
+
+// ================= EC2 detail / firewall / metrics =================
+// Phase 1 of the multi-cloud infrastructure console - real per-resource
+// detail beyond the management list above.
+
+export const getEc2InstanceDetail = async (instanceId, region) => {
+    const response = await api.get(`/ec2/${encodeURIComponent(instanceId)}`, { params: { region } });
+    return response.data;
+};
+
+export const getEc2Firewall = async (instanceId, region) => {
+    const response = await api.get(`/ec2/${encodeURIComponent(instanceId)}/firewall`, { params: { region } });
+    return response.data;
+};
+
+export const addEc2FirewallRule = async (instanceId, rule, region) => {
+    const response = await api.post(`/ec2/${encodeURIComponent(instanceId)}/firewall`, rule, { params: { region } });
+    return response.data;
+};
+
+export const removeEc2FirewallRule = async (instanceId, rule, region) => {
+    const response = await api.delete(`/ec2/${encodeURIComponent(instanceId)}/firewall`, { data: rule, params: { region } });
+    return response.data;
+};
+
+export const getEc2Metrics = async (instanceId, rangeMinutes, region) => {
+    const response = await api.get(`/ec2/${encodeURIComponent(instanceId)}/metrics`, { params: { rangeMinutes, region } });
+    return response.data;
+};
+
+// ================= Azure VM detail / firewall / metrics =================
+
+export const getAzureVmDetail = async (resourceGroup, vmName) => {
+    const response = await api.get(`/azurevm/${encodeURIComponent(resourceGroup)}/${encodeURIComponent(vmName)}/detail`);
+    return response.data;
+};
+
+export const getAzureVmFirewall = async (resourceGroup, vmName, nsgId) => {
+    const response = await api.get(`/azurevm/${encodeURIComponent(resourceGroup)}/${encodeURIComponent(vmName)}/firewall`, { params: { nsgId } });
+    return response.data;
+};
+
+export const addAzureVmFirewallRule = async (resourceGroup, vmName, rule, nsgId) => {
+    const response = await api.post(`/azurevm/${encodeURIComponent(resourceGroup)}/${encodeURIComponent(vmName)}/firewall`, rule, { params: { nsgId } });
+    return response.data;
+};
+
+export const removeAzureVmFirewallRule = async (resourceGroup, vmName, ruleName, nsgId) => {
+    const response = await api.delete(`/azurevm/${encodeURIComponent(resourceGroup)}/${encodeURIComponent(vmName)}/firewall/${encodeURIComponent(ruleName)}`, { params: { nsgId } });
+    return response.data;
+};
+
+export const getAzureVmMetrics = async (resourceGroup, vmName, rangeMinutes) => {
+    const response = await api.get(`/azurevm/${encodeURIComponent(resourceGroup)}/${encodeURIComponent(vmName)}/metrics`, { params: { rangeMinutes } });
+    return response.data;
+};
+
+// ================= GCP Compute Engine =================
+// Replaces the "not built yet" GCP stub - real VM management the same
+// shape as EC2/Azure VM above.
+
+export const getGcpVms = async () => {
+    const response = await api.get("/gcpvm");
+    return response.data;
+};
+
+export const startGcpVm = async (zone, instanceName) => {
+    const response = await api.post(`/gcpvm/${encodeURIComponent(zone)}/${encodeURIComponent(instanceName)}/start`);
+    return response.data;
+};
+
+export const stopGcpVm = async (zone, instanceName) => {
+    const response = await api.post(`/gcpvm/${encodeURIComponent(zone)}/${encodeURIComponent(instanceName)}/stop`);
+    return response.data;
+};
+
+export const resetGcpVm = async (zone, instanceName) => {
+    const response = await api.post(`/gcpvm/${encodeURIComponent(zone)}/${encodeURIComponent(instanceName)}/reset`);
+    return response.data;
+};
+
+export const deleteGcpVm = async (zone, instanceName) => {
+    const response = await api.delete(`/gcpvm/${encodeURIComponent(zone)}/${encodeURIComponent(instanceName)}`);
+    return response.data;
+};
+
+export const getGcpVmMetrics = async (zone, instanceName, instanceId, rangeMinutes) => {
+    const response = await api.get(`/gcpvm/${encodeURIComponent(zone)}/${encodeURIComponent(instanceName)}/metrics`, { params: { instanceId, rangeMinutes } });
+    return response.data;
+};
+
+export const getGcpFirewall = async () => {
+    const response = await api.get("/gcpfirewall");
+    return response.data;
+};
+
+export const addGcpFirewallRule = async (rule) => {
+    const response = await api.post("/gcpfirewall", rule);
+    return response.data;
+};
+
+export const removeGcpFirewallRule = async (ruleName) => {
+    const response = await api.delete(`/gcpfirewall/${encodeURIComponent(ruleName)}`);
+    return response.data;
+};
+
+// ================= Audit history (best-effort) =================
+
+export const getResourceAuditHistory = async (resource) => {
+    const response = await api.get("/audit", { params: { resource } });
+    return response.data;
+};

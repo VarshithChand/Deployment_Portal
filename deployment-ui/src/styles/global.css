@@ -5643,6 +5643,84 @@ textarea{
 
 }
 
+/* ---- Phase 1 infrastructure console: resource detail pages ---- */
+
+.cloud-service-connection-grid{
+
+    display:grid;
+
+    grid-template-columns:repeat(auto-fit, minmax(160px, 1fr));
+
+    gap:14px 20px;
+
+}
+
+.cloud-service-connection-grid p{
+
+    margin:0;
+
+}
+
+.cloud-service-firewall-form-grid{
+
+    display:grid;
+
+    grid-template-columns:repeat(auto-fit, minmax(180px, 1fr));
+
+    gap:0 16px;
+
+    margin-bottom:8px;
+
+}
+
+.cloud-service-relationship-chain{
+
+    display:flex;
+
+    flex-direction:column;
+
+    align-items:flex-start;
+
+    gap:2px;
+
+}
+
+.cloud-service-relationship-node-row{
+
+    display:flex;
+
+    flex-direction:column;
+
+    align-items:flex-start;
+
+}
+
+.cloud-service-relationship-node{
+
+    padding:10px 16px;
+
+    background:var(--card-bg);
+
+    border:1px solid var(--border);
+
+    border-radius:10px;
+
+    min-width:220px;
+
+}
+
+.cloud-service-relationship-arrow{
+
+    padding:2px 0 2px 24px;
+
+    color:var(--text-muted);
+
+    font-size:16px;
+
+    line-height:1;
+
+}
+
 /* ==========================================
    TOAST
 ========================================== */

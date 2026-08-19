@@ -8,6 +8,7 @@ import Pagination from "../common/Pagination";
 import SearchBox from "../common/SearchBox";
 import StateBadge from "./StateBadge";
 import TypedConfirmDialog from "./TypedConfirmDialog";
+import Ec2InstanceDetailPage from "./Ec2InstanceDetailPage";
 
 const PAGE_SIZE = 10;
 
@@ -33,6 +34,7 @@ export default function Ec2ManagementPage({ refreshToken }) {
     const [actioningId, setActioningId] = useState(null);
     const [terminateTarget, setTerminateTarget] = useState(null);
     const [terminating, setTerminating] = useState(false);
+    const [selectedInstance, setSelectedInstance] = useState(null);
 
     async function load() {
 
@@ -130,6 +132,18 @@ export default function Ec2ManagementPage({ refreshToken }) {
             setTerminating(false);
             setTerminateTarget(null);
         }
+
+    }
+
+    if (selectedInstance) {
+
+        return (
+            <Ec2InstanceDetailPage
+                instanceId={selectedInstance.instanceId}
+                region={null}
+                onBack={() => { setSelectedInstance(null); load(); }}
+            />
+        );
 
     }
 
@@ -250,7 +264,7 @@ export default function Ec2ManagementPage({ refreshToken }) {
 
                                         return (
 
-                                            <tr key={i.instanceId}>
+                                            <tr key={i.instanceId} className="table-row-clickable" onClick={() => setSelectedInstance(i)}>
                                                 <td className="smoke-test-metric-mono">{i.instanceId}</td>
                                                 <td>{i.name}</td>
                                                 <td><StateBadge state={i.state} /></td>
@@ -259,7 +273,7 @@ export default function Ec2ManagementPage({ refreshToken }) {
                                                 <td>{i.publicIp || "—"}</td>
                                                 <td>{i.availabilityZone || "—"}</td>
                                                 <td>{i.launchTime ? new Date(i.launchTime).toLocaleString() : "—"}</td>
-                                                <td>
+                                                <td onClick={(e) => e.stopPropagation()}>
 
                                                     {busy ? (
 
