@@ -10209,3 +10209,155 @@ message (including its error code, e.g. AuthorizationFailed) instead
 of a bare HTTP status number - whether or not the RBAC role
 assignment above turns out to be the actual fix, whatever this shows
 next is now specific enough to act on directly.
+
+==================================================
+ROUND 78 - FEATURE: REAL AZURE VM MANAGEMENT
+(START/STOP/RESTART/DELETE/CREATE) + GENERIC
+RESOURCE VIEW/READ FOR EVERYTHING ELSE
+==================================================
+Date: 2026-08-19
+Trigger: verbatim ask, once the Azure RBAC issue from Rounds 76-77 was
+resolved: "in the give an option to start and stop and create an vm
+from my portal not only for the vm giv them all the resources like
+view read and edit the resources." Scoped directly with the user via
+three clarifying questions before writing any code, since a few
+choices here have real cost/security consequences:
+  1. VM actions: confirmed Start/Stop/Restart/Delete (all four, not a
+     safer subset).
+  2. Create VM depth: confirmed auto-create networking with sensible
+     defaults (like `az vm create`), rather than requiring an
+     already-existing VNet/Subnet.
+  3. Non-VM resources ("view read and edit"): confirmed richer view/
+     read for every resource type, explicitly NOT create/edit/delete
+     for anything but VMs this round - each additional resource type
+     would need its own bespoke Azure API integration, the same
+     reasoning AWS's own catalog already lives by (only 7 of its ~100
+     services have real actions).
+
+Part 1 - Real Azure VM management:
+New GetAzureVmsAsync/StartAzureVmAsync/StopAzureVmAsync/
+RestartAzureVmAsync/DeleteAzureVmAsync/CreateAzureVmAsync
+(CloudServiceManagementService.cs) - genuine ARM compute/network write
+access via raw HttpClient calls (no Azure SDK in this project, same
+"raw HttpClient, not a vendor SDK" convention ACR already established
+for Azure). GetAzureVmsAsync lists every VM in the subscription in one
+call (statusOnly=true asks ARM to include each VM's instanceView -
+where PowerState actually lives - directly in the list response,
+avoiding a second GET per VM); Start/Stop/Restart/Delete are single
+POST/DELETE calls each, treated as "accepted, not yet done" the same
+"never claims the new state itself, the frontend re-fetches" contract
+AWS's own EC2 actions already use in this app - Stop specifically uses
+ARM's deallocate action (stops billing for compute), matching what the
+real Azure Portal's own "Stop" button does. Delete removes only the VM
+resource itself - its OS disk/NIC/public IP are NOT deleted alongside
+it (surfaced as an explicit field-hint, not a silent gap) since a
+cascading delete across resources the caller never explicitly asked to
+remove would be a real surprise-blast-radius risk.
+
+CreateAzureVmAsync goes further than this app's own AWS EC2 page
+(which explicitly does NOT implement instance creation - see
+Ec2ManagementPage.jsx's own comment) because Azure has no "just launch
+it" shortcut the way EC2 does: a VM needs a NIC, which needs a subnet,
+which needs a VNet. Auto-provisions, per VM, in dependency order: the
+resource group (idempotent), a Standard/Static Public IP, a VNet+
+Subnet in one call, an NSG opening SSH (22) or RDP (3389) depending on
+the image, a NIC tying them together, then the VM itself - mirroring
+what `az vm create` itself does by default. A small curated catalog
+(not Azure's full size/marketplace-image list, same "curated, not
+exhaustive" reasoning as data/awsRegions.js) offers 4 VM sizes and 2
+images (Ubuntu 22.04 LTS, Windows Server 2022 Datacenter) via a new
+GET azurevm/catalog route. New routes under api/cloudservices/
+azurevm/..., audit-logged via the same ActivityLogService pattern
+EC2 actions already use (AppendAuditLog), with a new
+ResolveAzureActorLabelAsync mirroring EC2's own actor-resolution
+helper but using GetAzureIdentityLabelAsync instead of AWS's STS call.
+
+Part 2 - Generic resource view/read for every other resource type:
+New GetAzureResourceDetailAsync (CloudStatusService.cs) - real ARM
+detail for any ONE resource, not just the inventory list's own name+
+location summary. The hard part: ARM has no single api-version that
+works across every resource type, each resource provider declares its
+own supported versions - rather than hand-maintaining a lookup table
+that would inevitably go stale, this resolves the correct api-version
+dynamically per request (GET /subscriptions/{sub}/providers/
+{namespace}, picks the newest non-preview version), the same approach
+Azure CLI and the Azure Portal itself use under the hood. New
+AzureResourceDetailDto carries a loose Properties dictionary (ARM's
+own property shape differs per resource type - there's no shared
+schema to model, same "two loose strings cover everything" reasoning
+AwsResourceItemDto already uses one level up) plus Tags and a real
+Azure Portal deep link. AwsResourceItemDto (shared with AWS's own
+inventory) gained one new optional field, ResourceId, populated only
+by GetAzureResourceInventoryAsync, so the frontend's resource list can
+pass a real ARM resource ID into this new detail call without needing
+to reconstruct one.
+
+Frontend: new AzureVmManagementPage.jsx (list with Start/Stop/Restart/
+Delete per row, a "+ Create VM" button opening a real create form/
+dialog with the size/image catalog + region picker) is wired into
+AzureServiceDetailPage.jsx's own new per-service switch - the Virtual
+Machines catalog entry gets this real management page, every other
+entry keeps the existing read-only resource list, now with clickable
+rows. New AzureResourceDetailDialog.jsx opens on any non-VM resource
+row click, showing its full ARM properties (nested values render as
+formatted JSON, since there's no per-type layout to build), a real
+Azure Portal deep link, and a copy-resource-ID button. New
+data/azureRegions.js (curated Azure region list) backs the Create VM
+form's location picker.
+
+Deliberately NOT built this round, stated plainly per the user's own
+confirmed scoping answer: create/edit/delete for any resource type
+other than VMs (storage accounts, databases, key vaults, etc.) - each
+would need its own real, resource-type-specific Azure API integration,
+not a generic one. This mirrors exactly how AWS's own catalog in this
+app works today: only 7 of its ~100 services (EC2/ECS/ECR/Lambda/RDS/
+S3/VPC) have real management actions, everything else is read-only
+plus a console link.
+
+Verification performed:
+  - `dotnet build` (isolated scratchpad output dir): 0 errors, same 2
+    pre-existing warnings every prior round has seen.
+  - `npm run lint`/`npm run build` in deployment-ui/: no new warnings;
+    build succeeded, CloudServicesAzure's own chunk grew from ~34kB to
+    ~47kB confirming the new VM management + resource detail code
+    bundled correctly.
+  - Live check against the deployed Render backend after the push:
+    /api/bootstrap healthy (HTTP 200).
+  - Could NOT exercise ANY of this against a real Azure subscription
+    in this sandboxed session (same standing limitation as every prior
+    Azure round) - this is by far the largest amount of unverified
+    real-world-shape risk in any Azure feature built so far in this
+    app: the exact JSON field names ARM's VM list/instanceView, the
+    network resource creation bodies, and the dynamic api-version
+    resolver all return are documented but genuinely unconfirmed
+    against a live account. Recommend the user test VM list first
+    (lowest risk, read-only), then a Start/Stop/Restart on an existing
+    VM if one exists, before trying Create VM (the highest-risk,
+    highest-blast-radius action - 6 chained resource creations, real
+    cost implications) - and report back the exact error text if
+    anything fails, since every error path in this round already
+    surfaces ARM's own real message, not a generic fallback.
+
+Files changed: src/DeploymentAPI/DTOs/AzureVmDtos.cs (new),
+src/DeploymentAPI/DTOs/CloudCredentialsDto.cs,
+src/DeploymentAPI/Services/CloudStatusService.cs,
+src/DeploymentAPI/Services/CloudServiceManagementService.cs,
+src/DeploymentAPI/Controllers/CloudServicesController.cs,
+deployment-ui/src/services/cloudServicesService.js,
+deployment-ui/src/data/azureRegions.js (new),
+deployment-ui/src/components/cloudServices/AzureVmManagementPage.jsx
+(new), deployment-ui/src/components/cloudServices/
+AzureResourceDetailDialog.jsx (new), deployment-ui/src/components/
+cloudServices/AzureServiceDetailPage.jsx, deployment-ui/src/styles/global.css.
+Commit: 07f9372.
+
+Status: Complete, pushed, live-verified the backend is up. Azure
+Virtual Machines now have real start/stop/restart/delete/create
+actions from within the Deployment Portal, and every other Azure
+resource type can be clicked into for its full live ARM detail.
+Standing limitation, stated as plainly as possible: none of this has
+been exercised against a real Azure subscription yet - this is
+grounded in ARM's documented REST API shapes, not in end-to-end
+verification, and Create VM in particular (6 chained resource
+creations with real cost) should be tested carefully and reported
+back on before being relied on.
