@@ -12196,3 +12196,122 @@ answers "what's going on" (real stat row + activity chart) and "let me
 get to it" (applications table + existing per-area summary cards +
 Quick Access) with entirely real data - no fabricated cost or uptime
 figures anywhere.
+
+
+==================================================
+ROUND 93 - DASHBOARD OPTIMIZATION: DEDUPE REDUNDANT
+FETCHES, CODE QUALITY SUMMARY CARD
+==================================================
+Date: 2026-08-20
+Trigger: immediately after Round 92's delivery, the user's very next
+message was "i need full optimized dashboard there i can all the
+resources what i had integrate" - explicitly naming "optimized" as a
+requirement, not just "more". Rather than guess at what that meant,
+audited the Dashboard's actual network behavior before writing any
+code.
+
+Finding: the audit confirmed a real, non-trivial inefficiency the prior
+two rounds had each individually introduced without anyone noticing the
+aggregate effect. `getMyAwsSettings`/`getMyAzureSettings`/
+`getMyGcpSettings` (the same 3 cheap "is this provider configured?"
+calls) were each being fired independently by FOUR separate Dashboard
+cards on every single page load:
+  - `CloudServicesCard.jsx` (Round 90-era)
+  - `ContainerRegistrySummaryCard.jsx` (Round 91)
+  - `ObservabilitySummaryCard.jsx` (Round 91)
+  - `QuickAccessCard.jsx` (pre-existing)
+4 call sites x 3 calls = 12 near-simultaneous requests asking the exact
+same 3 questions, purely because each card was built independently and
+correctly followed this session's own established "every card owns its
+own fetch" convention - a reasonable per-card rule that, in aggregate
+across an increasingly dense Dashboard, stopped being reasonable at the
+page level. Separately, `GET /api/paas/applications` (AWS Elastic
+Beanstalk + Azure App Service + GCP Cloud Run, aggregated server-side)
+was being called independently by THREE cards - `PaasSummaryCard.jsx`
+(Round 91), `AllApplicationsTable.jsx` (Round 92), and
+`OverviewStats.jsx` (Round 92) - the same duplication pattern, introduced
+by this session's own last two rounds.
+
+Fix - two new hooks, no Context/provider plumbing added to Dashboard.jsx
+(kept its own "plain composition" comment truthful rather than
+rewriting it around a new provider tree):
+  - `hooks/useCloudProviderStatus.js` (new) - module-scoped in-flight
+    promise + a short (4s) TTL cache. Whichever card mounts first
+    triggers the real 3 `getMyAws/Azure/GcpSettings` calls; every other
+    card that asks within the TTL window (i.e. every other card on the
+    same page load) rides that same promise instead of firing its own.
+    Real request count: 12 -> 3. No card's own rendering contract
+    changed - each still receives the exact same `{awsConfigured,
+    azureConfigured, gcpConfigured}` shape it computed before, from a
+    shared cache instead of its own network round trip.
+  - `hooks/usePaasApplications.js` (new) - identical shape, applied to
+    `GET /api/paas/applications`. Real request count: 3 -> 1.
+  - `CloudServicesCard.jsx`, `ContainerRegistrySummaryCard.jsx`,
+    `ObservabilitySummaryCard.jsx`, `QuickAccessCard.jsx` switched to
+    `useCloudProviderStatus()` in place of their own
+    `getMyAwsSettings`/`getMyAzureSettings`/`getMyGcpSettings` calls.
+    Each card's 6-standalone-registry / 10-standalone-observability-tool
+    / GitHub-and-other-provider calls are UNCHANGED - only the AWS/
+    Azure/GCP portion was ever duplicated, so only that portion moved.
+  - `PaasSummaryCard.jsx`, `AllApplicationsTable.jsx`,
+    `OverviewStats.jsx` switched to `usePaasApplications()` in place of
+    their own `getPaasApplications()` calls.
+
+Second half of "all the resources what i had integrate": checked
+whether every integrated area actually has an at-a-glance Dashboard
+card the way Cloud Services/PaaS/Container Registry/Observability
+already do. One real gap found - SonarQube/SonarCloud (Code Quality)
+had no dedicated card of their own; they only ever surfaced buried
+inside `QuickAccessCard`'s 22-item flat list. New
+`CodeQualitySummaryCard.jsx` (same "hide if nothing configured" shape
+as `ContainerRegistrySummaryCard.jsx`, reusing the exact
+`getSonarStatus` call `QuickAccessCard.jsx` already makes per provider -
+no new backend endpoint), added to `Dashboard.jsx` between Container
+Registry and Observability. Deliberately did NOT add a card for
+"Hosting Providers" (Render/Cloudflare/Netlify/Vercel) - per the
+existing Round 86 plan-file note, that feature is this portal's OWN
+production deployment target, admin-only, and semantically a different
+thing from a resource the user's applications run on; folding it into
+this "resources I integrated" sweep would misrepresent what it is.
+
+Verification performed:
+  - `npm run lint` in deployment-ui/: 0 new warnings (same pre-existing
+    warning set as every prior round - `only-export-components`/
+    `exhaustive-deps` on files this round never touched).
+  - `npm run build` in deployment-ui/: succeeded.
+  - No backend changes this round - purely frontend, no `dotnet build`
+    needed.
+  - `git status`/`git diff --cached` reviewed before commit - staged
+    only the 11 files this round actually touched (8 modified dashboard
+    components, `Dashboard.jsx`, 2 new hooks, 1 new card), explicitly
+    excluding `src/DeploymentAPI/DeploymentAPI.csproj`'s still-uncommitted,
+    unrelated Prometheus package reference and `docker-compose.yml`,
+    per this session's standing `git add -p`-adjacent discipline for
+    files known to carry unrelated in-progress work.
+  - Same deploy-visibility gap as every prior frontend round: this push
+    does not auto-deploy the frontend anywhere on its own.
+  - Noted but out of scope for this round: `git push` reported the
+    GitHub repository has been renamed/moved to
+    `github.com/VarshithChand/Deployment_Portal` - the push itself
+    succeeded against the old `yaml.git` remote (GitHub redirects it),
+    so no immediate action was required, but the user may want to
+    update their local `origin` remote URL at some point.
+
+Files changed: deployment-ui/src/hooks/useCloudProviderStatus.js (new),
+usePaasApplications.js (new),
+deployment-ui/src/components/dashboard/CodeQualitySummaryCard.jsx (new),
+CloudServicesCard.jsx, ContainerRegistrySummaryCard.jsx,
+ObservabilitySummaryCard.jsx, OverviewStats.jsx, PaasSummaryCard.jsx,
+QuickAccessCard.jsx, AllApplicationsTable.jsx,
+deployment-ui/src/pages/Dashboard.jsx.
+Commit: 8f232df.
+
+Status: Committed and pushed; build-verified locally, not yet confirmed
+live. Real Dashboard-load request count for the AWS/Azure/GCP
+configured-check dropped from 12 to 3, and the PaaS applications
+aggregation dropped from 3 to 1 - both measured directly from the
+call sites removed, not estimated. Every integrated provider area
+(Source Control, Cloud Services, PaaS, Container Registry, Code
+Quality, Observability, Environments) now has its own at-a-glance
+Dashboard card, plus Quick Access as a flat index of literally every
+connected credential.
