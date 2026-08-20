@@ -2,7 +2,8 @@ import { useEffect, useState } from "react";
 
 import useAuth from "../../hooks/useAuth";
 import useNavigation from "../../hooks/useNavigation";
-import { getMyAwsSettings, getMyAzureSettings, getMyGcpSettings, getSettings } from "../../services/settingsService";
+import useCloudProviderStatus from "../../hooks/useCloudProviderStatus";
+import { getSettings } from "../../services/settingsService";
 import { getMyApiKeys } from "../../services/securityService";
 import { getAzureDevOpsStatus } from "../../services/azureDevOpsService";
 import { getSonarStatus } from "../../services/sonarService";
@@ -71,6 +72,7 @@ export default function QuickAccessCard() {
 
     const { githubTokenConfigured } = useAuth();
     const { setTab, goToCredential } = useNavigation();
+    const { awsConfigured, azureConfigured, gcpConfigured, loading: cloudLoading } = useCloudProviderStatus();
 
     const [remoteStatus, setRemoteStatus] = useState({});
     const [loading, setLoading] = useState(true);
@@ -79,9 +81,6 @@ export default function QuickAccessCard() {
 
         Promise.all([
             getSettings().catch(() => null),
-            getMyAwsSettings().catch(() => null),
-            getMyAzureSettings().catch(() => null),
-            getMyGcpSettings().catch(() => null),
             getMyApiKeys().catch(() => null),
             getAzureDevOpsStatus().catch(() => null),
             getDockerHubStatus().catch(() => null),
@@ -97,7 +96,7 @@ export default function QuickAccessCard() {
             getPaasStatus("netlify").catch(() => null),
             getPaasStatus("vercel").catch(() => null)
         ]).then(([
-            settings, aws, azure, gcp, apiKeysRes, azureDevOps, dockerhub, ghcr, gitlabRegistry, jfrog,
+            settings, apiKeysRes, azureDevOps, dockerhub, ghcr, gitlabRegistry, jfrog,
             harbor, nexus, sonarqube, sonarcloud, render, cloudflare, netlify, vercel
         ]) => {
 
@@ -106,9 +105,6 @@ export default function QuickAccessCard() {
                 : 0;
 
             setRemoteStatus({
-                aws: aws?.configured,
-                azure: azure?.configured,
-                gcp: gcp?.configured,
                 apikey: activeKeyCount > 0,
                 docker: !!settings?.dockerPasswordConfigured,
                 oauth: !!settings?.gitHubOAuthClientId && !!settings?.gitHubOAuthClientSecretConfigured,
@@ -133,7 +129,13 @@ export default function QuickAccessCard() {
 
     }, []);
 
-    const configuredByKey = { github: githubTokenConfigured, ...remoteStatus };
+    const configuredByKey = {
+        github: githubTokenConfigured,
+        aws: awsConfigured, azure: azureConfigured, gcp: gcpConfigured,
+        ...remoteStatus
+    };
+
+    const isLoading = loading || cloudLoading;
 
     const visibleItems = ITEMS.filter((item) => configuredByKey[item.key]);
 
@@ -158,7 +160,7 @@ export default function QuickAccessCard() {
                 Every resource you've already connected a credential for - jump straight in.
             </p>
 
-            {loading ? (
+            {isLoading ? (
 
                 <p className="empty-state" style={{ minHeight: "60px" }}>Checking connected integrations...</p>
 

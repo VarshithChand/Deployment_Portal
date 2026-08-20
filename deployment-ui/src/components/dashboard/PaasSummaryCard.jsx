@@ -1,6 +1,4 @@
-import { useEffect, useState } from "react";
-
-import { getPaasApplications } from "../../services/paasHubService";
+import usePaasApplications from "../../hooks/usePaasApplications";
 import useNavigation from "../../hooks/useNavigation";
 import { AwsCloudIcon, AzureCloudIcon, GcpCloudIcon } from "../layout/SidebarIcons";
 
@@ -14,22 +12,16 @@ const PROVIDERS = [
 // cross-provider aggregation endpoint the "All Applications" hub page
 // already calls (GET /api/paas/applications, one round trip covering
 // AWS Elastic Beanstalk + Azure App Service + GCP Cloud Run in
-// parallel) rather than fetching anything new. Every tile routes to the
-// hub page (not a provider-specific deep link) - the hub already has
-// search/filters to narrow down from there, so a second navigation
-// destination per provider isn't worth the extra plumbing.
+// parallel), deduped via usePaasApplications so this and
+// AllApplicationsTable's own identical call share one request instead of
+// firing it twice on every Dashboard load. Every tile routes to the hub
+// page (not a provider-specific deep link) - the hub already has search/
+// filters to narrow down from there, so a second navigation destination
+// per provider isn't worth the extra plumbing.
 export default function PaasSummaryCard() {
 
     const { setTab } = useNavigation();
-
-    const [data, setData] = useState(null);
-    const [loading, setLoading] = useState(true);
-
-    useEffect(() => {
-
-        getPaasApplications().then(setData).catch(() => null).finally(() => setLoading(false));
-
-    }, []);
+    const { data, loading } = usePaasApplications();
 
     if (loading || !data) {
         return null;

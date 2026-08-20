@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react";
 
-import { getMyAwsSettings, getMyAzureSettings, getMyGcpSettings } from "../../services/settingsService";
 import {
     getDockerHubStatus, getGhcrStatus, getGitLabRegistryStatus, getJfrogStatus, getHostRegistryStatus
 } from "../../services/containerRegistryService";
 import useNavigation from "../../hooks/useNavigation";
+import useCloudProviderStatus from "../../hooks/useCloudProviderStatus";
 import {
     EcrIcon, AcrIcon, ArtifactRegistryIcon, DockerHubIcon, GhcrIcon,
     GitLabRegistryIcon, JfrogIcon, HarborIcon, NexusIcon
@@ -30,34 +30,30 @@ const ITEMS = [
 // CloudServicesCard's own "hide if nothing configured" convention, not
 // QuickAccessCard's "always show, with an empty state" one, since this
 // is a provider-integration summary like Cloud Services/PaaS rather
-// than a standing navigation aid. Reuses the exact same lightweight
-// status calls QuickAccessCard.jsx already makes for these 9 providers -
-// no new backend endpoint, no new frontend service functions.
+// than a standing navigation aid. AWS/Azure/GCP status comes from the
+// shared, deduped useCloudProviderStatus hook rather than its own
+// fetch - the 6 standalone registries still get their own lightweight
+// status calls (no other card asks about these).
 export default function ContainerRegistrySummaryCard() {
 
     const { setTab } = useNavigation();
+    const { awsConfigured, azureConfigured, gcpConfigured, loading: cloudLoading } = useCloudProviderStatus();
 
-    const [status, setStatus] = useState({});
+    const [standaloneStatus, setStandaloneStatus] = useState({});
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
 
         Promise.all([
-            getMyAwsSettings().catch(() => null),
-            getMyAzureSettings().catch(() => null),
-            getMyGcpSettings().catch(() => null),
             getDockerHubStatus().catch(() => null),
             getGhcrStatus().catch(() => null),
             getGitLabRegistryStatus().catch(() => null),
             getJfrogStatus().catch(() => null),
             getHostRegistryStatus("harbor").catch(() => null),
             getHostRegistryStatus("nexus").catch(() => null)
-        ]).then(([aws, azure, gcp, dockerhub, ghcr, gitlabRegistry, jfrog, harbor, nexus]) => {
+        ]).then(([dockerhub, ghcr, gitlabRegistry, jfrog, harbor, nexus]) => {
 
-            setStatus({
-                aws: aws?.configured,
-                azure: azure?.configured,
-                gcp: gcp?.configured,
+            setStandaloneStatus({
                 dockerhub: dockerhub?.configured,
                 ghcr: ghcr?.configured,
                 "gitlab-registry": gitlabRegistry?.configured,
@@ -72,9 +68,11 @@ export default function ContainerRegistrySummaryCard() {
 
     }, []);
 
-    if (loading) {
+    if (loading || cloudLoading) {
         return null;
     }
+
+    const status = { aws: awsConfigured, azure: azureConfigured, gcp: gcpConfigured, ...standaloneStatus };
 
     const visible = ITEMS.filter((item) => status[item.key]);
 

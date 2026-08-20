@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 
-import { getMyAwsSettings, getMyAzureSettings, getMyGcpSettings } from "../../services/settingsService";
 import { getObservabilityHostStatus } from "../../services/observabilityService";
 import useNavigation from "../../hooks/useNavigation";
+import useCloudProviderStatus from "../../hooks/useCloudProviderStatus";
 import {
     CloudWatchIcon, XRayIcon, AzureMonitorIcon, CloudMonitoringIcon,
     PrometheusIcon, DatadogIcon, ElkIcon, OpenSearchIcon, LokiIcon, FluentBitIcon,
@@ -39,26 +39,23 @@ const STANDALONE_TOOLS = [
 
 // Observability's own slice of the Dashboard - same "hide if nothing
 // configured" convention as Cloud Services/Container Registry/PaaS.
-// Standalone tools reuse the exact getObservabilityHostStatus call
+// CSP-native tool availability comes from the shared, deduped
+// useCloudProviderStatus hook rather than its own fetch. Standalone
+// tools still reuse the exact getObservabilityHostStatus call
 // CredentialsView.jsx already makes per tool - no new endpoint.
 export default function ObservabilitySummaryCard() {
 
     const { setTab } = useNavigation();
+    const { awsConfigured, azureConfigured, gcpConfigured, loading: cloudLoading } = useCloudProviderStatus();
 
-    const [providerConfigured, setProviderConfigured] = useState({});
     const [standaloneConfigured, setStandaloneConfigured] = useState({});
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
 
-        Promise.all([
-            getMyAwsSettings().catch(() => null),
-            getMyAzureSettings().catch(() => null),
-            getMyGcpSettings().catch(() => null),
-            ...STANDALONE_TOOLS.map((tool) => getObservabilityHostStatus(tool.key).catch(() => null))
-        ]).then(([aws, azure, gcp, ...standaloneResults]) => {
-
-            setProviderConfigured({ aws: !!aws?.configured, azure: !!azure?.configured, gcp: !!gcp?.configured });
+        Promise.all(
+            STANDALONE_TOOLS.map((tool) => getObservabilityHostStatus(tool.key).catch(() => null))
+        ).then((standaloneResults) => {
 
             const standaloneMap = {};
             STANDALONE_TOOLS.forEach((tool, index) => { standaloneMap[tool.key] = !!standaloneResults[index]?.configured; });
@@ -70,10 +67,11 @@ export default function ObservabilitySummaryCard() {
 
     }, []);
 
-    if (loading) {
+    if (loading || cloudLoading) {
         return null;
     }
 
+    const providerConfigured = { aws: awsConfigured, azure: azureConfigured, gcp: gcpConfigured };
     const visibleCsp = CSP_TOOLS.filter((tool) => providerConfigured[tool.providerKey]);
     const visibleStandalone = STANDALONE_TOOLS.filter((tool) => standaloneConfigured[tool.key]);
     const visible = [...visibleCsp, ...visibleStandalone];

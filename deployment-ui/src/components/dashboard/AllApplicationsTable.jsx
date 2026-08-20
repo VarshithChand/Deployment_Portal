@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 
-import { getPaasApplications } from "../../services/paasHubService";
+import usePaasApplications from "../../hooks/usePaasApplications";
 import usePagination from "../../hooks/usePagination";
 import useNavigation from "../../hooks/useNavigation";
 import Pagination from "../common/Pagination";
@@ -12,21 +12,16 @@ const PAGE_SIZE = 10;
 // A Dashboard-level glance at every PaaS application, reusing the exact
 // same real data the "All Applications" hub page already fetches (GET
 // /api/paas/applications - AWS Elastic Beanstalk + Azure App Service +
-// GCP Cloud Run in one call). Row click and "View All" both go to that
-// same hub page for real management - not a second detail view built
-// here.
+// GCP Cloud Run in one call), deduped with PaasSummaryCard's identical
+// call via usePaasApplications. Row click and "View All" both go to
+// that same hub page for real management - not a second detail view
+// built here.
 export default function AllApplicationsTable() {
 
     const { setTab } = useNavigation();
+    const { data } = usePaasApplications();
 
-    const [data, setData] = useState(null);
     const [search, setSearch] = useState("");
-
-    useEffect(() => {
-
-        getPaasApplications().then(setData).catch(() => null);
-
-    }, []);
 
     const apps = data?.applications || [];
 

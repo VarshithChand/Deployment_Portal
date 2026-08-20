@@ -1,6 +1,4 @@
-import { useEffect, useState } from "react";
-
-import { getMyAwsSettings, getMyAzureSettings, getMyGcpSettings } from "../../services/settingsService";
+import useCloudProviderStatus from "../../hooks/useCloudProviderStatus";
 import AwsCloudSection from "./AwsCloudSection";
 import AzureCloudSection from "./AzureCloudSection";
 import GcpCloudSection from "./GcpCloudSection";
@@ -10,9 +8,9 @@ import GcpCloudSection from "./GcpCloudSection";
 // (AwsServicesCard) sitting alone, by explicit request: no separate
 // container per provider. Aws/Azure/GcpCloudSection each manage their
 // own inventory fetch and hide themselves when that provider isn't
-// configured; this component only needs a cheap, separate configured
-// check for each (getMyAwsSettings/getMyAzureSettings/getMyGcpSettings,
-// the same lightweight calls QuickAccessCard already uses) to decide
+// configured; this component only needs a cheap, shared configured check
+// for each (useCloudProviderStatus - deduped with every other Dashboard
+// card asking the same question, see that hook's own comment) to decide
 // whether the outer container itself is worth rendering at all - if no
 // provider is configured, the whole card is hidden from the Dashboard
 // rather than showing an empty "connect your credentials" placeholder.
@@ -20,27 +18,9 @@ import GcpCloudSection from "./GcpCloudSection";
 // the multi-cloud infrastructure console rounds built those out.
 export default function CloudServicesCard() {
 
-    const [awsConfigured, setAwsConfigured] = useState(false);
-    const [azureConfigured, setAzureConfigured] = useState(false);
-    const [gcpConfigured, setGcpConfigured] = useState(false);
-    const [checked, setChecked] = useState(false);
+    const { awsConfigured, azureConfigured, gcpConfigured, loading } = useCloudProviderStatus();
 
-    useEffect(() => {
-
-        Promise.all([
-            getMyAwsSettings().catch(() => null),
-            getMyAzureSettings().catch(() => null),
-            getMyGcpSettings().catch(() => null)
-        ]).then(([aws, azure, gcp]) => {
-            setAwsConfigured(!!aws?.configured);
-            setAzureConfigured(!!azure?.configured);
-            setGcpConfigured(!!gcp?.configured);
-            setChecked(true);
-        });
-
-    }, []);
-
-    if (!checked || (!awsConfigured && !azureConfigured && !gcpConfigured)) {
+    if (loading || (!awsConfigured && !azureConfigured && !gcpConfigured)) {
         return null;
     }
 

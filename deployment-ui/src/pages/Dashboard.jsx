@@ -10,6 +10,7 @@ import AzureDevOpsCard from "../components/dashboard/AzureDevOpsCard";
 import CloudServicesCard from "../components/dashboard/CloudServicesCard";
 import PaasSummaryCard from "../components/dashboard/PaasSummaryCard";
 import ContainerRegistrySummaryCard from "../components/dashboard/ContainerRegistrySummaryCard";
+import CodeQualitySummaryCard from "../components/dashboard/CodeQualitySummaryCard";
 import ObservabilitySummaryCard from "../components/dashboard/ObservabilitySummaryCard";
 import EnvironmentsCard from "../components/dashboard/EnvironmentsCard";
 import QuickAccessCard from "../components/dashboard/QuickAccessCard";
@@ -85,6 +86,10 @@ export default function Dashboard() {
             <br />
 
             <ContainerRegistrySummaryCard />
+
+            <br />
+
+            <CodeQualitySummaryCard />
 
             <br />
 

@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 
 import useAuth from "../../hooks/useAuth";
-import { getPaasApplications } from "../../services/paasHubService";
+import usePaasApplications from "../../hooks/usePaasApplications";
 import { getMyAwsResources, getMyAzureResources } from "../../services/settingsService";
 import { getGcpVms } from "../../services/cloudServicesService";
 import { getCloudRunServices } from "../../services/containerServicesService";
@@ -38,12 +38,17 @@ export default function OverviewStats() {
 
     const { githubTokenConfigured } = useAuth();
 
+    // PaaS application count is shared with PaasSummaryCard/
+    // AllApplicationsTable via usePaasApplications - three cards used to
+    // each fire their own GET /api/paas/applications on every Dashboard
+    // load; now they ride one deduped request.
+    const { data: paas } = usePaasApplications();
+
     const [stats, setStats] = useState(null);
 
     useEffect(() => {
 
         const calls = [
-            getPaasApplications().catch(() => null),
             getMyAwsResources().catch(() => null),
             getMyAzureResources().catch(() => null),
             getGcpVms().catch(() => null),
@@ -60,7 +65,7 @@ export default function OverviewStats() {
                 .catch(() => ({}))
             : Promise.resolve({});
 
-        Promise.all([...calls, runsPromise]).then(([paas, aws, azure, gcpVms, cloudRun, runsByRepo]) => {
+        Promise.all([...calls, runsPromise]).then(([aws, azure, gcpVms, cloudRun, runsByRepo]) => {
 
             const awsCount = sumAwsCounts(aws);
             const azureCount = sumAzureCounts(azure);
@@ -77,7 +82,6 @@ export default function OverviewStats() {
             if (gcpVms?.error) openIssues += 1;
 
             setStats({
-                totalApplications: paas?.applications?.length ?? null,
                 awsCount, azureCount, gcpCount,
                 activeDeployments, openIssues
             });
@@ -90,8 +94,10 @@ export default function OverviewStats() {
         return null;
     }
 
+    const totalApplications = paas?.applications?.length ?? null;
+
     const tiles = [
-        stats.totalApplications != null && { key: "apps", label: "PaaS Applications", value: stats.totalApplications },
+        totalApplications != null && { key: "apps", label: "PaaS Applications", value: totalApplications },
         stats.awsCount != null && { key: "aws", label: "AWS Resources", value: stats.awsCount },
         stats.azureCount != null && { key: "azure", label: "Azure Resources", value: stats.azureCount },
         stats.gcpCount != null && { key: "gcp", label: "GCP Resources", value: stats.gcpCount },
