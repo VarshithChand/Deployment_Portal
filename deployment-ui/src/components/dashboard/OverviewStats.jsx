@@ -1,11 +1,7 @@
-import { useEffect, useState } from "react";
-
 import useAuth from "../../hooks/useAuth";
 import usePaasApplications from "../../hooks/usePaasApplications";
-import { getMyAwsResources, getMyAzureResources } from "../../services/settingsService";
-import { getGcpVms } from "../../services/cloudServicesService";
-import { getCloudRunServices } from "../../services/containerServicesService";
-import { getAccountRepositories, getRepoRunsBulk } from "../../services/githubService";
+import { useAwsResourceInventory, useAzureResourceInventory, useGcpResources } from "../../hooks/useSharedCloudInventories";
+import useGithubDeploymentActivity from "../../hooks/useGithubDeploymentActivity";
 import StatTile from "../charts/StatTile";
 
 function sumAwsCounts(inventory) {
@@ -30,84 +26,58 @@ function sumAzureCounts(inventory) {
 // The Dashboard's own top stat row - every number here is real, drawn
 // from data this app already fetches elsewhere (AWS/Azure resource
 // inventories, GCP VM/Cloud Run lists, the PaaS hub's aggregation, and
-// GitHub Actions run history). Deliberately no fake week-over-week
-// deltas ("+12 this week" style indicators) - this app keeps no
-// historical snapshots to compute a real delta from, so none are shown
-// rather than invented.
+// GitHub Actions run history), all via the shared hooks in
+// useSharedCloudInventories.js/usePaasApplications.js/
+// useGithubDeploymentActivity.js - this component no longer fetches
+// anything of its own, it only reads the same data AwsCloudSection/
+// AzureCloudSection/GcpCloudSection/PaasSummaryCard/DeploymentActivityCard
+// already keep live. Deliberately no fake week-over-week deltas ("+12
+// this week" style indicators) - this app keeps no historical snapshots
+// to compute a real delta from, so none are shown rather than invented.
 export default function OverviewStats() {
 
     const { githubTokenConfigured } = useAuth();
 
-    // PaaS application count is shared with PaasSummaryCard/
-    // AllApplicationsTable via usePaasApplications - three cards used to
-    // each fire their own GET /api/paas/applications on every Dashboard
-    // load; now they ride one deduped request.
     const { data: paas } = usePaasApplications();
+    const { data: aws, loading: awsLoading } = useAwsResourceInventory();
+    const { data: azure, loading: azureLoading } = useAzureResourceInventory();
+    const { data: gcpData, loading: gcpLoading } = useGcpResources();
+    const { runs, tookMs: runsTookMs } = useGithubDeploymentActivity(githubTokenConfigured);
 
-    const [stats, setStats] = useState(null);
-
-    useEffect(() => {
-
-        const calls = [
-            getMyAwsResources().catch(() => null),
-            getMyAzureResources().catch(() => null),
-            getGcpVms().catch(() => null),
-            getCloudRunServices().catch(() => null)
-        ];
-
-        const runsPromise = githubTokenConfigured
-            ? getAccountRepositories()
-                .then((response) => {
-                    const repos = (Array.isArray(response.data) ? response.data : []).slice(0, 100);
-                    if (repos.length === 0) return {};
-                    return getRepoRunsBulk(repos.map((r) => ({ owner: r.owner, repo: r.name }))).then((r) => r.data || {});
-                })
-                .catch(() => ({}))
-            : Promise.resolve({});
-
-        Promise.all([...calls, runsPromise]).then(([aws, azure, gcpVms, cloudRun, runsByRepo]) => {
-
-            const awsCount = sumAwsCounts(aws);
-            const azureCount = sumAzureCounts(azure);
-            const gcpCount = gcpVms?.configured ? (gcpVms.instances?.length || 0) + (cloudRun?.services?.length || 0) : null;
-
-            const allRuns = Object.values(runsByRepo || {}).flat();
-            const activeDeployments = githubTokenConfigured
-                ? allRuns.filter((r) => r.status === "in_progress" || r.status === "queued").length
-                : null;
-
-            let openIssues = allRuns.filter((r) => r.conclusion === "failure").length;
-            if (aws?.error) openIssues += 1;
-            if (azure?.error) openIssues += 1;
-            if (gcpVms?.error) openIssues += 1;
-
-            setStats({
-                awsCount, azureCount, gcpCount,
-                activeDeployments, openIssues
-            });
-
-        });
-
-    }, [githubTokenConfigured]);
-
-    if (!stats) {
+    if (awsLoading || azureLoading || gcpLoading || (githubTokenConfigured && runsTookMs === null)) {
         return null;
     }
 
+    const gcpVms = gcpData?.vms;
+    const cloudRun = gcpData?.cloudRun;
+
     const totalApplications = paas?.applications?.length ?? null;
+    const awsCount = sumAwsCounts(aws);
+    const azureCount = sumAzureCounts(azure);
+    const gcpCount = gcpVms?.configured ? (gcpVms.instances?.length || 0) + (cloudRun?.services?.length || 0) : null;
+
+    const allRuns = runs || [];
+    const activeDeployments = githubTokenConfigured
+        ? allRuns.filter((r) => r.status === "in_progress" || r.status === "queued").length
+        : null;
+
+    let openIssues = allRuns.filter((r) => r.conclusion === "failure").length;
+    if (aws?.error) openIssues += 1;
+    if (azure?.error) openIssues += 1;
+    if (gcpVms?.error) openIssues += 1;
 
     const tiles = [
         totalApplications != null && { key: "apps", label: "PaaS Applications", value: totalApplications },
-        stats.awsCount != null && { key: "aws", label: "AWS Resources", value: stats.awsCount },
-        stats.azureCount != null && { key: "azure", label: "Azure Resources", value: stats.azureCount },
-        stats.gcpCount != null && { key: "gcp", label: "GCP Resources", value: stats.gcpCount },
-        stats.activeDeployments != null && {
-            key: "active", label: "Active Deployments", value: stats.activeDeployments,
-            tone: stats.activeDeployments > 0 ? "good" : "default"
+        awsCount != null && { key: "aws", label: "AWS Resources", value: awsCount },
+        azureCount != null && { key: "azure", label: "Azure Resources", value: azureCount },
+        gcpCount != null && { key: "gcp", label: "GCP Resources", value: gcpCount },
+        activeDeployments != null && {
+            key: "active", label: "Active Deployments", value: activeDeployments,
+            tone: activeDeployments > 0 ? "good" : "default"
         },
         {
-            key: "issues", label: "Open Issues", value: stats.openIssues,
-            tone: stats.openIssues > 0 ? "critical" : "good",
+            key: "issues", label: "Open Issues", value: openIssues,
+            tone: openIssues > 0 ? "critical" : "good",
             sublabel: "failed runs + connection errors"
         }
     ].filter(Boolean);

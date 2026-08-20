@@ -1,13 +1,11 @@
 import { useState } from "react";
 
-import { getMyAwsResources } from "../../services/settingsService";
 import AWS_REGIONS from "../../data/awsRegions";
 import useAuth from "../../hooks/useAuth";
 import useNavigation from "../../hooks/useNavigation";
-import usePolling from "../../hooks/usePolling";
+import { useAwsResourceInventory, fetchAwsResourceInventory } from "../../hooks/useSharedCloudInventories";
 import ComboBox from "../common/ComboBox";
 
-const POLL_MS = 30000;
 const MAX_ITEMS_SHOWN = 4;
 
 const SERVICES = [
@@ -96,38 +94,41 @@ function AwsServiceTile({ label, status, onSelect }) {
 // the configured region. Renders nothing at all once it's clear AWS isn't
 // configured - CloudServicesCard itself decides whether the whole
 // container is worth showing.
+//
+// The default-region view rides useAwsResourceInventory's shared,
+// polled store (see useSharedCloudInventories.js) - OverviewStats and
+// SystemHealthCard poll this exact same data, so this section no longer
+// runs its own separate 30s timer for it. Only a manually-picked region
+// (via the ComboBox below) falls back to a local, one-off fetch - a
+// per-visitor override the shared store has no reason to know about.
 export default function AwsCloudSection() {
 
-    const { githubTokenConfigured, awsIdentityLabel } = useAuth();
+    const { awsIdentityLabel } = useAuth();
     const { goToCloudService } = useNavigation();
 
-    const [inventory, setInventory] = useState(null);
-    const [loading, setLoading] = useState(true);
+    const shared = useAwsResourceInventory();
 
+    const [overrideInventory, setOverrideInventory] = useState(null);
+    const [overrideLoading, setOverrideLoading] = useState(false);
     const [selectedRegion, setSelectedRegion] = useState(null);
 
-    async function loadInventory(region) {
+    async function handleRegionChange(region) {
 
-        if (!githubTokenConfigured) {
-            setLoading(false);
+        setSelectedRegion(region || null);
+
+        if (!region) {
+            setOverrideInventory(null);
             return;
         }
 
-        const data = await getMyAwsResources(region ?? selectedRegion);
-        setInventory(data);
-        setLoading(false);
+        setOverrideLoading(true);
+        setOverrideInventory(await fetchAwsResourceInventory(region));
+        setOverrideLoading(false);
 
     }
 
-    usePolling(loadInventory, POLL_MS);
-
-    function handleRegionChange(region) {
-
-        setSelectedRegion(region || null);
-        setLoading(true);
-        loadInventory(region || null);
-
-    }
+    const loading = selectedRegion ? overrideLoading : shared.loading;
+    const inventory = selectedRegion ? overrideInventory : shared.data;
 
     if (loading || !inventory?.configured) {
         return null;

@@ -2,9 +2,12 @@ import { useGithubResources } from "../hooks/useGithubResources";
 
 import PageLayout from "../components/layout/PageLayout";
 
+import SystemHealthCard from "../components/dashboard/SystemHealthCard";
+import IntegrationFlowCard from "../components/dashboard/IntegrationFlowCard";
 import OverviewStats from "../components/dashboard/OverviewStats";
 import DeploymentActivityCard from "../components/dashboard/DeploymentActivityCard";
 import AllApplicationsTable from "../components/dashboard/AllApplicationsTable";
+import SourceControlSummaryCard from "../components/dashboard/SourceControlSummaryCard";
 import AllRepositoriesCard from "../components/dashboard/AllRepositoriesCard";
 import AzureDevOpsCard from "../components/dashboard/AzureDevOpsCard";
 import CloudServicesCard from "../components/dashboard/CloudServicesCard";
@@ -15,15 +18,25 @@ import ObservabilitySummaryCard from "../components/dashboard/ObservabilitySumma
 import EnvironmentsCard from "../components/dashboard/EnvironmentsCard";
 import QuickAccessCard from "../components/dashboard/QuickAccessCard";
 
-// "At a glance, then drill in" ordering (see security_findings.txt's own
-// Round entry for this redesign): a real top-line stat row, real
-// deployment activity, a real cross-provider application table, THEN
-// the per-area cards (Source Control, Cloud Services, PaaS, Container
-// Registry, Observability, Environments) for anyone who wants the detail
-// behind any one of those numbers, and Quick Access last as a standing
-// navigation aid. Every section still owns its own fetch/hide-if-
-// unconfigured logic - Dashboard itself stays a plain composition, same
-// as before.
+// "One container, then drill in" ordering (see security_findings.txt's
+// Round 94 entry): SystemHealthCard is the single place every connected
+// integration's real status/response-time lives - what used to require
+// scanning 6+ separate summary cards to answer "is everything OK right
+// now." IntegrationFlowCard answers "how does it all connect" right
+// below it. Everything after that is unchanged in spirit from the prior
+// redesign - resource counts, activity, applications, then the per-area
+// detail cards (Source Control gets the same compact-glance-then-full-
+// browser split every other area already has), Quick Access last as a
+// standing navigation aid.
+//
+// Every card still fetches through its OWN hook call, but almost all of
+// those hooks are now the shared ones in src/hooks/ (useCloudProviderStatus,
+// useSharedCloudInventories, usePaasApplications, useGithubDeploymentActivity,
+// useContainerRegistryStatus, useSonarStatus, useObservabilityStatus,
+// useAzureDevOpsStatus) - the same underlying data is deduped across
+// however many cards ask for it, instead of each card firing its own
+// request the way this Dashboard used to. Dashboard.jsx itself is still
+// a plain composition with no data of its own beyond `repository`.
 export default function Dashboard() {
 
     // Only `repository` is still needed here - it tells AllRepositoriesCard
@@ -36,11 +49,9 @@ export default function Dashboard() {
     // bootstrap check resolves, so gating the whole Dashboard behind it
     // meant the page title and every card's own shell sat behind a blank
     // spinner for a full network round trip. Each card already manages its
-    // own loading/empty state independently (AllRepositoriesCard,
-    // AwsServicesCard, EnvironmentsCard all gate their own fetch on
-    // githubTokenConfigured themselves) - none of them actually needed this
-    // page-level gate to behave correctly, only to paint later than they
-    // had to.
+    // own loading/empty state independently - none of them actually needed
+    // this page-level gate to behave correctly, only to paint later than
+    // they had to.
     const { repository, error } = useGithubResources({ includeRepository: true });
 
     return (
@@ -59,6 +70,14 @@ export default function Dashboard() {
 
             }
 
+            <SystemHealthCard />
+
+            <br />
+
+            <IntegrationFlowCard />
+
+            <br />
+
             <OverviewStats />
 
             <br />
@@ -68,6 +87,10 @@ export default function Dashboard() {
             <br />
 
             <AllApplicationsTable />
+
+            <br />
+
+            <SourceControlSummaryCard />
 
             <br />
 

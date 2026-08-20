@@ -3,14 +3,12 @@ import { useEffect, useState } from "react";
 import useAuth from "../../hooks/useAuth";
 import useNavigation from "../../hooks/useNavigation";
 import useCloudProviderStatus from "../../hooks/useCloudProviderStatus";
+import useContainerRegistryStatus from "../../hooks/useContainerRegistryStatus";
+import useSonarStatus from "../../hooks/useSonarStatus";
+import useAzureDevOpsStatus from "../../hooks/useAzureDevOpsStatus";
 import { getSettings } from "../../services/settingsService";
 import { getMyApiKeys } from "../../services/securityService";
-import { getAzureDevOpsStatus } from "../../services/azureDevOpsService";
-import { getSonarStatus } from "../../services/sonarService";
 import { getPaasStatus } from "../../services/paasService";
-import {
-    getDockerHubStatus, getGhcrStatus, getGitLabRegistryStatus, getJfrogStatus, getHostRegistryStatus
-} from "../../services/containerRegistryService";
 import {
     DeployIcon, AzureDevOpsIcon, AwsCloudIcon, AzureCloudIcon, GcpCloudIcon,
     EcrIcon, AcrIcon, ArtifactRegistryIcon, DockerHubIcon, GhcrIcon,
@@ -73,6 +71,9 @@ export default function QuickAccessCard() {
     const { githubTokenConfigured } = useAuth();
     const { setTab, goToCredential } = useNavigation();
     const { awsConfigured, azureConfigured, gcpConfigured, loading: cloudLoading } = useCloudProviderStatus();
+    const { status: registryStatus, loading: registryLoading } = useContainerRegistryStatus();
+    const { status: sonarStatus, loading: sonarLoading } = useSonarStatus();
+    const { configured: azureDevOpsConfigured, loading: azureDevOpsLoading } = useAzureDevOpsStatus();
 
     const [remoteStatus, setRemoteStatus] = useState({});
     const [loading, setLoading] = useState(true);
@@ -82,23 +83,11 @@ export default function QuickAccessCard() {
         Promise.all([
             getSettings().catch(() => null),
             getMyApiKeys().catch(() => null),
-            getAzureDevOpsStatus().catch(() => null),
-            getDockerHubStatus().catch(() => null),
-            getGhcrStatus().catch(() => null),
-            getGitLabRegistryStatus().catch(() => null),
-            getJfrogStatus().catch(() => null),
-            getHostRegistryStatus("harbor").catch(() => null),
-            getHostRegistryStatus("nexus").catch(() => null),
-            getSonarStatus("sonarqube").catch(() => null),
-            getSonarStatus("sonarcloud").catch(() => null),
             getPaasStatus("render").catch(() => null),
             getPaasStatus("cloudflare").catch(() => null),
             getPaasStatus("netlify").catch(() => null),
             getPaasStatus("vercel").catch(() => null)
-        ]).then(([
-            settings, apiKeysRes, azureDevOps, dockerhub, ghcr, gitlabRegistry, jfrog,
-            harbor, nexus, sonarqube, sonarcloud, render, cloudflare, netlify, vercel
-        ]) => {
+        ]).then(([settings, apiKeysRes, render, cloudflare, netlify, vercel]) => {
 
             const activeKeyCount = Array.isArray(apiKeysRes?.data)
                 ? apiKeysRes.data.filter((k) => !k.revoked).length
@@ -108,15 +97,6 @@ export default function QuickAccessCard() {
                 apikey: activeKeyCount > 0,
                 docker: !!settings?.dockerPasswordConfigured,
                 oauth: !!settings?.gitHubOAuthClientId && !!settings?.gitHubOAuthClientSecretConfigured,
-                azureDevOps: azureDevOps?.configured,
-                dockerhub: dockerhub?.configured,
-                ghcr: ghcr?.configured,
-                "gitlab-registry": gitlabRegistry?.configured,
-                jfrog: jfrog?.configured,
-                harbor: harbor?.configured,
-                nexus: nexus?.configured,
-                sonarqube: sonarqube?.configured,
-                sonarcloud: sonarcloud?.configured,
                 render: render?.configured,
                 cloudflare: cloudflare?.configured,
                 netlify: netlify?.configured,
@@ -132,10 +112,13 @@ export default function QuickAccessCard() {
     const configuredByKey = {
         github: githubTokenConfigured,
         aws: awsConfigured, azure: azureConfigured, gcp: gcpConfigured,
+        azureDevOps: azureDevOpsConfigured,
+        ...registryStatus,
+        ...sonarStatus,
         ...remoteStatus
     };
 
-    const isLoading = loading || cloudLoading;
+    const isLoading = loading || cloudLoading || registryLoading || sonarLoading || azureDevOpsLoading;
 
     const visibleItems = ITEMS.filter((item) => configuredByKey[item.key]);
 

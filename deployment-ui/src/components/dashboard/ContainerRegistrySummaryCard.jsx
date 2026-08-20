@@ -1,10 +1,6 @@
-import { useEffect, useState } from "react";
-
-import {
-    getDockerHubStatus, getGhcrStatus, getGitLabRegistryStatus, getJfrogStatus, getHostRegistryStatus
-} from "../../services/containerRegistryService";
 import useNavigation from "../../hooks/useNavigation";
 import useCloudProviderStatus from "../../hooks/useCloudProviderStatus";
+import useContainerRegistryStatus from "../../hooks/useContainerRegistryStatus";
 import {
     EcrIcon, AcrIcon, ArtifactRegistryIcon, DockerHubIcon, GhcrIcon,
     GitLabRegistryIcon, JfrogIcon, HarborIcon, NexusIcon
@@ -31,42 +27,14 @@ const ITEMS = [
 // QuickAccessCard's "always show, with an empty state" one, since this
 // is a provider-integration summary like Cloud Services/PaaS rather
 // than a standing navigation aid. AWS/Azure/GCP status comes from the
-// shared, deduped useCloudProviderStatus hook rather than its own
-// fetch - the 6 standalone registries still get their own lightweight
-// status calls (no other card asks about these).
+// shared, deduped useCloudProviderStatus hook; the 6 standalone
+// registries come from useContainerRegistryStatus - both shared with
+// QuickAccessCard, which used to fire these same 9 calls a second time.
 export default function ContainerRegistrySummaryCard() {
 
     const { setTab } = useNavigation();
     const { awsConfigured, azureConfigured, gcpConfigured, loading: cloudLoading } = useCloudProviderStatus();
-
-    const [standaloneStatus, setStandaloneStatus] = useState({});
-    const [loading, setLoading] = useState(true);
-
-    useEffect(() => {
-
-        Promise.all([
-            getDockerHubStatus().catch(() => null),
-            getGhcrStatus().catch(() => null),
-            getGitLabRegistryStatus().catch(() => null),
-            getJfrogStatus().catch(() => null),
-            getHostRegistryStatus("harbor").catch(() => null),
-            getHostRegistryStatus("nexus").catch(() => null)
-        ]).then(([dockerhub, ghcr, gitlabRegistry, jfrog, harbor, nexus]) => {
-
-            setStandaloneStatus({
-                dockerhub: dockerhub?.configured,
-                ghcr: ghcr?.configured,
-                "gitlab-registry": gitlabRegistry?.configured,
-                jfrog: jfrog?.configured,
-                harbor: harbor?.configured,
-                nexus: nexus?.configured
-            });
-
-            setLoading(false);
-
-        });
-
-    }, []);
+    const { status: standaloneStatus, loading } = useContainerRegistryStatus();
 
     if (loading || cloudLoading) {
         return null;

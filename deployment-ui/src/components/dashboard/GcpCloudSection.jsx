@@ -1,11 +1,6 @@
-import { useState } from "react";
-
-import { getGcpVms } from "../../services/cloudServicesService";
-import { getCloudRunServices } from "../../services/containerServicesService";
 import useNavigation from "../../hooks/useNavigation";
-import usePolling from "../../hooks/usePolling";
+import { useGcpResources } from "../../hooks/useSharedCloudInventories";
 
-const POLL_MS = 45000;
 const MAX_ITEMS_SHOWN = 4;
 
 // Same tile shape as AwsCloudSection.jsx's own (private, unexported)
@@ -71,29 +66,16 @@ function GcpServiceTile({ label, status, onSelect }) {
 // grouped/counted inventory endpoint like AWS/Azure have - two real
 // numbers from data already fetchable in two calls, not a full
 // per-resource-type breakdown, a proportionate scope for what's
-// actually needed on a summary card.
+// actually needed on a summary card. Rides useGcpResources' shared,
+// polled store (see useSharedCloudInventories.js) instead of its own
+// 45s timer - OverviewStats and SystemHealthCard poll this same data.
 export default function GcpCloudSection() {
 
     const { setTab } = useNavigation();
+    const { data, loading } = useGcpResources();
 
-    const [vms, setVms] = useState(null);
-    const [cloudRun, setCloudRun] = useState(null);
-    const [loading, setLoading] = useState(true);
-
-    async function load() {
-
-        const [vmsRes, cloudRunRes] = await Promise.all([
-            getGcpVms().catch(() => null),
-            getCloudRunServices().catch(() => null)
-        ]);
-
-        setVms(vmsRes);
-        setCloudRun(cloudRunRes);
-        setLoading(false);
-
-    }
-
-    usePolling(load, POLL_MS);
+    const vms = data?.vms;
+    const cloudRun = data?.cloudRun;
 
     if (loading || !vms?.configured) {
         return null;

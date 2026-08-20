@@ -1,8 +1,6 @@
-import { useEffect, useState } from "react";
-
-import { getObservabilityHostStatus } from "../../services/observabilityService";
 import useNavigation from "../../hooks/useNavigation";
 import useCloudProviderStatus from "../../hooks/useCloudProviderStatus";
+import useObservabilityStatus from "../../hooks/useObservabilityStatus";
 import {
     CloudWatchIcon, XRayIcon, AzureMonitorIcon, CloudMonitoringIcon,
     PrometheusIcon, DatadogIcon, ElkIcon, OpenSearchIcon, LokiIcon, FluentBitIcon,
@@ -40,32 +38,14 @@ const STANDALONE_TOOLS = [
 // Observability's own slice of the Dashboard - same "hide if nothing
 // configured" convention as Cloud Services/Container Registry/PaaS.
 // CSP-native tool availability comes from the shared, deduped
-// useCloudProviderStatus hook rather than its own fetch. Standalone
-// tools still reuse the exact getObservabilityHostStatus call
-// CredentialsView.jsx already makes per tool - no new endpoint.
+// useCloudProviderStatus hook; standalone tools come from
+// useObservabilityStatus - both shared with SystemHealthCard, which
+// used to mean this data would otherwise be fetched twice.
 export default function ObservabilitySummaryCard() {
 
     const { setTab } = useNavigation();
     const { awsConfigured, azureConfigured, gcpConfigured, loading: cloudLoading } = useCloudProviderStatus();
-
-    const [standaloneConfigured, setStandaloneConfigured] = useState({});
-    const [loading, setLoading] = useState(true);
-
-    useEffect(() => {
-
-        Promise.all(
-            STANDALONE_TOOLS.map((tool) => getObservabilityHostStatus(tool.key).catch(() => null))
-        ).then((standaloneResults) => {
-
-            const standaloneMap = {};
-            STANDALONE_TOOLS.forEach((tool, index) => { standaloneMap[tool.key] = !!standaloneResults[index]?.configured; });
-            setStandaloneConfigured(standaloneMap);
-
-            setLoading(false);
-
-        });
-
-    }, []);
+    const { status: standaloneConfigured, loading } = useObservabilityStatus();
 
     if (loading || cloudLoading) {
         return null;

@@ -1,7 +1,5 @@
-import { useEffect, useState } from "react";
-
 import useAuth from "../../hooks/useAuth";
-import { getAccountRepositories, getRepoRunsBulk } from "../../services/githubService";
+import useGithubDeploymentActivity from "../../hooks/useGithubDeploymentActivity";
 import BarChart from "../charts/BarChart";
 import DonutChart from "../charts/DonutChart";
 import StatusBadge from "../StatusBadge";
@@ -13,49 +11,18 @@ function dayLabel(date) {
     return date.toLocaleDateString(undefined, { weekday: "short" });
 }
 
-// Real GitHub Actions run history for the last 7 days - its own
-// independent fetch (not shared state with OverviewStats, matching this
-// Dashboard's established "each card fetches its own data" convention).
-// BarChart (runs/day) + DonutChart (outcome breakdown) rather than a
-// multi-line chart - LineChart.jsx only ever plots one series (no dual-
-// axis, an existing rule this app's chart components already follow),
-// so two existing, unmodified components cover the same information
-// without a new multi-series chart component built for one card.
+// Real GitHub Actions run history for the last 7 days - shared with
+// OverviewStats via useGithubDeploymentActivity (see that hook's own
+// comment) so both cards ride one fetch instead of two. BarChart
+// (runs/day) + DonutChart (outcome breakdown) rather than a multi-line
+// chart - LineChart.jsx only ever plots one series (no dual-axis, an
+// existing rule this app's chart components already follow), so two
+// existing, unmodified components cover the same information without a
+// new multi-series chart component built for one card.
 export default function DeploymentActivityCard() {
 
     const { githubTokenConfigured } = useAuth();
-
-    const [runs, setRuns] = useState(null);
-
-    useEffect(() => {
-
-        if (!githubTokenConfigured) {
-            setRuns([]);
-            return;
-        }
-
-        getAccountRepositories().then((response) => {
-
-            const repos = (Array.isArray(response.data) ? response.data : []).slice(0, 100);
-
-            if (repos.length === 0) {
-                setRuns([]);
-                return;
-            }
-
-            getRepoRunsBulk(repos.map((r) => ({ owner: r.owner, repo: r.name }))).then((runsResponse) => {
-
-                const all = Object.entries(runsResponse.data || {}).flatMap(([fullName, repoRuns]) =>
-                    (repoRuns || []).map((r) => ({ ...r, repo: fullName }))
-                );
-
-                setRuns(all.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)));
-
-            }).catch(() => setRuns([]));
-
-        }).catch(() => setRuns([]));
-
-    }, [githubTokenConfigured]);
+    const { runs } = useGithubDeploymentActivity(githubTokenConfigured);
 
     if (runs === null) {
         return <div className="card"><p className="empty-state">Loading deployment activity...</p></div>;

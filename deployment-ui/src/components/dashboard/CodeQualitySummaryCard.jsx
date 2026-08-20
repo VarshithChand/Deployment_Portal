@@ -1,7 +1,5 @@
-import { useEffect, useState } from "react";
-
-import { getSonarStatus } from "../../services/sonarService";
 import useNavigation from "../../hooks/useNavigation";
+import useSonarStatus from "../../hooks/useSonarStatus";
 import { SonarQubeIcon, SonarCloudIcon } from "../layout/SidebarIcons";
 
 const ITEMS = [
@@ -13,29 +11,13 @@ const ITEMS = [
 // area (Cloud Services, PaaS, Container Registry, Observability) already
 // gets a "hide if nothing configured" glance card; SonarQube/SonarCloud
 // previously only surfaced inside Quick Access, with no dedicated card
-// of their own. Same shape as ContainerRegistrySummaryCard.jsx - reuses
-// the exact getSonarStatus call QuickAccessCard.jsx already makes per
-// provider, no new backend endpoint.
+// of their own. Same shape as ContainerRegistrySummaryCard.jsx - status
+// comes from useSonarStatus, shared with QuickAccessCard which used to
+// fire these same 2 calls a second time.
 export default function CodeQualitySummaryCard() {
 
     const { setTab } = useNavigation();
-
-    const [status, setStatus] = useState({});
-    const [loading, setLoading] = useState(true);
-
-    useEffect(() => {
-
-        Promise.all([
-            getSonarStatus("sonarqube").catch(() => null),
-            getSonarStatus("sonarcloud").catch(() => null)
-        ]).then(([sonarqube, sonarcloud]) => {
-
-            setStatus({ sonarqube: sonarqube?.configured, sonarcloud: sonarcloud?.configured });
-            setLoading(false);
-
-        });
-
-    }, []);
+    const { status, loading } = useSonarStatus();
 
     if (loading) {
         return null;

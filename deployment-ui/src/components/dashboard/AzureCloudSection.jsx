@@ -1,10 +1,6 @@
-import { useState } from "react";
-
-import { getMyAzureResources } from "../../services/settingsService";
 import useNavigation from "../../hooks/useNavigation";
-import usePolling from "../../hooks/usePolling";
+import { useAzureResourceInventory } from "../../hooks/useSharedCloudInventories";
 
-const POLL_MS = 45000;
 const MAX_ITEMS_SHOWN = 4;
 const MAX_GROUPS_SHOWN = 7;
 
@@ -60,29 +56,13 @@ function AzureServiceTile({ label, status }) {
 // that page's own comment on why this doesn't need AWS's "known services +
 // tagging API" split). Renders nothing at all once it's clear Azure isn't
 // configured - CloudServicesCard itself decides whether the whole
-// container is worth showing.
+// container is worth showing. Rides useAzureResourceInventory's shared,
+// polled store (see useSharedCloudInventories.js) instead of its own
+// 45s timer - OverviewStats and SystemHealthCard poll this same data.
 export default function AzureCloudSection() {
 
     const { setTab } = useNavigation();
-
-    const [inventory, setInventory] = useState(null);
-    const [loading, setLoading] = useState(true);
-
-    async function loadInventory() {
-
-        try {
-            setInventory(await getMyAzureResources());
-        }
-        catch (err) {
-            console.error(err);
-        }
-        finally {
-            setLoading(false);
-        }
-
-    }
-
-    usePolling(loadInventory, POLL_MS);
+    const { data: inventory, loading } = useAzureResourceInventory();
 
     if (loading || !inventory?.configured) {
         return null;
