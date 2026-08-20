@@ -12315,3 +12315,176 @@ call sites removed, not estimated. Every integrated provider area
 Quality, Observability, Environments) now has its own at-a-glance
 Dashboard card, plus Quick Access as a flat index of literally every
 connected credential.
+
+
+==================================================
+ROUND 94 - SYSTEM HEALTH CARD, INTEGRATION FLOW,
+AND A REAL SHARED-FETCH DATA LAYER
+==================================================
+Date: 2026-08-20
+Trigger: the user posted a reference mockup image of an "Observability
+Overview" dashboard (top health/uptime/request stat row, a Services
+Status table with per-service response time/uptime, a System
+Architecture flow diagram, request/response charts, resource usage,
+deployments/alerts/logs panels) asking to optimize the Dashboard the
+same way, monitor every resource together, monitor CSP resources and
+hosting providers, see how the integration flow is going, and stop
+adding duplicate data - use only the real data connected credentials
+actually return.
+
+Interpreted as three concrete, separable asks rather than a pixel-match
+re-skin (this app already has its own established design system - see
+every prior round's "reuse existing CSS classes/components" discipline;
+a full re-theme to the mockup's dark/neon look was never requested,
+only its information architecture): (1) one place to see every
+integration's real status/response time together, (2) a real answer to
+"how does the integration flow go," (3) literally eliminate duplicate
+data fetching, using only what the actually-configured credentials
+return - not synthetic/fabricated metrics.
+
+Explicitly did NOT build the mockup's Total Requests/Error Rate/24h
+Uptime % tiles - this app has no request-count or uptime-history
+instrumentation anywhere. Worth noting: a separate, still-uncommitted
+Prometheus integration has sat in Program.cs/DeploymentAPI.csproj this
+entire session (flagged since Round 85's hotfix as unrelated, pre-
+existing in-progress work that must never be swept into a commit) -
+that is exactly the kind of instrumentation the mockup's fabricated
+tiles would need, and it's someone else's work in flight, not mine to
+finish or route around. Stated this trade-off plainly rather than
+faking numbers to match the reference image.
+
+Before writing any new component, audited the Dashboard's actual
+network behavior end to end (grepped every dashboard component for its
+service-layer calls) rather than assume Round 93's dedup pass had
+already caught everything. It hadn't - found real, unaddressed
+duplication Round 93 introduced or left standing:
+  - AwsCloudSection.jsx/AzureCloudSection.jsx/GcpCloudSection.jsx (Cloud
+    Services card, Round 90-91) were each independently POLLING their
+    own AWS/Azure/GCP resource inventory in the background (usePolling,
+    30s/45s/45s) while OverviewStats.jsx (Round 92) fetched the exact
+    same 3 endpoints once more on every page load. Round 93's TTL-cache
+    hooks only dedupe a burst of near-simultaneous ONE-SHOT calls - they
+    can't dedupe an ongoing background poll, since each poller would
+    just re-win its own cache slot on its own next tick.
+  - QuickAccessCard.jsx was still independently calling
+    getDockerHubStatus/getGhcrStatus/getGitLabRegistryStatus/
+    getJfrogStatus/getHostRegistryStatus(harbor/nexus) - the same 6
+    calls ContainerRegistrySummaryCard makes - and getSonarStatus for
+    both providers, same as CodeQualitySummaryCard, and
+    getAzureDevOpsStatus, used nowhere else yet but about to be needed
+    by this round's own new cards too.
+  - OverviewStats.jsx and DeploymentActivityCard.jsx both independently
+    fetched every repo + every repo's recent runs (getAccountRepositories
+    + getRepoRunsBulk).
+
+Fix - one new shared-store hook plus five TTL-cache hooks, all in
+deployment-ui/src/hooks/:
+  - useSharedCloudInventories.js (new) - a real pub-sub resource store
+    (module-scoped: one setInterval, one in-flight fetch per tick,
+    broadcast to every subscribed component; the timer stops when the
+    last subscriber unmounts) for AWS (30s)/Azure (45s)/GCP (45s)
+    inventory. AwsCloudSection/AzureCloudSection/GcpCloudSection,
+    OverviewStats, and the new SystemHealthCard/IntegrationFlowCard all
+    now read from these 3 stores instead of firing their own polls -
+    what used to be 4 independent AWS pollers (3 cloud-section cards +
+    OverviewStats) is now 1 timer covering all of them. AwsCloudSection's
+    region ComboBox still gets its own one-off fetch when a NON-default
+    region is picked (fetchAwsResourceInventory export) - a per-visitor
+    override the shared store has no reason to know about, so that one
+    real feature wasn't broken by the dedup.
+  - useGithubDeploymentActivity.js (new) - shared by OverviewStats,
+    DeploymentActivityCard, and the new SourceControlSummaryCard; also
+    now exposes repoCount alongside runs so the new card doesn't need
+    a second getAccountRepositories() call of its own.
+  - useContainerRegistryStatus.js, useSonarStatus.js,
+    useAzureDevOpsStatus.js, useObservabilityStatus.js (new) - same
+    TTL-cache dedup shape as Round 93's useCloudProviderStatus.js/
+    usePaasApplications.js. Every one of these also records tookMs
+    (client-measured elapsed time around the real call) - this is what
+    SystemHealthCard's "Response Time" column and stat tile are built
+    from; nothing here is invented, and nothing here is a second fetch
+    of data another card already has.
+  - QuickAccessCard.jsx, ContainerRegistrySummaryCard.jsx,
+    CodeQualitySummaryCard.jsx, ObservabilitySummaryCard.jsx,
+    AwsCloudSection.jsx, AzureCloudSection.jsx, GcpCloudSection.jsx,
+    OverviewStats.jsx, DeploymentActivityCard.jsx all switched to the
+    relevant shared hook(s) in place of their own fetch code.
+
+New components (all pure consumers of the shared hooks above - none of
+them make a network call of their own):
+  - SystemHealthCard.jsx (new) - the mockup's "Services Status"
+    table, adapted to this app's real integration surface: one row per
+    area (GitHub, Azure DevOps, AWS, Azure, GCP, PaaS, Container
+    Registry, Code Quality, Observability), each showing a real
+    Healthy/Needs Attention/Not Connected badge and a real response
+    time or a dash. Top stat row: Overall Status, Integrations
+    Connected (X of 9), Healthy, Needs Attention, Avg Response Time -
+    all derived, none fabricated. Placed at the very top of the
+    Dashboard, ahead of OverviewStats, as the new "one container"
+    answer to "is everything OK right now."
+  - IntegrationFlowCard.jsx (new) - the mockup's "System Architecture"
+    concept, reshaped to this app's actual pipeline shape (a real
+    linear flow, not a synthetic network diagram this app has no data
+    to back): Source Control -> Build and Registry -> Deploy -> Observe
+    and Quality, each step showing small colored chips for the specific
+    providers actually connected at that stage. Not built on
+    RelationshipDiagram.jsx (that component is a single vertical chain
+    scoped to one resource's own parents, with a hardcoded
+    "Relationships" heading - doesn't fit a top-level multi-provider
+    flow) - same "no unnecessary dependencies" spirit, plain flexbox,
+    no new library.
+  - SourceControlSummaryCard.jsx (new) - GitHub/Azure DevOps previously
+    had no compact glance card of their own (only the large,
+    full-browser AllRepositoriesCard) - every other integrated area
+    already had this "compact glance card, then full detail below"
+    split; this closes that gap using data the shared hooks above
+    already carry.
+
+Dashboard.jsx reordered: SystemHealthCard -> IntegrationFlowCard ->
+OverviewStats -> DeploymentActivityCard -> AllApplicationsTable ->
+SourceControlSummaryCard -> AllRepositoriesCard/AzureDevOpsCard -> the
+existing per-area cards -> QuickAccessCard.
+
+Verification performed:
+  - npm run lint: 0 new warnings after fixing one real one this round
+    introduced (useSharedCloudInventories.js's useStore effect was
+    missing "store" in its dependency array - added it; the store
+    reference is a stable module-level constant per exported hook, so
+    this was a correct fix, not a suppression).
+  - npm run build: succeeded.
+  - Started the Vite dev server locally and curled it to confirm the
+    app shell serves (200, real HTML/script tags) - did NOT visually
+    render/screenshot the Dashboard itself, since no browser-automation
+    tool is available in this session and there are no real GitHub/AWS/
+    Azure/GCP credentials in this sandboxed environment to populate it
+    meaningfully anyway (most new cards would show their own honest
+    empty/not-connected states regardless). Stated plainly, consistent
+    with this session's standing verification posture for every UI
+    round. Dev server stopped after the smoke test.
+  - git status/reviewed diff before commit - staged only the 19 files
+    this round actually touched, excluding DeploymentAPI.csproj's
+    still-uncommitted Prometheus reference, docker-compose.yml, and
+    other unrelated in-progress files present in the working tree.
+
+Files changed: deployment-ui/src/hooks/useSharedCloudInventories.js
+(new), useGithubDeploymentActivity.js (new), useContainerRegistryStatus.js
+(new), useSonarStatus.js (new), useAzureDevOpsStatus.js (new),
+useObservabilityStatus.js (new); deployment-ui/src/components/dashboard/
+SystemHealthCard.jsx (new), IntegrationFlowCard.jsx (new),
+SourceControlSummaryCard.jsx (new), AwsCloudSection.jsx,
+AzureCloudSection.jsx, GcpCloudSection.jsx, OverviewStats.jsx,
+DeploymentActivityCard.jsx, QuickAccessCard.jsx,
+ContainerRegistrySummaryCard.jsx, CodeQualitySummaryCard.jsx,
+ObservabilitySummaryCard.jsx; deployment-ui/src/pages/Dashboard.jsx.
+Commit: f6a09d0.
+
+Status: Committed and pushed; build-verified locally, not yet confirmed
+live or visually. What used to be up to 4 independent AWS/Azure/GCP
+inventory pollers running in parallel on every Dashboard load is now 1
+shared timer per provider; every remaining one-shot duplicate this
+round found (registries, Sonar, Azure DevOps, GitHub activity,
+observability) is now a single deduped fetch. Every connected
+integration this session has ever built now surfaces in exactly one
+place (SystemHealthCard) with a real, client-measured response time -
+nothing in this round's own new UI is a placeholder or fabricated
+number.
