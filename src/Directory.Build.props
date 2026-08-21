@@ -1,0 +1,38 @@
+<Project>
+
+  <!--
+    Applies to every project under src/ (AdminAPI, DeploymentAPI, PMSCoreAPI,
+    SecurityAPI) via MSBuild's own directory-search convention - no need to
+    touch any individual .csproj. Roslyn's built-in .NET analyzers are on
+    by default in the SDK; this turns them up from their default mode and
+    makes code-style rules (from .editorconfig) actually run at build time
+    instead of only showing up in the IDE.
+
+    Deliberately NOT setting CodeAnalysisTreatWarningsAsErrors here - across
+    4 existing services this would turn an unknown number of newly-surfaced
+    warnings into hard build failures on the next commit, which is a much
+    bigger, separate decision. Ratchet that on later, project by project,
+    once the current warning list from a clean build has actually been
+    triaged.
+  -->
+
+  <PropertyGroup>
+    <EnableNETAnalyzers>true</EnableNETAnalyzers>
+    <AnalysisLevel>latest</AnalysisLevel>
+    <AnalysisMode>Recommended</AnalysisMode>
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!--
+      SonarAnalyzer.CSharp - the same rule set SonarCloud/SonarQube already
+      run against this repo (see the portal's own Code Quality integration),
+      now also running locally at build time via Roslyn instead of only
+      showing up after a separate cloud scan. Analyzer-only reference -
+      PrivateAssets="all" keeps it out of each project's own dependency
+      graph/published output.
+    -->
+    <PackageReference Include="SonarAnalyzer.CSharp" Version="10.*" PrivateAssets="all" />
+  </ItemGroup>
+
+</Project>

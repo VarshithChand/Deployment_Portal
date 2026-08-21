@@ -1,0 +1,57 @@
+root = true
+
+[*]
+charset = utf-8
+end_of_line = crlf
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+[*.cs]
+indent_style = space
+indent_size = 4
+
+# Language conventions
+dotnet_style_qualification_for_field = false:suggestion
+dotnet_style_qualification_for_property = false:suggestion
+dotnet_style_qualification_for_method = false:suggestion
+csharp_style_var_for_built_in_types = true:suggestion
+csharp_style_var_when_type_is_apparent = true:suggestion
+csharp_style_var_elsewhere = true:suggestion
+csharp_style_expression_bodied_methods = when_on_single_line:suggestion
+csharp_style_expression_bodied_properties = true:suggestion
+csharp_prefer_braces = true:suggestion
+dotnet_style_prefer_conditional_expression_over_return = false:silent
+dotnet_style_coalesce_expression = true:suggestion
+dotnet_style_null_propagation = true:suggestion
+
+# Naming conventions - matches existing codebase style: PascalCase for
+# types/members, camelCase parameters/locals, _camelCase private fields
+# (see e.g. Services/ExternalHealthCheckService.cs's own _httpClientFactory).
+dotnet_naming_rule.private_fields_underscore_camel_case.severity = suggestion
+dotnet_naming_rule.private_fields_underscore_camel_case.symbols = private_fields
+dotnet_naming_rule.private_fields_underscore_camel_case.style = underscore_camel_case
+
+dotnet_naming_symbols.private_fields.applicable_kinds = field
+dotnet_naming_symbols.private_fields.applicable_accessibilities = private
+dotnet_naming_symbols.private_fields.required_modifiers = readonly
+
+dotnet_naming_style.underscore_camel_case.capitalization = camel_case
+dotnet_naming_style.underscore_camel_case.required_prefix = _
+
+# A handful of built-in analyzer rules dialed down from "Recommended"
+# mode's default - each is high-noise / low-value against this codebase's
+# own established patterns rather than a real defect signal:
+#   CA1031 - this app's whole DTO contract is "never throw to caller,
+#            report Configured/Error instead" (see every cloud service),
+#            which means broad catch(Exception) at service boundaries is
+#            deliberate, not a bug.
+#   CA2007 - ASP.NET Core apps don't need ConfigureAwait(false) (no
+#            SynchronizationContext to deadlock against), unlike library
+#            code - this rule is meant for libraries, not this codebase.
+#   CA1054/CA1056 - flags string params/properties named "url" for not
+#            being System.Uri; this codebase deliberately keeps
+#            provider URLs as plain strings throughout its DTOs.
+dotnet_diagnostic.CA1031.severity = suggestion
+dotnet_diagnostic.CA2007.severity = none
+dotnet_diagnostic.CA1054.severity = suggestion
+dotnet_diagnostic.CA1056.severity = suggestion
