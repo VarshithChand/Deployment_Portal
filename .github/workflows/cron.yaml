@@ -1,0 +1,28 @@
+name: US East Cron Test
+
+on:
+  schedule:
+    - cron: "30 14 * * *"
+      timezone: "America/New_York"
+
+  workflow_dispatch:
+
+jobs:
+  test-cron:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Show times
+        run: |
+          echo "UTC time:"
+          date -u
+
+          echo "US Eastern time:"
+          TZ=America/New_York date
+
+          echo "India time:"
+          TZ=Asia/Kolkata date
+
+      - name: Run pipeline
+        run: |
+          echo "Pipeline started successfully!"
