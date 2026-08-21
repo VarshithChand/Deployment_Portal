@@ -114,8 +114,9 @@ export default function JfrogLoginSection({ onCleared }) {
                 <form onSubmit={handleSave}>
 
                     <div className="form-group">
-                        <label>Host URL</label>
+                        <label htmlFor="jfrog-host-url">Host URL</label>
                         <ClearableInput
+                            id="jfrog-host-url"
                             placeholder={status?.hostUrl || "https://mycompany.jfrog.io/artifactory"}
                             value={form.hostUrl}
                             onChange={(e) => setForm({ ...form, hostUrl: e.target.value })}
@@ -126,8 +127,9 @@ export default function JfrogLoginSection({ onCleared }) {
                     </div>
 
                     <div className="form-group">
-                        <label>Access Token</label>
+                        <label htmlFor="jfrog-token">Access Token</label>
                         <ClearableInput
+                            id="jfrog-token"
                             type="password"
                             placeholder={status?.configured ? "Leave blank to keep current token" : ""}
                             value={form.token}

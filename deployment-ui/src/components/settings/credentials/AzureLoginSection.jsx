@@ -127,8 +127,9 @@ export default function AzureLoginSection({ onCleared }) {
                 <form onSubmit={handleSave}>
 
                     <div className="form-group">
-                        <label>Tenant ID</label>
+                        <label htmlFor="azure-tenant-id">Tenant ID</label>
                         <ClearableInput
+                            id="azure-tenant-id"
                             placeholder={status?.configured ? "Leave blank to keep current tenant" : ""}
                             value={form.tenantId}
                             onChange={(e) => setForm({ ...form, tenantId: e.target.value })}
@@ -139,8 +140,9 @@ export default function AzureLoginSection({ onCleared }) {
                     </div>
 
                     <div className="form-group">
-                        <label>Client ID</label>
+                        <label htmlFor="azure-client-id">Client ID</label>
                         <ClearableInput
+                            id="azure-client-id"
                             placeholder={status?.configured ? "Leave blank to keep current client ID" : ""}
                             value={form.clientId}
                             onChange={(e) => setForm({ ...form, clientId: e.target.value })}
@@ -151,8 +153,9 @@ export default function AzureLoginSection({ onCleared }) {
                     </div>
 
                     <div className="form-group">
-                        <label>Client Secret</label>
+                        <label htmlFor="azure-client-secret">Client Secret</label>
                         <ClearableInput
+                            id="azure-client-secret"
                             type="password"
                             placeholder={status?.configured ? "Leave blank to keep current secret" : ""}
                             value={form.clientSecret}
@@ -169,8 +172,9 @@ export default function AzureLoginSection({ onCleared }) {
                     </div>
 
                     <div className="form-group">
-                        <label>Subscription ID (optional — for Azure Container Registry)</label>
+                        <label htmlFor="azure-subscription-id">Subscription ID (optional — for Azure Container Registry)</label>
                         <ClearableInput
+                            id="azure-subscription-id"
                             placeholder={status?.subscriptionId ? `Leave blank to keep "${status.subscriptionId}"` : ""}
                             value={form.subscriptionId}
                             onChange={(e) => setForm({ ...form, subscriptionId: e.target.value })}

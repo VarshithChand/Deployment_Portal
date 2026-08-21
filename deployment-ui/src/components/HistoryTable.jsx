@@ -185,7 +185,7 @@ export default function HistoryTable({ runs = [] }) {
                         <th>Conclusion</th>
                         <th>Triggered By</th>
                         <th>Created</th>
-                        <th></th>
+                        <th><span className="visually-hidden">Actions</span></th>
 
                     </tr>
 

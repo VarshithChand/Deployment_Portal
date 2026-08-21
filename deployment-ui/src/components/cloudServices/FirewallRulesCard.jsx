@@ -230,16 +230,16 @@ export default function FirewallRulesCard({ rules, loading, onAdd, onRemove }) {
                                 <div className="cloud-service-firewall-form-grid">
 
                                     <div className="form-group">
-                                        <label>Direction</label>
-                                        <select className="form-control" value={form.direction} onChange={(e) => setField("direction", e.target.value)}>
+                                        <label htmlFor="firewall-rule-direction">Direction</label>
+                                        <select id="firewall-rule-direction" className="form-control" value={form.direction} onChange={(e) => setField("direction", e.target.value)}>
                                             <option value="Inbound">Inbound</option>
                                             <option value="Outbound">Outbound</option>
                                         </select>
                                     </div>
 
                                     <div className="form-group">
-                                        <label>Protocol</label>
-                                        <select className="form-control" value={form.protocol} onChange={(e) => setField("protocol", e.target.value)}>
+                                        <label htmlFor="firewall-rule-protocol">Protocol</label>
+                                        <select id="firewall-rule-protocol" className="form-control" value={form.protocol} onChange={(e) => setField("protocol", e.target.value)}>
                                             <option value="tcp">TCP</option>
                                             <option value="udp">UDP</option>
                                             <option value="icmp">ICMP</option>
@@ -247,8 +247,9 @@ export default function FirewallRulesCard({ rules, loading, onAdd, onRemove }) {
                                     </div>
 
                                     <div className="form-group">
-                                        <label>Port</label>
+                                        <label htmlFor="firewall-rule-from-port">Port</label>
                                         <input
+                                            id="firewall-rule-from-port"
                                             type="number" className="form-control" value={form.fromPort}
                                             onChange={(e) => setField("fromPort", e.target.value)}
                                             placeholder="22" required
@@ -256,8 +257,9 @@ export default function FirewallRulesCard({ rules, loading, onAdd, onRemove }) {
                                     </div>
 
                                     <div className="form-group">
-                                        <label>Port range end (optional)</label>
+                                        <label htmlFor="firewall-rule-to-port">Port range end (optional)</label>
                                         <input
+                                            id="firewall-rule-to-port"
                                             type="number" className="form-control" value={form.toPort}
                                             onChange={(e) => setField("toPort", e.target.value)}
                                             placeholder="Same as port"
@@ -265,8 +267,9 @@ export default function FirewallRulesCard({ rules, loading, onAdd, onRemove }) {
                                     </div>
 
                                     <div className="form-group">
-                                        <label>{form.direction === "Inbound" ? "Source" : "Destination"} (CIDR)</label>
+                                        <label htmlFor="firewall-rule-cidr">{form.direction === "Inbound" ? "Source" : "Destination"} (CIDR)</label>
                                         <input
+                                            id="firewall-rule-cidr"
                                             type="text" className="form-control" value={form.cidr}
                                             onChange={(e) => setField("cidr", e.target.value)}
                                             placeholder="e.g. 203.0.113.4/32 (your IP) - not 0.0.0.0/0 unless you mean it"
@@ -275,8 +278,9 @@ export default function FirewallRulesCard({ rules, loading, onAdd, onRemove }) {
                                     </div>
 
                                     <div className="form-group">
-                                        <label>Description (optional)</label>
+                                        <label htmlFor="firewall-rule-description">Description (optional)</label>
                                         <input
+                                            id="firewall-rule-description"
                                             type="text" className="form-control" value={form.description}
                                             onChange={(e) => setField("description", e.target.value)}
                                         />

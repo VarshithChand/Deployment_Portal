@@ -116,9 +116,9 @@ export default function CloudStatusPanel({
 
                     <p className="empty-state" style={{ textAlign: "left" }}>
                         Connect your own {PROVIDER_LABEL[cloudProvider]} account in{" "}
-                        <a href="#" onClick={(e) => { e.preventDefault(); setTab("settings"); }}>
+                        <button type="button" className="btn-link" style={{ padding: 0 }} onClick={() => setTab("settings")}>
                             Settings → Credentials
-                        </a>
+                        </button>
                         {" "}to see this environment's live status.
                     </p>
 
@@ -311,8 +311,9 @@ export default function CloudStatusPanel({
                 <form onSubmit={handleSaveCredentials}>
 
                     <div className="form-group">
-                        <label>Access Key ID</label>
+                        <label htmlFor="cloudstatus-aws-access-key-id">Access Key ID</label>
                         <input
+                            id="cloudstatus-aws-access-key-id"
                             className="form-control"
                             value={awsForm.accessKeyId}
                             onChange={(e) => setAwsForm({ ...awsForm, accessKeyId: e.target.value })}
@@ -321,8 +322,9 @@ export default function CloudStatusPanel({
                     </div>
 
                     <div className="form-group">
-                        <label>Secret Access Key</label>
+                        <label htmlFor="cloudstatus-aws-secret-access-key">Secret Access Key</label>
                         <input
+                            id="cloudstatus-aws-secret-access-key"
                             type="password"
                             className="form-control"
                             value={awsForm.secretAccessKey}
@@ -332,8 +334,9 @@ export default function CloudStatusPanel({
                     </div>
 
                     <div className="form-group">
-                        <label>Region (used if the environment doesn't set its own)</label>
+                        <label htmlFor="cloudstatus-aws-region">Region (used if the environment doesn't set its own)</label>
                         <input
+                            id="cloudstatus-aws-region"
                             className="form-control"
                             placeholder="us-east-1"
                             value={awsForm.region}
@@ -358,8 +361,9 @@ export default function CloudStatusPanel({
                 <form onSubmit={handleSaveCredentials}>
 
                     <div className="form-group">
-                        <label>Tenant ID</label>
+                        <label htmlFor="cloudstatus-azure-tenant-id">Tenant ID</label>
                         <input
+                            id="cloudstatus-azure-tenant-id"
                             className="form-control"
                             value={azureForm.tenantId}
                             onChange={(e) => setAzureForm({ ...azureForm, tenantId: e.target.value })}
@@ -368,8 +372,9 @@ export default function CloudStatusPanel({
                     </div>
 
                     <div className="form-group">
-                        <label>Client ID</label>
+                        <label htmlFor="cloudstatus-azure-client-id">Client ID</label>
                         <input
+                            id="cloudstatus-azure-client-id"
                             className="form-control"
                             value={azureForm.clientId}
                             onChange={(e) => setAzureForm({ ...azureForm, clientId: e.target.value })}
@@ -378,8 +383,9 @@ export default function CloudStatusPanel({
                     </div>
 
                     <div className="form-group">
-                        <label>Client Secret</label>
+                        <label htmlFor="cloudstatus-azure-client-secret">Client Secret</label>
                         <input
+                            id="cloudstatus-azure-client-secret"
                             type="password"
                             className="form-control"
                             value={azureForm.clientSecret}

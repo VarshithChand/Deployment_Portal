@@ -118,8 +118,9 @@ export default function GitLabRegistryLoginSection({ onCleared }) {
                 <form onSubmit={handleSave}>
 
                     <div className="form-group">
-                        <label>Host URL</label>
+                        <label htmlFor="gitlab-host-url">Host URL</label>
                         <ClearableInput
+                            id="gitlab-host-url"
                             placeholder={status?.hostUrl || DEFAULT_HOST}
                             value={form.hostUrl}
                             onChange={(e) => setForm({ ...form, hostUrl: e.target.value })}
@@ -130,8 +131,9 @@ export default function GitLabRegistryLoginSection({ onCleared }) {
                     </div>
 
                     <div className="form-group">
-                        <label>Project ID or path</label>
+                        <label htmlFor="gitlab-project-id">Project ID or path</label>
                         <ClearableInput
+                            id="gitlab-project-id"
                             placeholder={status?.configured ? `Leave blank to keep "${status.projectId}"` : "e.g. 12345 or mygroup/myproject"}
                             value={form.projectId}
                             onChange={(e) => setForm({ ...form, projectId: e.target.value })}
@@ -142,8 +144,9 @@ export default function GitLabRegistryLoginSection({ onCleared }) {
                     </div>
 
                     <div className="form-group">
-                        <label>Personal Access Token</label>
+                        <label htmlFor="gitlab-token">Personal Access Token</label>
                         <ClearableInput
+                            id="gitlab-token"
                             type="password"
                             placeholder={status?.configured ? "Leave blank to keep current token" : ""}
                             value={form.token}

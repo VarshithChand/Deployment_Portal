@@ -123,8 +123,9 @@ export default function PaasLoginSection({ provider, label, hasAccountId = false
                 <form onSubmit={handleSave}>
 
                     <div className="form-group">
-                        <label>API Token</label>
+                        <label htmlFor={`${label}-token`}>API Token</label>
                         <ClearableInput
+                            id={`${label}-token`}
                             type="password"
                             placeholder={status?.configured ? "Leave blank to keep current token" : ""}
                             value={form.token}
@@ -137,8 +138,9 @@ export default function PaasLoginSection({ provider, label, hasAccountId = false
                     {hasAccountId && (
 
                         <div className="form-group">
-                            <label>Account ID</label>
+                            <label htmlFor={`${label}-account-id`}>Account ID</label>
                             <ClearableInput
+                                id={`${label}-account-id`}
                                 placeholder={status?.configured ? "Leave blank to keep current Account ID" : ""}
                                 value={form.accountId}
                                 onChange={(e) => setForm({ ...form, accountId: e.target.value })}

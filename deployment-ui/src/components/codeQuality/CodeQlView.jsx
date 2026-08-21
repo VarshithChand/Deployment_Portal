@@ -135,7 +135,7 @@ export default function CodeQlView() {
                                     <th>Rule</th>
                                     <th>File</th>
                                     <th>Found</th>
-                                    <th></th>
+                                    <th><span className="visually-hidden">Actions</span></th>
                                 </tr>
                             </thead>
 

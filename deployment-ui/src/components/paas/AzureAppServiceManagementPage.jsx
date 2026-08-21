@@ -158,13 +158,13 @@ export default function AzureAppServiceManagementPage() {
                     <strong>{checked.size} app(s) selected</strong>
 
                     <div className="form-group" style={{ margin: 0 }}>
-                        <label style={{ fontSize: "12px" }}>Source slot</label>
-                        <input type="text" className="form-control" style={{ width: "120px" }} value={sourceSlot} onChange={(e) => setSourceSlot(e.target.value)} />
+                        <label htmlFor="appservice-bulk-source-slot" style={{ fontSize: "12px" }}>Source slot</label>
+                        <input id="appservice-bulk-source-slot" type="text" className="form-control" style={{ width: "120px" }} value={sourceSlot} onChange={(e) => setSourceSlot(e.target.value)} />
                     </div>
 
                     <div className="form-group" style={{ margin: 0 }}>
-                        <label style={{ fontSize: "12px" }}>Target slot</label>
-                        <input type="text" className="form-control" style={{ width: "120px" }} value={targetSlot} onChange={(e) => setTargetSlot(e.target.value)} />
+                        <label htmlFor="appservice-bulk-target-slot" style={{ fontSize: "12px" }}>Target slot</label>
+                        <input id="appservice-bulk-target-slot" type="text" className="form-control" style={{ width: "120px" }} value={targetSlot} onChange={(e) => setTargetSlot(e.target.value)} />
                     </div>
 
                     <button type="button" className="btn btn-sm btn-primary" disabled={!sourceSlot || !targetSlot} onClick={() => setConfirmOpen(true)}>
@@ -213,7 +213,7 @@ export default function AzureAppServiceManagementPage() {
 
                             <thead>
                                 <tr>
-                                    <th></th>
+                                    <th><span className="visually-hidden">Select</span></th>
                                     <th>Name</th>
                                     <th>Resource Group</th>
                                     <th>Location</th>
@@ -228,7 +228,7 @@ export default function AzureAppServiceManagementPage() {
 
                                     <tr key={`${a.resourceGroup}/${a.name}`}>
                                         <td onClick={(e) => e.stopPropagation()}>
-                                            <input type="checkbox" checked={checked.has(a.name)} onChange={() => toggleChecked(a.name)} />
+                                            <input type="checkbox" aria-label={`Select ${a.name}`} checked={checked.has(a.name)} onChange={() => toggleChecked(a.name)} />
                                         </td>
                                         <td className="table-row-clickable" onClick={() => setSelected(a)}>{a.name}</td>
                                         <td>{a.resourceGroup}</td>

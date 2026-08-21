@@ -2968,6 +2968,32 @@ textarea{
 
 }
 
+/* Standard "sr-only" technique - present for screen readers/assistive
+   tech (unlike display:none, which removes it from the accessibility
+   tree too) but takes no visual space. Used for fieldset legends and
+   similar labels a sighted user already gets from surrounding context. */
+.visually-hidden{
+
+    position:absolute;
+
+    width:1px;
+
+    height:1px;
+
+    padding:0;
+
+    margin:-1px;
+
+    overflow:hidden;
+
+    clip:rect(0,0,0,0);
+
+    white-space:nowrap;
+
+    border:0;
+
+}
+
 .field-hint-good{
 
     color:var(--viz-good);

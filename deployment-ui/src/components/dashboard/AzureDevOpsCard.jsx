@@ -129,7 +129,7 @@ export default function AzureDevOpsCard() {
                     <thead>
                         <tr>
                             <th>Project</th>
-                            <th></th>
+                            <th><span className="visually-hidden">Actions</span></th>
                         </tr>
                     </thead>
 

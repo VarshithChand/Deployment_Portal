@@ -65,7 +65,7 @@ export default function ObservabilityHostView({ provider, label }) {
 
                 <p className="empty-state" style={{ textAlign: "left" }}>
                     Connect {label} in{" "}
-                    <a href="#" onClick={(e) => { e.preventDefault(); setTab("settings"); }}>Settings → Credentials → Observability</a>
+                    <button type="button" className="btn-link" style={{ padding: 0 }} onClick={() => setTab("settings")}>Settings → Credentials → Observability</button>
                     {" "}to see its connection status here.
                 </p>
 

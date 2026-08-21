@@ -64,9 +64,9 @@ export default function PaasHosting() {
                         This page is restricted to a single administrator account. Your own
                         connected Render/Cloudflare/Netlify/Vercel accounts are still available
                         under{" "}
-                        <a href="#" onClick={(e) => { e.preventDefault(); setTab("settings"); }}>
+                        <button type="button" className="btn-link" style={{ padding: 0 }} onClick={() => setTab("settings")}>
                             Settings → Credentials
-                        </a>.
+                        </button>.
                     </p>
 
                 </div>

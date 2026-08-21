@@ -124,8 +124,9 @@ export default function GcpLoginSection({ onCleared }) {
                 <form onSubmit={handleSave}>
 
                     <div className="form-group">
-                        <label>Project ID</label>
+                        <label htmlFor="gcp-project-id">Project ID</label>
                         <ClearableInput
+                            id="gcp-project-id"
                             placeholder={status?.projectId ? `Leave blank to keep "${status.projectId}"` : "my-gcp-project"}
                             value={form.projectId}
                             onChange={(e) => setForm({ ...form, projectId: e.target.value })}
@@ -136,7 +137,7 @@ export default function GcpLoginSection({ onCleared }) {
                     </div>
 
                     <div className="form-group">
-                        <label>
+                        <label htmlFor="gcp-service-account-key">
                             Service Account Key (JSON)
                             {" "}
                             {status?.configured && (
@@ -144,6 +145,7 @@ export default function GcpLoginSection({ onCleared }) {
                             )}
                         </label>
                         <textarea
+                            id="gcp-service-account-key"
                             className="form-control"
                             rows={6}
                             placeholder={status?.configured ? "Leave blank to keep the current key" : '{ "type": "service_account", ... }'}
@@ -155,8 +157,9 @@ export default function GcpLoginSection({ onCleared }) {
                     </div>
 
                     <div className="form-group">
-                        <label>Location (for Artifact Registry)</label>
+                        <label htmlFor="gcp-location">Location (for Artifact Registry)</label>
                         <ClearableInput
+                            id="gcp-location"
                             placeholder={status?.location ? `Leave blank to keep "${status.location}"` : "us-central1"}
                             value={form.location}
                             onChange={(e) => setForm({ ...form, location: e.target.value })}

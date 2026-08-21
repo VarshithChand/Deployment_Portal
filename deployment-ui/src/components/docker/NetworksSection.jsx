@@ -65,7 +65,7 @@ export default function NetworksSection({
                         <th>Name</th>
                         <th>Driver</th>
                         <th>Scope</th>
-                        <th></th>
+                        <th><span className="visually-hidden">Actions</span></th>
                     </tr>
                 </thead>
 

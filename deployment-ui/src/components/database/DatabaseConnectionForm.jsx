@@ -277,9 +277,10 @@ export default function DatabaseConnectionForm({
 
                             <div className="form-group">
 
-                                <label>Render Database</label>
+                                <label htmlFor="render-database">Render Database</label>
 
                                 <select
+                                    id="render-database"
                                     className="form-control"
                                     value={selectedRenderDb}
                                     onChange={(e) => setSelectedRenderDb(e.target.value)}
@@ -347,8 +348,9 @@ export default function DatabaseConnectionForm({
                         <form onSubmit={handleSaveFields}>
 
                             <div className="form-group">
-                                <label>Provider Name</label>
+                                <label htmlFor="db-fields-provider-label">Provider Name</label>
                                 <ClearableInput
+                                    id="db-fields-provider-label"
                                     placeholder="e.g. CSP, AWS RDS, Supabase, Neon..."
                                     value={fields.providerLabel}
                                     onChange={(e) => setFields({ ...fields, providerLabel: e.target.value })}
@@ -358,8 +360,9 @@ export default function DatabaseConnectionForm({
                             </div>
 
                             <div className="form-group">
-                                <label>Hostname</label>
+                                <label htmlFor="db-fields-host">Hostname</label>
                                 <ClearableInput
+                                    id="db-fields-host"
                                     placeholder="dpg-xxxxxxxxxxxxxxxxxxxx-a"
                                     value={fields.host}
                                     onChange={(e) => setFields({ ...fields, host: e.target.value })}
@@ -369,8 +372,9 @@ export default function DatabaseConnectionForm({
                             </div>
 
                             <div className="form-group">
-                                <label>Port</label>
+                                <label htmlFor="db-fields-port">Port</label>
                                 <ClearableInput
+                                    id="db-fields-port"
                                     placeholder="5432"
                                     value={fields.port}
                                     onChange={(e) => setFields({ ...fields, port: e.target.value.replace(/\D/g, "") })}
@@ -380,8 +384,9 @@ export default function DatabaseConnectionForm({
                             </div>
 
                             <div className="form-group">
-                                <label>Database</label>
+                                <label htmlFor="db-fields-database">Database</label>
                                 <ClearableInput
+                                    id="db-fields-database"
                                     value={fields.database}
                                     onChange={(e) => setFields({ ...fields, database: e.target.value })}
                                     onClear={() => setFields({ ...fields, database: "" })}
@@ -390,8 +395,9 @@ export default function DatabaseConnectionForm({
                             </div>
 
                             <div className="form-group">
-                                <label>Username</label>
+                                <label htmlFor="db-fields-username">Username</label>
                                 <ClearableInput
+                                    id="db-fields-username"
                                     value={fields.username}
                                     onChange={(e) => setFields({ ...fields, username: e.target.value })}
                                     onClear={() => setFields({ ...fields, username: "" })}
@@ -400,8 +406,9 @@ export default function DatabaseConnectionForm({
                             </div>
 
                             <div className="form-group">
-                                <label>Password</label>
+                                <label htmlFor="db-fields-password">Password</label>
                                 <ClearableInput
+                                    id="db-fields-password"
                                     type="password"
                                     value={fields.password}
                                     onChange={(e) => setFields({ ...fields, password: e.target.value })}
@@ -431,8 +438,9 @@ export default function DatabaseConnectionForm({
                         <form onSubmit={handleSaveManual}>
 
                             <div className="form-group">
-                                <label>Provider Name</label>
+                                <label htmlFor="db-string-provider-label">Provider Name</label>
                                 <ClearableInput
+                                    id="db-string-provider-label"
                                     placeholder="e.g. CSP, AWS RDS, Supabase, Neon..."
                                     value={form.providerLabel}
                                     onChange={(e) => setForm({ ...form, providerLabel: e.target.value })}
@@ -442,8 +450,9 @@ export default function DatabaseConnectionForm({
                             </div>
 
                             <div className="form-group">
-                                <label>Connection String</label>
+                                <label htmlFor="db-connection-string">Connection String</label>
                                 <ClearableInput
+                                    id="db-connection-string"
                                     type="password"
                                     placeholder={status?.configured ? "Leave blank to keep current connection string" : "postgresql://user:password@host:5432/dbname"}
                                     value={form.connectionString}

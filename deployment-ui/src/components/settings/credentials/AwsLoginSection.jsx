@@ -43,8 +43,9 @@ function AwsAccessKeyForm({ form, setForm, status, saving, missingSerialForCode,
         <form onSubmit={onSave} style={{ marginTop: "16px" }}>
 
             <div className="form-group">
-                <label>Access Key ID</label>
+                <label htmlFor="aws-access-key-id">Access Key ID</label>
                 <ClearableInput
+                    id="aws-access-key-id"
                     placeholder={status?.configured ? "Leave blank to keep current key" : ""}
                     value={form.accessKeyId}
                     onChange={(e) => setForm({ ...form, accessKeyId: e.target.value })}
@@ -55,8 +56,9 @@ function AwsAccessKeyForm({ form, setForm, status, saving, missingSerialForCode,
             </div>
 
             <div className="form-group">
-                <label>Secret Access Key</label>
+                <label htmlFor="aws-secret-access-key">Secret Access Key</label>
                 <ClearableInput
+                    id="aws-secret-access-key"
                     type="password"
                     placeholder={status?.configured ? "Leave blank to keep current secret" : ""}
                     value={form.secretAccessKey}
@@ -67,8 +69,9 @@ function AwsAccessKeyForm({ form, setForm, status, saving, missingSerialForCode,
             </div>
 
             <div className="form-group">
-                <label>Region</label>
+                <label htmlFor="aws-region">Region</label>
                 <ComboBox
+                    id="aws-region"
                     options={AWS_REGIONS}
                     value={form.region}
                     onChange={(region) => setForm({ ...form, region })}
@@ -77,7 +80,7 @@ function AwsAccessKeyForm({ form, setForm, status, saving, missingSerialForCode,
             </div>
 
             <div className="form-group">
-                <label>
+                <label htmlFor="aws-mfa-serial">
                     MFA Serial Number (ARN)
                     {" "}
                     <a
@@ -90,6 +93,7 @@ function AwsAccessKeyForm({ form, setForm, status, saving, missingSerialForCode,
                     </a>
                 </label>
                 <ClearableInput
+                    id="aws-mfa-serial"
                     placeholder="arn:aws:iam::123456789012:mfa/your-username"
                     value={form.mfaSerialNumber}
                     onChange={(e) => setForm({ ...form, mfaSerialNumber: e.target.value })}
@@ -100,8 +104,9 @@ function AwsAccessKeyForm({ form, setForm, status, saving, missingSerialForCode,
             </div>
 
             <div className="form-group">
-                <label>MFA Code (6 digits)</label>
+                <label htmlFor="aws-mfa-code">MFA Code (6 digits)</label>
                 <ClearableInput
+                    id="aws-mfa-code"
                     placeholder="123456"
                     inputMode="numeric"
                     maxLength={6}

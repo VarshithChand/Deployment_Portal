@@ -393,8 +393,9 @@ export default function TemplateTester() {
                     </p>
 
                     <div className="form-group">
-                        <label>Branch</label>
+                        <label htmlFor="template-tester-branch">Branch</label>
                         <input
+                            id="template-tester-branch"
                             className="form-control"
                             value={paramDialog.values.branch}
                             onChange={(e) => updateParamValue("branch", e.target.value)}

@@ -57,7 +57,7 @@ export default function SidebarAccessView({
                             <th>PAT Owner</th>
                             <th>Repository</th>
                             <th>Restricted</th>
-                            <th></th>
+                            <th><span className="visually-hidden">Actions</span></th>
                         </tr>
                     </thead>
 

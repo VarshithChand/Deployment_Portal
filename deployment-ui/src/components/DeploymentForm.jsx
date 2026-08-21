@@ -616,10 +616,11 @@ export default function DeploymentForm({
 
             <div className="form-group" key={input.name}>
 
-                <label>Docker Image</label>
+                <label htmlFor={`docker-image-${input.name}`}>Docker Image</label>
 
                 <ClearableInput
 
+                    id={`docker-image-${input.name}`}
                     placeholder="registry/repository:tag"
 
                     value={inputValues[input.name] ?? ""}
@@ -750,9 +751,9 @@ export default function DeploymentForm({
 
                         You're browsing in public view. Triggering a deployment needs a GitHub
                         Personal Access Token —{" "}
-                        <a href="#" onClick={(e) => { e.preventDefault(); setTab("settings"); }}>
+                        <button type="button" className="btn-link" style={{ padding: 0 }} onClick={() => setTab("settings")}>
                             add one in Settings
-                        </a>.
+                        </button>.
 
                     </div>
 
@@ -762,9 +763,9 @@ export default function DeploymentForm({
                     CI / CD Mode
                 =========================== */}
 
-                <div className="form-group">
+                <fieldset className="form-group" style={{ border: "none", padding: 0, margin: 0 }}>
 
-                    <label>Mode</label>
+                    <legend className="field-hint" style={{ padding: 0, marginBottom: "6px" }}>Mode</legend>
 
                     <div className="mode-toggle">
 
@@ -794,7 +795,7 @@ export default function DeploymentForm({
 
                     </div>
 
-                </div>
+                </fieldset>
 
                 {/* ==========================
                     Branch
@@ -802,10 +803,11 @@ export default function DeploymentForm({
 
                 <div className="form-group">
 
-                    <label>Branch</label>
+                    <label htmlFor="deployment-form-branch">Branch</label>
 
                     <ComboBox
 
+                        id="deployment-form-branch"
                         options={branches.map((item) => ({ value: item.name, label: item.name }))}
                         value={branch}
                         onChange={setBranch}
@@ -822,7 +824,7 @@ export default function DeploymentForm({
 
                 <div className="form-group">
 
-                    <label>Workflow</label>
+                    <label htmlFor="deployment-form-workflow">Workflow</label>
 
                     <p className="field-hint">
 
@@ -844,6 +846,7 @@ export default function DeploymentForm({
 
                     <ComboBox
 
+                        id="deployment-form-workflow"
                         options={modeWorkflows.map((item) => ({ value: item.path, label: item.name }))}
                         value={workflow}
                         onChange={setWorkflow}
@@ -902,13 +905,13 @@ export default function DeploymentForm({
 
                         {!workflowInputsLoading && clusterInputs.length > 0 && (
 
-                            <div className="form-group">
+                            <fieldset className="form-group" style={{ border: "none", padding: 0, margin: 0 }}>
 
-                                <label>Clusters</label>
+                                <legend className="field-hint" style={{ padding: 0, marginBottom: "6px" }}>Clusters</legend>
 
                                 {clusterInputs.map((input) => renderClusterInput(input))}
 
-                            </div>
+                            </fieldset>
 
                         )}
 

@@ -419,11 +419,12 @@ export default function BranchManager() {
 
                                     <div className="form-group">
 
-                                        <label>Purpose</label>
+                                        <label htmlFor={`branch-purpose-${b.name}`}>Purpose</label>
 
                                         <div className="access-invite-controls">
 
                                             <input
+                                                id={`branch-purpose-${b.name}`}
                                                 type="text"
                                                 className="form-control"
                                                 placeholder="What is this branch for?"
@@ -444,9 +445,9 @@ export default function BranchManager() {
 
                                     </div>
 
-                                    <div className="form-group">
+                                    <fieldset className="form-group" style={{ border: "none", padding: 0, margin: 0 }}>
 
-                                        <label>Assign users — restrict who can push</label>
+                                        <legend className="field-hint" style={{ padding: 0, marginBottom: "6px" }}>Assign users — restrict who can push</legend>
 
                                         {collaborators.length === 0 ? (
 
@@ -501,7 +502,7 @@ export default function BranchManager() {
 
                                         </div>
 
-                                    </div>
+                                    </fieldset>
 
                                 </div>
 

@@ -129,8 +129,9 @@ export default function XRay() {
                 {overview?.configured && (
 
                     <div className="form-group cloud-provider-select-group">
-                        <label>Region</label>
+                        <label htmlFor="xray-region">Region</label>
                         <ComboBox
+                            id="xray-region"
                             options={AWS_REGIONS}
                             value={selectedRegion || overview.region || ""}
                             onChange={handleRegionChange}

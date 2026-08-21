@@ -217,13 +217,13 @@ export default function AzureContainerAppDetailPage({ resourceGroup, name, onBac
                 <div className="cloud-service-firewall-form-grid">
 
                     <div className="form-group">
-                        <label>Minimum Replicas</label>
-                        <input type="number" min="0" className="form-control" value={minReplicas} onChange={(e) => setMinReplicas(e.target.value)} />
+                        <label htmlFor="container-app-min-replicas">Minimum Replicas</label>
+                        <input id="container-app-min-replicas" type="number" min="0" className="form-control" value={minReplicas} onChange={(e) => setMinReplicas(e.target.value)} />
                     </div>
 
                     <div className="form-group">
-                        <label>Maximum Replicas</label>
-                        <input type="number" min="1" className="form-control" value={maxReplicas} onChange={(e) => setMaxReplicas(e.target.value)} />
+                        <label htmlFor="container-app-max-replicas">Maximum Replicas</label>
+                        <input id="container-app-max-replicas" type="number" min="1" className="form-control" value={maxReplicas} onChange={(e) => setMaxReplicas(e.target.value)} />
                     </div>
 
                 </div>

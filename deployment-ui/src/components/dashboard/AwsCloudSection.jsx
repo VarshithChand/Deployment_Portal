@@ -163,9 +163,10 @@ export default function AwsCloudSection() {
 
             <div className="form-group cloud-provider-select-group">
 
-                <label>Region</label>
+                <label htmlFor="aws-dashboard-region">Region</label>
 
                 <ComboBox
+                    id="aws-dashboard-region"
                     options={AWS_REGIONS}
                     value={selectedRegion || inventory.region || ""}
                     onChange={handleRegionChange}

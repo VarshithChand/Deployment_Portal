@@ -53,7 +53,7 @@ export default function VolumesSection({
                         <th>Name</th>
                         <th>Driver</th>
                         <th>Mountpoint</th>
-                        <th></th>
+                        <th><span className="visually-hidden">Actions</span></th>
                     </tr>
                 </thead>
 

@@ -117,8 +117,9 @@ export default function CloudWatch() {
                 {overview?.configured && (
 
                     <div className="form-group cloud-provider-select-group">
-                        <label>Region</label>
+                        <label htmlFor="cloudwatch-region">Region</label>
                         <ComboBox
+                            id="cloudwatch-region"
                             options={AWS_REGIONS}
                             value={selectedRegion || overview.region || ""}
                             onChange={handleRegionChange}

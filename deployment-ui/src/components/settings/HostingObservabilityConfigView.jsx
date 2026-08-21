@@ -101,8 +101,9 @@ function ProviderCredentialSection({ provider, label, hasAccountId, status, onSa
             <form onSubmit={handleSave}>
 
                 <div className="form-group">
-                    <label>API Token</label>
+                    <label htmlFor={`${label}-hosting-token`}>API Token</label>
                     <ClearableInput
+                        id={`${label}-hosting-token`}
                         type="password"
                         placeholder={configured ? "Leave blank to keep current token" : ""}
                         value={form.token}
@@ -115,8 +116,9 @@ function ProviderCredentialSection({ provider, label, hasAccountId, status, onSa
                 {hasAccountId && (
 
                     <div className="form-group">
-                        <label>Account ID</label>
+                        <label htmlFor={`${label}-hosting-account-id`}>Account ID</label>
                         <ClearableInput
+                            id={`${label}-hosting-account-id`}
                             placeholder={configured ? "Leave blank to keep current Account ID" : ""}
                             value={form.accountId}
                             onChange={(e) => setForm({ ...form, accountId: e.target.value })}
@@ -170,9 +172,9 @@ function TargetRoleFields({ label, hint, provider, serviceId, onProviderChange, 
 
             <div className="form-group">
 
-                <label>Provider</label>
+                <label htmlFor={`${label}-target-provider`}>Provider</label>
 
-                <select className="form-control" value={provider || ""} onChange={(e) => onProviderChange(e.target.value)}>
+                <select id={`${label}-target-provider`} className="form-control" value={provider || ""} onChange={(e) => onProviderChange(e.target.value)}>
                     {allowEmpty && <option value="">Not configured</option>}
                     {PROVIDERS.map((p) => <option key={p.key} value={p.key}>{p.label}</option>)}
                 </select>
@@ -183,11 +185,11 @@ function TargetRoleFields({ label, hint, provider, serviceId, onProviderChange, 
 
                 <div className="form-group">
 
-                    <label>Service</label>
+                    <label htmlFor={`${label}-target-service`}>Service</label>
 
                     {hasLiveList ? (
 
-                        <select className="form-control" value={serviceId || ""} onChange={(e) => onServiceIdChange(e.target.value)}>
+                        <select id={`${label}-target-service`} className="form-control" value={serviceId || ""} onChange={(e) => onServiceIdChange(e.target.value)}>
                             <option value="">Select a service…</option>
                             {status.services.map((s) => (
                                 <option key={s.id || s.name} value={s.id || s.name}>{s.name}</option>

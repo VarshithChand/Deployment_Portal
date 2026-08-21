@@ -181,7 +181,7 @@ export default function AzureDevOpsPullRequestsView() {
             <div className="card">
                 <p className="empty-state" style={{ textAlign: "left" }}>
                     Pick an Azure DevOps project on the{" "}
-                    <a href="#" onClick={(e) => { e.preventDefault(); setTab("dashboard"); }}>Dashboard</a>
+                    <button type="button" className="btn-link" style={{ padding: 0 }} onClick={() => setTab("dashboard")}>Dashboard</button>
                     {" "}first.
                 </p>
             </div>
@@ -203,7 +203,7 @@ export default function AzureDevOpsPullRequestsView() {
                     <button type="button" className="btn btn-secondary btn-sm" onClick={() => loadPullRequests(project)}>
                         Refresh
                     </button>
-                    <a href="#" onClick={(e) => { e.preventDefault(); setTab("dashboard"); }}>Change project</a>
+                    <button type="button" className="btn-link" style={{ padding: 0 }} onClick={() => setTab("dashboard")}>Change project</button>
                 </div>
             </div>
 
@@ -240,7 +240,7 @@ export default function AzureDevOpsPullRequestsView() {
                                     <th>Branches</th>
                                     <th>Created By</th>
                                     <th>Status</th>
-                                    <th></th>
+                                    <th><span className="visually-hidden">Actions</span></th>
                                 </tr>
                             </thead>
 

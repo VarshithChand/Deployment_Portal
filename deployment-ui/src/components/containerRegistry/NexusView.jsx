@@ -232,7 +232,7 @@ export default function NexusView() {
             <div className="card">
                 <p className="empty-state" style={{ textAlign: "left" }}>
                     Connect your Nexus credentials in{" "}
-                    <a href="#" onClick={(e) => { e.preventDefault(); setTab("settings"); }}>Settings → Credentials → Nexus</a>
+                    <button type="button" className="btn-link" style={{ padding: 0 }} onClick={() => setTab("settings")}>Settings → Credentials → Nexus</button>
                     {" "}to browse this.
                 </p>
             </div>

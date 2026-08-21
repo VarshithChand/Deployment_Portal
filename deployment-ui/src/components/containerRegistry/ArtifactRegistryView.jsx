@@ -143,7 +143,7 @@ export default function ArtifactRegistryView() {
             <div className="card">
                 <p className="empty-state" style={{ textAlign: "left" }}>
                     Connect your GCP credentials (including a Location) in{" "}
-                    <a href="#" onClick={(e) => { e.preventDefault(); setTab("settings"); }}>Settings → Credentials → GCP</a>
+                    <button type="button" className="btn-link" style={{ padding: 0 }} onClick={() => setTab("settings")}>Settings → Credentials → GCP</button>
                     {" "}to browse Artifact Registry.
                 </p>
             </div>

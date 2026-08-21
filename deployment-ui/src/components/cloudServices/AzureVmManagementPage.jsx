@@ -86,8 +86,9 @@ function CreateVmDialog({ open, catalog, creating, onCreate, onClose }) {
                 <form onSubmit={handleSubmit}>
 
                     <div className="form-group">
-                        <label>Resource Group</label>
+                        <label htmlFor="azure-vm-resource-group">Resource Group</label>
                         <input
+                            id="azure-vm-resource-group"
                             type="text" className="form-control" value={form.resourceGroup}
                             onChange={(e) => setField("resourceGroup", e.target.value)}
                             placeholder="my-resource-group" required autoComplete="off"
@@ -96,8 +97,9 @@ function CreateVmDialog({ open, catalog, creating, onCreate, onClose }) {
                     </div>
 
                     <div className="form-group">
-                        <label>VM Name</label>
+                        <label htmlFor="azure-vm-name">VM Name</label>
                         <input
+                            id="azure-vm-name"
                             type="text" className="form-control" value={form.name}
                             onChange={(e) => setField("name", e.target.value)}
                             placeholder="my-vm" required autoComplete="off"
@@ -105,8 +107,9 @@ function CreateVmDialog({ open, catalog, creating, onCreate, onClose }) {
                     </div>
 
                     <div className="form-group">
-                        <label>Location</label>
+                        <label htmlFor="azure-vm-location">Location</label>
                         <ComboBox
+                            id="azure-vm-location"
                             options={AZURE_REGIONS}
                             value={form.location}
                             onChange={(v) => setField("location", v)}
@@ -115,8 +118,9 @@ function CreateVmDialog({ open, catalog, creating, onCreate, onClose }) {
                     </div>
 
                     <div className="form-group">
-                        <label>Size</label>
+                        <label htmlFor="azure-vm-size">Size</label>
                         <ComboBox
+                            id="azure-vm-size"
                             options={catalog?.sizes || []}
                             value={form.size}
                             onChange={(v) => setField("size", v)}
@@ -125,8 +129,9 @@ function CreateVmDialog({ open, catalog, creating, onCreate, onClose }) {
                     </div>
 
                     <div className="form-group">
-                        <label>Image</label>
+                        <label htmlFor="azure-vm-image">Image</label>
                         <ComboBox
+                            id="azure-vm-image"
                             options={catalog?.images || []}
                             value={form.image}
                             onChange={(v) => setField("image", v)}
@@ -135,8 +140,9 @@ function CreateVmDialog({ open, catalog, creating, onCreate, onClose }) {
                     </div>
 
                     <div className="form-group">
-                        <label>Admin Username</label>
+                        <label htmlFor="azure-vm-admin-username">Admin Username</label>
                         <input
+                            id="azure-vm-admin-username"
                             type="text" className="form-control" value={form.adminUsername}
                             onChange={(e) => setField("adminUsername", e.target.value)}
                             required autoComplete="off"
@@ -144,8 +150,9 @@ function CreateVmDialog({ open, catalog, creating, onCreate, onClose }) {
                     </div>
 
                     <div className="form-group">
-                        <label>Admin Password{isWindows ? "" : " (or use an SSH key below)"}</label>
+                        <label htmlFor="azure-vm-admin-password">Admin Password{isWindows ? "" : " (or use an SSH key below)"}</label>
                         <input
+                            id="azure-vm-admin-password"
                             type="password" className="form-control" value={form.adminPassword}
                             onChange={(e) => setField("adminPassword", e.target.value)}
                             autoComplete="new-password"
@@ -158,8 +165,9 @@ function CreateVmDialog({ open, catalog, creating, onCreate, onClose }) {
                     {!isWindows && (
 
                         <div className="form-group">
-                            <label>SSH Public Key (optional)</label>
+                            <label htmlFor="azure-vm-ssh-public-key">SSH Public Key (optional)</label>
                             <textarea
+                                id="azure-vm-ssh-public-key"
                                 className="form-control" rows={3} value={form.sshPublicKey}
                                 onChange={(e) => setField("sshPublicKey", e.target.value)}
                                 placeholder="ssh-ed25519 AAAA..."

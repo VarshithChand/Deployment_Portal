@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 // the input, instead of pairing a separate search box with a plain <select>.
 export default function ComboBox({
 
+    id,
     options,
     value,
     onChange,
@@ -85,6 +86,7 @@ export default function ComboBox({
             <div className="clearable-input-wrap">
 
                 <input
+                    id={id}
                     type="text"
                     className="form-control"
                     placeholder={placeholder}

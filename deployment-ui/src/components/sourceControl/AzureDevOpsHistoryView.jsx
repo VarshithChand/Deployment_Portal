@@ -104,7 +104,7 @@ export default function AzureDevOpsHistoryView() {
             <div className="card">
                 <p className="empty-state" style={{ textAlign: "left" }}>
                     Pick an Azure DevOps project on the{" "}
-                    <a href="#" onClick={(e) => { e.preventDefault(); setTab("dashboard"); }}>Dashboard</a>
+                    <button type="button" className="btn-link" style={{ padding: 0 }} onClick={() => setTab("dashboard")}>Dashboard</button>
                     {" "}first.
                 </p>
             </div>
@@ -122,7 +122,7 @@ export default function AzureDevOpsHistoryView() {
                     <button type="button" className="btn btn-secondary btn-sm" onClick={() => loadHistory(project)}>
                         Refresh
                     </button>
-                    <a href="#" onClick={(e) => { e.preventDefault(); setTab("dashboard"); }}>Change project</a>
+                    <button type="button" className="btn-link" style={{ padding: 0 }} onClick={() => setTab("dashboard")}>Change project</button>
                 </div>
             </div>
 

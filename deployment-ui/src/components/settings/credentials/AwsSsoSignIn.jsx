@@ -182,8 +182,9 @@ export default function AwsSsoSignIn({ onConnected }) {
                 <>
 
                 <div className="form-group">
-                    <label>AWS SSO Start URL</label>
+                    <label htmlFor="aws-sso-start-url">AWS SSO Start URL</label>
                     <ClearableInput
+                        id="aws-sso-start-url"
                         placeholder="https://your-company.awsapps.com/start"
                         value={startUrl}
                         onChange={(e) => setStartUrl(e.target.value)}
@@ -194,8 +195,9 @@ export default function AwsSsoSignIn({ onConnected }) {
                 </div>
 
                 <div className="form-group">
-                    <label>SSO Region</label>
+                    <label htmlFor="aws-sso-region">SSO Region</label>
                     <ClearableInput
+                        id="aws-sso-region"
                         placeholder="us-east-1"
                         value={ssoRegion}
                         onChange={(e) => setSsoRegion(e.target.value)}
@@ -243,8 +245,9 @@ export default function AwsSsoSignIn({ onConnected }) {
                 <>
 
                 <div className="form-group">
-                    <label>AWS Account</label>
+                    <label htmlFor="aws-sso-account">AWS Account</label>
                     <select
+                        id="aws-sso-account"
                         className="form-control"
                         value={selectedAccountId}
                         onChange={(e) => {
@@ -264,8 +267,9 @@ export default function AwsSsoSignIn({ onConnected }) {
                 </div>
 
                 <div className="form-group">
-                    <label>Role</label>
+                    <label htmlFor="aws-sso-role">Role</label>
                     <select
+                        id="aws-sso-role"
                         className="form-control"
                         value={selectedRole}
                         onChange={(e) => setSelectedRole(e.target.value)}
@@ -277,8 +281,9 @@ export default function AwsSsoSignIn({ onConnected }) {
                 </div>
 
                 <div className="form-group">
-                    <label>Region</label>
+                    <label htmlFor="aws-sso-connect-region">Region</label>
                     <ClearableInput
+                        id="aws-sso-connect-region"
                         placeholder="us-east-1"
                         value={region}
                         onChange={(e) => setRegion(e.target.value)}

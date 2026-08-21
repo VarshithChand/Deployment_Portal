@@ -387,7 +387,7 @@ function EcsClusterDetail({ cluster, onSelectService, onScaled }) {
 
                                 <thead>
                                     <tr>
-                                        <th></th>
+                                        <th><span className="visually-hidden">Select</span></th>
                                         <th>Service</th>
                                         <th className="num">Desired</th>
                                         <th className="num">Running</th>
@@ -404,7 +404,7 @@ function EcsClusterDetail({ cluster, onSelectService, onScaled }) {
 
                                         <tr key={s.serviceName}>
                                             <td onClick={(e) => e.stopPropagation()}>
-                                                <input type="checkbox" checked={selected.has(s.serviceName)} onChange={() => toggleSelected(s.serviceName)} />
+                                                <input type="checkbox" aria-label={`Select ${s.serviceName}`} checked={selected.has(s.serviceName)} onChange={() => toggleSelected(s.serviceName)} />
                                             </td>
                                             <td className="table-row-clickable" onClick={() => onSelectService(s.serviceName)}>{s.serviceName}</td>
                                             <td className="num">{s.desiredCount}</td>
@@ -638,8 +638,9 @@ function EcsServiceDetail({ clusterName, serviceName, onScaled }) {
                 </div>
 
                 <div className="form-group" style={{ maxWidth: "160px" }}>
-                    <label>Desired Count</label>
+                    <label htmlFor="ecs-desired-count">Desired Count</label>
                     <input
+                        id="ecs-desired-count"
                         type="number" min="0" className="form-control"
                         value={desiredCount}
                         onChange={(e) => setDesiredCount(e.target.value)}

@@ -146,7 +146,7 @@ export default function ContainersSection({
                         <th>Status</th>
                         <th>Ports</th>
                         <th>Created</th>
-                        <th></th>
+                        <th><span className="visually-hidden">Actions</span></th>
                     </tr>
                 </thead>
 

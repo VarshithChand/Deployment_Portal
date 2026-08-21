@@ -23,7 +23,7 @@ export default function ImagesSection({ images, actingId, handleRemoveImage }) {
                         <th>Tags</th>
                         <th>Size</th>
                         <th>Created</th>
-                        <th></th>
+                        <th><span className="visually-hidden">Actions</span></th>
                     </tr>
                 </thead>
 

@@ -357,9 +357,9 @@ export default function PullRequests() {
                     <div className="error-message">
                         A GitHub Personal Access Token is required to view and manage pull
                         requests —{" "}
-                        <a href="#" onClick={(e) => { e.preventDefault(); setTab("settings"); }}>
+                        <button type="button" className="btn-link" style={{ padding: 0 }} onClick={() => setTab("settings")}>
                             add one in Settings
-                        </a>.
+                        </button>.
                     </div>
 
                 </div>
@@ -418,8 +418,8 @@ export default function PullRequests() {
 
                             {assignableUsers.length > 0 && (
 
-                                <div className="form-group">
-                                    <label>Assignees (optional)</label>
+                                <fieldset className="form-group" style={{ border: "none", padding: 0, margin: 0 }}>
+                                    <legend className="field-hint" style={{ padding: 0, marginBottom: "6px" }}>Assignees (optional)</legend>
                                     <div className="checkbox-list">
 
                                         {assignableUsers.map((user) => (
@@ -441,7 +441,7 @@ export default function PullRequests() {
                                         ))}
 
                                     </div>
-                                </div>
+                                </fieldset>
 
                             )}
 

@@ -128,7 +128,7 @@ export default function GitHubAccessSection({
 
             <div className="form-group">
 
-                <label>Switch repository</label>
+                <label htmlFor="github-switch-repo">Switch repository</label>
 
                 {loadingAccountRepos ? (
 
@@ -137,6 +137,7 @@ export default function GitHubAccessSection({
                 ) : accountRepos.length > 0 ? (
 
                     <ComboBox
+                        id="github-switch-repo"
                         options={accountRepos.map((repo) => ({
                             value: repo.htmlUrl,
                             label: repo.private ? `${repo.fullName} (private)` : repo.fullName
@@ -159,8 +160,9 @@ export default function GitHubAccessSection({
         )}
 
         <div className="form-group">
-            <label>Repository URL or GitHub Username</label>
+            <label htmlFor="github-repo-url">Repository URL or GitHub Username</label>
             <ClearableInput
+                id="github-repo-url"
                 placeholder="https://github.com/owner/repo or octocat"
                 value={githubRepoUrl}
                 onChange={(e) => setGithubRepoUrl(e.target.value)}

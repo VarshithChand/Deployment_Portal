@@ -175,8 +175,9 @@ export default function AdminAccessView({
             </p>
 
             <div className="form-group">
-                <label>GitHub Usernames (comma-separated)</label>
+                <label htmlFor="admin-allowlist-usernames">GitHub Usernames (comma-separated)</label>
                 <ClearableInput
+                    id="admin-allowlist-usernames"
                     placeholder="octocat, hubot"
                     value={adminUsernamesText}
                     onChange={(e) => setAdminUsernamesText(e.target.value)}
@@ -232,7 +233,7 @@ export default function AdminAccessView({
                             <tr>
                                 <th>User</th>
                                 <th>MFA</th>
-                                <th></th>
+                                <th><span className="visually-hidden">Actions</span></th>
                             </tr>
                         </thead>
 

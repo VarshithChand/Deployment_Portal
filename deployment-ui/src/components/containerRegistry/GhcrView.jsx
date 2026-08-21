@@ -144,7 +144,7 @@ export default function GhcrView() {
             <div className="card">
                 <p className="empty-state" style={{ textAlign: "left" }}>
                     Connect your GHCR credentials in{" "}
-                    <a href="#" onClick={(e) => { e.preventDefault(); setTab("settings"); }}>Settings → Credentials → GHCR</a>
+                    <button type="button" className="btn-link" style={{ padding: 0 }} onClick={() => setTab("settings")}>Settings → Credentials → GHCR</button>
                     {" "}to browse this.
                 </p>
             </div>

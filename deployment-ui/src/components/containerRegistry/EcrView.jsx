@@ -152,7 +152,7 @@ export default function EcrView() {
             <div className="card">
                 <p className="empty-state" style={{ textAlign: "left" }}>
                     Connect your AWS credentials in{" "}
-                    <a href="#" onClick={(e) => { e.preventDefault(); setTab("settings"); }}>Settings → Credentials → AWS</a>
+                    <button type="button" className="btn-link" style={{ padding: 0 }} onClick={() => setTab("settings")}>Settings → Credentials → AWS</button>
                     {" "}to browse ECR.
                 </p>
             </div>

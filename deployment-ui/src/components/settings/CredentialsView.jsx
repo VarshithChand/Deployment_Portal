@@ -623,8 +623,9 @@ export default function CredentialsView({
             </p>
 
             <div className="form-group">
-                <label>Registry</label>
+                <label htmlFor="docker-registry">Registry</label>
                 <ClearableInput
+                    id="docker-registry"
                     placeholder="docker.io / ghcr.io / your-registry.com"
                     value={dockerRegistry}
                     onChange={(e) => setDockerRegistry(e.target.value)}
@@ -635,8 +636,9 @@ export default function CredentialsView({
             </div>
 
             <div className="form-group">
-                <label>Username</label>
+                <label htmlFor="docker-username">Username</label>
                 <ClearableInput
+                    id="docker-username"
                     value={dockerUsername}
                     onChange={(e) => setDockerUsername(e.target.value)}
                     onClear={() => setDockerUsername("")}
@@ -955,8 +957,9 @@ export default function CredentialsView({
             </p>
 
             <div className="form-group">
-                <label>Client ID</label>
+                <label htmlFor="oauth-client-id">Client ID</label>
                 <ClearableInput
+                    id="oauth-client-id"
                     value={oauthClientId}
                     onChange={(e) => setOauthClientId(e.target.value)}
                     onClear={() => setOauthClientId("")}
@@ -966,7 +969,7 @@ export default function CredentialsView({
             </div>
 
             <div className="form-group">
-                <label>
+                <label htmlFor="oauth-client-secret">
                     Client Secret
                     {" "}
                     {oauthClientSecretConfigured && (
@@ -974,6 +977,7 @@ export default function CredentialsView({
                     )}
                 </label>
                 <ClearableInput
+                    id="oauth-client-secret"
                     type="password"
                     placeholder={oauthClientSecretConfigured ? "Leave blank to keep current secret" : ""}
                     value={oauthClientSecret}
@@ -1040,12 +1044,12 @@ export default function CredentialsView({
             </p>
 
             <div className="form-group">
-                <label>Provider</label>
-                <input type="text" className="form-control" value="Google Gemini" disabled />
+                <label htmlFor="ai-provider">Provider</label>
+                <input id="ai-provider" type="text" className="form-control" value="Google Gemini" disabled />
             </div>
 
             <div className="form-group">
-                <label>
+                <label htmlFor="ai-api-key">
                     Gemini API Key
                     {" "}
                     {aiApiKeyConfigured && (
@@ -1053,6 +1057,7 @@ export default function CredentialsView({
                     )}
                 </label>
                 <ClearableInput
+                    id="ai-api-key"
                     type="password"
                     placeholder={aiApiKeyConfigured ? "Leave blank to keep current key" : ""}
                     value={aiApiKey}
@@ -1064,9 +1069,10 @@ export default function CredentialsView({
 
             <div className="form-group">
 
-                <label>Gemini Model</label>
+                <label htmlFor="ai-gemini-model">Gemini Model</label>
 
                 <select
+                    id="ai-gemini-model"
                     className="form-control"
                     value={GEMINI_MODEL_OPTIONS.some((o) => o.value === aiModel) ? aiModel : CUSTOM_MODEL_VALUE}
                     onChange={(e) => setAiModel(e.target.value === CUSTOM_MODEL_VALUE ? "" : e.target.value)}
@@ -1100,7 +1106,7 @@ export default function CredentialsView({
             </div>
 
             <div className="form-group">
-                <label>Status</label>
+                <span className="field-hint" style={{ display: "block", marginBottom: "4px" }}>Status</span>
                 <p style={{ margin: 0 }}>
                     {aiApiKeyConfigured
                         ? <span className="badge badge-success">🟢 Configured</span>

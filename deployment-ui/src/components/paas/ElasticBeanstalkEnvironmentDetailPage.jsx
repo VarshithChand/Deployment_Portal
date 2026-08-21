@@ -381,13 +381,13 @@ export default function ElasticBeanstalkEnvironmentDetailPage({ environmentName,
                 <div className="cloud-service-firewall-form-grid">
 
                     <div className="form-group">
-                        <label>Minimum Instances</label>
-                        <input type="number" min="0" className="form-control" value={minSize} onChange={(e) => setMinSize(e.target.value)} />
+                        <label htmlFor="eb-min-instances">Minimum Instances</label>
+                        <input id="eb-min-instances" type="number" min="0" className="form-control" value={minSize} onChange={(e) => setMinSize(e.target.value)} />
                     </div>
 
                     <div className="form-group">
-                        <label>Maximum Instances</label>
-                        <input type="number" min="1" className="form-control" value={maxSize} onChange={(e) => setMaxSize(e.target.value)} />
+                        <label htmlFor="eb-max-instances">Maximum Instances</label>
+                        <input id="eb-max-instances" type="number" min="1" className="form-control" value={maxSize} onChange={(e) => setMaxSize(e.target.value)} />
                     </div>
 
                 </div>
@@ -428,13 +428,13 @@ export default function ElasticBeanstalkEnvironmentDetailPage({ environmentName,
                     <div className="cloud-service-firewall-form-grid">
 
                         <div className="form-group">
-                            <label>Name</label>
-                            <input type="text" className="form-control" value={varForm.name} onChange={(e) => setVarForm((f) => ({ ...f, name: e.target.value }))} required />
+                            <label htmlFor="eb-var-name">Name</label>
+                            <input id="eb-var-name" type="text" className="form-control" value={varForm.name} onChange={(e) => setVarForm((f) => ({ ...f, name: e.target.value }))} required />
                         </div>
 
                         <div className="form-group">
-                            <label>Value</label>
-                            <input type="text" className="form-control" value={varForm.value} onChange={(e) => setVarForm((f) => ({ ...f, value: e.target.value }))} />
+                            <label htmlFor="eb-var-value">Value</label>
+                            <input id="eb-var-value" type="text" className="form-control" value={varForm.value} onChange={(e) => setVarForm((f) => ({ ...f, value: e.target.value }))} />
                         </div>
 
                     </div>

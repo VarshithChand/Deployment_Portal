@@ -168,8 +168,8 @@ export default function AzureAppServiceDetailPage({ resourceGroup, name, onBack 
                 </div>
 
                 <div className="form-group" style={{ maxWidth: "160px" }}>
-                    <label>Instance Count</label>
-                    <input type="number" min="1" className="form-control" value={capacity} onChange={(e) => setCapacity(e.target.value)} />
+                    <label htmlFor="appservice-instance-count">Instance Count</label>
+                    <input id="appservice-instance-count" type="number" min="1" className="form-control" value={capacity} onChange={(e) => setCapacity(e.target.value)} />
                 </div>
 
                 <button type="button" className="btn btn-primary btn-sm" onClick={handleScale} disabled={scaling || capacity === ""}>

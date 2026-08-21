@@ -493,7 +493,7 @@ export default function Services() {
                                     <th>Device</th>
                                     <th>Last Active</th>
                                     <th>Status</th>
-                                    <th></th>
+                                    <th><span className="visually-hidden">Actions</span></th>
                                 </tr>
                             </thead>
 

@@ -207,8 +207,9 @@ function EcrRepositoryList({ repositories, onSelectRepo, onChanged }) {
                 {creating && (
 
                     <form onSubmit={handleCreate} className="form-group">
-                        <label>Repository Name</label>
+                        <label htmlFor="ecr-new-repo-name">Repository Name</label>
                         <input
+                            id="ecr-new-repo-name"
                             type="text"
                             className="form-control"
                             value={newRepoName}

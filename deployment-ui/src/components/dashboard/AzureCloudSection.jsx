@@ -99,9 +99,9 @@ export default function AzureCloudSection() {
             )}
 
             <p className="field-hint" style={{ marginTop: "10px" }}>
-                <a href="#" onClick={(e) => { e.preventDefault(); setTab("cloudServicesAzure"); }}>
+                <button type="button" className="btn-link" style={{ padding: 0 }} onClick={() => setTab("cloudServicesAzure")}>
                     View all Azure services →
-                </a>
+                </button>
             </p>
 
         </>

@@ -418,12 +418,13 @@ export default function SecurityTestingView() {
 
             <div className="form-group">
 
-                <label>Add a target URL</label>
+                <label htmlFor="security-target-url">Add a target URL</label>
 
                 <div className="button-row">
 
                     <div style={{ flex: 1 }}>
                         <ClearableInput
+                            id="security-target-url"
                             placeholder="https://example.com"
                             value={newTargetUrl}
                             onChange={(e) => setNewTargetUrl(e.target.value)}
@@ -461,7 +462,7 @@ export default function SecurityTestingView() {
                             <tr>
                                 <th>URL</th>
                                 <th>Added</th>
-                                <th></th>
+                                <th><span className="visually-hidden">Actions</span></th>
                             </tr>
                         </thead>
 
@@ -538,7 +539,7 @@ export default function SecurityTestingView() {
                         <tr>
                             <th>Page</th>
                             <th>URL</th>
-                            <th></th>
+                            <th><span className="visually-hidden">Actions</span></th>
                         </tr>
                     </thead>
 
@@ -622,7 +623,7 @@ export default function SecurityTestingView() {
                                 <th>Controller</th>
                                 <th>Method</th>
                                 <th>Path</th>
-                                <th></th>
+                                <th><span className="visually-hidden">Actions</span></th>
                             </tr>
                         </thead>
 
@@ -679,8 +680,9 @@ export default function SecurityTestingView() {
 
             <div className="form-group">
 
-                <label>Target URL</label>
+                <label htmlFor="security-scan-target-url">Target URL</label>
                 <ClearableInput
+                    id="security-scan-target-url"
                     placeholder="https://example.com"
                     value={scanUrl}
                     onChange={(e) => setScanUrl(e.target.value)}
@@ -958,7 +960,7 @@ export default function SecurityTestingView() {
                                 <th>Security</th>
                                 <th>Performance</th>
                                 <th>Findings</th>
-                                <th></th>
+                                <th><span className="visually-hidden">Actions</span></th>
                             </tr>
                         </thead>
 
@@ -983,6 +985,7 @@ export default function SecurityTestingView() {
                                             <button
                                                 type="button"
                                                 className="btn btn-secondary btn-sm"
+                                                aria-label={`View scan of ${entry.target}`}
                                                 onClick={() => handleViewScan(entry.id)}
                                                 disabled={loadingScanId === entry.id}
                                             >
@@ -992,6 +995,7 @@ export default function SecurityTestingView() {
                                             <button
                                                 type="button"
                                                 className="btn btn-danger btn-sm"
+                                                aria-label={`Delete scan of ${entry.target}`}
                                                 onClick={() => handleDeleteScan(entry)}
                                                 disabled={deletingScanId === entry.id}
                                             >

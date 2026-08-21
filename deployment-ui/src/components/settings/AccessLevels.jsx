@@ -361,7 +361,7 @@ export default function AccessLevels() {
                             <th>User</th>
                             <th>Status</th>
                             <th>Access Level</th>
-                            <th></th>
+                            <th><span className="visually-hidden">Actions</span></th>
                         </tr>
                     </thead>
 

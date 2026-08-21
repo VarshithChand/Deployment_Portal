@@ -234,7 +234,7 @@ export default function AcrView() {
             <div className="card">
                 <p className="empty-state" style={{ textAlign: "left" }}>
                     Connect your Azure credentials (including a Subscription ID) in{" "}
-                    <a href="#" onClick={(e) => { e.preventDefault(); setTab("settings"); }}>Settings → Credentials → Azure</a>
+                    <button type="button" className="btn-link" style={{ padding: 0 }} onClick={() => setTab("settings")}>Settings → Credentials → Azure</button>
                     {" "}to browse ACR.
                 </p>
             </div>

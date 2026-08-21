@@ -183,8 +183,9 @@ export default function SecurityPinSection() {
                 <form onSubmit={mfaAction === "remove" ? handleClear : handleSave}>
 
                     <div className="form-group">
-                        <label>{status?.configured ? "New PIN" : "PIN"} (4–8 digits)</label>
+                        <label htmlFor="security-pin">{status?.configured ? "New PIN" : "PIN"} (4–8 digits)</label>
                         <input
+                            id="security-pin"
                             type="password"
                             inputMode="numeric"
                             maxLength={8}
@@ -197,8 +198,9 @@ export default function SecurityPinSection() {
                     </div>
 
                     <div className="form-group">
-                        <label>Confirm PIN</label>
+                        <label htmlFor="security-pin-confirm">Confirm PIN</label>
                         <input
+                            id="security-pin-confirm"
                             type="password"
                             inputMode="numeric"
                             maxLength={8}
@@ -214,8 +216,9 @@ export default function SecurityPinSection() {
 
                         <div className="form-group">
 
-                            <label>6-digit authenticator code</label>
+                            <label htmlFor="security-pin-mfa-code">6-digit authenticator code</label>
                             <input
+                                id="security-pin-mfa-code"
                                 className="form-control"
                                 inputMode="numeric"
                                 maxLength={6}

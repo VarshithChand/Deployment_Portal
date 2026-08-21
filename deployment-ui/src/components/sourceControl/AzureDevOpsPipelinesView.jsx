@@ -411,7 +411,7 @@ export default function AzureDevOpsPipelinesView() {
             <div className="card">
                 <p className="empty-state" style={{ textAlign: "left" }}>
                     Pick an Azure DevOps project on the{" "}
-                    <a href="#" onClick={(e) => { e.preventDefault(); setTab("dashboard"); }}>Dashboard</a>
+                    <button type="button" className="btn-link" style={{ padding: 0 }} onClick={() => setTab("dashboard")}>Dashboard</button>
                     {" "}first.
                 </p>
             </div>
@@ -431,7 +431,7 @@ export default function AzureDevOpsPipelinesView() {
 
                 <div className="button-row" style={{ justifyContent: "space-between" }}>
                     <h2 className="card-title" style={{ marginBottom: 0 }}>Pipeline Configuration</h2>
-                    <a href="#" onClick={(e) => { e.preventDefault(); setTab("dashboard"); }}>Change project</a>
+                    <button type="button" className="btn-link" style={{ padding: 0 }} onClick={() => setTab("dashboard")}>Change project</button>
                 </div>
 
                 <p className="field-hint" style={{ marginTop: 0 }}>{project.name}</p>
@@ -448,9 +448,9 @@ export default function AzureDevOpsPipelinesView() {
 
                     <>
 
-                    <div className="form-group">
+                    <fieldset className="form-group" style={{ border: "none", padding: 0, margin: 0 }}>
 
-                        <label>Mode</label>
+                        <legend className="field-hint" style={{ padding: 0, marginBottom: "6px" }}>Mode</legend>
 
                         <div className="mode-toggle">
 
@@ -480,13 +480,14 @@ export default function AzureDevOpsPipelinesView() {
 
                         </div>
 
-                    </div>
+                    </fieldset>
 
                     <div className="form-group">
 
-                        <label>Branch</label>
+                        <label htmlFor="ado-pipeline-branch">Branch</label>
 
                         <ComboBox
+                            id="ado-pipeline-branch"
                             options={(branches?.branches || []).map((b) => ({ value: b.name, label: b.name }))}
                             value={branch}
                             onChange={setBranch}
@@ -498,7 +499,7 @@ export default function AzureDevOpsPipelinesView() {
 
                     <div className="form-group">
 
-                        <label>Pipeline</label>
+                        <label htmlFor="ado-pipeline-select">Pipeline</label>
 
                         <p className="field-hint">
                             {mode === "CI"
@@ -509,6 +510,7 @@ export default function AzureDevOpsPipelinesView() {
                         </p>
 
                         <ComboBox
+                            id="ado-pipeline-select"
                             options={modeFilteredPipelines.map((p) => ({ value: String(p.id), label: p.name }))}
                             value={pipelineId}
                             onChange={handleSelectPipeline}
@@ -535,9 +537,9 @@ export default function AzureDevOpsPipelinesView() {
 
                         ) : (parameters?.parameters || []).filter((p) => RENDERABLE_PARAM_TYPES.has(p.type)).length > 0 && (
 
-                            <div className="form-group">
+                            <fieldset className="form-group" style={{ border: "none", padding: 0, margin: 0 }}>
 
-                                <label>Parameters</label>
+                                <legend className="field-hint" style={{ padding: 0, fontWeight: 600 }}>Parameters</legend>
 
                                 <p className="field-hint">
                                     Declared by this pipeline's own YAML file, same as Azure DevOps' own "Run pipeline" dialog.
@@ -559,8 +561,9 @@ export default function AzureDevOpsPipelinesView() {
                                     ) : p.values && p.values.length > 0 ? (
 
                                         <div key={p.name} style={{ marginBottom: "10px" }}>
-                                            <label style={{ display: "block" }}>{p.displayName || p.name}</label>
+                                            <label htmlFor={`ado-param-${p.name}`} style={{ display: "block" }}>{p.displayName || p.name}</label>
                                             <ComboBox
+                                                id={`ado-param-${p.name}`}
                                                 options={p.values.map((v) => ({ value: v, label: v }))}
                                                 value={paramValues[p.name] || ""}
                                                 onChange={(value) => setParamValue(p.name, value)}
@@ -572,8 +575,9 @@ export default function AzureDevOpsPipelinesView() {
                                     ) : (
 
                                         <div key={p.name} className="form-group" style={{ marginBottom: "10px" }}>
-                                            <label>{p.displayName || p.name}</label>
+                                            <label htmlFor={`ado-param-${p.name}`}>{p.displayName || p.name}</label>
                                             <input
+                                                id={`ado-param-${p.name}`}
                                                 type={p.type === "number" ? "number" : "text"}
                                                 className="form-control"
                                                 value={paramValues[p.name] || ""}
@@ -585,7 +589,7 @@ export default function AzureDevOpsPipelinesView() {
 
                                 ))}
 
-                            </div>
+                            </fieldset>
 
                         )}
 

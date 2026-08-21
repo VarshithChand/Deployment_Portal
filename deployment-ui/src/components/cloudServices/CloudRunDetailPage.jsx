@@ -230,13 +230,13 @@ export default function CloudRunDetailPage({ service, onBack, onChanged }) {
                 <div className="cloud-service-firewall-form-grid">
 
                     <div className="form-group">
-                        <label>Minimum Instances</label>
-                        <input type="number" min="0" className="form-control" value={minInstances} onChange={(e) => setMinInstances(e.target.value)} />
+                        <label htmlFor="cloudrun-min-instances">Minimum Instances</label>
+                        <input id="cloudrun-min-instances" type="number" min="0" className="form-control" value={minInstances} onChange={(e) => setMinInstances(e.target.value)} />
                     </div>
 
                     <div className="form-group">
-                        <label>Maximum Instances</label>
-                        <input type="number" min="1" className="form-control" value={maxInstances} onChange={(e) => setMaxInstances(e.target.value)} />
+                        <label htmlFor="cloudrun-max-instances">Maximum Instances</label>
+                        <input id="cloudrun-max-instances" type="number" min="1" className="form-control" value={maxInstances} onChange={(e) => setMaxInstances(e.target.value)} />
                     </div>
 
                 </div>
@@ -300,6 +300,7 @@ export default function CloudRunDetailPage({ service, onBack, onChanged }) {
                                             <td>
                                                 <input
                                                     type="number" min="0" max="100" className="form-control" style={{ width: "80px" }}
+                                                    aria-label={`Traffic percent for ${r.name}`}
                                                     value={trafficDraft[r.name] ?? "0"}
                                                     onChange={(e) => setTrafficDraft((d) => ({ ...d, [r.name]: e.target.value }))}
                                                 />

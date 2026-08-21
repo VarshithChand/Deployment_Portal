@@ -221,7 +221,7 @@ export default function AzureDevOpsArtifactsView() {
             <div className="card">
                 <p className="empty-state" style={{ textAlign: "left" }}>
                     Pick an Azure DevOps project on the{" "}
-                    <a href="#" onClick={(e) => { e.preventDefault(); setTab("dashboard"); }}>Dashboard</a>
+                    <button type="button" className="btn-link" style={{ padding: 0 }} onClick={() => setTab("dashboard")}>Dashboard</button>
                     {" "}first.
                 </p>
             </div>
@@ -239,7 +239,7 @@ export default function AzureDevOpsArtifactsView() {
 
             <div className="button-row" style={{ justifyContent: "space-between", marginBottom: "12px" }}>
                 <h2 className="card-title" style={{ marginBottom: 0 }}>{project.name}</h2>
-                <a href="#" onClick={(e) => { e.preventDefault(); setTab("dashboard"); }}>Change project</a>
+                <button type="button" className="btn-link" style={{ padding: 0 }} onClick={() => setTab("dashboard")}>Change project</button>
             </div>
 
             {pipelinesLoading ? (
@@ -254,9 +254,9 @@ export default function AzureDevOpsArtifactsView() {
 
                 <>
 
-                <div className="form-group">
+                <fieldset className="form-group" style={{ border: "none", padding: 0, margin: 0 }}>
 
-                    <label>Mode</label>
+                    <legend className="field-hint" style={{ padding: 0, marginBottom: "6px" }}>Mode</legend>
 
                     <div className="mode-toggle">
 
@@ -286,13 +286,14 @@ export default function AzureDevOpsArtifactsView() {
 
                     </div>
 
-                </div>
+                </fieldset>
 
                 <div className="form-group">
 
-                    <label>Pipeline</label>
+                    <label htmlFor="ado-artifacts-pipeline">Pipeline</label>
 
                     <ComboBox
+                        id="ado-artifacts-pipeline"
                         options={modeFilteredPipelines.map((p) => ({ value: String(p.id), label: p.name }))}
                         value={pipelineId}
                         onChange={handleSelectPipeline}
@@ -334,7 +335,7 @@ export default function AzureDevOpsArtifactsView() {
                                         <th>Type</th>
                                         <th>Run</th>
                                         <th>Run Date</th>
-                                        <th></th>
+                                        <th><span className="visually-hidden">Actions</span></th>
                                     </tr>
                                 </thead>
 

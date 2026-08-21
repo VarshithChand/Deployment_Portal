@@ -289,9 +289,10 @@ export default function CloudServicesAws() {
 
                     <div className="form-group cloud-provider-select-group">
 
-                        <label>Region</label>
+                        <label htmlFor="cloudservices-aws-region">Region</label>
 
                         <ComboBox
+                            id="cloudservices-aws-region"
                             options={AWS_REGIONS}
                             value={selectedRegion || inventory.region || ""}
                             onChange={handleRegionChange}

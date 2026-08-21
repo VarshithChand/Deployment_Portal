@@ -126,8 +126,9 @@ export default function HostCredentialLoginSection({
                 <form onSubmit={handleSave}>
 
                     <div className="form-group">
-                        <label>Host URL</label>
+                        <label htmlFor={`${provider}-host-url`}>Host URL</label>
                         <ClearableInput
+                            id={`${provider}-host-url`}
                             placeholder={status?.hostUrl || hostPlaceholder}
                             value={form.hostUrl}
                             onChange={(e) => setForm({ ...form, hostUrl: e.target.value })}
@@ -138,8 +139,9 @@ export default function HostCredentialLoginSection({
                     </div>
 
                     <div className="form-group">
-                        <label>Username</label>
+                        <label htmlFor={`${provider}-username`}>Username</label>
                         <ClearableInput
+                            id={`${provider}-username`}
                             placeholder={status?.configured ? `Leave blank to keep "${status.username}"` : ""}
                             value={form.username}
                             onChange={(e) => setForm({ ...form, username: e.target.value })}
@@ -150,8 +152,9 @@ export default function HostCredentialLoginSection({
                     </div>
 
                     <div className="form-group">
-                        <label>{passwordLabel}</label>
+                        <label htmlFor={`${provider}-password`}>{passwordLabel}</label>
                         <ClearableInput
+                            id={`${provider}-password`}
                             type="password"
                             placeholder={status?.configured ? "Leave blank to keep current password" : ""}
                             value={form.password}

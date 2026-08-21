@@ -110,8 +110,9 @@ export default function SonarLoginSection({ provider, label, hasHostUrl, onClear
                     {hasHostUrl && (
 
                         <div className="form-group">
-                            <label>Host URL</label>
+                            <label htmlFor={`${provider}-host-url`}>Host URL</label>
                             <ClearableInput
+                                id={`${provider}-host-url`}
                                 placeholder={status?.hostUrl || "https://sonarqube.mycompany.com"}
                                 value={form.hostUrl}
                                 onChange={(e) => setForm({ ...form, hostUrl: e.target.value })}
@@ -124,8 +125,9 @@ export default function SonarLoginSection({ provider, label, hasHostUrl, onClear
                     )}
 
                     <div className="form-group">
-                        <label>Organization</label>
+                        <label htmlFor={`${provider}-organization`}>Organization</label>
                         <ClearableInput
+                            id={`${provider}-organization`}
                             placeholder={status?.organization || "your-sonarcloud-org"}
                             value={form.organization}
                             onChange={(e) => setForm({ ...form, organization: e.target.value })}
@@ -136,8 +138,9 @@ export default function SonarLoginSection({ provider, label, hasHostUrl, onClear
                     </div>
 
                     <div className="form-group">
-                        <label>Project Key</label>
+                        <label htmlFor={`${provider}-project-key`}>Project Key</label>
                         <ClearableInput
+                            id={`${provider}-project-key`}
                             placeholder={status?.projectKey || "VarshithChand_yaml"}
                             value={form.projectKey}
                             onChange={(e) => setForm({ ...form, projectKey: e.target.value })}

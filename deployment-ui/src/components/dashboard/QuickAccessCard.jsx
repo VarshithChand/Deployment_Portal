@@ -151,7 +151,7 @@ export default function QuickAccessCard() {
 
                 <p className="empty-state" style={{ textAlign: "left" }}>
                     Nothing connected yet — head to{" "}
-                    <a href="#" onClick={(e) => { e.preventDefault(); setTab("settings"); }}>Settings → Credentials</a>
+                    <button type="button" className="btn-link" style={{ padding: 0 }} onClick={() => setTab("settings")}>Settings → Credentials</button>
                     {" "}to connect your first provider.
                 </p>
 

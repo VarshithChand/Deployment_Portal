@@ -312,8 +312,9 @@ export default function DashboardRoleSection({ provider, label, hasAccountId }) 
                 <form onSubmit={handleSaveCredential}>
 
                     <div className="form-group">
-                        <label>API Token</label>
+                        <label htmlFor={`${label}-dashboard-token`}>API Token</label>
                         <ClearableInput
+                            id={`${label}-dashboard-token`}
                             type="password"
                             placeholder={configured ? "Leave blank to keep current token" : ""}
                             value={form.token}
@@ -326,8 +327,9 @@ export default function DashboardRoleSection({ provider, label, hasAccountId }) 
                     {hasAccountId && (
 
                         <div className="form-group">
-                            <label>Account ID</label>
+                            <label htmlFor={`${label}-dashboard-account-id`}>Account ID</label>
                             <ClearableInput
+                                id={`${label}-dashboard-account-id`}
                                 placeholder={configured ? "Leave blank to keep current Account ID" : ""}
                                 value={form.accountId}
                                 onChange={(e) => setForm({ ...form, accountId: e.target.value })}

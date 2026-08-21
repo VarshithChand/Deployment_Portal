@@ -126,13 +126,14 @@ export default function DatabaseCreateTableDialog({ open, defaultSchema, onCance
                 <form onSubmit={handleSubmit}>
 
                     <div className="form-group">
-                        <label>Schema</label>
-                        <input type="text" className="form-control" value={schema} onChange={(e) => setSchema(e.target.value)} />
+                        <label htmlFor="db-create-schema">Schema</label>
+                        <input id="db-create-schema" type="text" className="form-control" value={schema} onChange={(e) => setSchema(e.target.value)} />
                     </div>
 
                     <div className="form-group">
-                        <label>Table Name</label>
+                        <label htmlFor="db-create-table-name">Table Name</label>
                         <input
+                            id="db-create-table-name"
                             type="text"
                             className="form-control"
                             value={tableName}
@@ -142,15 +143,18 @@ export default function DatabaseCreateTableDialog({ open, defaultSchema, onCance
                         />
                     </div>
 
-                    <label style={{ display: "block", marginBottom: "6px" }}>Columns</label>
+                    <span className="field-hint" style={{ display: "block", marginBottom: "6px" }}>Columns</span>
 
                     {columns.map((col, index) => (
 
-                        <div key={index} className="db-column-row">
+                        <fieldset key={index} className="db-column-row" style={{ border: "none", padding: 0, margin: 0 }}>
+
+                            <legend className="visually-hidden">Column {index + 1}</legend>
 
                             <input
                                 type="text"
                                 className="form-control"
+                                aria-label="Column name"
                                 placeholder="column_name"
                                 value={col.name}
                                 onChange={(e) => updateColumn(index, { name: e.target.value })}
@@ -199,7 +203,7 @@ export default function DatabaseCreateTableDialog({ open, defaultSchema, onCance
                                 Remove
                             </button>
 
-                        </div>
+                        </fieldset>
 
                     ))}
 

@@ -265,13 +265,13 @@ export default function AzureAppServiceSlotDetailPage({ resourceGroup, appName, 
                     <div className="cloud-service-firewall-form-grid">
 
                         <div className="form-group">
-                            <label>Name</label>
-                            <input type="text" className="form-control" value={varForm.name} onChange={(e) => setVarForm((f) => ({ ...f, name: e.target.value }))} required />
+                            <label htmlFor="appservice-slot-var-name">Name</label>
+                            <input id="appservice-slot-var-name" type="text" className="form-control" value={varForm.name} onChange={(e) => setVarForm((f) => ({ ...f, name: e.target.value }))} required />
                         </div>
 
                         <div className="form-group">
-                            <label>Value</label>
-                            <input type="text" className="form-control" value={varForm.value} onChange={(e) => setVarForm((f) => ({ ...f, value: e.target.value }))} />
+                            <label htmlFor="appservice-slot-var-value">Value</label>
+                            <input id="appservice-slot-var-value" type="text" className="form-control" value={varForm.value} onChange={(e) => setVarForm((f) => ({ ...f, value: e.target.value }))} />
                         </div>
 
                     </div>
@@ -326,8 +326,8 @@ export default function AzureAppServiceSlotDetailPage({ resourceGroup, appName, 
                         Target: <strong>{swapTarget}</strong><br />
                         {swapChoices.length > 1 && (
                             <div className="form-group" style={{ marginTop: "10px" }}>
-                                <label>Target slot</label>
-                                <select className="form-control" value={swapTarget} onChange={(e) => setSwapTarget(e.target.value)}>
+                                <label htmlFor="appservice-slot-swap-target">Target slot</label>
+                                <select id="appservice-slot-swap-target" className="form-control" value={swapTarget} onChange={(e) => setSwapTarget(e.target.value)}>
                                     {swapChoices.map((s) => <option key={s.name} value={s.name}>{s.name}</option>)}
                                 </select>
                             </div>

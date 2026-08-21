@@ -86,11 +86,12 @@ export default function InviteCollaborator({ onInvited, isOrganization }) {
 
             <div className="form-group">
 
-                <label>GitHub username</label>
+                <label htmlFor="invite-github-username">GitHub username</label>
 
                 <div className="access-invite-controls">
 
                     <input
+                        id="invite-github-username"
                         type="text"
                         className="form-control"
                         placeholder="GitHub username"

@@ -97,9 +97,9 @@ export default function SonarView({ provider }) {
                     <h2 className="card-title">Not Configured</h2>
                     <p className="empty-state" style={{ textAlign: "left" }}>
                         Add a project key and token in{" "}
-                        <a href="#" onClick={(e) => { e.preventDefault(); setTab("settings"); }}>
+                        <button type="button" className="btn-link" style={{ padding: 0 }} onClick={() => setTab("settings")}>
                             Settings → Credentials → {provider === "sonarqube" ? "SonarQube" : "SonarCloud"}
-                        </a>
+                        </button>
                         {" "}to see analysis results here.
                     </p>
                 </div>

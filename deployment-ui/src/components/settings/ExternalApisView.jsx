@@ -195,9 +195,10 @@ export default function ExternalApisView() {
 
             <div className="form-group">
 
-                <label>Endpoint URLs (one per line)</label>
+                <label htmlFor="external-apis-endpoints">Endpoint URLs (one per line)</label>
 
                 <textarea
+                    id="external-apis-endpoints"
                     className="form-control external-health-textarea"
                     rows={10}
                     value={endpointsText}

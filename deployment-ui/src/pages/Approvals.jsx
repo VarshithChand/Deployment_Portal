@@ -199,9 +199,9 @@ export default function Approvals() {
                     <div className="error-message">
                         A GitHub Personal Access Token is required to view and manage release
                         approvals —{" "}
-                        <a href="#" onClick={(e) => { e.preventDefault(); setTab("settings"); }}>
+                        <button type="button" className="btn-link" style={{ padding: 0 }} onClick={() => setTab("settings")}>
                             add one in Settings
-                        </a>.
+                        </button>.
                     </div>
 
                 </div>

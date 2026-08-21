@@ -223,7 +223,7 @@ export default function PaasHub() {
 
                                         <thead>
                                             <tr>
-                                                <th></th>
+                                                <th><span className="visually-hidden">Select</span></th>
                                                 <th>Provider</th>
                                                 <th>Name</th>
                                                 <th>Environment</th>
@@ -240,7 +240,7 @@ export default function PaasHub() {
 
                                                 <tr key={appKey(a)}>
                                                     <td onClick={(e) => e.stopPropagation()}>
-                                                        <input type="checkbox" checked={checked.has(appKey(a))} onChange={() => toggleChecked(appKey(a))} />
+                                                        <input type="checkbox" aria-label={`Select ${a.name}`} checked={checked.has(appKey(a))} onChange={() => toggleChecked(appKey(a))} />
                                                     </td>
                                                     <td><span className="badge badge-secondary">{a.provider}</span></td>
                                                     <td>{a.name}</td>

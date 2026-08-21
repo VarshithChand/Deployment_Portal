@@ -215,8 +215,9 @@ export default function AzureDevOpsBranchesView() {
 
                     <form onSubmit={handleCreateBranch} className="form-group" style={{ border: "1px solid var(--border)", borderRadius: "8px", padding: "12px", marginBottom: "16px" }}>
 
-                        <label>New branch name</label>
+                        <label htmlFor="ado-new-branch-name">New branch name</label>
                         <ClearableInput
+                            id="ado-new-branch-name"
                             placeholder="e.g. feature/my-change"
                             value={newBranchName}
                             onChange={(e) => setNewBranchName(e.target.value)}
@@ -224,8 +225,9 @@ export default function AzureDevOpsBranchesView() {
                             autoComplete="off"
                         />
 
-                        <label style={{ marginTop: "12px" }}>Create from</label>
+                        <label htmlFor="ado-branch-source" style={{ marginTop: "12px" }}>Create from</label>
                         <ComboBox
+                            id="ado-branch-source"
                             options={(branches?.branches || []).map((b) => ({ value: b.name, label: b.name }))}
                             value={sourceBranch}
                             onChange={setSourceBranch}
@@ -262,7 +264,7 @@ export default function AzureDevOpsBranchesView() {
                             <thead>
                                 <tr>
                                     <th>Branch</th>
-                                    <th></th>
+                                    <th><span className="visually-hidden">Actions</span></th>
                                 </tr>
                             </thead>
 
@@ -319,7 +321,7 @@ export default function AzureDevOpsBranchesView() {
             <div className="card">
                 <p className="empty-state" style={{ textAlign: "left" }}>
                     Connect your Azure DevOps credentials in{" "}
-                    <a href="#" onClick={(e) => { e.preventDefault(); setTab("settings"); }}>Settings → Credentials → Azure DevOps</a>
+                    <button type="button" className="btn-link" style={{ padding: 0 }} onClick={() => setTab("settings")}>Settings → Credentials → Azure DevOps</button>
                     {" "}to browse this.
                 </p>
             </div>

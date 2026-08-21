@@ -255,8 +255,9 @@ export default function MfaSection({ onEnrolled }) {
                 <form onSubmit={handleVerifyEnroll}>
 
                     <div className="form-group">
-                        <label>6-digit code</label>
+                        <label htmlFor="mfa-enroll-code">6-digit code</label>
                         <input
+                            id="mfa-enroll-code"
                             type="text"
                             inputMode="numeric"
                             maxLength={6}
@@ -325,8 +326,9 @@ export default function MfaSection({ onEnrolled }) {
                     <form onSubmit={handleDisable}>
 
                         <div className="form-group">
-                            <label>6-digit code</label>
+                            <label htmlFor="mfa-disable-code">6-digit code</label>
                             <ClearableInput
+                                id="mfa-disable-code"
                                 inputMode="numeric"
                                 placeholder="123456"
                                 value={disableCode}
@@ -338,8 +340,9 @@ export default function MfaSection({ onEnrolled }) {
                         </div>
 
                         <div className="form-group">
-                            <label>Or a recovery code</label>
+                            <label htmlFor="mfa-disable-recovery">Or a recovery code</label>
                             <ClearableInput
+                                id="mfa-disable-recovery"
                                 placeholder="8H7K-XP2Q"
                                 value={disableRecoveryCode}
                                 onChange={(e) => { setDisableRecoveryCode(e.target.value); setDisableCode(""); }}
@@ -386,7 +389,7 @@ export default function MfaSection({ onEnrolled }) {
 
                     <div className="form-group" style={{ marginTop: 20 }}>
 
-                        <label>Lockout notification email</label>
+                        <label htmlFor="mfa-notification-email">Lockout notification email</label>
 
                         <p className="field-hint" style={{ marginTop: 0 }}>
                             If this account gets locked out after too many wrong codes, we'll email this
@@ -397,6 +400,7 @@ export default function MfaSection({ onEnrolled }) {
 
                             <div style={{ flex: 1 }}>
                                 <ClearableInput
+                                    id="mfa-notification-email"
                                     type="email"
                                     placeholder="you@example.com"
                                     value={notificationEmailInput}

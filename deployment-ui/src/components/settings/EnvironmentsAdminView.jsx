@@ -73,9 +73,9 @@ function PaasServiceIdField({ index, provider, field, label, placeholder, env, i
 
                 <p className="field-hint">
                     Connect your own {PROVIDER_LABEL[provider]} account in{" "}
-                    <a href="#" onClick={(e) => { e.preventDefault(); setTab("settings"); }}>
+                    <button type="button" className="btn-link" style={{ padding: 0 }} onClick={() => setTab("settings")}>
                         Settings → Credentials
-                    </a>
+                    </button>
                     {" "}to pick from a live list instead of typing an id.
                 </p>
 
@@ -311,8 +311,9 @@ export default function EnvironmentsAdminView({ isAdmin }) {
                     </div>
 
                     <div className="form-group">
-                        <label>Name</label>
+                        <label htmlFor={`env-${index}-name`}>Name</label>
                         <input
+                            id={`env-${index}-name`}
                             className="form-control"
                             placeholder="Production"
                             value={env.name}
@@ -322,8 +323,9 @@ export default function EnvironmentsAdminView({ isAdmin }) {
                     </div>
 
                     <div className="form-group">
-                        <label>CD Workflow Name (must match the workflow's exact name)</label>
+                        <label htmlFor={`env-${index}-workflow-name`}>CD Workflow Name (must match the workflow's exact name)</label>
                         <input
+                            id={`env-${index}-workflow-name`}
                             className="form-control"
                             placeholder="Release API"
                             value={env.workflowName}
@@ -357,8 +359,9 @@ export default function EnvironmentsAdminView({ isAdmin }) {
                     )}
 
                     <div className="form-group">
-                        <label>Cloud Target</label>
+                        <label htmlFor={`env-${index}-cloud-target`}>Cloud Target</label>
                         <select
+                            id={`env-${index}-cloud-target`}
                             className="form-control"
                             value={env.cloudProvider}
                             onChange={(e) => updateField(index, "cloudProvider", e.target.value)}
@@ -379,8 +382,9 @@ export default function EnvironmentsAdminView({ isAdmin }) {
                         <>
 
                         <div className="form-group">
-                            <label>AWS Region</label>
+                            <label htmlFor={`env-${index}-aws-region`}>AWS Region</label>
                             <input
+                                id={`env-${index}-aws-region`}
                                 className="form-control"
                                 placeholder="us-east-1"
                                 value={env.awsRegion || ""}
@@ -390,8 +394,9 @@ export default function EnvironmentsAdminView({ isAdmin }) {
                         </div>
 
                         <div className="form-group">
-                            <label>ECS Cluster</label>
+                            <label htmlFor={`env-${index}-ecs-cluster`}>ECS Cluster</label>
                             <input
+                                id={`env-${index}-ecs-cluster`}
                                 className="form-control"
                                 value={env.ecsCluster || ""}
                                 onChange={(e) => updateField(index, "ecsCluster", e.target.value)}
@@ -400,8 +405,9 @@ export default function EnvironmentsAdminView({ isAdmin }) {
                         </div>
 
                         <div className="form-group">
-                            <label>ECS Service</label>
+                            <label htmlFor={`env-${index}-ecs-service`}>ECS Service</label>
                             <input
+                                id={`env-${index}-ecs-service`}
                                 className="form-control"
                                 value={env.ecsService || ""}
                                 onChange={(e) => updateField(index, "ecsService", e.target.value)}
@@ -410,8 +416,9 @@ export default function EnvironmentsAdminView({ isAdmin }) {
                         </div>
 
                         <div className="form-group">
-                            <label>ECR Repository</label>
+                            <label htmlFor={`env-${index}-ecr-repository`}>ECR Repository</label>
                             <input
+                                id={`env-${index}-ecr-repository`}
                                 className="form-control"
                                 value={env.ecrRepository || ""}
                                 onChange={(e) => updateField(index, "ecrRepository", e.target.value)}
@@ -428,8 +435,9 @@ export default function EnvironmentsAdminView({ isAdmin }) {
                         <>
 
                         <div className="form-group">
-                            <label>Azure Subscription ID</label>
+                            <label htmlFor={`env-${index}-azure-subscription-id`}>Azure Subscription ID</label>
                             <input
+                                id={`env-${index}-azure-subscription-id`}
                                 className="form-control"
                                 value={env.azureSubscriptionId || ""}
                                 onChange={(e) => updateField(index, "azureSubscriptionId", e.target.value)}
@@ -438,8 +446,9 @@ export default function EnvironmentsAdminView({ isAdmin }) {
                         </div>
 
                         <div className="form-group">
-                            <label>Resource Group</label>
+                            <label htmlFor={`env-${index}-azure-resource-group`}>Resource Group</label>
                             <input
+                                id={`env-${index}-azure-resource-group`}
                                 className="form-control"
                                 value={env.azureResourceGroup || ""}
                                 onChange={(e) => updateField(index, "azureResourceGroup", e.target.value)}
@@ -448,8 +457,9 @@ export default function EnvironmentsAdminView({ isAdmin }) {
                         </div>
 
                         <div className="form-group">
-                            <label>Web App Name</label>
+                            <label htmlFor={`env-${index}-azure-webapp-name`}>Web App Name</label>
                             <input
+                                id={`env-${index}-azure-webapp-name`}
                                 className="form-control"
                                 value={env.azureWebAppName || ""}
                                 onChange={(e) => updateField(index, "azureWebAppName", e.target.value)}
@@ -488,8 +498,9 @@ export default function EnvironmentsAdminView({ isAdmin }) {
                             environment's Cloudflare Project actually lives under, so it
                             stays a plain field rather than being folded into the picker. */}
                         <div className="form-group">
-                            <label>Cloudflare Account ID</label>
+                            <label htmlFor={`env-${index}-cloudflare-account-id`}>Cloudflare Account ID</label>
                             <input
+                                id={`env-${index}-cloudflare-account-id`}
                                 className="form-control"
                                 value={env.cloudflareAccountId || ""}
                                 onChange={(e) => updateField(index, "cloudflareAccountId", e.target.value)}

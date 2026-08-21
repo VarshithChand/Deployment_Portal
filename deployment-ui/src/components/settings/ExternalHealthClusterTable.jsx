@@ -31,7 +31,7 @@ export default function ExternalHealthClusterTable({ title, endpoints, results, 
                         <th>Service</th>
                         <th>Status</th>
                         <th className="num">Response</th>
-                        <th></th>
+                        <th><span className="visually-hidden">Actions</span></th>
                     </tr>
 
                 </thead>
