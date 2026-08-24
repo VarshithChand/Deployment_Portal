@@ -8,7 +8,7 @@ import useToast from "../../hooks/useToast";
 import useConfirm from "../../hooks/useConfirm";
 import {
     resetUserMfa, generateMfaRecoveryCode, requireUserMfa, unrequireUserMfa,
-    blockUser, unblockUser, exportBackup, importBackup
+    forceLogoutUser, exportBackup, importBackup
 } from "../../services/adminService";
 
 const IMPORT_CONFIRM_PHRASE = "OVERWRITE EVERYTHING";
@@ -142,26 +142,31 @@ export default function AdminAccessView({
 
     }
 
-    // Suspend/Unblock reuses the exact same PAT-session block flow
-    // Services > Users already exposes (see AdminUsersController) - only
-    // meaningful for an allowlist entry that also has an active PAT
-    // session, so it's only shown where findPatUser resolves one.
-    async function handleToggleBlock(patUser) {
-
-        const blocking = !patUser.isBlocked;
+    // "Remove" above only stops a FUTURE login from getting Admin - the
+    // GitHub OAuth login this row already has is a JWT with the Admin role
+    // baked in at sign-in, valid until it naturally expires, so it doesn't
+    // notice a later allowlist change on its own. Suspend forces that one
+    // session to end right now (see AdminUsersController's /logout route
+    // and GlobalLogoutMonitor's mySessionForceLogoutEpoch handling) so a
+    // just-removed admin can't keep acting on the old token - but nothing
+    // here blocks them from signing back in afterward (as a Viewer, since
+    // they're off the allowlist by then). Actually blocking someone from
+    // the portal entirely is a different, heavier action that stays where
+    // it already lives, Services > Users' own Block/Unblock.
+    async function handleForceLogout(patUser) {
 
         try {
 
             setBlockingKey(patUser.key);
-            await (blocking ? blockUser(patUser.key) : unblockUser(patUser.key));
-            toast.show(blocking ? `'${patUser.patOwnerLogin}' suspended.` : `'${patUser.patOwnerLogin}' unblocked.`, "success");
+            await forceLogoutUser(patUser.key);
+            toast.show(`'${patUser.patOwnerLogin}' signed out.`, "success");
             refreshPatUsers();
 
         }
         catch (err) {
 
             console.error(err);
-            toast.show(err.response?.data?.message || "Failed to update this user's status.", "error");
+            toast.show(err.response?.data?.message || "Failed to sign out this user.", "error");
 
         }
         finally {
@@ -414,10 +419,11 @@ export default function AdminAccessView({
 
                 <p className="empty-state" style={{ padding: "0 0 15px", textAlign: "left" }}>
                     GitHub usernames that get the Admin role on login. Everyone else who logs in
-                    gets Viewer. <strong>Remove</strong> takes away Admin only. <strong>Suspend</strong>
-                    {" "}(shown only where this login has an active session) rejects every request from
-                    that session outright, even with a still-valid token — the same action Services →
-                    Users already offers.
+                    gets Viewer. <strong>Remove</strong> takes away Admin for future logins.
+                    {" "}<strong>Suspend</strong> (shown only where this login has an active session)
+                    signs that session out right now, so it can't keep acting as Admin on an
+                    already-issued login — it doesn't block them from using the portal afterward.
+                    To block someone from the portal entirely, use Services → Users instead.
                 </p>
 
                 <form onSubmit={handleAddAdmin} className="button-row" style={{ flexWrap: "nowrap", marginBottom: "16px" }}>
@@ -477,7 +483,7 @@ export default function AdminAccessView({
                                                 {!patUser ? (
                                                     <span className="badge badge-secondary">No session</span>
                                                 ) : patUser.isBlocked ? (
-                                                    <span className="badge badge-danger">Suspended</span>
+                                                    <span className="badge badge-danger">Blocked</span>
                                                 ) : (
                                                     <span className="badge badge-success">Active</span>
                                                 )}
@@ -491,11 +497,11 @@ export default function AdminAccessView({
 
                                                         <button
                                                             type="button"
-                                                            className={`btn btn-sm ${patUser.isBlocked ? "btn-secondary" : "btn-danger"}`}
-                                                            onClick={() => handleToggleBlock(patUser)}
+                                                            className="btn btn-sm btn-danger"
+                                                            onClick={() => handleForceLogout(patUser)}
                                                             disabled={blockingKey === patUser.key}
                                                         >
-                                                            {blockingKey === patUser.key ? "..." : patUser.isBlocked ? "Unblock" : "Suspend"}
+                                                            {blockingKey === patUser.key ? "..." : "Suspend"}
                                                         </button>
 
                                                     )}
