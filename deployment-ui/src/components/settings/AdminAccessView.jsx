@@ -1,47 +1,183 @@
 import { useRef, useState } from "react";
 
 import ClearableInput from "../common/ClearableInput";
+import SectionTabs from "../common/SectionTabs";
+import SidebarStateToggle from "../common/SidebarStateToggle";
 import TypedConfirmDialog from "../cloudServices/TypedConfirmDialog";
 import useToast from "../../hooks/useToast";
 import useConfirm from "../../hooks/useConfirm";
 import {
     resetUserMfa, generateMfaRecoveryCode, requireUserMfa, unrequireUserMfa,
-    exportBackup, importBackup
+    blockUser, unblockUser, exportBackup, importBackup
 } from "../../services/adminService";
 
 const IMPORT_CONFIRM_PHRASE = "OVERWRITE EVERYTHING";
+
+const TABS = [
+    { key: "allowlist", label: "Admin Allowlist" },
+    { key: "mfa", label: "MFA" },
+    { key: "service-access", label: "Service Access" },
+    { key: "backup", label: "Backup & Restore" }
+];
 
 // Settings > Admin Access - restricted to the single super-admin identity
 // (see constants/settingsViews.js's SUPER_ADMIN_ONLY_VIEWS, enforced here
 // only for hiding the tile/redirecting the view; the real enforcement is
 // server-side, AdminGate.DenyUnlessSuperAdminAsync on every action this
-// page calls). Bundles the two things that used to be reachable by anyone
-// (Admin Allowlist, an open tab in Credentials) or by any general admin
-// (MFA reset, on Services > Users) into one place only VarshithChand can
-// even see.
+// page calls). Four tabs, one console: who gets Admin (Admin Allowlist),
+// who has MFA set up (MFA), what each PAT user can see in the sidebar
+// (Service Access - the SAME feature Settings > Sidebar Access exposes to
+// every general admin, reused here unchanged rather than duplicated, just
+// with a second entry point for the super-admin), and a full export/import
+// of this portal's own persisted state (Backup & Restore).
 export default function AdminAccessView({
     adminUsernamesText,
     setAdminUsernamesText,
     handleSaveAdmins,
-    savingAdmins,
     handleClear,
     patUsers,
     patUsersLoading,
-    refreshPatUsers
+    refreshPatUsers,
+    selectedPatUserKey,
+    setSelectedPatUserKey,
+    sidebarAccessLoading,
+    sidebarAccessMap,
+    setSidebarTabState,
+    sidebarTabs,
+    handleSaveSidebarAccess,
+    savingSidebarAccess,
+    handleClearSidebarAccess,
+    clearingSidebarAccess
 }) {
 
     const toast = useToast();
     const { confirm, dialog } = useConfirm();
 
+    const [tab, setTab] = useState("allowlist");
+
+    // ---- Admin Allowlist (per-row, not a raw textarea) -----------------
+
+    const [newAdminUsername, setNewAdminUsername] = useState("");
+    const [savingRow, setSavingRow] = useState(null);
+    const [blockingKey, setBlockingKey] = useState(null);
+
+    const adminUsernames = adminUsernamesText.split(",").map((u) => u.trim()).filter(Boolean);
+
+    // Matches an allowlist entry to a real PAT session by GitHub login
+    // (case-insensitive - GitHub usernames aren't case-sensitive) so
+    // "Suspend" only shows where there's an actual session to suspend.
+    function findPatUser(username) {
+        return (patUsers || []).find((u) => u.patOwnerLogin?.toLowerCase() === username.toLowerCase());
+    }
+
+    async function handleAddAdmin(e) {
+
+        e.preventDefault();
+
+        const username = newAdminUsername.trim();
+
+        if (!username) return;
+
+        if (adminUsernames.some((u) => u.toLowerCase() === username.toLowerCase())) {
+            toast.show(`'${username}' is already on the allowlist.`, "error");
+            return;
+        }
+
+        const updated = [...adminUsernames, username];
+
+        try {
+
+            setSavingRow(username);
+            setAdminUsernamesText(updated.join(", "));
+            await handleSaveAdmins(updated);
+            setNewAdminUsername("");
+
+        }
+        catch (err) {
+
+            console.error(err);
+            toast.show(err.response?.data?.message || "Failed to add that username.", "error");
+
+        }
+        finally {
+
+            setSavingRow(null);
+
+        }
+
+    }
+
+    async function handleRemoveAdmin(username) {
+
+        if (!(await confirm({
+            title: "Remove from admin allowlist?",
+            message: `'${username}' loses the Admin role on their next login. This only removes ` +
+                "admin privileges - it doesn't block or delete their account.",
+            confirmLabel: "Remove",
+            danger: true
+        }))) {
+            return;
+        }
+
+        const updated = adminUsernames.filter((u) => u.toLowerCase() !== username.toLowerCase());
+
+        try {
+
+            setSavingRow(username);
+            setAdminUsernamesText(updated.join(", "));
+            await handleSaveAdmins(updated);
+
+        }
+        catch (err) {
+
+            console.error(err);
+            toast.show(err.response?.data?.message || "Failed to remove that username.", "error");
+
+        }
+        finally {
+
+            setSavingRow(null);
+
+        }
+
+    }
+
+    // Suspend/Unblock reuses the exact same PAT-session block flow
+    // Services > Users already exposes (see AdminUsersController) - only
+    // meaningful for an allowlist entry that also has an active PAT
+    // session, so it's only shown where findPatUser resolves one.
+    async function handleToggleBlock(patUser) {
+
+        const blocking = !patUser.isBlocked;
+
+        try {
+
+            setBlockingKey(patUser.key);
+            await (blocking ? blockUser(patUser.key) : unblockUser(patUser.key));
+            toast.show(blocking ? `'${patUser.patOwnerLogin}' suspended.` : `'${patUser.patOwnerLogin}' unblocked.`, "success");
+            refreshPatUsers();
+
+        }
+        catch (err) {
+
+            console.error(err);
+            toast.show(err.response?.data?.message || "Failed to update this user's status.", "error");
+
+        }
+        finally {
+
+            setBlockingKey(null);
+
+        }
+
+    }
+
+    // ---- MFA Console -----------------------------------------------
+
     const [resettingKey, setResettingKey] = useState(null);
     const [generatingKey, setGeneratingKey] = useState(null);
     const [requiringKey, setRequiringKey] = useState(null);
     const [revealedCode, setRevealedCode] = useState(null);
-
-    const [exporting, setExporting] = useState(false);
-    const [pendingImport, setPendingImport] = useState(null);
-    const [importing, setImporting] = useState(false);
-    const importFileRef = useRef(null);
 
     // Toggles the admin-set "must set up MFA" flag - doesn't enroll the
     // user itself (only their own phone can scan a QR code), just makes
@@ -159,13 +295,13 @@ export default function AdminAccessView({
 
     }
 
-    // Downloads the raw export response as a .json file - a plain Blob +
-    // temporary <a download> click, the standard browser pattern, no
-    // server involvement beyond the GET itself. The file is exactly as
-    // sensitive as every credential in this portal in plaintext (see
-    // BackupController's own comment) - never uploaded anywhere by this
-    // code, never logged, gone from memory the moment the browser tab
-    // that triggered the download closes.
+    // ---- Backup & Restore -----------------------------------------
+
+    const [exporting, setExporting] = useState(false);
+    const [pendingImport, setPendingImport] = useState(null);
+    const [importing, setImporting] = useState(false);
+    const importFileRef = useRef(null);
+
     async function handleExport() {
 
         setExporting(true);
@@ -226,12 +362,6 @@ export default function AdminAccessView({
 
     }
 
-    // Full overwrite, not a merge — every credential, PAT user, and
-    // setting currently in this portal is replaced by whatever the file
-    // holds the instant this succeeds. The Data Protection key ring only
-    // takes effect for a NEW process, so a restart/redeploy right after
-    // this is what actually makes the restored credentials decrypt
-    // correctly again - not optional, not automatic.
     async function handleConfirmImport() {
 
         setImporting(true);
@@ -274,143 +404,329 @@ export default function AdminAccessView({
 
         {dialog}
 
-        <div className="card">
+        <SectionTabs sections={TABS} active={tab} onSelect={setTab} />
 
-            <h2 className="card-title">Admin Allowlist</h2>
+        {tab === "allowlist" && (
 
-            <p className="empty-state" style={{ padding: "0 0 15px", textAlign: "left" }}>
-                GitHub usernames that get the Admin role on login. Everyone else who logs in gets
-                Viewer. Restricted to a single administrator account, same as Database Management.
-            </p>
+            <div className="card">
 
-            <div className="form-group">
-                <label htmlFor="admin-allowlist-usernames">GitHub Usernames (comma-separated)</label>
-                <ClearableInput
-                    id="admin-allowlist-usernames"
-                    placeholder="octocat, hubot"
-                    value={adminUsernamesText}
-                    onChange={(e) => setAdminUsernamesText(e.target.value)}
-                    onClear={() => setAdminUsernamesText("")}
-                    autoComplete="off"
-                    name="admin-usernames"
-                />
+                <h2 className="card-title">Admin Allowlist</h2>
+
+                <p className="empty-state" style={{ padding: "0 0 15px", textAlign: "left" }}>
+                    GitHub usernames that get the Admin role on login. Everyone else who logs in
+                    gets Viewer. <strong>Remove</strong> takes away Admin only. <strong>Suspend</strong>
+                    {" "}(shown only where this login has an active session) rejects every request from
+                    that session outright, even with a still-valid token — the same action Services →
+                    Users already offers.
+                </p>
+
+                <form onSubmit={handleAddAdmin} className="button-row" style={{ flexWrap: "nowrap", marginBottom: "16px" }}>
+
+                    <div style={{ flex: 1 }}>
+                        <ClearableInput
+                            id="new-admin-username"
+                            placeholder="GitHub username"
+                            value={newAdminUsername}
+                            onChange={(e) => setNewAdminUsername(e.target.value)}
+                            onClear={() => setNewAdminUsername("")}
+                            autoComplete="off"
+                        />
+                    </div>
+
+                    <button type="submit" className="btn btn-primary" disabled={!newAdminUsername.trim() || savingRow !== null}>
+                        Add
+                    </button>
+
+                </form>
+
+                {adminUsernames.length === 0 ? (
+
+                    <p className="empty-state field-hint-bad">
+                        Empty — bootstrap mode is active, every visitor is treated as Admin until
+                        someone's added here.
+                    </p>
+
+                ) : (
+
+                    <div className="table-scroll">
+
+                        <table className="table">
+
+                            <thead>
+                                <tr>
+                                    <th>Username</th>
+                                    <th>Session</th>
+                                    <th><span className="visually-hidden">Actions</span></th>
+                                </tr>
+                            </thead>
+
+                            <tbody>
+
+                                {adminUsernames.map((username) => {
+
+                                    const patUser = findPatUser(username);
+                                    const busy = savingRow === username;
+
+                                    return (
+
+                                        <tr key={username}>
+
+                                            <td>@{username}</td>
+
+                                            <td>
+                                                {!patUser ? (
+                                                    <span className="badge badge-secondary">No session</span>
+                                                ) : patUser.isBlocked ? (
+                                                    <span className="badge badge-danger">Suspended</span>
+                                                ) : (
+                                                    <span className="badge badge-success">Active</span>
+                                                )}
+                                            </td>
+
+                                            <td>
+
+                                                <div className="button-row">
+
+                                                    {patUser && (
+
+                                                        <button
+                                                            type="button"
+                                                            className={`btn btn-sm ${patUser.isBlocked ? "btn-secondary" : "btn-danger"}`}
+                                                            onClick={() => handleToggleBlock(patUser)}
+                                                            disabled={blockingKey === patUser.key}
+                                                        >
+                                                            {blockingKey === patUser.key ? "..." : patUser.isBlocked ? "Unblock" : "Suspend"}
+                                                        </button>
+
+                                                    )}
+
+                                                    <button
+                                                        type="button"
+                                                        className="btn btn-danger btn-sm"
+                                                        onClick={() => handleRemoveAdmin(username)}
+                                                        disabled={busy}
+                                                    >
+                                                        {busy ? "..." : "Remove"}
+                                                    </button>
+
+                                                </div>
+
+                                            </td>
+
+                                        </tr>
+
+                                    );
+
+                                })}
+
+                            </tbody>
+
+                        </table>
+
+                    </div>
+
+                )}
+
+                <div className="button-row" style={{ marginTop: "16px" }}>
+
+                    <button type="button" className="btn btn-danger" onClick={() => handleClear("admins", "admin allowlist")}>
+                        Clear Entire Allowlist
+                    </button>
+
+                </div>
+
             </div>
 
-            <div className="button-row">
+        )}
 
-                <button type="button" className="btn btn-primary" onClick={handleSaveAdmins} disabled={savingAdmins}>
-                    {savingAdmins ? "Saving..." : "Save Admin Allowlist"}
-                </button>
+        {tab === "mfa" && (
 
-                <button type="button" className="btn btn-danger" onClick={() => handleClear("admins", "admin allowlist")}>
-                    Clear
-                </button>
+            <div className="card">
+
+                <h2 className="card-title">MFA Console</h2>
+
+                <p className="empty-state" style={{ padding: "0 0 15px", textAlign: "left" }}>
+                    Every PAT user's MFA status. "Require MFA" nudges a not-yet-enrolled user to set
+                    theirs up, escalating to a full-screen block if they skip it twice - it doesn't
+                    enroll them for you, only their own authenticator app can do that. "Reset MFA"
+                    removes an existing enrollment entirely (they re-enroll from scratch). "Generate
+                    Recovery Code" issues a single one-time code for someone locked out of their
+                    authenticator app, without resetting anything - users never see their own recovery
+                    codes, only an admin can issue one.
+                </p>
+
+                {patUsersLoading ? (
+
+                    <p className="field-hint">Loading...</p>
+
+                ) : mfaUsers.length === 0 ? (
+
+                    <p className="empty-state">No PAT users yet.</p>
+
+                ) : (
+
+                    <div className="table-scroll">
+
+                        <table className="table">
+
+                            <thead>
+                                <tr>
+                                    <th>User</th>
+                                    <th>MFA</th>
+                                    <th><span className="visually-hidden">Actions</span></th>
+                                </tr>
+                            </thead>
+
+                            <tbody>
+
+                                {mfaUsers.map((u) => (
+
+                                    <tr key={u.key}>
+
+                                        <td>@{u.patOwnerLogin}</td>
+
+                                        <td>
+                                            <span className={`badge ${u.isMfaEnabled ? "badge-success" : "badge-secondary"}`}>
+                                                {u.isMfaEnabled ? "Enabled" : "Off"}
+                                            </span>
+                                            {!u.isMfaEnabled && u.isMfaRequired && (
+                                                <span className="badge badge-warning" style={{ marginLeft: 6 }}>
+                                                    Required
+                                                </span>
+                                            )}
+                                        </td>
+
+                                        <td>
+
+                                            {/* Not gated on u.isMfaEnabled - that flag is only ever
+                                                meaningful for a row with a currently-resolvable login
+                                                (see GetPatUsersAsync), so a flaky/"Unknown" row would
+                                                hide both actions right when they're most needed. Both
+                                                backend actions re-resolve the login themselves and fail
+                                                cleanly (400/404 with a real message) when there's
+                                                genuinely nothing to act on. */}
+                                            <div className="button-row">
+
+                                                    {!u.isMfaEnabled && (
+
+                                                        <button
+                                                            type="button"
+                                                            className={`btn btn-sm ${u.isMfaRequired ? "btn-secondary" : "btn-primary"}`}
+                                                            onClick={() => handleToggleRequireMfa(u)}
+                                                            disabled={requiringKey === u.key}
+                                                        >
+                                                            {requiringKey === u.key ? "..." : u.isMfaRequired ? "Remove Requirement" : "Require MFA"}
+                                                        </button>
+
+                                                    )}
+
+                                                    <button
+                                                        type="button"
+                                                        className="btn btn-secondary btn-sm"
+                                                        onClick={() => handleGenerateRecoveryCode(u)}
+                                                        disabled={generatingKey === u.key}
+                                                    >
+                                                        {generatingKey === u.key ? "..." : "Generate Recovery Code"}
+                                                    </button>
+
+                                                    <button
+                                                        type="button"
+                                                        className="btn btn-danger btn-sm"
+                                                        onClick={() => handleResetMfa(u)}
+                                                        disabled={resettingKey === u.key}
+                                                    >
+                                                        {resettingKey === u.key ? "..." : "Reset MFA"}
+                                                    </button>
+
+                                            </div>
+
+                                        </td>
+
+                                    </tr>
+
+                                ))}
+
+                            </tbody>
+
+                        </table>
+
+                    </div>
+
+                )}
 
             </div>
 
-        </div>
+        )}
 
-        <div className="card">
+        {tab === "service-access" && (
 
-            <h2 className="card-title">MFA Console</h2>
+            <>
 
-            <p className="empty-state" style={{ padding: "0 0 15px", textAlign: "left" }}>
-                Every PAT user's MFA status. "Require MFA" nudges a not-yet-enrolled user to set
-                theirs up, escalating to a full-screen block if they skip it twice - it doesn't
-                enroll them for you, only their own authenticator app can do that. "Reset MFA"
-                removes an existing enrollment entirely (they re-enroll from scratch). "Generate
-                Recovery Code" issues a single one-time code for someone locked out of their
-                authenticator app, without resetting anything - users never see their own recovery
-                codes, only an admin can issue one.
-            </p>
+            <div className="card">
 
-            {patUsersLoading ? (
+                <h2 className="card-title">Service Access</h2>
 
-                <p className="field-hint">Loading...</p>
+                <p className="empty-state" style={{ padding: "0 0 15px", textAlign: "left" }}>
+                    Pick a PAT user below, then restrict any sidebar section (every service this
+                    portal integrates with) for just them. <strong>Locked</strong> keeps it visible
+                    but disabled, with a lock icon in place of its usual one. <strong>Hidden</strong>
+                    {" "}removes it from the sidebar entirely. Settings and Dashboard can't be
+                    restricted, so there's always a way back in. The same console any general admin
+                    can already reach at Settings → Sidebar Access — this is a second way in, not a
+                    separate copy of it.
+                </p>
 
-            ) : mfaUsers.length === 0 ? (
+                {patUsersLoading ? (
 
-                <p className="empty-state">No PAT users yet.</p>
+                    <p className="field-hint">Loading PAT users...</p>
 
-            ) : (
+                ) : patUsers.length === 0 ? (
 
-                <div className="table-scroll">
+                    <p className="empty-state">
+                        No PAT users yet — nobody has configured a Personal Access Token on
+                        this portal.
+                    </p>
+
+                ) : (
+
+                    <div className="table-scroll">
 
                     <table className="table">
 
                         <thead>
                             <tr>
-                                <th>User</th>
-                                <th>MFA</th>
+                                <th>PAT Owner</th>
+                                <th>Repository</th>
+                                <th>Restricted</th>
                                 <th><span className="visually-hidden">Actions</span></th>
                             </tr>
                         </thead>
 
                         <tbody>
 
-                            {mfaUsers.map((u) => (
+                            {patUsers.map((u) => (
 
-                                <tr key={u.key}>
-
-                                    <td>@{u.patOwnerLogin}</td>
-
+                                <tr key={u.key} className={selectedPatUserKey === u.key ? "table-row-active" : ""}>
+                                    <td>{u.patOwnerLogin}</td>
+                                    <td>{u.owner}/{u.repository}</td>
                                     <td>
-                                        <span className={`badge ${u.isMfaEnabled ? "badge-success" : "badge-secondary"}`}>
-                                            {u.isMfaEnabled ? "Enabled" : "Off"}
-                                        </span>
-                                        {!u.isMfaEnabled && u.isMfaRequired && (
-                                            <span className="badge badge-warning" style={{ marginLeft: 6 }}>
-                                                Required
-                                            </span>
+                                        {u.restrictedTabCount > 0 ? (
+                                            <span className="badge badge-danger">{u.restrictedTabCount} restricted</span>
+                                        ) : (
+                                            <span className="badge badge-success">Fully visible</span>
                                         )}
                                     </td>
-
                                     <td>
-
-                                        {/* Not gated on u.isMfaEnabled - that flag is only ever
-                                            meaningful for a row with a currently-resolvable login
-                                            (see GetPatUsersAsync), so a flaky/"Unknown" row would
-                                            hide both actions right when they're most needed. Both
-                                            backend actions re-resolve the login themselves and fail
-                                            cleanly (400/404 with a real message) when there's
-                                            genuinely nothing to act on. */}
-                                        <div className="button-row">
-
-                                                {!u.isMfaEnabled && (
-
-                                                    <button
-                                                        type="button"
-                                                        className={`btn btn-sm ${u.isMfaRequired ? "btn-secondary" : "btn-primary"}`}
-                                                        onClick={() => handleToggleRequireMfa(u)}
-                                                        disabled={requiringKey === u.key}
-                                                    >
-                                                        {requiringKey === u.key ? "..." : u.isMfaRequired ? "Remove Requirement" : "Require MFA"}
-                                                    </button>
-
-                                                )}
-
-                                                <button
-                                                    type="button"
-                                                    className="btn btn-secondary btn-sm"
-                                                    onClick={() => handleGenerateRecoveryCode(u)}
-                                                    disabled={generatingKey === u.key}
-                                                >
-                                                    {generatingKey === u.key ? "..." : "Generate Recovery Code"}
-                                                </button>
-
-                                                <button
-                                                    type="button"
-                                                    className="btn btn-danger btn-sm"
-                                                    onClick={() => handleResetMfa(u)}
-                                                    disabled={resettingKey === u.key}
-                                                >
-                                                    {resettingKey === u.key ? "..." : "Reset MFA"}
-                                                </button>
-
-                                        </div>
-
+                                        <button
+                                            type="button"
+                                            className="btn btn-secondary btn-sm"
+                                            onClick={() => setSelectedPatUserKey(
+                                                selectedPatUserKey === u.key ? null : u.key
+                                            )}
+                                        >
+                                            {selectedPatUserKey === u.key ? "Close" : "Manage Access"}
+                                        </button>
                                     </td>
-
                                 </tr>
 
                             ))}
@@ -419,59 +735,133 @@ export default function AdminAccessView({
 
                     </table>
 
+                    </div>
+
+                )}
+
+            </div>
+
+            {selectedPatUserKey && (
+
+                <div className="card">
+
+                    <h2 className="card-title">
+                        Service Access — {patUsers.find((u) => u.key === selectedPatUserKey)?.patOwnerLogin || selectedPatUserKey}
+                    </h2>
+
+                    {sidebarAccessLoading ? (
+
+                        <p className="field-hint">Loading this user's service access...</p>
+
+                    ) : (
+
+                        <div className="table-scroll">
+
+                        <table className="table">
+
+                            <thead>
+                                <tr>
+                                    <th>Service</th>
+                                    <th>Access</th>
+                                </tr>
+                            </thead>
+
+                            <tbody>
+
+                                {sidebarTabs.map(({ key, label }) => (
+
+                                    <tr key={key}>
+                                        <td>{label}</td>
+                                        <td>
+                                            <SidebarStateToggle
+                                                value={sidebarAccessMap[key]}
+                                                onChange={(state) => setSidebarTabState(key, state)}
+                                            />
+                                        </td>
+                                    </tr>
+
+                                ))}
+
+                            </tbody>
+
+                        </table>
+
+                        </div>
+
+                    )}
+
+                    <div className="button-row" style={{ marginTop: "15px" }}>
+
+                        <button type="button" className="btn btn-primary" onClick={handleSaveSidebarAccess} disabled={savingSidebarAccess || sidebarAccessLoading}>
+                            {savingSidebarAccess ? "Saving..." : "Save Service Access"}
+                        </button>
+
+                        <button type="button" className="btn btn-danger" onClick={handleClearSidebarAccess} disabled={clearingSidebarAccess || sidebarAccessLoading}>
+                            {clearingSidebarAccess ? "Resetting..." : "Reset This User To Visible"}
+                        </button>
+
+                    </div>
+
                 </div>
 
             )}
 
-        </div>
+            </>
 
-        <div className="card">
+        )}
 
-            <h2 className="card-title">Backup &amp; Restore</h2>
+        {tab === "backup" && (
 
-            <p className="empty-state" style={{ padding: "0 0 15px", textAlign: "left" }}>
-                A full export of everything this portal has saved — the admin allowlist, every PAT
-                user's settings, and every connected credential (GitHub PAT, cloud secret keys,
-                database passwords, everything in Settings → Credentials). Built for moving off a
-                Render free-tier Postgres database before its 30-day expiration deletes it: export
-                here, store the file in whatever new database or secret store you're moving to,
-                then import it there once this portal is pointed at the new database.
-            </p>
+            <div className="card">
 
-            <p className="field-hint field-hint-bad" style={{ margin: "0 0 15px" }}>
-                Treat the exported file as sensitive as every one of those credentials in plain
-                text — it carries the encryption key that unlocks all of them, not just the
-                encrypted values. Never commit it to a git repo (not even a private one — the same
-                rule as never committing a raw GitHub PAT), and delete it once it's safely stored
-                wherever you're keeping it.
-            </p>
+                <h2 className="card-title">Backup &amp; Restore</h2>
 
-            <div className="button-row">
+                <p className="empty-state" style={{ padding: "0 0 15px", textAlign: "left" }}>
+                    A full export of everything this portal has saved — the admin allowlist, every
+                    PAT user's settings, and every connected credential (GitHub PAT, cloud secret
+                    keys, database passwords, everything in Settings → Credentials). Built for
+                    moving off a Render free-tier Postgres database before its 30-day expiration
+                    deletes it: export here, store the file in whatever new database or secret
+                    store you're moving to, then import it there once this portal is pointed at
+                    the new database.
+                </p>
 
-                <button type="button" className="btn btn-primary" onClick={handleExport} disabled={exporting}>
-                    {exporting ? "Exporting..." : "Export Backup"}
-                </button>
+                <p className="field-hint field-hint-bad" style={{ margin: "0 0 15px" }}>
+                    Treat the exported file as sensitive as every one of those credentials in
+                    plain text — it carries the encryption key that unlocks all of them, not just
+                    the encrypted values. Never commit it to a git repo (not even a private one —
+                    the same rule as never committing a raw GitHub PAT), and delete it once it's
+                    safely stored wherever you're keeping it.
+                </p>
 
-                <button
-                    type="button"
-                    className="btn btn-secondary"
-                    onClick={() => importFileRef.current?.click()}
-                    disabled={importing}
-                >
-                    Import Backup...
-                </button>
+                <div className="button-row">
 
-                <input
-                    ref={importFileRef}
-                    type="file"
-                    accept="application/json"
-                    onChange={handleImportFileChosen}
-                    style={{ display: "none" }}
-                />
+                    <button type="button" className="btn btn-primary" onClick={handleExport} disabled={exporting}>
+                        {exporting ? "Exporting..." : "Export Backup"}
+                    </button>
+
+                    <button
+                        type="button"
+                        className="btn btn-secondary"
+                        onClick={() => importFileRef.current?.click()}
+                        disabled={importing}
+                    >
+                        Import Backup...
+                    </button>
+
+                    <input
+                        ref={importFileRef}
+                        type="file"
+                        accept="application/json"
+                        onChange={handleImportFileChosen}
+                        style={{ display: "none" }}
+                    />
+
+                </div>
 
             </div>
 
-        </div>
+        )}
 
         <TypedConfirmDialog
             open={!!pendingImport}

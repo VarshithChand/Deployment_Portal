@@ -654,9 +654,15 @@ export default function Settings() {
 
     }
 
-    async function handleSaveAdmins() {
+    // `usernamesOverride`, when given, is saved directly instead of
+    // re-parsing adminUsernamesText - needed because a per-row Add/Remove
+    // (see AdminAccessView's Admin Allowlist tab) computes its own next
+    // list and calls this in the same tick as setAdminUsernamesText,
+    // which wouldn't be reflected in this closure's adminUsernamesText
+    // yet (React state updates aren't synchronous).
+    async function handleSaveAdmins(usernamesOverride) {
 
-        const usernames = adminUsernamesText
+        const usernames = usernamesOverride ?? adminUsernamesText
             .split(",")
             .map((u) => u.trim())
             .filter(Boolean);
@@ -1046,6 +1052,16 @@ export default function Settings() {
                     patUsers={patUsers}
                     patUsersLoading={patUsersLoading}
                     refreshPatUsers={refreshPatUsers}
+                    selectedPatUserKey={selectedPatUserKey}
+                    setSelectedPatUserKey={setSelectedPatUserKey}
+                    sidebarAccessLoading={sidebarAccessLoading}
+                    sidebarAccessMap={sidebarAccessMap}
+                    setSidebarTabState={setSidebarTabState}
+                    sidebarTabs={SIDEBAR_TABS}
+                    handleSaveSidebarAccess={handleSaveSidebarAccess}
+                    savingSidebarAccess={savingSidebarAccess}
+                    handleClearSidebarAccess={handleClearSidebarAccess}
+                    clearingSidebarAccess={clearingSidebarAccess}
                 />
 
             )}
