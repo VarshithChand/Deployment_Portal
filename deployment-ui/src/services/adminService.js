@@ -50,3 +50,13 @@ export const unrequireUserMfa = async (key) =>
 // whichever was active most recently - a one-time cleanup for rows that
 // predate the one-session-per-PAT check saving now enforces.
 export const removeDuplicateUsers = async () => await api.post("/users/dedupe");
+
+// Full export/import of this portal's own persisted state - see
+// BackupController/SettingsService.ExportBackupAsync's own comments for
+// why the response is exactly as sensitive as every stored credential in
+// plaintext (it carries both the encrypted settings AND the only key
+// ring that can decrypt them). Never logged, never cached - the caller
+// is responsible for what happens to it once it leaves this response.
+export const exportBackup = async () => await api.get("/backup/export");
+
+export const importBackup = async (backup) => await api.post("/backup/import", backup);

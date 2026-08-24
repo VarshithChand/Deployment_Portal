@@ -1,9 +1,15 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 
 import ClearableInput from "../common/ClearableInput";
+import TypedConfirmDialog from "../cloudServices/TypedConfirmDialog";
 import useToast from "../../hooks/useToast";
 import useConfirm from "../../hooks/useConfirm";
-import { resetUserMfa, generateMfaRecoveryCode, requireUserMfa, unrequireUserMfa } from "../../services/adminService";
+import {
+    resetUserMfa, generateMfaRecoveryCode, requireUserMfa, unrequireUserMfa,
+    exportBackup, importBackup
+} from "../../services/adminService";
+
+const IMPORT_CONFIRM_PHRASE = "OVERWRITE EVERYTHING";
 
 // Settings > Admin Access - restricted to the single super-admin identity
 // (see constants/settingsViews.js's SUPER_ADMIN_ONLY_VIEWS, enforced here
@@ -31,6 +37,11 @@ export default function AdminAccessView({
     const [generatingKey, setGeneratingKey] = useState(null);
     const [requiringKey, setRequiringKey] = useState(null);
     const [revealedCode, setRevealedCode] = useState(null);
+
+    const [exporting, setExporting] = useState(false);
+    const [pendingImport, setPendingImport] = useState(null);
+    const [importing, setImporting] = useState(false);
+    const importFileRef = useRef(null);
 
     // Toggles the admin-set "must set up MFA" flag - doesn't enroll the
     // user itself (only their own phone can scan a QR code), just makes
@@ -143,6 +154,104 @@ export default function AdminAccessView({
         finally {
 
             setGeneratingKey(null);
+
+        }
+
+    }
+
+    // Downloads the raw export response as a .json file - a plain Blob +
+    // temporary <a download> click, the standard browser pattern, no
+    // server involvement beyond the GET itself. The file is exactly as
+    // sensitive as every credential in this portal in plaintext (see
+    // BackupController's own comment) - never uploaded anywhere by this
+    // code, never logged, gone from memory the moment the browser tab
+    // that triggered the download closes.
+    async function handleExport() {
+
+        setExporting(true);
+
+        try {
+
+            const response = await exportBackup();
+            const blob = new Blob([JSON.stringify(response.data, null, 2)], { type: "application/json" });
+            const url = URL.createObjectURL(blob);
+
+            const link = document.createElement("a");
+            link.href = url;
+            link.download = `deployment-portal-backup-${new Date().toISOString().slice(0, 10)}.json`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+
+            toast.show("Backup downloaded. Store it somewhere as protected as your credentials — never in a git repo.", "success");
+
+        }
+        catch (err) {
+
+            console.error(err);
+            toast.show(err.response?.data?.message || "Failed to export the backup.", "error");
+
+        }
+        finally {
+
+            setExporting(false);
+
+        }
+
+    }
+
+    function handleImportFileChosen(e) {
+
+        const file = e.target.files?.[0];
+        e.target.value = "";
+
+        if (!file) return;
+
+        const reader = new FileReader();
+
+        reader.onload = () => {
+
+            try {
+                setPendingImport(JSON.parse(reader.result));
+            }
+            catch {
+                toast.show("That file isn't valid JSON — is it really an exported backup?", "error");
+            }
+
+        };
+
+        reader.onerror = () => toast.show("Couldn't read that file.", "error");
+        reader.readAsText(file);
+
+    }
+
+    // Full overwrite, not a merge — every credential, PAT user, and
+    // setting currently in this portal is replaced by whatever the file
+    // holds the instant this succeeds. The Data Protection key ring only
+    // takes effect for a NEW process, so a restart/redeploy right after
+    // this is what actually makes the restored credentials decrypt
+    // correctly again - not optional, not automatic.
+    async function handleConfirmImport() {
+
+        setImporting(true);
+
+        try {
+
+            await importBackup(pendingImport);
+            toast.show("Backup restored. Restart or redeploy the backend now — the restored encryption keys only take effect on a fresh process.", "success");
+            setPendingImport(null);
+
+        }
+        catch (err) {
+
+            console.error(err);
+            toast.show(err.response?.data?.message || "Failed to import that backup.", "error");
+
+        }
+        finally {
+
+            setImporting(false);
 
         }
 
@@ -315,6 +424,72 @@ export default function AdminAccessView({
             )}
 
         </div>
+
+        <div className="card">
+
+            <h2 className="card-title">Backup &amp; Restore</h2>
+
+            <p className="empty-state" style={{ padding: "0 0 15px", textAlign: "left" }}>
+                A full export of everything this portal has saved — the admin allowlist, every PAT
+                user's settings, and every connected credential (GitHub PAT, cloud secret keys,
+                database passwords, everything in Settings → Credentials). Built for moving off a
+                Render free-tier Postgres database before its 30-day expiration deletes it: export
+                here, store the file in whatever new database or secret store you're moving to,
+                then import it there once this portal is pointed at the new database.
+            </p>
+
+            <p className="field-hint field-hint-bad" style={{ margin: "0 0 15px" }}>
+                Treat the exported file as sensitive as every one of those credentials in plain
+                text — it carries the encryption key that unlocks all of them, not just the
+                encrypted values. Never commit it to a git repo (not even a private one — the same
+                rule as never committing a raw GitHub PAT), and delete it once it's safely stored
+                wherever you're keeping it.
+            </p>
+
+            <div className="button-row">
+
+                <button type="button" className="btn btn-primary" onClick={handleExport} disabled={exporting}>
+                    {exporting ? "Exporting..." : "Export Backup"}
+                </button>
+
+                <button
+                    type="button"
+                    className="btn btn-secondary"
+                    onClick={() => importFileRef.current?.click()}
+                    disabled={importing}
+                >
+                    Import Backup...
+                </button>
+
+                <input
+                    ref={importFileRef}
+                    type="file"
+                    accept="application/json"
+                    onChange={handleImportFileChosen}
+                    style={{ display: "none" }}
+                />
+
+            </div>
+
+        </div>
+
+        <TypedConfirmDialog
+            open={!!pendingImport}
+            title="Overwrite everything with this backup?"
+            message={(
+                <>
+                    This replaces the admin allowlist, every PAT user's settings, and every
+                    connected credential currently in this portal with what's in the imported
+                    file. There is no undo. After this succeeds, restart or redeploy the backend —
+                    the restored encryption keys only take effect on a fresh process.
+                </>
+            )}
+            resourceName={IMPORT_CONFIRM_PHRASE}
+            confirmLabel={importing ? "Restoring..." : "Restore Backup"}
+            loading={importing}
+            onConfirm={handleConfirmImport}
+            onCancel={() => !importing && setPendingImport(null)}
+        />
 
         {revealedCode && (
 

@@ -3171,4 +3171,100 @@ public class SettingsService
 
         await File.WriteAllTextAsync(_localSettingsPath, root.ToString());
     }
+
+    // Everything this portal persists, in one file - built for migrating
+    // off a Render free-tier Postgres instance before its 30-day
+    // expiration deletes it. `Settings` is the exact portal_settings.data
+    // JSONB as it sits at rest (individual secret fields still Data-
+    // Protection ciphertext - this never calls Unprotect, so a leaked
+    // export never hands over a plaintext credential on its own).
+    // DataProtectionKeyXmls is the OTHER half that actually matters here:
+    // without the matching key ring, every one of those encrypted fields
+    // becomes permanently unreadable the moment this is restored into a
+    // database with a different, freshly-generated key ring - the two
+    // only work together. That also means this file is, in practice, AS
+    // SENSITIVE AS every credential in this portal in plaintext (anyone
+    // holding both halves can decrypt everything offline) - callers must
+    // treat it that way, never as "safely encrypted".
+    public async Task<PortalBackupDto> ExportBackupAsync()
+    {
+        if (_connectionString == null)
+            throw new InvalidOperationException(
+                "This portal isn't running against a Postgres database (DATABASE_URL not set) - there's nothing durable to back up.");
+
+        var root = await ReadRootAsync();
+
+        await using var connection = new NpgsqlConnection(_connectionString);
+        await connection.OpenAsync();
+        await EnsureDataProtectionKeysTableAsync(connection);
+
+        var keys = new List<string>();
+
+        await using (var keysCommand = new NpgsqlCommand("SELECT xml FROM data_protection_keys ORDER BY id", connection))
+        await using (var reader = await keysCommand.ExecuteReaderAsync())
+        {
+            while (await reader.ReadAsync())
+                keys.Add(reader.GetString(0));
+        }
+
+        return new PortalBackupDto
+        {
+            ExportedAtUtc = DateTime.UtcNow,
+            Settings = root,
+            DataProtectionKeyXmls = keys
+        };
+    }
+
+    // Full overwrite of both halves - the settings row AND the key ring -
+    // never a merge. A partial restore (settings without the matching
+    // keys, or vice versa) is worse than no restore at all, since it
+    // leaves every credential looking present but silently undecryptable.
+    // The key ring change only takes effect for THIS process the next
+    // time it starts (ASP.NET Core's Data Protection system loads keys
+    // once at startup and caches them in memory) - the caller needs to
+    // restart/redeploy afterward, not just call this and keep going.
+    public async Task ImportBackupAsync(PortalBackupDto backup)
+    {
+        if (_connectionString == null)
+            throw new InvalidOperationException(
+                "This portal isn't running against a Postgres database (DATABASE_URL not set) - there's nothing to restore into.");
+
+        if (backup.Settings == null)
+            throw new ArgumentException("Backup file is missing its settings data.");
+
+        await WriteRootAsync(backup.Settings);
+
+        await using var connection = new NpgsqlConnection(_connectionString);
+        await connection.OpenAsync();
+        await EnsureDataProtectionKeysTableAsync(connection);
+
+        await using var transaction = await connection.BeginTransactionAsync();
+
+        await using (var clearKeys = new NpgsqlCommand("DELETE FROM data_protection_keys", connection, transaction))
+            await clearKeys.ExecuteNonQueryAsync();
+
+        foreach (var xml in backup.DataProtectionKeyXmls)
+        {
+            await using var insertKey = new NpgsqlCommand(
+                "INSERT INTO data_protection_keys (xml) VALUES (@xml)", connection, transaction);
+
+            insertKey.Parameters.AddWithValue("xml", xml);
+            await insertKey.ExecuteNonQueryAsync();
+        }
+
+        await transaction.CommitAsync();
+    }
+
+    // Same table PostgresXmlRepository (Program.cs's Data Protection setup)
+    // creates and writes to - CREATE TABLE IF NOT EXISTS is idempotent, so
+    // running it again here (a fresh connection, possibly before that
+    // repository has ever been touched) is always safe.
+    private static async Task EnsureDataProtectionKeysTableAsync(NpgsqlConnection connection)
+    {
+        await using var command = new NpgsqlCommand(
+            "CREATE TABLE IF NOT EXISTS data_protection_keys (id SERIAL PRIMARY KEY, xml TEXT NOT NULL)",
+            connection);
+
+        await command.ExecuteNonQueryAsync();
+    }
 }
