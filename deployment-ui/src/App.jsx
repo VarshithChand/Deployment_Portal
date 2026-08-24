@@ -47,6 +47,7 @@ const AzureDevOpsFeeds = lazy(() => import("./pages/AzureDevOpsFeeds"));
 const CodeCommit = lazy(() => import("./pages/CodeCommit"));
 const GitLab = lazy(() => import("./pages/GitLab"));
 const Bitbucket = lazy(() => import("./pages/Bitbucket"));
+const CloudServicesOverview = lazy(() => import("./pages/CloudServicesOverview"));
 const CloudServicesAws = lazy(() => import("./pages/CloudServicesAws"));
 const CloudServicesAzure = lazy(() => import("./pages/CloudServicesAzure"));
 const CloudServicesGcp = lazy(() => import("./pages/CloudServicesGcp"));
@@ -270,6 +271,7 @@ function App(){
                             {tab === "codeCommit" && <CodeCommit/>}
                             {tab === "gitlab" && <GitLab/>}
                             {tab === "bitbucket" && <Bitbucket/>}
+                            {tab === "cloudServicesOverview" && <CloudServicesOverview/>}
                             {tab === "cloudServicesAws" && <CloudServicesAws/>}
                             {tab === "cloudServicesAzure" && <CloudServicesAzure/>}
                             {tab === "cloudServicesGcp" && <CloudServicesGcp/>}

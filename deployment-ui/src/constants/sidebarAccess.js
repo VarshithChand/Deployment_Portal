@@ -24,8 +24,17 @@ import { FLAT_TABS } from "../components/layout/Sidebar";
 // frontend's route guard sends anyone who lands on a restricted tab).
 const EXCLUDED_FROM_SIDEBAR_ACCESS = new Set(["settings", "dashboard"]);
 
+// A handful of leaves are deliberately aliased under two different nav
+// entry points (e.g. GCP Cloud Run appears both under Cloud Services and,
+// with its own "Cloud Run (GCP)" label, under PaaS/Microservices - same
+// tab key, same underlying page, reached two ways) - Set dedupes those
+// down to one row here rather than restricting/locking the same page
+// twice under two different-looking entries.
+const seenKeys = new Set();
+
 export const SIDEBAR_TABS = FLAT_TABS
     .filter((t) => !EXCLUDED_FROM_SIDEBAR_ACCESS.has(t.key))
+    .filter((t) => (seenKeys.has(t.key) ? false : (seenKeys.add(t.key), true)))
     .map((t) => ({ key: t.key, label: t.label }));
 
 export const SIDEBAR_STATES = [

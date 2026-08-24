@@ -185,28 +185,31 @@ export const TABS = [
         label: "Cloud Services",
         Icon: CloudServicesIcon,
         children: [
+            { key: "cloudServicesOverview", label: "Overview", Icon: CloudServicesIcon },
             { key: "cloudServicesAws", label: "AWS", Icon: AwsCloudIcon },
             { key: "cloudServicesAzure", label: "Azure", Icon: AzureCloudIcon },
-            { key: "cloudServicesGcp", label: "GCP", Icon: GcpCloudIcon }
-        ]
-    },
-    // PaaS/Microservices - lifecycle management for customer-deployed
-    // PaaS apps (AWS Elastic Beanstalk / Azure App Service + slots / GCP
-    // Cloud Run), NOT this portal's own hosting - see "Hosting
-    // Providers" below for that, a deliberately different feature kept
-    // under its own distinct nav item to avoid the exact naming
-    // confusion this app already fixed once for Docker Engine vs.
-    // Container Registry.
-    {
-        key: "paasMicroservicesGroup",
-        type: "group",
-        label: "PaaS / Microservices",
-        Icon: PaasMicroservicesIcon,
-        children: [
-            { key: "paasHub", label: "All Applications", Icon: PaasMicroservicesIcon },
-            { key: "paasElasticBeanstalk", label: "Elastic Beanstalk", Icon: ElasticBeanstalkIcon },
-            { key: "paasAzureAppService", label: "App Service", Icon: AzureCloudIcon },
-            { key: "cloudServicesGcp", label: "Cloud Run (GCP)", Icon: GcpCloudIcon }
+            { key: "cloudServicesGcp", label: "GCP", Icon: GcpCloudIcon },
+            // PaaS/Microservices nested here, not a top-level group of its
+            // own - lifecycle management for customer-deployed PaaS apps
+            // (AWS Elastic Beanstalk / Azure App Service + slots / GCP
+            // Cloud Run), a real sub-concern of Cloud Services rather than
+            // a separate top-level category. Still NOT the same thing as
+            // "Hosting Providers" below (this portal's own hosting) -
+            // that stays its own distinct nav item, same reasoning as
+            // before, just no longer needing a whole extra top-level
+            // group to keep that distinction clear.
+            {
+                key: "paasMicroservicesGroup",
+                type: "group",
+                label: "PaaS / Microservices",
+                Icon: PaasMicroservicesIcon,
+                children: [
+                    { key: "paasHub", label: "All Applications", Icon: PaasMicroservicesIcon },
+                    { key: "paasElasticBeanstalk", label: "Elastic Beanstalk", Icon: ElasticBeanstalkIcon },
+                    { key: "paasAzureAppService", label: "App Service", Icon: AzureCloudIcon },
+                    { key: "cloudServicesGcp", label: "Cloud Run (GCP)", Icon: GcpCloudIcon }
+                ]
+            }
         ]
     },
     // Session-scoped Render/Cloudflare/Netlify/Vercel connections (see
