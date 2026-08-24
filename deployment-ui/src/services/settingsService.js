@@ -206,6 +206,19 @@ export const saveAdminUsernames = async (payload) => {
     return response.data;
 };
 
+// Suspends/unsuspends one admin in place (stays on the allowlist, just
+// treated as a Viewer until unsuspended) - distinct from re-saving the
+// allowlist without them, which is what Remove does instead.
+export const suspendAdmin = async (username) => {
+    const response = await settingsApi.post(`/admins/${encodeURIComponent(username)}/suspend`);
+    return response.data;
+};
+
+export const unsuspendAdmin = async (username) => {
+    const response = await settingsApi.post(`/admins/${encodeURIComponent(username)}/unsuspend`);
+    return response.data;
+};
+
 // SonarQube/SonarCloud saves live on sonarService.js now (api/sonar/
 // {provider}) - each an independent credential since the split.
 

@@ -8,6 +8,8 @@ import {
     saveDockerSettings,
     saveGitHubOAuthSettings,
     saveAdminUsernames,
+    suspendAdmin,
+    unsuspendAdmin,
     saveAiSettings,
     testAiConnection,
     getPatUsers,
@@ -156,6 +158,7 @@ export default function Settings() {
     const [oauthClientSecretConfigured, setOauthClientSecretConfigured] = useState(false);
 
     const [adminUsernamesText, setAdminUsernamesText] = useState("");
+    const [suspendedAdminUsernames, setSuspendedAdminUsernames] = useState([]);
 
     const [aiModel, setAiModel] = useState("");
     const [aiApiKey, setAiApiKey] = useState("");
@@ -202,6 +205,7 @@ export default function Settings() {
             setOauthClientSecretConfigured(!!data.gitHubOAuthClientSecretConfigured);
 
             setAdminUsernamesText((data.adminGitHubUsernames || []).join(", "));
+            setSuspendedAdminUsernames(data.suspendedAdminGitHubUsernames || []);
 
             setAiModel(data.aiModel || "");
             setAiApiKeyConfigured(!!data.aiApiKeyConfigured);
@@ -711,6 +715,28 @@ export default function Settings() {
 
     }
 
+    // Toggles one admin's suspended flag - unlike Remove above, the
+    // username stays on the allowlist, just treated as a Viewer until
+    // unsuspended (see AdminGate.IsAdminOrBootstrap). Takes effect on
+    // that person's very next request, no logout needed.
+    async function handleToggleSuspendAdmin(username, suspending) {
+
+        try {
+
+            await (suspending ? suspendAdmin(username) : unsuspendAdmin(username));
+            toast.show(suspending ? `'${username}' suspended.` : `'${username}' unsuspended.`, "success");
+            load();
+
+        }
+        catch (err) {
+
+            console.error(err);
+            toast.show(err.response?.data?.message || "Failed to update this admin's suspended status.", "error");
+
+        }
+
+    }
+
     function setSidebarTabState(key, state) {
 
         setSidebarAccessMap((prev) => ({ ...prev, [key]: state }));
@@ -1048,6 +1074,8 @@ export default function Settings() {
                     setAdminUsernamesText={setAdminUsernamesText}
                     handleSaveAdmins={handleSaveAdmins}
                     savingAdmins={savingAdmins}
+                    suspendedAdminUsernames={suspendedAdminUsernames}
+                    handleToggleSuspendAdmin={handleToggleSuspendAdmin}
                     handleClear={handleClear}
                     patUsers={patUsers}
                     patUsersLoading={patUsersLoading}

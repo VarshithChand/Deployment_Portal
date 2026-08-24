@@ -18,6 +18,14 @@ public class SettingsViewDto
 
     public List<string> AdminGitHubUsernames { get; set; } = new();
 
+    // Stays ON AdminGitHubUsernames (unlike Remove, which deletes the
+    // entry outright) but is treated as a normal Viewer everywhere until
+    // unsuspended - see AdminGate.IsAdminOrBootstrap, which cross-checks
+    // this list even for a session whose JWT already has the Admin role
+    // claim baked in, so suspending someone takes effect on their very
+    // next request instead of only at their next login.
+    public List<string> SuspendedAdminGitHubUsernames { get; set; } = new();
+
     // SonarQube/SonarCloud are NOT here - each now has its own dedicated
     // status endpoint (SonarController.Status) since the split into two
     // independent credentials, matching the same pattern Docker Hub/GHCR/

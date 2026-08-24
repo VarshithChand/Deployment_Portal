@@ -19,9 +19,32 @@ namespace DeploymentAPI.Helpers;
 // authenticated user in the "Admin" role may act.
 public static class AdminGate
 {
-    public static bool IsAdminOrBootstrap(ControllerBase controller, SettingsViewDto view) =>
-        view.AdminGitHubUsernames.Count == 0
-        || (controller.User.Identity?.IsAuthenticated == true && controller.User.IsInRole("Admin"));
+    public static bool IsAdminOrBootstrap(ControllerBase controller, SettingsViewDto view)
+    {
+        if (view.AdminGitHubUsernames.Count == 0)
+            return true;
+
+        if (controller.User.Identity?.IsAuthenticated != true || !controller.User.IsInRole("Admin"))
+            return false;
+
+        // The "Admin" role claim above is baked into this session's JWT at
+        // sign-in (see AuthService) and doesn't notice a LATER allowlist
+        // change on its own - a plain Remove or Suspend from Admin Access
+        // wouldn't take effect until this token naturally expired. Cross-
+        // checking the live allowlist/suspended-list here, using the login
+        // already embedded in the same token (ClaimTypes.Name - no extra
+        // GitHub API call), is what makes both take effect on this
+        // session's very next request instead.
+        var claimLogin = controller.User.FindFirst(ClaimTypes.Name)?.Value;
+
+        if (claimLogin == null)
+            return false;
+
+        if (!view.AdminGitHubUsernames.Any(u => string.Equals(u, claimLogin, StringComparison.OrdinalIgnoreCase)))
+            return false;
+
+        return !view.SuspendedAdminGitHubUsernames.Any(u => string.Equals(u, claimLogin, StringComparison.OrdinalIgnoreCase));
+    }
 
     // CSRF guard: the actual authorization above relies on the portal_token
     // cookie, which is SameSite=None (required so the separately-hosted
@@ -105,7 +128,10 @@ public static class AdminGate
         if (login == null)
             return false;
 
-        if (view.AdminGitHubUsernames.Any(u => string.Equals(u, login, StringComparison.OrdinalIgnoreCase)))
+        var onAllowlist = view.AdminGitHubUsernames.Any(u => string.Equals(u, login, StringComparison.OrdinalIgnoreCase));
+        var suspended = view.SuspendedAdminGitHubUsernames.Any(u => string.Equals(u, login, StringComparison.OrdinalIgnoreCase));
+
+        if (onAllowlist && !suspended)
             return true;
 
         return pageKey != null && await settings.IsGrantedPageAdminAsync(pageKey, login);
@@ -139,7 +165,8 @@ public static class AdminGate
         var login = await auth.GetAuthenticatedLoginAsync();
 
         return login != null
-            && view.AdminGitHubUsernames.Any(u => string.Equals(u, login, StringComparison.OrdinalIgnoreCase));
+            && view.AdminGitHubUsernames.Any(u => string.Equals(u, login, StringComparison.OrdinalIgnoreCase))
+            && !view.SuspendedAdminGitHubUsernames.Any(u => string.Equals(u, login, StringComparison.OrdinalIgnoreCase));
     }
 
     // Database Management is deliberately restricted to one specific GitHub

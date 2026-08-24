@@ -8,7 +8,7 @@ import useToast from "../../hooks/useToast";
 import useConfirm from "../../hooks/useConfirm";
 import {
     resetUserMfa, generateMfaRecoveryCode, requireUserMfa, unrequireUserMfa,
-    forceLogoutUser, exportBackup, importBackup
+    exportBackup, importBackup
 } from "../../services/adminService";
 
 const IMPORT_CONFIRM_PHRASE = "OVERWRITE EVERYTHING";
@@ -34,6 +34,8 @@ export default function AdminAccessView({
     adminUsernamesText,
     setAdminUsernamesText,
     handleSaveAdmins,
+    suspendedAdminUsernames,
+    handleToggleSuspendAdmin,
     handleClear,
     patUsers,
     patUsersLoading,
@@ -64,10 +66,15 @@ export default function AdminAccessView({
     const adminUsernames = adminUsernamesText.split(",").map((u) => u.trim()).filter(Boolean);
 
     // Matches an allowlist entry to a real PAT session by GitHub login
-    // (case-insensitive - GitHub usernames aren't case-sensitive) so
-    // "Suspend" only shows where there's an actual session to suspend.
+    // (case-insensitive - GitHub usernames aren't case-sensitive) - used
+    // for the Session column only; Suspend itself no longer needs one
+    // (see handleSuspendClick below).
     function findPatUser(username) {
         return (patUsers || []).find((u) => u.patOwnerLogin?.toLowerCase() === username.toLowerCase());
+    }
+
+    function isSuspended(username) {
+        return (suspendedAdminUsernames || []).some((u) => u.toLowerCase() === username.toLowerCase());
     }
 
     async function handleAddAdmin(e) {
@@ -142,31 +149,18 @@ export default function AdminAccessView({
 
     }
 
-    // "Remove" above only stops a FUTURE login from getting Admin - the
-    // GitHub OAuth login this row already has is a JWT with the Admin role
-    // baked in at sign-in, valid until it naturally expires, so it doesn't
-    // notice a later allowlist change on its own. Suspend forces that one
-    // session to end right now (see AdminUsersController's /logout route
-    // and GlobalLogoutMonitor's mySessionForceLogoutEpoch handling) so a
-    // just-removed admin can't keep acting on the old token - but nothing
-    // here blocks them from signing back in afterward (as a Viewer, since
-    // they're off the allowlist by then). Actually blocking someone from
-    // the portal entirely is a different, heavier action that stays where
-    // it already lives, Services > Users' own Block/Unblock.
-    async function handleForceLogout(patUser) {
+    // Stays on the allowlist (unlike Remove, which deletes the row) but
+    // immediately stops counting as Admin - see AdminGate.IsAdminOrBootstrap,
+    // which cross-checks this even against a session whose JWT already has
+    // the Admin role claim baked in, so this takes effect on that person's
+    // very next request. No logout, no re-typing the username to bring
+    // them back later.
+    async function handleSuspendClick(username) {
 
         try {
 
-            setBlockingKey(patUser.key);
-            await forceLogoutUser(patUser.key);
-            toast.show(`'${patUser.patOwnerLogin}' signed out.`, "success");
-            refreshPatUsers();
-
-        }
-        catch (err) {
-
-            console.error(err);
-            toast.show(err.response?.data?.message || "Failed to sign out this user.", "error");
+            setBlockingKey(username);
+            await handleToggleSuspendAdmin(username, !isSuspended(username));
 
         }
         finally {
@@ -419,11 +413,12 @@ export default function AdminAccessView({
 
                 <p className="empty-state" style={{ padding: "0 0 15px", textAlign: "left" }}>
                     GitHub usernames that get the Admin role on login. Everyone else who logs in
-                    gets Viewer. <strong>Remove</strong> takes away Admin for future logins.
-                    {" "}<strong>Suspend</strong> (shown only where this login has an active session)
-                    signs that session out right now, so it can't keep acting as Admin on an
-                    already-issued login — it doesn't block them from using the portal afterward.
-                    To block someone from the portal entirely, use Services → Users instead.
+                    gets Viewer. <strong>Suspend</strong> strips Admin immediately — even from an
+                    already-signed-in session, no logout needed — while leaving them able to keep
+                    using the portal as a normal Viewer; the username stays on this list so
+                    <strong> Unsuspend</strong> restores Admin without retyping it.
+                    {" "}<strong>Remove</strong> deletes the username from this list entirely.
+                    Neither one blocks someone from the portal — for that, use Services → Users.
                 </p>
 
                 <form onSubmit={handleAddAdmin} className="button-row" style={{ flexWrap: "nowrap", marginBottom: "16px" }}>
@@ -472,6 +467,8 @@ export default function AdminAccessView({
 
                                     const patUser = findPatUser(username);
                                     const busy = savingRow === username;
+                                    const suspended = isSuspended(username);
+                                    const toggling = blockingKey === username;
 
                                     return (
 
@@ -480,7 +477,9 @@ export default function AdminAccessView({
                                             <td>@{username}</td>
 
                                             <td>
-                                                {!patUser ? (
+                                                {suspended ? (
+                                                    <span className="badge badge-warning">Suspended</span>
+                                                ) : !patUser ? (
                                                     <span className="badge badge-secondary">No session</span>
                                                 ) : patUser.isBlocked ? (
                                                     <span className="badge badge-danger">Blocked</span>
@@ -493,18 +492,15 @@ export default function AdminAccessView({
 
                                                 <div className="button-row">
 
-                                                    {patUser && (
-
-                                                        <button
-                                                            type="button"
-                                                            className="btn btn-sm btn-danger"
-                                                            onClick={() => handleForceLogout(patUser)}
-                                                            disabled={blockingKey === patUser.key}
-                                                        >
-                                                            {blockingKey === patUser.key ? "..." : "Suspend"}
-                                                        </button>
-
-                                                    )}
+                                                    <button
+                                                        type="button"
+                                                        className={`btn btn-sm ${suspended ? "btn-secondary" : "btn-danger"}`}
+                                                        onClick={() => handleSuspendClick(username)}
+                                                        disabled={toggling}
+                                                        aria-label={`${suspended ? "Unsuspend" : "Suspend"} @${username}`}
+                                                    >
+                                                        {toggling ? "..." : suspended ? "Unsuspend" : "Suspend"}
+                                                    </button>
 
                                                     <button
                                                         type="button"

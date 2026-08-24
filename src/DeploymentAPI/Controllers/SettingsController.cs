@@ -785,6 +785,27 @@ public class SettingsController : ControllerBase
         return Ok(await _settings.SaveAdminUsernamesAsync(request));
     }
 
+    // Same super-admin-only tier as SaveAdmins above - see
+    // SettingsService.SuspendAdminAsync for why this is distinct from
+    // just re-saving the allowlist without that username.
+    [HttpPost("admins/{username}/suspend")]
+    public async Task<IActionResult> SuspendAdmin(string username)
+    {
+        if (await AdminGate.DenyUnlessSuperAdminAsync(this, "suspend an admin") is IActionResult denied)
+            return denied;
+
+        return Ok(await _settings.SuspendAdminAsync(username));
+    }
+
+    [HttpPost("admins/{username}/unsuspend")]
+    public async Task<IActionResult> UnsuspendAdmin(string username)
+    {
+        if (await AdminGate.DenyUnlessSuperAdminAsync(this, "unsuspend an admin") is IActionResult denied)
+            return denied;
+
+        return Ok(await _settings.UnsuspendAdminAsync(username));
+    }
+
     // Read is anonymous — every visitor's own Sidebar needs to know which of
     // ITS OWN tabs to grey out or remove. Restrictions are per PAT user
     // (see SettingsService), so this always resolves to the caller's own

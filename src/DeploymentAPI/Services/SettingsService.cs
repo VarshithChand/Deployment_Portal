@@ -1405,6 +1405,48 @@ public class SettingsService
         return BuildView(root);
     }
 
+    // Suspends an admin in place - unlike SaveAdminUsernamesAsync removing
+    // them from the list outright, this keeps the username on the
+    // allowlist (nothing to retype to bring them back) but marks it so
+    // AdminGate.IsAdminOrBootstrap stops honoring even an already-issued
+    // session's Admin role claim for it. Effective on that session's very
+    // next request - no logout, no waiting for a token to expire.
+    public async Task<SettingsViewDto> SuspendAdminAsync(string username)
+    {
+        var root = await ReadRootAsync();
+        var auth = root["Auth"] as JObject ?? new JObject();
+        var suspended = auth["SuspendedAdminGitHubUsernames"] as JArray ?? new JArray();
+
+        if (!suspended.Any(u => string.Equals(u.ToString(), username, StringComparison.OrdinalIgnoreCase)))
+            suspended.Add(username);
+
+        auth["SuspendedAdminGitHubUsernames"] = suspended;
+        root["Auth"] = auth;
+        await WriteRootAsync(root);
+
+        _log.LogInfo("Settings", $"Admin '{username}' suspended - treated as a normal Viewer until unsuspended.");
+
+        return BuildView(root);
+    }
+
+    public async Task<SettingsViewDto> UnsuspendAdminAsync(string username)
+    {
+        var root = await ReadRootAsync();
+
+        if (root["Auth"] is JObject auth && auth["SuspendedAdminGitHubUsernames"] is JArray suspended)
+        {
+            auth["SuspendedAdminGitHubUsernames"] = new JArray(
+                suspended.Where(u => !string.Equals(u.ToString(), username, StringComparison.OrdinalIgnoreCase)));
+
+            root["Auth"] = auth;
+            await WriteRootAsync(root);
+        }
+
+        _log.LogInfo("Settings", $"Admin '{username}' unsuspended.");
+
+        return BuildView(root);
+    }
+
     // "Clear" removes only the secret field, leaving non-secret identifiers
     // (Docker Registry/Username, OAuth ClientId) in place — a null
     // SecretField means the whole section IS the thing being cleared.
@@ -3003,6 +3045,10 @@ public class SettingsService
             .Select(x => x.ToString())
             .ToList() ?? new List<string>();
 
+        var suspendedAdmins = (auth?["SuspendedAdminGitHubUsernames"] as JArray)?
+            .Select(x => x.ToString())
+            .ToList() ?? new List<string>();
+
         return new SettingsViewDto
         {
             DockerRegistry = docker?["Registry"]?.ToString() ?? string.Empty,
@@ -3013,6 +3059,7 @@ public class SettingsService
             GitHubOAuthClientSecretConfigured = !string.IsNullOrWhiteSpace(oauth?["ClientSecret"]?.ToString()),
 
             AdminGitHubUsernames = admins,
+            SuspendedAdminGitHubUsernames = suspendedAdmins,
 
             AiProvider = "Google Gemini",
             AiModel = ai?["Model"]?.ToString() ?? string.Empty,
