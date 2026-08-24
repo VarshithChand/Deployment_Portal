@@ -1353,7 +1353,13 @@ textarea{
 
     flex-direction:column;
 
-    width:220px;
+    /* 220px used to clip longer labels (esp. two-level-deep entries like
+       PaaS/Microservices' own children, which compound two rounds of
+       .app-sidebar-group-children's 22px indent). The text-overflow
+       ellipsis fallback above still covers anything longer than this
+       comfortably fits, but widening removes the need for it in the
+       common case. */
+    width:250px;
 
     background:var(--card-bg-strong);
 
@@ -1668,6 +1674,26 @@ textarea{
     justify-content:center;
 
     padding:10px;
+
+}
+
+/* Flex children default to min-width:auto, which for nowrap text means
+   "never shrink below the full label's own width" — with no min-width
+   override here, a long label at deeper nesting (less room left after
+   compounding .app-sidebar-group-children padding-left) just forced the
+   parent .app-sidebar-item to overflow, and its own overflow:hidden then
+   hard-clipped the row mid-character instead of truncating gracefully. */
+.app-sidebar-item-label{
+
+    flex:1 1 auto;
+
+    min-width:0;
+
+    overflow:hidden;
+
+    text-overflow:ellipsis;
+
+    white-space:nowrap;
 
 }
 
