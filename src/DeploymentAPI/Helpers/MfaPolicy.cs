@@ -26,15 +26,15 @@ public static class MfaPolicy
 
     public static async Task<Result> EvaluateAsync(SettingsService settings, string userId)
     {
-        var githubCreds = await settings.GetUserGitHubCredentialsAsync(userId);
-
-        // TokenConfigured, not IsConfigured - see BootstrapController's own
-        // long-standing comment on this exact distinction (Round 27: using
-        // IsConfigured meant the whole nudge/mandatory/block system never
-        // activated until a repo was also picked from the Dashboard).
-        if (!githubCreds.TokenConfigured)
-            return new Result(false, false, 0, false);
-
+        // No longer gated on a connected GitHub PAT (used to check
+        // TokenConfigured here) - that made sense back when a PAT WAS the
+        // login, so "no PAT connected" meant "not really using the app."
+        // Login is a real account now, independent of any GitHub PAT (see
+        // AccountAuthService) - most accounts never connect one at all,
+        // which made this gate silently swallow the admin's "Require MFA"
+        // flag (Services > Users) for every one of them, even though that
+        // flag has nothing to do with GitHub. Evaluated purely off the
+        // account's own state now.
         var mfaEnabled = await settings.IsMfaEnabledAsync(userId);
         var show = !mfaEnabled;
 
