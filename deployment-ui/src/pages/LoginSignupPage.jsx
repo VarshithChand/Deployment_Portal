@@ -1,10 +1,16 @@
-import { useState } from "react";
+import { lazy, Suspense, useState } from "react";
 
 import { signUp, logIn } from "../services/authLoginService";
 import { API_BASE } from "../api/apiBase";
 import Logo from "../components/common/Logo";
 import useTheme from "../hooks/useTheme";
 import { SunIcon, MoonIcon } from "../components/layout/SidebarIcons";
+
+// Lazy for the same reason MfaEnforcementGate keeps this lazy - it pulls in
+// the qrcode library, which has no reason to sit in the bundle every
+// visitor downloads before ever reaching this page, let alone before ever
+// signing up at all.
+const MfaSection = lazy(() => import("../components/settings/credentials/MfaSection"));
 
 // Same stroke-weight/line-cap style as PatLoginPage's old KeyIcon, so
 // these read as part of the same icon set.
@@ -66,6 +72,15 @@ export default function LoginSignupPage({ onMfaRequired }) {
     const [submitting, setSubmitting] = useState(false);
     const [error, setError] = useState("");
 
+    // A brand-new account has nothing to verify yet (mfaRequired only ever
+    // means "an existing enrollment needs a code"), so without this a
+    // fresh signup would land straight on the dashboard with no MFA at
+    // all. Only signup sets this - an existing account logging in without
+    // MFA enabled keeps going straight to the dashboard as before, same as
+    // it always has (see the "when i am a new user" request this is
+    // scoped to - registration specifically, not every un-enrolled login).
+    const [needsMfaSetup, setNeedsMfaSetup] = useState(false);
+
     const isSignup = mode === "signup";
 
     async function handleSubmit(e) {
@@ -97,6 +112,17 @@ export default function LoginSignupPage({ onMfaRequired }) {
                 return;
             }
 
+            // A fresh signup is already fully authenticated at this point
+            // (the token's issued, same as any other successful login) -
+            // just not reloaded into the app shell yet, which is what
+            // makes it safe to hold here for mandatory enrollment instead
+            // of reloading straight to the dashboard.
+            if (isSignup) {
+                setNeedsMfaSetup(true);
+                setSubmitting(false);
+                return;
+            }
+
             // Real session cookie now set server-side — reload so
             // bootstrap picks it up and the normal app shell takes over.
             window.location.reload();
@@ -108,6 +134,52 @@ export default function LoginSignupPage({ onMfaRequired }) {
             setSubmitting(false);
 
         }
+
+    }
+
+    // Mandatory, no skip/cancel back to the form - "register, then MFA,
+    // then dashboard" is a straight line for a brand-new account, not a
+    // dismissible nudge (see MfaEnforcementGate for the separate, skippable
+    // nudge that still applies to already-existing accounts).
+    if (needsMfaSetup) {
+
+        return (
+
+            <div className="auth-page">
+
+                <div className="auth-page-card" role="main" aria-labelledby="mfa-setup-title">
+
+                    <button
+                        type="button"
+                        className="auth-theme-toggle"
+                        onClick={toggleTheme}
+                        title={theme === "dark" ? "Light mode" : "Dark mode"}
+                        aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+                    >
+                        {theme === "dark" ? <SunIcon /> : <MoonIcon />}
+                    </button>
+
+                    <div className="auth-page-logo">
+                        <Logo showEyebrow={false} compact size={34} />
+                    </div>
+
+                    <h1 id="mfa-setup-title" className="setup-gate-title">
+                        Secure your new account
+                    </h1>
+
+                    <p className="field-hint" style={{ textAlign: "center" }}>
+                        Set up multi-factor authentication to finish creating your account.
+                    </p>
+
+                    <Suspense fallback={<p className="field-hint">Loading...</p>}>
+                        <MfaSection onEnrolled={() => window.location.reload()} />
+                    </Suspense>
+
+                </div>
+
+            </div>
+
+        );
 
     }
 
