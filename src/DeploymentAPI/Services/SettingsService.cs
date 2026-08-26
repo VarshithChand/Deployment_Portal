@@ -2292,7 +2292,14 @@ public class SettingsService
     public async Task<string?> ResolveSessionKeyFromRowIdAsync(string rowId)
     {
         var root = await ReadRootAsync();
-        var users = root["UserGitHubCredentials"] as JObject;
+
+        // Same source GetPatUsersAsync lists rows from - every real
+        // account, not just ones with a connected GitHub PAT. Searching
+        // UserGitHubCredentials here (as this used to, back when that WAS
+        // the user list) meant every action button for an account with no
+        // connected PAT could never resolve its own row id back to a real
+        // key - it isn't in that section at all.
+        var users = root["Users"] as JObject;
 
         if (users == null)
             return null;
