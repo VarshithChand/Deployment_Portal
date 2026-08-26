@@ -6666,8 +6666,8 @@ textarea{
     font-size:13px;
 }
 
-/* PatLoginPage / MfaVerifyPage — the two full, bare pages a not-yet-
-   connected visitor sees before reaching any other page (see App.jsx's
+/* LoginSignupPage / MfaVerifyPage — the two full, bare pages a not-yet-
+   authenticated visitor sees before reaching any other page (see App.jsx's
    top-level gate). Unlike .dialog-backdrop/.dialog (ConfirmDialog), this
    is a real page, not an overlay on top of already-visible app chrome —
    no backdrop, no fixed positioning, no blur-over-content — but the card
@@ -6811,10 +6811,10 @@ textarea{
     .pin-lock-icon::before, .pin-lock-icon::after{ animation:none; }
 }
 
-/* Icon-prefixed input, used for the PAT field on PatLoginPage - same
-   focus ring/border-color transition as .form-control (kept in sync
-   deliberately, this just adds the icon slot .form-control alone
-   doesn't have). */
+/* Icon-prefixed input, used for the email/password fields on
+   LoginSignupPage - same focus ring/border-color transition as
+   .form-control (kept in sync deliberately, this just adds the icon slot
+   .form-control alone doesn't have). */
 .auth-page-field{
     display:flex;
     align-items:center;
@@ -6882,9 +6882,9 @@ textarea{
     background:rgba(37,99,235,.08);
 }
 
-/* Title/form styling shared by PatLoginPage and MfaVerifyPage (name
-   predates the two-page rework, kept as-is rather than churning every
-   call site). */
+/* Title/form styling shared by LoginSignupPage and MfaVerifyPage (name
+   predates the account-login rework, kept as-is rather than churning
+   every call site). */
 .setup-gate-title{
     font-size:22px;
     font-weight:800;
@@ -6904,6 +6904,28 @@ textarea{
 
 .setup-gate-form .btn{
     width:100%;
+}
+
+/* Between the email/password form and the Google/GitHub buttons on
+   LoginSignupPage - a plain "or continue with" rule, not a form element
+   itself, so it sits outside .setup-gate-form. */
+.auth-page-divider{
+    display:flex;
+    align-items:center;
+    gap:12px;
+    width:100%;
+    margin:4px 0;
+    color:var(--text-muted);
+    font-size:12px;
+    text-transform:uppercase;
+    letter-spacing:.04em;
+}
+.auth-page-divider::before,
+.auth-page-divider::after{
+    content:"";
+    flex:1;
+    height:1px;
+    background:var(--stroke);
 }
 
 /* ==========================================

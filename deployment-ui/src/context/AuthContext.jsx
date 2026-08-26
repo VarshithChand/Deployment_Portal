@@ -2,7 +2,6 @@ import { createContext, useCallback, useEffect, useState } from "react";
 
 import { getBootstrap } from "../services/bootstrapService";
 import { logout as logoutRequest } from "../services/authService";
-import { API_BASE } from "../api/apiBase";
 import useToast from "../hooks/useToast";
 
 export const AuthContext = createContext();
@@ -251,16 +250,10 @@ export default function AuthProvider({ children }) {
 
     }
 
-    function login() {
-
-        window.location.href = `${API_BASE}/api/auth/github/login`;
-
-    }
-
     return (
 
         <AuthContext.Provider value={{
-            user, loading, login, logout,
+            user, loading, logout,
             refresh: loadBootstrap, refreshOauthStatus: loadBootstrap,
             oauthConfigured, githubTokenConfigured, githubRepoConfigured,
             githubOwner, githubRepository, githubWasSignedOut,

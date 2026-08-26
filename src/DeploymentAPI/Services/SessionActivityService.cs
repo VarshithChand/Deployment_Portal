@@ -54,41 +54,19 @@ public class SessionActivityService
     // 1day) and has to survive a restart for that escalation to mean
     // anything, which an in-memory ConcurrentDictionary can't do.
 
-    // The two-page PAT-login flow's "already proved the PAT, waiting on a
-    // code" state (see AuthController's pat-login/mfa/verify actions) -
-    // keyed by PortalIdentity session key (unlike the MFA attempt/lockout
-    // dictionaries above, which are per-login) since this is specifically
-    // "what THIS browser is mid-login with," not an attribute of the
-    // GitHub account itself. In-memory only, same "gone on restart is
-    // fine" reasoning as everything else here - worst case a mid-login
-    // visitor has to paste their token again, never a security hole. The
-    // token itself is stored encrypted (see SettingsService.ProtectValue)
-    // even for this short in-memory life, not held as plaintext.
-    private readonly ConcurrentDictionary<string, (string EncryptedToken, string Login, DateTime ExpiresAtUtc)> _pendingPatSessions = new();
-
-    public void SetPendingPatSession(string key, string encryptedToken, string login, TimeSpan ttl) =>
-        _pendingPatSessions[key] = (encryptedToken, login, DateTime.UtcNow.Add(ttl));
-
-    // Null once expired, not just removed - an expired-but-still-present
-    // entry must read as "nothing pending" everywhere it's checked,
-    // exactly like the credential-unlock grants above already do.
-    public (string EncryptedToken, string Login)? GetPendingPatSession(string key)
-    {
-        if (!_pendingPatSessions.TryGetValue(key, out var entry) || entry.ExpiresAtUtc <= DateTime.UtcNow)
-            return null;
-
-        return (entry.EncryptedToken, entry.Login);
-    }
-
-    public void ClearPendingPatSession(string key) => _pendingPatSessions.TryRemove(key, out _);
-
-    // The generalized equivalent of _pendingPatSessions above, for the new
-    // email/password + Google + GitHub login paths (see
-    // AccountAuthController) - "primary factor already proved, waiting on
-    // an MFA code before the real JWT gets issued." Holds the resolved
-    // identity/role/email rather than an encrypted token, since by this
-    // point there's nothing left to prove except the MFA code itself - the
-    // account and its role were already fully resolved before this was set.
+    // "Primary factor already proved, waiting on an MFA code before the
+    // real JWT gets issued" - shared by every login method (email/
+    // password, Google, GitHub OAuth; see AccountAuthController/
+    // OAuthLoginFinisher). Keyed by PortalIdentity session key (unlike the
+    // MFA attempt/lockout dictionaries above, which are per-account) since
+    // this is specifically "what THIS browser is mid-login with," before
+    // there's a JWT to identify it by any other way. Holds the resolved
+    // identity/role/email rather than a credential - by this point
+    // there's nothing left to prove except the MFA code itself, the
+    // account and its role were already fully resolved before this was
+    // set. In-memory only, same "gone on restart is fine" reasoning as
+    // everything else here - worst case a mid-login visitor has to sign
+    // in again, never a security hole.
     private readonly ConcurrentDictionary<string, (string UserId, string Role, string? Email, DateTime ExpiresAtUtc)> _pendingAccountLogins = new();
 
     public void SetPendingAccountLogin(string key, string userId, string role, string? email, TimeSpan ttl) =>

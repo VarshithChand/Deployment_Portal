@@ -5,7 +5,7 @@ import TopBar from "./components/layout/TopBar";
 import Sidebar from "./components/layout/Sidebar";
 import Footer from "./components/layout/Footer";
 import ErrorBoundary from "./components/common/ErrorBoundary";
-import PatLoginPage from "./pages/PatLoginPage";
+import LoginSignupPage from "./pages/LoginSignupPage";
 import MfaVerifyPage from "./pages/MfaVerifyPage";
 import PeriodicSignOutMonitor from "./components/PeriodicSignOutMonitor";
 import GlobalLogoutMonitor from "./components/GlobalLogoutMonitor";
@@ -96,16 +96,16 @@ const ADMIN_ONLY_TABS = new Set(["codeQuality", "sonarcloud", "services"]);
 function App(){
 
     const { tab, setTab, sidebarAccess } = useNavigation();
-    const { isAdminSession, grantedPages, oauthStatusChecked, bootstrapError, githubTokenConfigured, githubWasSignedOut } = useAuth();
+    const { user, isAdminSession, grantedPages, oauthStatusChecked, bootstrapError } = useAuth();
     const toast = useToast();
 
     useCardTilt();
 
     // Which of the two pre-auth pages to show — null (still checking)
-    // until a real GET api/auth/mfa/pending answers it, so a browser
+    // until a real GET api/auth/login-mfa/pending answers it, so a browser
     // refresh that lands mid-MFA goes straight back to the MFA page
-    // instead of bouncing to PAT login first (the server's pending state
-    // is what decides this, never an assumption).
+    // instead of bouncing to the login page first (the server's pending
+    // state is what decides this, never an assumption).
     //
     // Fired immediately on mount, in PARALLEL with AuthContext's own
     // bootstrap fetch below (not sequenced after it, which is what this
@@ -130,7 +130,11 @@ function App(){
     }, []);
 
     const checking = !oauthStatusChecked;
-    const configured = bootstrapError || githubTokenConfigured;
+    // "configured" now means "a real account session exists" - user is set
+    // exactly when the bootstrap response's auth.authenticated is true
+    // (see AuthContext), true for all 3 login methods alike since they all
+    // issue the same JWT shape.
+    const configured = bootstrapError || !!user;
 
     // Fired once per real app load (not polled) - reports this browser's
     // own build-time commit so Services -> Application Support can show
@@ -222,8 +226,7 @@ function App(){
         }
 
         return (
-            <PatLoginPage
-                wasSignedOut={githubWasSignedOut}
+            <LoginSignupPage
                 onMfaRequired={() => setMfaPending(true)}
             />
         );

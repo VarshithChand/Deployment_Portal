@@ -6,9 +6,10 @@ import performSelfClear from "../utils/performSelfClear";
 
 const MAX_ATTEMPTS = 5;
 
-// Padlock, not the PatLoginPage KeyIcon - same stroke weight/line-cap
-// style as the rest of this app's hand-drawn icon set, just a different
-// glyph since this screen is about re-entering a lock, not a login. Used
+// Padlock, not LoginSignupPage's PasswordIcon - same stroke weight/
+// line-cap style as the rest of this app's hand-drawn icon set, just a
+// different glyph since this screen is about re-entering a lock, not a
+// login. Used
 // both large (the top tile) and small (the field prefix, matching
 // KeyIcon's own 18px there) via the same size prop. Coordinates shifted up
 // 1.75 units from a naive "rect at y=11" layout - the shackle-plus-body

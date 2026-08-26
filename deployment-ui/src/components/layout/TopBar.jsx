@@ -44,7 +44,7 @@ function LockIcon() {
 export default function TopBar() {
 
     const {
-        user, loading, login, logout, oauthConfigured, tokenOwner,
+        user, loading, logout, oauthConfigured, tokenOwner,
         canApproveReleases, isAdminSession, awsIdentityLabel, pinConfigured,
         githubOwner, githubRepository
     } = useAuth();
@@ -211,8 +211,16 @@ export default function TopBar() {
 
                     ) : oauthConfigured ? (
 
-                        <button type="button" className="theme-toggle" onClick={login}>
-                            Login with GitHub
+                        // Only reachable when the app shell mounted despite
+                        // a failed bootstrap check (see App.jsx's
+                        // bootstrapError fail-open) - a real "not logged
+                        // in" visitor never sees TopBar at all, since
+                        // App.jsx's gate shows LoginSignupPage instead. A
+                        // reload re-runs that gate, landing back on the
+                        // real login page (all 3 methods) rather than
+                        // jumping straight to GitHub OAuth specifically.
+                        <button type="button" className="theme-toggle" onClick={() => window.location.reload()}>
+                            Sign In
                         </button>
 
                     ) : (

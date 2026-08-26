@@ -12,8 +12,8 @@ import { SunIcon, MoonIcon } from "../components/layout/SidebarIcons";
 // pending session the backend already created in step 1.
 //
 // "Never grant authentication merely because the frontend remembers the
-// PAT was accepted" — so this never trusts its own memory of having just
-// come from PatLoginPage. On mount, and again whenever the tab regains
+// primary factor was accepted" — so this never trusts its own memory of
+// having just come from LoginSignupPage. On mount, and again whenever the tab regains
 // focus (covers a refresh, a background tab left open past its TTL, or
 // another tab/window having already completed or cancelled this same
 // pending session), it re-asks the server whether a pending challenge is

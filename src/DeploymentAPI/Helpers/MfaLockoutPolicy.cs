@@ -4,10 +4,11 @@ using DeploymentAPI.Services;
 namespace DeploymentAPI.Helpers;
 
 // Single source of truth for MFA wrong-code lockout, shared by every
-// place that checks a TOTP/recovery code against a login: AuthController.
-// MfaVerify (the two-page PAT+MFA login flow), MfaController.
-// VerifyEnrollment/Disable (self-service, already-connected session), and
-// MfaGate.DenyUnlessVerifiedAsync (the reconnect-a-token path off
+// place that checks a TOTP/recovery code against an account:
+// AccountAuthController.VerifyMfa (the login-time MFA-pending flow, shared
+// by every login method), MfaController.VerifyEnrollment/Disable
+// (self-service, already-authenticated session), and MfaGate.
+// DenyUnlessVerifiedAsync (the reconnect-a-token path off
 // SettingsController.SaveMyGitHub). Previously each of these duplicated
 // its own copy of "5 attempts, 15-minute lockout" against in-memory
 // SessionActivityService counters - centralized here (same reasoning as

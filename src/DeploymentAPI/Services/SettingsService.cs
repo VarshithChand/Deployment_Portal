@@ -387,7 +387,7 @@ public class SettingsService
     // device's login for the same account) only if it's BOTH been seen
     // recently AND hasn't explicitly signed out. Recency alone isn't
     // enough: the sign-out flow's own requests (POST me/github/signout,
-    // POST auth/logout, then the reload that follows onto PatLoginPage)
+    // POST auth/logout, then the reload that follows onto the login page)
     // all touch this same session's lastSeen right up to the moment of
     // signing out - so checking recency alone meant explicitly signing
     // out on one device didn't actually free the account for a SECOND
@@ -407,32 +407,18 @@ public class SettingsService
         return lastSeen.HasValue && DateTime.UtcNow - lastSeen.Value < ActiveDeviceWindow;
     }
 
-    // Public so AuthController.PatLogin can reject a duplicate-device
-    // login BEFORE asking for an MFA code (better UX - no point making
-    // someone type a code just to be told no) - SaveUserGitHubCredentialsAsync
-    // below still re-checks this itself right before actually writing
-    // anything, since a login this cheap has no other way to stay correct
-    // against a race (a second device finishing its own connect in the
-    // gap between this preview check and the eventual save).
-    public async Task<bool> IsLoginActiveOnAnotherSessionAsync(string resolvedLogin, string excludingKey)
-    {
-        var existing = await GetPatUsersAsync();
-        var other = existing.FirstOrDefault(u => u.Key != excludingKey && u.PatOwnerLogin == resolvedLogin);
-
-        return other != null && await IsSessionConsideredActiveAsync(other.Key);
-    }
-
     // allowTakeoverIfActive: false (default) is Round 21's behavior - a
     // bare token is the only proof this call has, so an OTHER device that's
     // genuinely active right now wins and this save is refused outright.
     // true is for a caller that already has STRONGER proof than the token
-    // alone - AuthController.MfaVerify passes true because reaching this
-    // point required a valid TOTP/recovery code, which is real evidence
-    // this connection is the legitimate account owner, not just whoever
-    // has a copy of the PAT string. With that proof in hand, the active
-    // device loses instead of the new one - migrated/evicted/notified
-    // exactly like an abandoned session already was, just without waiting
-    // for it to go quiet first.
+    // alone - reaching this point with it set required a valid TOTP/
+    // recovery code (previously AuthController.MfaVerify, now this
+    // account's own MFA already having been satisfied to reach here at
+    // all), which is real evidence this connection is the legitimate
+    // account owner, not just whoever has a copy of the PAT string. With
+    // that proof in hand, the active device loses instead of the new one -
+    // migrated/evicted/notified exactly like an abandoned session already
+    // was, just without waiting for it to go quiet first.
     public async Task<SaveGitHubCredentialsResult> SaveUserGitHubCredentialsAsync(
         string login, GitHubSettingsUpdateDto update, bool allowTakeoverIfActive = false)
     {
@@ -2594,25 +2580,6 @@ public class SettingsService
     // session check already does, without duplicating that logic or
     // widening the private method's own access.
     public Task<string?> ResolveGitHubLoginAsync(string token) => ResolvePatOwnerLoginAsync(token);
-
-    // Resolves an ALREADY-STORED session's own saved token to its real
-    // GitHub login, live - used by the admin "Reset MFA" action
-    // (AdminUsersController), which needs to know whose Mfa[login] entry
-    // to clear for a given row in the Users table (MFA is keyed by login,
-    // not by this session key - see the TOTP MFA region above). Reads the
-    // raw stored token directly rather than going through
-    // GetUserGitHubCredentialsAsync, which deliberately masks it to null
-    // for a soft-signed-out session - exactly the account an admin is
-    // most likely resetting MFA for (locked out, can't re-prove their old
-    // code to reconnect), so this can't afford to also come up empty then.
-    public async Task<string?> ResolveCurrentLoginForKeyAsync(string key)
-    {
-        var root = await ReadRootAsync();
-        var entry = (root["UserGitHubCredentials"] as JObject)?[key] as JObject;
-        var token = Unprotect(entry?["PersonalAccessToken"]?.ToString());
-
-        return string.IsNullOrWhiteSpace(token) ? null : await ResolvePatOwnerLoginAsync(token);
-    }
 
     public async Task<bool> IsMfaEnabledAsync(string login)
     {
