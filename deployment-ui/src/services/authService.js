@@ -1,4 +1,5 @@
 import authApi from "../api/authApi";
+import { clearAuthToken } from "../api/apiBase";
 
 export const getMe = async () => {
 
@@ -18,7 +19,12 @@ export const getMe = async () => {
 
 export const logout = async () => {
 
-    await authApi.post("/logout");
+    try {
+        await authApi.post("/logout");
+    }
+    finally {
+        clearAuthToken();
+    }
 
 };
 

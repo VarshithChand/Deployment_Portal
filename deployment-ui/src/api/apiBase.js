@@ -32,6 +32,31 @@ function getSessionId() {
 
 }
 
+// The real login credential, for the exact same reason SESSION_STORAGE_KEY
+// above is a header instead of relying on the browser to just attach a
+// cookie: portal_token is set as a cookie too (AccountAuthController,
+// AuthCookie.CrossSiteOptions), but a cookie set by a separately-hosted API
+// answering a fetch() is a third-party cookie from the browser's point of
+// view, and Safari/Chrome increasingly refuse to persist those outright,
+// regardless of SameSite=None/Secure/correct CORS. Storing the token
+// ourselves and sending it back as a plain Authorization header sidesteps
+// that entirely - ASP.NET Core's JwtBearerHandler already reads that header
+// by default whenever OnMessageReceived's cookie check (Program.cs) finds
+// no cookie to override it with.
+const AUTH_TOKEN_STORAGE_KEY = "portalAuthToken";
+
+export function getAuthToken() {
+    return localStorage.getItem(AUTH_TOKEN_STORAGE_KEY);
+}
+
+export function setAuthToken(token) {
+    if (token) localStorage.setItem(AUTH_TOKEN_STORAGE_KEY, token);
+}
+
+export function clearAuthToken() {
+    localStorage.removeItem(AUTH_TOKEN_STORAGE_KEY);
+}
+
 // Every controller action's response is wrapped server-side in a standard
 // {success,data} / {success,error:{code,message,correlationId}} envelope
 // (see DeploymentAPI's ApiResponseWrapperFilter) - unwrapped back out here,
@@ -87,6 +112,10 @@ export function createApiClient(path, options = {}) {
 
     client.interceptors.request.use((config) => {
         config.headers["X-Session-Id"] = getSessionId();
+
+        const authToken = getAuthToken();
+        if (authToken) config.headers["Authorization"] = `Bearer ${authToken}`;
+
         return config;
     });
 

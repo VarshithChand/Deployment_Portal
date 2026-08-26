@@ -75,8 +75,8 @@ public class AccountAuthController : ControllerBase
             return Ok(new { success = true, authenticated = false, mfaRequired = true });
         }
 
-        await IssueSessionAsync(user.Id, result.Role, user.Email);
-        return Ok(new { success = true, authenticated = true, mfaRequired = false });
+        var jwt = await IssueSessionAsync(user.Id, result.Role, user.Email);
+        return Ok(new { success = true, authenticated = true, mfaRequired = false, token = jwt });
     }
 
     // Mirrors AuthController's mfa/pending - lets the MFA page know, on
@@ -147,9 +147,9 @@ public class AccountAuthController : ControllerBase
         await MfaLockoutPolicy.RecordSuccessAsync(_settings, userId);
         _activity.ClearPendingAccountLogin(key);
 
-        await IssueSessionAsync(userId, role, email);
+        var jwt = await IssueSessionAsync(userId, role, email);
 
-        return Ok(new { success = true, authenticated = true });
+        return Ok(new { success = true, authenticated = true, token = jwt });
     }
 
     [HttpPost("login-mfa/cancel")]
@@ -166,25 +166,40 @@ public class AccountAuthController : ControllerBase
     // isolated try/catch, same reasoning as AuthController.Callback: a
     // Resend failure must never be able to turn an already-successful
     // login into an error response.
-    private async Task IssueSessionAsync(string userId, string role, string? email)
+    //
+    // ALSO returns the raw JWT so the caller can put it in the JSON body -
+    // this login path is a plain fetch() from a separately-hosted frontend
+    // (Cloudflare Workers) to this API (Render), not a top-level OAuth
+    // redirect through this domain, so the portal_token cookie set here is
+    // a genuine third-party cookie from the browser's point of view.
+    // Safari (and increasingly Chrome) silently refuse to persist that
+    // regardless of SameSite=None/Secure/correct CORS - see apiBase.js's
+    // identical reasoning for why X-Session-Id is a header, not a cookie.
+    // The cookie is still set too (harmless, and still what local dev and
+    // any same-site deployment rely on) but the frontend now also stores
+    // this token and sends it back as an Authorization header, which has
+    // no such restriction.
+    private async Task<string> IssueSessionAsync(string userId, string role, string? email)
     {
         var jwt = _auth.IssueJwt(userId, role, email);
         Response.Cookies.Append("portal_token", jwt, AuthCookie.CrossSiteOptions(Request, DateTimeOffset.UtcNow.AddHours(8)));
 
         await _settings.UpdateUserLastLoginAsync(userId);
 
-        if (string.IsNullOrWhiteSpace(email))
-            return;
+        if (!string.IsNullOrWhiteSpace(email))
+        {
+            try
+            {
+                await _email.SendLoginNotificationAsync(email, userId, DateTime.UtcNow);
+            }
+            catch (Exception)
+            {
+                // See AuthController.Callback's identical comment - a bug in
+                // IEmailService's "never throws" contract must never surface
+                // as a broken login here either.
+            }
+        }
 
-        try
-        {
-            await _email.SendLoginNotificationAsync(email, userId, DateTime.UtcNow);
-        }
-        catch (Exception)
-        {
-            // See AuthController.Callback's identical comment - a bug in
-            // IEmailService's "never throws" contract must never surface
-            // as a broken login here either.
-        }
+        return jwt;
     }
 }
