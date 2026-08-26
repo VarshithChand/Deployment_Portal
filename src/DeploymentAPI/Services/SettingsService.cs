@@ -305,15 +305,24 @@ public class SettingsService
     }
 
     // A real delete (unlike SoftSignOutPatUserAsync above) - the Services
-    // page's Users tab "Delete" action for a session an admin never wants
-    // to see again. Removes everything tied to that key: GitHub, AWS,
-    // Azure, GCP credentials, sidebar access restrictions, and its block
-    // flag if it had one. Irreversible - if that browser comes back, it
-    // starts over as a brand-new, unconfigured session.
+    // page's Users tab "Delete" action for an account an admin never wants
+    // to see again. Removes everything tied to that key: the account
+    // itself (Users - without this, GetPatUsersAsync's listing, which
+    // sources from that same section, just showed the row right back on
+    // the next load, since nothing had actually removed it from there),
+    // its MFA state, GitHub/AWS/Azure/GCP credentials, sidebar access
+    // restrictions, and its block flag if it had one. Irreversible - the
+    // email is free to sign up again, but as a brand-new account with none
+    // of this data.
     public async Task DeletePatUserAsync(string key)
     {
         var root = await ReadRootAsync();
 
+        (root["Users"] as JObject)?.Remove(key);
+        (root["Mfa"] as JObject)?.Remove(key);
+        (root["MfaLockouts"] as JObject)?.Remove(key);
+        (root["MfaNudgeSkips"] as JObject)?.Remove(key);
+        (root["SecurityPins"] as JObject)?.Remove(key);
         (root["UserGitHubCredentials"] as JObject)?.Remove(key);
         (root["UserAwsCredentials"] as JObject)?.Remove(key);
         (root["UserAzureCredentials"] as JObject)?.Remove(key);
@@ -325,7 +334,7 @@ public class SettingsService
 
         await WriteRootAsync(root);
 
-        _log.LogInfo("Settings", $"PAT user '{MaskKey(key)}' deleted by admin.");
+        _log.LogInfo("Settings", $"Account '{MaskKey(key)}' deleted by admin.");
     }
 
     // Carries a reconnecting PAT owner's own saved data across to the new
