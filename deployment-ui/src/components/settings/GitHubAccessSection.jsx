@@ -160,7 +160,10 @@ export default function GitHubAccessSection({
         )}
 
         <div className="form-group">
-            <label htmlFor="github-repo-url">Repository URL or GitHub Username</label>
+            <label htmlFor="github-repo-url">Repository URL or GitHub Username (optional)</label>
+            <p className="field-hint" style={{ marginTop: 0 }}>
+                Leave this blank to save just your token — pick a repository later, whenever you need one.
+            </p>
             <ClearableInput
                 id="github-repo-url"
                 placeholder="https://github.com/owner/repo or octocat"

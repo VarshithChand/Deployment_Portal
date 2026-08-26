@@ -503,9 +503,17 @@ export default function Settings() {
 
     async function handleSaveGitHub() {
 
-        const parsed = parseRepoUrl(githubRepoUrl);
+        // Repo selection is optional here - the backend already accepts a
+        // blank owner/repository (see SettingsController.SaveMyGitHub), so
+        // saving just a token and picking a repo later (via the "Switch
+        // repository" picker right above this field, once the token's
+        // saved) is a real, supported flow, not a partial/invalid state.
+        // Only a NON-blank value that fails to parse is rejected - that's
+        // still a typo worth catching.
+        const trimmedUrl = githubRepoUrl.trim();
+        const parsed = trimmedUrl ? parseRepoUrl(trimmedUrl) : null;
 
-        if (!parsed) {
+        if (trimmedUrl && !parsed) {
 
             toast.show(
                 "Enter a valid GitHub repository URL, e.g. https://github.com/owner/repo",
@@ -516,18 +524,30 @@ export default function Settings() {
 
         }
 
+        if (!parsed && !githubToken && !githubTokenConfigured) {
+
+            toast.show("Enter a Personal Access Token to connect GitHub.", "error");
+            return;
+
+        }
+
         try {
 
             setSavingGitHub(true);
 
             await saveMyGitHubSettings({
-                owner: parsed.owner,
-                repository: parsed.repository,
+                owner: parsed?.owner || null,
+                repository: parsed?.repository || null,
                 personalAccessToken: githubToken || null
             });
 
             setGithubToken("");
-            toast.show(`GitHub settings saved: ${parsed.owner}/${parsed.repository}`, "success");
+            toast.show(
+                parsed
+                    ? `GitHub settings saved: ${parsed.owner}/${parsed.repository}`
+                    : "GitHub token saved. Pick a repository whenever you're ready.",
+                "success"
+            );
 
             // Full reload, not just re-fetching this page's own state —
             // Dashboard, Deploy, History, etc. already loaded data for
