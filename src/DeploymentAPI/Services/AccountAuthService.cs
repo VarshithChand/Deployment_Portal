@@ -61,25 +61,20 @@ public class AccountAuthService
         return await ResolveRoleAsync(user);
     }
 
-    // Shared by SignUpAsync/LoginWithPasswordAsync and (Phase B) Google
-    // login - given an already-authenticated PortalUserAccount, decides
-    // Admin/Viewer/rejected the same way AuthService.ExchangeCodeForUserAsync
-    // does for GitHub OAuth, just checked by email instead of username.
+    // Shared by SignUpAsync/LoginWithPasswordAsync and Google login - given
+    // an already-authenticated PortalUserAccount, decides Admin vs Viewer
+    // the same way AuthService.ExchangeCodeForUserAsync does for GitHub
+    // OAuth, just checked by email instead of username. No allowlist gate
+    // here anymore - anyone who successfully authenticates gets in as a
+    // Viewer by default; AdminEmails only decides who additionally gets
+    // Admin. Promoting/demoting is the super-admin's own call afterward,
+    // from Settings > Admin Access - not something the login flow itself
+    // pre-approves.
     public AccountAuthResult ResolveRoleSync(PortalUserAccount user)
     {
         var authz = _authzOptions.CurrentValue;
 
         var isAdmin = authz.AdminEmails.Any(e => string.Equals(e, user.Email, StringComparison.OrdinalIgnoreCase));
-        var isViewer = authz.ViewerEmails.Any(e => string.Equals(e, user.Email, StringComparison.OrdinalIgnoreCase));
-
-        var allowlistConfigured = authz.AdminGitHubUsernames.Count > 0 || authz.ViewerGitHubUsernames.Count > 0
-            || authz.AdminEmails.Count > 0 || authz.ViewerEmails.Count > 0;
-
-        if (allowlistConfigured && !isAdmin && !isViewer)
-        {
-            return AccountAuthResult.Fail(
-                "Your account isn't authorized to access this portal yet. Ask an admin to add your email to the allowlist.");
-        }
 
         return AccountAuthResult.Ok(user, isAdmin ? "Admin" : "Viewer");
     }

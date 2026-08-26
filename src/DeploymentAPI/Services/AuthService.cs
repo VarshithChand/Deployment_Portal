@@ -90,28 +90,14 @@ public class AuthService
         // Checked in parallel by username AND by email (when resolved) -
         // an existing GitHub-OAuth admin keeps working purely off their
         // username exactly as before, while the same email allowlist that
-        // gates email/password and Google logins also recognizes a GitHub
-        // login whose resolved email happens to be on it.
+        // gates password and Google logins also recognizes a GitHub login
+        // whose resolved email happens to be on it. No allowlist gate on
+        // login itself anymore - anyone who authenticates with GitHub gets
+        // in as a Viewer by default; these lists only decide who
+        // additionally gets Admin (see AccountAuthService.ResolveRoleSync's
+        // identical reasoning for the password/Google paths).
         var isAdmin = authz.AdminGitHubUsernames.Any(u => string.Equals(u, login, StringComparison.OrdinalIgnoreCase))
             || (email != null && authz.AdminEmails.Any(e => string.Equals(e, email, StringComparison.OrdinalIgnoreCase)));
-
-        var isAllowedViewer = authz.ViewerGitHubUsernames.Any(u => string.Equals(u, login, StringComparison.OrdinalIgnoreCase))
-            || (email != null && authz.ViewerEmails.Any(e => string.Equals(e, email, StringComparison.OrdinalIgnoreCase)));
-
-        // Every list empty means the portal hasn't been configured yet
-        // (bootstrap mode) — let anyone finish the login so a first admin
-        // can actually get in. Once any list has an entry, only an account
-        // on one of them may proceed; everyone else is rejected here,
-        // before a token is ever issued. In practice this is never actually
-        // empty past a portal's very first request - SettingsService seeds
-        // AdminEmails with the initial super-admin account the moment
-        // anything reads settings for the first time (see
-        // GetOrCreateUsersSectionAsync).
-        var allowlistConfigured = authz.AdminGitHubUsernames.Count > 0 || authz.ViewerGitHubUsernames.Count > 0
-            || authz.AdminEmails.Count > 0 || authz.ViewerEmails.Count > 0;
-
-        if (allowlistConfigured && !isAdmin && !isAllowedViewer)
-            throw new UnauthorizedAccessException($"GitHub user '{login}' is not on the allowlist for this portal.");
 
         return (login, isAdmin ? "Admin" : "Viewer", email);
     }
