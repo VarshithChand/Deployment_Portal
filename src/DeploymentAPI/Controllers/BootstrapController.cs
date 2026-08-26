@@ -135,12 +135,22 @@ public class BootstrapController : ControllerBase
 
         var authenticated = User.Identity?.IsAuthenticated == true;
 
+        // A GitHub OAuth account's id already reads fine as-is (it's their
+        // GitHub username) - this only rewrites the two internal id
+        // schemes that don't (password accounts' "usr_"+hex, Google
+        // accounts' "google:"+sub), which is what TopBar/AccountAvatar
+        // otherwise showed verbatim (see RequireAuth.ResolveDisplayLoginAsync).
+        var displayLogin = authenticated
+            ? await RequireAuth.ResolveDisplayLoginAsync(
+                User.Identity!.Name!, User.FindFirst(ClaimTypes.Email)?.Value, _settings)
+            : null;
+
         return Ok(new BootstrapResponseDto
         {
             Auth = new BootstrapAuthDto
             {
                 Authenticated = authenticated,
-                Login = authenticated ? User.Identity!.Name : null,
+                Login = displayLogin,
                 Role = authenticated ? User.FindFirst(ClaimTypes.Role)?.Value : null
             },
             Settings = settingsView,

@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using DeploymentAPI.Services;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 
@@ -83,5 +84,29 @@ public static class RequireAuth
             throw new InvalidOperationException("ResolveUserId called for a request with no authenticated user.");
 
         return userId;
+    }
+
+    // Human-friendly identity for DISPLAY only (TopBar, Services > Users'
+    // "PatOwnerLogin", etc.) - never use this for identity/authorization,
+    // only the raw account id from RequireUserId/ResolveUserId above for
+    // that. A GitHub OAuth account's id IS its GitHub username, already
+    // readable as-is - this only rewrites the two internal id schemes that
+    // aren't (password accounts' "usr_"+hex, Google accounts' "google:"+
+    // sub), preferring that account's own DisplayName, then falling back
+    // to its email, and only to the raw id if neither is set.
+    public static async Task<string> ResolveDisplayLoginAsync(string rawLogin, string? email, SettingsService settings)
+    {
+        var isOpaqueId = rawLogin.StartsWith("usr_", StringComparison.Ordinal)
+            || rawLogin.StartsWith("google:", StringComparison.Ordinal);
+
+        if (!isOpaqueId)
+            return rawLogin;
+
+        var account = await settings.GetUserByIdAsync(rawLogin);
+
+        if (!string.IsNullOrWhiteSpace(account?.DisplayName))
+            return account!.DisplayName!;
+
+        return !string.IsNullOrWhiteSpace(email) ? email! : rawLogin;
     }
 }

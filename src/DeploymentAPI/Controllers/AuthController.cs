@@ -124,11 +124,14 @@ public class AuthController : ControllerBase
 
     [Authorize]
     [HttpGet("me")]
-    public IActionResult Me()
+    public async Task<IActionResult> Me()
     {
+        var displayLogin = await RequireAuth.ResolveDisplayLoginAsync(
+            User.Identity!.Name!, User.FindFirst(ClaimTypes.Email)?.Value, _settings);
+
         return Ok(new
         {
-            login = User.Identity?.Name,
+            login = displayLogin,
             role = User.FindFirst(ClaimTypes.Role)?.Value
         });
     }
