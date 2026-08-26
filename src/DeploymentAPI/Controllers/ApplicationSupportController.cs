@@ -123,7 +123,8 @@ public class ApplicationSupportController : ControllerBase
             creds.ApiKey!,
             creds.Model);
 
-        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var (key, authDenied) = RequireAuth.RequireUserId(this);
+        if (authDenied != null) return authDenied;
         var actor = await AdminGate.ResolveCallerLoginAsync(this) ?? $"session {key[..Math.Min(8, key.Length)]}";
 
         // Never the actual question/answer text - same reasoning as

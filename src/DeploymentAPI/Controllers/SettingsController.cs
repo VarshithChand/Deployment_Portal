@@ -24,16 +24,18 @@ public class SettingsController : ControllerBase
     private readonly CloudStatusService _cloud;
     private readonly GitHubAuthService _githubAuth;
     private readonly IAiAssistantService _ai;
+    private readonly IEmailService _email;
     private readonly SessionActivityService _activity;
     private readonly NotificationService _notifications;
 
-    public SettingsController(SettingsService settings, GitHubApiService github, CloudStatusService cloud, GitHubAuthService githubAuth, IAiAssistantService ai, SessionActivityService activity, NotificationService notifications)
+    public SettingsController(SettingsService settings, GitHubApiService github, CloudStatusService cloud, GitHubAuthService githubAuth, IAiAssistantService ai, IEmailService email, SessionActivityService activity, NotificationService notifications)
     {
         _settings = settings;
         _github = github;
         _cloud = cloud;
         _githubAuth = githubAuth;
         _ai = ai;
+        _email = email;
         _activity = activity;
         _notifications = notifications;
     }
@@ -43,10 +45,7 @@ public class SettingsController : ControllerBase
     {
         var view = await _settings.GetViewAsync();
 
-        var isAdmin = AdminGate.IsAdminOrBootstrap(this, view)
-            || await AdminGate.IsAdminViaPersonalAccessTokenAsync(this, view);
-
-        view.IsAdminSession = isAdmin;
+        view.IsAdminSession = AdminGate.IsAdminOrBootstrap(this, view);
         view.IsSuperAdminSession = await AdminGate.IsSuperAdminAsync(this);
 
         // Same resolution BootstrapController.Get() uses for its own copy
@@ -61,9 +60,10 @@ public class SettingsController : ControllerBase
         // pure reconnaissance value (exactly who to target to gain admin
         // access here) for no functional benefit, since they can't act on
         // it either way.
-        if (!isAdmin)
+        if (!view.IsAdminSession)
         {
             view.AdminGitHubUsernames = new List<string>();
+            view.AdminEmails = new List<string>();
         }
 
         return Ok(view);
@@ -90,17 +90,19 @@ public class SettingsController : ControllerBase
         return Ok(await _github.PreviewUserRepositoriesAsync(username));
     }
 
-    // Every visitor manages their own GitHub repo + token — no AdminGate,
-    // no [Authorize], no GitHub OAuth login required at all. PortalIdentity
-    // resolves who's asking: a real GitHub login if one exists, otherwise
-    // an anonymous per-browser session cookie it creates on the spot. That's
-    // what lets this work immediately for anyone, isolated from every other
-    // visitor, without anyone needing to set up (or complete) an OAuth App.
+    // Every account manages its own GitHub repo + token — no AdminGate, no
+    // page grant needed, just being logged in (any of the 3 login methods).
+    // RequireAuth resolves who's asking, isolated from every other account -
+    // this is deliberately a separate concept from login itself (see
+    // PortalIdentity.cs's own header comment): which GitHub repo/token an
+    // account points at for real API calls has nothing to do with which of
+    // email/password, Google, or GitHub OAuth it used to sign in.
 
     [HttpGet("me/github")]
     public async Task<IActionResult> GetMyGitHub()
     {
-        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var (key, authDenied) = RequireAuth.RequireUserId(this);
+        if (authDenied != null) return authDenied;
         var creds = await _settings.GetUserGitHubCredentialsAsync(key);
 
         return Ok(new
@@ -131,7 +133,8 @@ public class SettingsController : ControllerBase
             || (!string.IsNullOrEmpty(request.Repository) && !GitHubNameValidator.IsValid(request.Repository)))
             return BadRequest(new { message = "Owner and repository must be valid GitHub names (letters, numbers, hyphens, underscores, periods only)." });
 
-        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var (key, authDenied) = RequireAuth.RequireUserId(this);
+        if (authDenied != null) return authDenied;
 
         // Only gated while a working connection already exists - this same
         // endpoint is also what RequireGitHubSetup's first-time/reconnect-
@@ -184,7 +187,8 @@ public class SettingsController : ControllerBase
         if (await CredentialGate.DenyUnlessUnlockedAsync(this, _settings, _activity, "github") is IActionResult denied)
             return denied;
 
-        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var (key, authDenied) = RequireAuth.RequireUserId(this);
+        if (authDenied != null) return authDenied;
         await _settings.ClearUserGitHubTokenAsync(key);
         _activity.RevokeCredentialUnlock(key, "github");
 
@@ -203,7 +207,8 @@ public class SettingsController : ControllerBase
     [HttpPost("me/github/signout")]
     public async Task<IActionResult> SignOutMyGitHub()
     {
-        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var (key, authDenied) = RequireAuth.RequireUserId(this);
+        if (authDenied != null) return authDenied;
         await _settings.SoftSignOutPatUserAsync(key);
 
         return Ok();
@@ -249,7 +254,8 @@ public class SettingsController : ControllerBase
     [HttpGet("me/aws")]
     public async Task<IActionResult> GetMyAws()
     {
-        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var (key, authDenied) = RequireAuth.RequireUserId(this);
+        if (authDenied != null) return authDenied;
         var creds = await _settings.GetUserAwsCredentialsAsync(key);
 
         // Only asks AWS "who are you" when there's actually a credential to
@@ -281,7 +287,8 @@ public class SettingsController : ControllerBase
     [HttpGet("me/aws/resources")]
     public async Task<IActionResult> GetMyAwsResources([FromQuery] string? region)
     {
-        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var (key, authDenied) = RequireAuth.RequireUserId(this);
+        if (authDenied != null) return authDenied;
         var creds = await _settings.GetUserAwsCredentialsAsync(key);
 
         return Ok(await _cloud.GetAwsResourceInventoryAsync(creds, region));
@@ -293,7 +300,8 @@ public class SettingsController : ControllerBase
     [HttpGet("me/aws/ec2-detail")]
     public async Task<IActionResult> GetMyAwsEc2Detail([FromQuery] string? region)
     {
-        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var (key, authDenied) = RequireAuth.RequireUserId(this);
+        if (authDenied != null) return authDenied;
         var creds = await _settings.GetUserAwsCredentialsAsync(key);
 
         return Ok(await _cloud.GetEc2DetailAsync(creds, region));
@@ -305,7 +313,8 @@ public class SettingsController : ControllerBase
     [HttpGet("me/aws/ecs-detail")]
     public async Task<IActionResult> GetMyAwsEcsDetail([FromQuery] string? region)
     {
-        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var (key, authDenied) = RequireAuth.RequireUserId(this);
+        if (authDenied != null) return authDenied;
         var creds = await _settings.GetUserAwsCredentialsAsync(key);
 
         return Ok(await _cloud.GetEcsDetailAsync(creds, region));
@@ -322,7 +331,8 @@ public class SettingsController : ControllerBase
         if (await CredentialGate.DenyUnlessUnlockedAsync(this, _settings, _activity, "aws") is IActionResult denied)
             return denied;
 
-        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var (key, authDenied) = RequireAuth.RequireUserId(this);
+        if (authDenied != null) return authDenied;
 
         // A blank field keeps whatever's already saved (see
         // SaveUserAwsCredentialsAsync) - only reject if the access key or
@@ -367,7 +377,8 @@ public class SettingsController : ControllerBase
         if (await CredentialGate.DenyUnlessUnlockedAsync(this, _settings, _activity, "aws") is IActionResult denied)
             return denied;
 
-        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var (key, authDenied) = RequireAuth.RequireUserId(this);
+        if (authDenied != null) return authDenied;
         await _settings.ClearUserAwsCredentialsAsync(key);
         _activity.RevokeCredentialUnlock(key, "aws");
 
@@ -379,7 +390,8 @@ public class SettingsController : ControllerBase
     [HttpGet("me/azure")]
     public async Task<IActionResult> GetMyAzure()
     {
-        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var (key, authDenied) = RequireAuth.RequireUserId(this);
+        if (authDenied != null) return authDenied;
         var creds = await _settings.GetUserAzureCredentialsAsync(key);
 
         var identityLabel = creds.IsConfigured
@@ -396,7 +408,8 @@ public class SettingsController : ControllerBase
     [HttpGet("me/azure/resources")]
     public async Task<IActionResult> GetMyAzureResources()
     {
-        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var (key, authDenied) = RequireAuth.RequireUserId(this);
+        if (authDenied != null) return authDenied;
         var creds = await _settings.GetUserAzureCredentialsAsync(key);
 
         return Ok(await _cloud.GetAzureResourceInventoryAsync(creds));
@@ -408,7 +421,8 @@ public class SettingsController : ControllerBase
         if (await CredentialGate.DenyUnlessUnlockedAsync(this, _settings, _activity, "azure") is IActionResult denied)
             return denied;
 
-        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var (key, authDenied) = RequireAuth.RequireUserId(this);
+        if (authDenied != null) return authDenied;
 
         // A blank field keeps whatever's already saved - see SaveMyAws above.
         var existing = await _settings.GetUserAzureCredentialsAsync(key);
@@ -431,7 +445,8 @@ public class SettingsController : ControllerBase
         if (await CredentialGate.DenyUnlessUnlockedAsync(this, _settings, _activity, "azure") is IActionResult denied)
             return denied;
 
-        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var (key, authDenied) = RequireAuth.RequireUserId(this);
+        if (authDenied != null) return authDenied;
         await _settings.ClearUserAzureCredentialsAsync(key);
         _activity.RevokeCredentialUnlock(key, "azure");
 
@@ -443,7 +458,8 @@ public class SettingsController : ControllerBase
     [HttpGet("me/gcp")]
     public async Task<IActionResult> GetMyGcp()
     {
-        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var (key, authDenied) = RequireAuth.RequireUserId(this);
+        if (authDenied != null) return authDenied;
         var creds = await _settings.GetUserGcpCredentialsAsync(key);
 
         // No live API call needed here, unlike AWS/Azure - a GCP service
@@ -480,7 +496,8 @@ public class SettingsController : ControllerBase
         if (await CredentialGate.DenyUnlessUnlockedAsync(this, _settings, _activity, "gcp") is IActionResult denied)
             return denied;
 
-        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var (key, authDenied) = RequireAuth.RequireUserId(this);
+        if (authDenied != null) return authDenied;
 
         // A blank field keeps whatever's already saved - see SaveMyAws above.
         var existing = await _settings.GetUserGcpCredentialsAsync(key);
@@ -502,7 +519,8 @@ public class SettingsController : ControllerBase
         if (await CredentialGate.DenyUnlessUnlockedAsync(this, _settings, _activity, "gcp") is IActionResult denied)
             return denied;
 
-        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var (key, authDenied) = RequireAuth.RequireUserId(this);
+        if (authDenied != null) return authDenied;
         await _settings.ClearUserGcpCredentialsAsync(key);
         _activity.RevokeCredentialUnlock(key, "gcp");
 
@@ -517,7 +535,8 @@ public class SettingsController : ControllerBase
     [HttpGet("me/pin")]
     public async Task<IActionResult> GetMyPin()
     {
-        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var (key, authDenied) = RequireAuth.RequireUserId(this);
+        if (authDenied != null) return authDenied;
         return Ok(new { Configured = await _settings.HasPinAsync(key) });
     }
 
@@ -547,7 +566,8 @@ public class SettingsController : ControllerBase
         if (await DenyUnlessPinActionVerifiedAsync(request.Code) is IActionResult denied)
             return denied;
 
-        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var (key, authDenied) = RequireAuth.RequireUserId(this);
+        if (authDenied != null) return authDenied;
         await _settings.SetPinAsync(key, request.Pin);
         _activity.ClearFailedPinAttempts(key);
 
@@ -565,7 +585,8 @@ public class SettingsController : ControllerBase
         if (await DenyUnlessPinActionVerifiedAsync(request?.Code) is IActionResult denied)
             return denied;
 
-        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var (key, authDenied) = RequireAuth.RequireUserId(this);
+        if (authDenied != null) return authDenied;
         await _settings.ClearPinAsync(key);
         _activity.ClearFailedPinAttempts(key);
         return Ok();
@@ -585,7 +606,8 @@ public class SettingsController : ControllerBase
     [HttpPost("me/pin/verify")]
     public async Task<IActionResult> VerifyMyPin(SecurityPinUpdateDto request)
     {
-        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var (key, authDenied) = RequireAuth.RequireUserId(this);
+        if (authDenied != null) return authDenied;
 
         if (_activity.GetFailedPinAttemptCount(key) >= MaxPinAttempts)
             return Ok(new { Valid = false, Locked = true });
@@ -627,7 +649,8 @@ public class SettingsController : ControllerBase
     [HttpPost("me/credentials/{provider}/unlock")]
     public async Task<IActionResult> UnlockMyCredential(string provider, SecurityPinUpdateDto request)
     {
-        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var (key, authDenied) = RequireAuth.RequireUserId(this);
+        if (authDenied != null) return authDenied;
 
         // No screen-lock PIN configured at all - credential management
         // works exactly as it did before this feature existed, with no
@@ -676,7 +699,8 @@ public class SettingsController : ControllerBase
     [HttpDelete("me/all")]
     public async Task<IActionResult> ClearMyAll()
     {
-        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var (key, authDenied) = RequireAuth.RequireUserId(this);
+        if (authDenied != null) return authDenied;
         return Ok(await _settings.ClearMyCredentialsAsync(key));
     }
 
@@ -689,7 +713,8 @@ public class SettingsController : ControllerBase
     [HttpPost("me/mfa/skip-nudge")]
     public async Task<IActionResult> SkipMfaNudge()
     {
-        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var (key, authDenied) = RequireAuth.RequireUserId(this);
+        if (authDenied != null) return authDenied;
         var count = await _settings.IncrementMfaNudgeSkipCountAsync(key);
 
         return Ok(new { skipsUsed = count });
@@ -772,6 +797,40 @@ public class SettingsController : ControllerBase
         return Ok(await _ai.TestConnectionAsync(creds.ApiKey!, creds.Model));
     }
 
+    // Resend login-notification email - same admin-only, portal-wide,
+    // PIN-gated model as AI Assistant above. The saved view never echoes
+    // the key back, only NotificationsApiKeyConfigured/FromEmail/FromName.
+    [HttpPost("notifications")]
+    public async Task<IActionResult> SaveNotifications(NotificationSettingsUpdateDto request)
+    {
+        if (await AdminGate.DenyUnlessAdminAsync(this, _settings, "change settings") is IActionResult denied)
+            return denied;
+
+        if (await CredentialGate.DenyUnlessUnlockedAsync(this, _settings, _activity, "resend") is IActionResult locked)
+            return locked;
+
+        return Ok(await _settings.SaveNotificationSettingsAsync(request));
+    }
+
+    // Sends a real Resend email to whatever address the admin types in -
+    // deliberately not auto-resolved from the caller's own session (a
+    // PAT-based admin session has no reliable email to resolve), same
+    // reasoning as TestAi ignoring anything not yet saved: this uses
+    // whatever's currently saved, not an unsaved key sitting in the form.
+    [HttpPost("notifications/test")]
+    public async Task<IActionResult> TestNotifications(EmailTestRequestDto request)
+    {
+        if (await AdminGate.DenyUnlessAdminAsync(this, _settings, "send a test email") is IActionResult denied)
+            return denied;
+
+        if (string.IsNullOrWhiteSpace(request.ToEmail))
+        {
+            return Ok(new EmailSendResultDto { Success = false, Message = "Enter an email address to send the test to." });
+        }
+
+        return Ok(await _email.SendTestEmailAsync(request.ToEmail.Trim()));
+    }
+
     // Deliberately super-admin-only (not the general AdminGate.
     // DenyUnlessAdminAsync every other section here uses) - who gets the
     // Admin role at all is a step up from "changing settings," the same
@@ -806,15 +865,42 @@ public class SettingsController : ControllerBase
         return Ok(await _settings.UnsuspendAdminAsync(username));
     }
 
-    // Read is anonymous — every visitor's own Sidebar needs to know which of
-    // ITS OWN tabs to grey out or remove. Restrictions are per PAT user
-    // (see SettingsService), so this always resolves to the caller's own
-    // key — nobody can read (or infer) what's restricted for anyone else
-    // through this endpoint.
+    // Email equivalent of the admins/* endpoints above - the actual
+    // source of truth for Admin/Viewer role going forward, since it's the
+    // one identifier every login method (email/password, Google, GitHub)
+    // can resolve. Same super-admin-only tier - who gets Admin at all is a
+    // step up from "changing settings" regardless of which allowlist it is.
+    [HttpPost("admin-emails")]
+    public async Task<IActionResult> SaveAdminEmails(AdminEmailsUpdateDto request)
+    {
+        if (await AdminGate.DenyUnlessSuperAdminAsync(this, "change the admin email allowlist") is IActionResult denied)
+            return denied;
+
+        return Ok(await _settings.SaveAdminEmailsAsync(request.AdminEmails, request.ViewerEmails));
+    }
+
+    [HttpPost("super-admin-email")]
+    public async Task<IActionResult> SetSuperAdminEmail(SuperAdminEmailUpdateDto request)
+    {
+        if (await AdminGate.DenyUnlessSuperAdminAsync(this, "change the super-admin email") is IActionResult denied)
+            return denied;
+
+        if (string.IsNullOrWhiteSpace(request.Email) || !request.Email.Contains('@'))
+            return BadRequest(new { message = "Enter a valid email address." });
+
+        return Ok(await _settings.SetSuperAdminEmailAsync(request.Email));
+    }
+
+    // No AdminGate needed beyond being logged in - every account's own
+    // Sidebar needs to know which of ITS OWN tabs to grey out or remove.
+    // Restrictions are per account (see SettingsService), so this always
+    // resolves to the caller's own key — nobody can read (or infer) what's
+    // restricted for anyone else through this endpoint.
     [HttpGet("sidebar")]
     public async Task<IActionResult> GetSidebarAccess()
     {
-        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var (key, authDenied) = RequireAuth.RequireUserId(this);
+        if (authDenied != null) return authDenied;
         return Ok(await _settings.GetSidebarAccessAsync(key));
     }
 
@@ -929,12 +1015,13 @@ public class SettingsController : ControllerBase
     }
 
     // Sections individually gated below - "docker"/"github-oauth"/"sonar"/
-    // "ai" are the per-provider credentials this feature covers (see
-    // CredentialGate). "admins" is never gated (it's not a credential, it's
-    // access control) and neither is "all" - that's an admin's bulk portal
-    // reset across every shared section at once, the same category of
-    // escape hatch as ClearMyAll, not a targeted single-credential action.
-    private static readonly HashSet<string> CredentialGatedSections = new() { "docker", "github-oauth", "sonar", "ai" };
+    // "ai"/"notifications" are the per-provider credentials this feature
+    // covers (see CredentialGate). "admins" is never gated (it's not a
+    // credential, it's access control) and neither is "all" - that's an
+    // admin's bulk portal reset across every shared section at once, the
+    // same category of escape hatch as ClearMyAll, not a targeted
+    // single-credential action.
+    private static readonly HashSet<string> CredentialGatedSections = new() { "docker", "github-oauth", "sonar", "ai", "notifications" };
 
     [HttpDelete("{section}")]
     public async Task<IActionResult> Clear(string section)
@@ -958,14 +1045,20 @@ public class SettingsController : ControllerBase
         {
             if (section == "all")
             {
-                var key = PortalIdentity.GetOrCreateKey(HttpContext);
+                var (key, authDenied) = RequireAuth.RequireUserId(this);
+                if (authDenied != null) return authDenied;
                 return Ok(await _settings.ClearAllAsync(key));
             }
 
             var result = await _settings.ClearAsync(section);
 
             if (CredentialGatedSections.Contains(section))
-                _activity.RevokeCredentialUnlock(PortalIdentity.GetOrCreateKey(HttpContext), section);
+            {
+                // Always succeeds here - DenyUnlessAdminAsync above already
+                // guarantees an authenticated caller by this point.
+                var (revokeKey, _) = RequireAuth.RequireUserId(this);
+                _activity.RevokeCredentialUnlock(revokeKey!, section);
+            }
 
             return Ok(result);
         }

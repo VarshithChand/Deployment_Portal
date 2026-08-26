@@ -27,7 +27,8 @@ public class PaasHubController : ControllerBase
     [HttpGet("applications")]
     public async Task<IActionResult> GetApplications()
     {
-        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var (key, authDenied) = RequireAuth.RequireUserId(this);
+        if (authDenied != null) return authDenied;
 
         var awsCreds = await _settings.GetUserAwsCredentialsAsync(key);
         var azureCreds = await _settings.GetUserAzureCredentialsAsync(key);
@@ -42,7 +43,8 @@ public class PaasHubController : ControllerBase
         if (request.Items == null || request.Items.Count == 0)
             return BadRequest("At least one item is required.");
 
-        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var (key, authDenied) = RequireAuth.RequireUserId(this);
+        if (authDenied != null) return authDenied;
 
         var awsCreds = await _settings.GetUserAwsCredentialsAsync(key);
         var azureCreds = await _settings.GetUserAzureCredentialsAsync(key);

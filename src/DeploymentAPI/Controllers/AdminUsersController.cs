@@ -130,12 +130,15 @@ public class AdminUsersController : ControllerBase
         if (await ResolveRealKeyAsync(key) is not string realKey)
             return NotFound(new { message = "That user's session no longer exists." });
 
-        var login = await _settings.ResolveCurrentLoginForKeyAsync(realKey);
-
-        if (login == null)
-            return NotFound(new { message = "Unable to resolve that session's GitHub identity right now." });
-
-        await _settings.ResetMfaForLoginAsync(login);
+        // realKey is now the account's own id (see RequireAuth/AccountAuthService)
+        // - the same identifier MFA is already keyed by, no separate
+        // "which GitHub account does this connected PAT belong to" live
+        // lookup needed anymore. That lookup used to be the only way to
+        // find a session's real identity; now the account already carries
+        // it, and re-resolving via a connected PAT would be actively wrong
+        // - an account can have ANY PAT connected (or none), unrelated to
+        // which account it actually is.
+        await _settings.ResetMfaForLoginAsync(realKey);
 
         return Ok();
     }
@@ -157,12 +160,8 @@ public class AdminUsersController : ControllerBase
         if (await ResolveRealKeyAsync(key) is not string realKey)
             return NotFound(new { message = "That user's session no longer exists." });
 
-        var login = await _settings.ResolveCurrentLoginForKeyAsync(realKey);
-
-        if (login == null)
-            return NotFound(new { message = "Unable to resolve that session's GitHub identity right now." });
-
-        var code = await _settings.GenerateAdminRecoveryCodeAsync(login);
+        // See ResetMfa's comment above - realKey is the account's own id.
+        var code = await _settings.GenerateAdminRecoveryCodeAsync(realKey);
 
         if (code == null)
             return BadRequest(new { message = "This user hasn't enabled MFA yet." });
@@ -187,12 +186,8 @@ public class AdminUsersController : ControllerBase
         if (await ResolveRealKeyAsync(key) is not string realKey)
             return NotFound(new { message = "That user's session no longer exists." });
 
-        var login = await _settings.ResolveCurrentLoginForKeyAsync(realKey);
-
-        if (login == null)
-            return NotFound(new { message = "Unable to resolve that session's GitHub identity right now." });
-
-        await _settings.SetMfaRequiredAsync(login, true);
+        // See ResetMfa's comment above - realKey is the account's own id.
+        await _settings.SetMfaRequiredAsync(realKey, true);
 
         return Ok();
     }
@@ -209,12 +204,8 @@ public class AdminUsersController : ControllerBase
         if (await ResolveRealKeyAsync(key) is not string realKey)
             return NotFound(new { message = "That user's session no longer exists." });
 
-        var login = await _settings.ResolveCurrentLoginForKeyAsync(realKey);
-
-        if (login == null)
-            return NotFound(new { message = "Unable to resolve that session's GitHub identity right now." });
-
-        await _settings.SetMfaRequiredAsync(login, false);
+        // See ResetMfa's comment above - realKey is the account's own id.
+        await _settings.SetMfaRequiredAsync(realKey, false);
 
         return Ok();
     }

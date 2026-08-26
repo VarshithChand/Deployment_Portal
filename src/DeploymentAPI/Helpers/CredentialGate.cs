@@ -7,7 +7,7 @@ namespace DeploymentAPI.Helpers;
 // authority) and from the Screen Lock PIN's own whole-portal lock
 // (PeriodicSignOutMonitor/PinLockScreen). This gates every credential
 // provider (GitHub, AWS, Azure, GCP, API Key, Docker, Sonar, GitHub OAuth,
-// AI Assistant) behind the SAME screen-lock PIN. One successful PIN entry
+// AI Assistant, Resend) behind the SAME screen-lock PIN. One successful PIN entry
 // via POST me/credentials/{provider}/unlock grants all of them at once
 // (see SettingsController.UnlockMyCredential) - a per-provider prompt on
 // every single tab switch was more friction than the security model
@@ -24,7 +24,7 @@ public static class CredentialGate
     // site) so adding a future gated provider is a one-line change.
     public static readonly IReadOnlyList<string> AllProviders = new[]
     {
-        "github", "aws", "azure", "gcp", "apikey", "docker", "github-oauth", "sonarqube", "sonarcloud", "ai",
+        "github", "aws", "azure", "gcp", "apikey", "docker", "github-oauth", "sonarqube", "sonarcloud", "ai", "resend",
         "render", "cloudflare", "netlify", "vercel", "dockerhub", "ghcr", "gitlab-registry", "jfrog",
         "harbor", "nexus", "azureDevOps",
         // Observability's 10 standalone tools - same generic PortalHostCredentials
@@ -36,12 +36,13 @@ public static class CredentialGate
     public static async Task<IActionResult?> DenyUnlessUnlockedAsync(
         ControllerBase controller, SettingsService settings, SessionActivityService activity, string provider)
     {
-        var key = PortalIdentity.GetOrCreateKey(controller.HttpContext);
+        var (key, denied) = RequireAuth.RequireUserId(controller);
+        if (denied != null) return denied;
 
-        if (!await settings.HasPinAsync(key))
+        if (!await settings.HasPinAsync(key!))
             return null;
 
-        if (activity.IsCredentialUnlocked(key, provider))
+        if (activity.IsCredentialUnlocked(key!, provider))
             return null;
 
         return controller.StatusCode(403, new

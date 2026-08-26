@@ -65,6 +65,7 @@ const MODES = [
     { key: "zipkin", label: "Zipkin" },
     { key: "oauth", label: "GitHub OAuth" },
     { key: "ai", label: "AI Assistant" },
+    { key: "resend", label: "Notifications" },
     { key: "render", label: "Render" },
     { key: "cloudflare", label: "Cloudflare" },
     { key: "netlify", label: "Netlify" },
@@ -79,7 +80,7 @@ const MODES = [
 // frontend mirrors that here instead of only marking whichever single tab
 // prompted for the PIN.
 const ALL_CREDENTIAL_PROVIDERS = [
-    "github", "aws", "azure", "gcp", "apikey", "docker", "github-oauth", "sonarqube", "sonarcloud", "ai",
+    "github", "aws", "azure", "gcp", "apikey", "docker", "github-oauth", "sonarqube", "sonarcloud", "ai", "resend",
     "render", "cloudflare", "netlify", "vercel", "dockerhub", "ghcr", "gitlab-registry", "jfrog",
     "harbor", "nexus", "azureDevOps",
     "prometheus", "datadog", "elk", "opensearch", "loki", "fluentbit", "fluentd", "opentelemetry",
@@ -178,7 +179,21 @@ export default function CredentialsView({
     savingAi,
     handleTestAi,
     testingAi,
-    aiTestResult
+    aiTestResult,
+    notificationsFromEmail,
+    setNotificationsFromEmail,
+    notificationsFromName,
+    setNotificationsFromName,
+    notificationsApiKey,
+    setNotificationsApiKey,
+    notificationsApiKeyConfigured,
+    handleSaveNotifications,
+    savingNotifications,
+    testEmailAddress,
+    setTestEmailAddress,
+    handleTestNotifications,
+    testingNotifications,
+    notificationsTestResult
 }) {
 
     const [mode, setMode] = useState("github");
@@ -1138,6 +1153,144 @@ export default function CredentialsView({
                 <button type="button" className="btn btn-danger" onClick={() => handleClearAndRelock("ai", "Gemini API key")}>
                     Clear Key
                 </button>
+
+            </div>
+
+            </div>
+
+            </CredentialPinGate>
+
+            )}
+
+            {mode === "resend" && (
+
+            <CredentialPinGate provider="resend" unlocked={unlockedProviders.has("resend")} onUnlocked={markAllUnlocked}>
+
+            <div className="settings-subsection">
+
+            <h3 className="settings-subhead">Notifications</h3>
+
+            <p className="empty-state" style={{ padding: "0 0 15px", textAlign: "left" }}>
+                Sends a login-notification email via <strong>Resend</strong> to a user's GitHub email
+                the moment they sign in. The API key is only ever used server-side, never sent to the browser.
+            </p>
+
+            <div className="form-group">
+                <label htmlFor="resend-provider">Provider</label>
+                <input id="resend-provider" type="text" className="form-control" value="Resend" disabled />
+            </div>
+
+            <div className="form-group">
+                <label htmlFor="resend-api-key">
+                    Resend API Key
+                    {" "}
+                    {notificationsApiKeyConfigured && (
+                        <span className="badge badge-success">Saved</span>
+                    )}
+                </label>
+                <ClearableInput
+                    id="resend-api-key"
+                    type="password"
+                    placeholder={notificationsApiKeyConfigured ? "Leave blank to keep current key" : "re_xxxxxxxxxxxxxxxxxxxxxxxx"}
+                    value={notificationsApiKey}
+                    onChange={(e) => setNotificationsApiKey(e.target.value)}
+                    onClear={() => setNotificationsApiKey("")}
+                    autoComplete="new-password"
+                />
+            </div>
+
+            <div className="form-group">
+                <label htmlFor="resend-from-email">From Email</label>
+                <ClearableInput
+                    id="resend-from-email"
+                    placeholder="notifications@yourdomain.com"
+                    value={notificationsFromEmail}
+                    onChange={(e) => setNotificationsFromEmail(e.target.value)}
+                    onClear={() => setNotificationsFromEmail("")}
+                    autoComplete="off"
+                    name="resend-from-email"
+                />
+                <p className="field-hint" style={{ marginTop: "6px" }}>
+                    Must be on a domain verified with Resend — an unverified domain rejects every send.
+                </p>
+            </div>
+
+            <div className="form-group">
+                <label htmlFor="resend-from-name">From Name (optional)</label>
+                <ClearableInput
+                    id="resend-from-name"
+                    placeholder="Deployment Portal"
+                    value={notificationsFromName}
+                    onChange={(e) => setNotificationsFromName(e.target.value)}
+                    onClear={() => setNotificationsFromName("")}
+                    autoComplete="off"
+                    name="resend-from-name"
+                />
+            </div>
+
+            <div className="form-group">
+                <span className="field-hint" style={{ display: "block", marginBottom: "4px" }}>Status</span>
+                <p style={{ margin: 0 }}>
+                    {notificationsApiKeyConfigured
+                        ? <span className="badge badge-success">🟢 Configured</span>
+                        : <span className="badge badge-danger">🔴 Not Configured</span>}
+                </p>
+                {!notificationsApiKeyConfigured && (
+                    <p className="field-hint" style={{ marginTop: "6px" }}>
+                        Add a Resend API key and From email to enable login-notification emails.
+                    </p>
+                )}
+            </div>
+
+            <div className="button-row">
+
+                <button type="button" className="btn btn-primary" onClick={handleSaveNotifications} disabled={savingNotifications}>
+                    {savingNotifications ? "Saving..." : "Save Configuration"}
+                </button>
+
+                <button type="button" className="btn btn-danger" onClick={() => handleClearAndRelock("resend", "Resend API key")}>
+                    Clear Key
+                </button>
+
+            </div>
+
+            <div className="form-group" style={{ marginTop: "20px", borderTop: "1px solid var(--border)", paddingTop: "20px" }}>
+
+                <label htmlFor="resend-test-email">Send Test Email</label>
+
+                <div className="button-row" style={{ flexWrap: "nowrap" }}>
+
+                    <div style={{ flex: 1 }}>
+                        <ClearableInput
+                            id="resend-test-email"
+                            placeholder="you@example.com"
+                            value={testEmailAddress}
+                            onChange={(e) => setTestEmailAddress(e.target.value)}
+                            onClear={() => setTestEmailAddress("")}
+                            autoComplete="off"
+                            name="resend-test-email"
+                        />
+                    </div>
+
+                    <button
+                        type="button"
+                        className="btn btn-secondary"
+                        onClick={handleTestNotifications}
+                        disabled={testingNotifications || !notificationsApiKeyConfigured}
+                    >
+                        {testingNotifications ? "Sending..." : "Send Test Email"}
+                    </button>
+
+                </div>
+
+                {notificationsTestResult && (
+                    <p
+                        className={notificationsTestResult.success ? "field-hint" : "field-hint field-hint-bad"}
+                        style={{ marginTop: "8px" }}
+                    >
+                        {notificationsTestResult.success ? "🟢 " : "🔴 "}{notificationsTestResult.message}
+                    </p>
+                )}
 
             </div>
 

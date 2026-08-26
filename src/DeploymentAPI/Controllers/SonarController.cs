@@ -48,7 +48,8 @@ public class SonarController : ControllerBase
         if (await AdminGate.DenyUnlessAdminAsync(this, _settings, "view code quality data", "codeQuality") is IActionResult denied)
             return denied;
 
-        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var (key, authDenied) = RequireAuth.RequireUserId(this);
+        if (authDenied != null) return authDenied;
         return Ok(await _sonar.GetOverviewAsync(provider, key));
     }
 
@@ -61,7 +62,8 @@ public class SonarController : ControllerBase
         if (await AdminGate.DenyUnlessAdminAsync(this, _settings, "view code quality data", "codeQuality") is IActionResult denied)
             return denied;
 
-        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var (key, authDenied) = RequireAuth.RequireUserId(this);
+        if (authDenied != null) return authDenied;
         var creds = await _settings.GetUserSonarCredentialsAsync(provider, key);
 
         return Ok(new SonarStatusDto
@@ -82,7 +84,8 @@ public class SonarController : ControllerBase
         if (await CredentialGate.DenyUnlessUnlockedAsync(this, _settings, _activity, provider) is IActionResult locked)
             return locked;
 
-        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var (key, authDenied) = RequireAuth.RequireUserId(this);
+        if (authDenied != null) return authDenied;
 
         if (provider == "sonarqube")
         {
@@ -107,7 +110,8 @@ public class SonarController : ControllerBase
         if (await CredentialGate.DenyUnlessUnlockedAsync(this, _settings, _activity, provider) is IActionResult locked)
             return locked;
 
-        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var (key, authDenied) = RequireAuth.RequireUserId(this);
+        if (authDenied != null) return authDenied;
         await _settings.ClearUserSonarCredentialsAsync(provider, key);
         _activity.RevokeCredentialUnlock(key, provider);
 

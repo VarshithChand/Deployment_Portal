@@ -82,6 +82,28 @@ public class SessionActivityService
 
     public void ClearPendingPatSession(string key) => _pendingPatSessions.TryRemove(key, out _);
 
+    // The generalized equivalent of _pendingPatSessions above, for the new
+    // email/password + Google + GitHub login paths (see
+    // AccountAuthController) - "primary factor already proved, waiting on
+    // an MFA code before the real JWT gets issued." Holds the resolved
+    // identity/role/email rather than an encrypted token, since by this
+    // point there's nothing left to prove except the MFA code itself - the
+    // account and its role were already fully resolved before this was set.
+    private readonly ConcurrentDictionary<string, (string UserId, string Role, string? Email, DateTime ExpiresAtUtc)> _pendingAccountLogins = new();
+
+    public void SetPendingAccountLogin(string key, string userId, string role, string? email, TimeSpan ttl) =>
+        _pendingAccountLogins[key] = (userId, role, email, DateTime.UtcNow.Add(ttl));
+
+    public (string UserId, string Role, string? Email)? GetPendingAccountLogin(string key)
+    {
+        if (!_pendingAccountLogins.TryGetValue(key, out var entry) || entry.ExpiresAtUtc <= DateTime.UtcNow)
+            return null;
+
+        return (entry.UserId, entry.Role, entry.Email);
+    }
+
+    public void ClearPendingAccountLogin(string key) => _pendingAccountLogins.TryRemove(key, out _);
+
     // Per-credential PIN unlock grants (see CredentialGate) - a browser
     // that's verified the screen-lock PIN for one provider (say, AWS) does
     // NOT automatically get GitHub/Azure/etc. too; each is tracked

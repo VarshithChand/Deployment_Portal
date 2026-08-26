@@ -12,6 +12,8 @@ import {
     unsuspendAdmin,
     saveAiSettings,
     testAiConnection,
+    saveNotificationSettings,
+    testNotificationEmail,
     getPatUsers,
     getUserSidebarAccess,
     saveUserSidebarAccess,
@@ -167,6 +169,15 @@ export default function Settings() {
     const [testingAi, setTestingAi] = useState(false);
     const [aiTestResult, setAiTestResult] = useState(null);
 
+    const [notificationsFromEmail, setNotificationsFromEmail] = useState("");
+    const [notificationsFromName, setNotificationsFromName] = useState("");
+    const [notificationsApiKey, setNotificationsApiKey] = useState("");
+    const [notificationsApiKeyConfigured, setNotificationsApiKeyConfigured] = useState(false);
+    const [savingNotifications, setSavingNotifications] = useState(false);
+    const [testEmailAddress, setTestEmailAddress] = useState("");
+    const [testingNotifications, setTestingNotifications] = useState(false);
+    const [notificationsTestResult, setNotificationsTestResult] = useState(null);
+
     // Sidebar Access is two levels: a list of PAT users to pick from, then
     // that one user's own per-tab restrictions once picked.
     const [patUsers, setPatUsers] = useState([]);
@@ -209,6 +220,10 @@ export default function Settings() {
 
             setAiModel(data.aiModel || "");
             setAiApiKeyConfigured(!!data.aiApiKeyConfigured);
+
+            setNotificationsFromEmail(data.notificationsFromEmail || "");
+            setNotificationsFromName(data.notificationsFromName || "");
+            setNotificationsApiKeyConfigured(!!data.notificationsApiKeyConfigured);
 
         }
         catch (err) {
@@ -658,6 +673,72 @@ export default function Settings() {
 
     }
 
+    async function handleSaveNotifications() {
+
+        try {
+
+            setSavingNotifications(true);
+
+            await saveNotificationSettings({
+                apiKey: notificationsApiKey || null,
+                fromEmail: notificationsFromEmail,
+                fromName: notificationsFromName
+            });
+
+            setNotificationsApiKey("");
+            setNotificationsTestResult(null);
+            toast.show("Notification settings saved.", "success");
+            load();
+
+        }
+        catch (err) {
+
+            console.error(err);
+            toast.show(err.response?.data?.message || "Failed to save notification settings.", "error");
+
+        }
+        finally {
+
+            setSavingNotifications(false);
+
+        }
+
+    }
+
+    async function handleTestNotifications() {
+
+        if (!testEmailAddress.trim()) {
+            toast.show("Enter an email address to send the test to.", "error");
+            return;
+        }
+
+        try {
+
+            setTestingNotifications(true);
+            setNotificationsTestResult(null);
+
+            const result = await testNotificationEmail(testEmailAddress.trim());
+            setNotificationsTestResult(result);
+
+        }
+        catch (err) {
+
+            console.error(err);
+
+            setNotificationsTestResult({
+                success: false,
+                message: err.response?.data?.message || "Unable to send the test email right now."
+            });
+
+        }
+        finally {
+
+            setTestingNotifications(false);
+
+        }
+
+    }
+
     // `usernamesOverride`, when given, is saved directly instead of
     // re-parsing adminUsernamesText - needed because a per-row Add/Remove
     // (see AdminAccessView's Admin Allowlist tab) computes its own next
@@ -998,6 +1079,20 @@ export default function Settings() {
                     handleTestAi={handleTestAi}
                     testingAi={testingAi}
                     aiTestResult={aiTestResult}
+                    notificationsFromEmail={notificationsFromEmail}
+                    setNotificationsFromEmail={setNotificationsFromEmail}
+                    notificationsFromName={notificationsFromName}
+                    setNotificationsFromName={setNotificationsFromName}
+                    notificationsApiKey={notificationsApiKey}
+                    setNotificationsApiKey={setNotificationsApiKey}
+                    notificationsApiKeyConfigured={notificationsApiKeyConfigured}
+                    handleSaveNotifications={handleSaveNotifications}
+                    savingNotifications={savingNotifications}
+                    testEmailAddress={testEmailAddress}
+                    setTestEmailAddress={setTestEmailAddress}
+                    handleTestNotifications={handleTestNotifications}
+                    testingNotifications={testingNotifications}
+                    notificationsTestResult={notificationsTestResult}
                 />
 
             )}

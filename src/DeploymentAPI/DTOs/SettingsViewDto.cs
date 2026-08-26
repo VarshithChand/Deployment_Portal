@@ -26,6 +26,20 @@ public class SettingsViewDto
     // next request instead of only at their next login.
     public List<string> SuspendedAdminGitHubUsernames { get; set; } = new();
 
+    // Email equivalents of the two lists above - checked in parallel by
+    // AdminGate.IsAdminOrBootstrap via the JWT's Email claim, alongside the
+    // GitHub-username checks, so an email/password or Google account (which
+    // has no GitHub username to match) can still qualify as Admin. See
+    // Configuration/AuthorizationSettings.cs for the full reasoning.
+    public List<string> AdminEmails { get; set; } = new();
+
+    public List<string> SuspendedAdminEmails { get; set; } = new();
+
+    // Replaces the old hardcoded SuperAdminLogin constant - see AdminGate.
+    // IsSuperAdminAsync, which checks this alongside the legacy GitHub-
+    // username constant for continuity.
+    public string? SuperAdminEmail { get; set; }
+
     // SonarQube/SonarCloud are NOT here - each now has its own dedicated
     // status endpoint (SonarController.Status) since the split into two
     // independent credentials, matching the same pattern Docker Hub/GHCR/
@@ -40,6 +54,15 @@ public class SettingsViewDto
     public string AiModel { get; set; } = string.Empty;
 
     public bool AiApiKeyConfigured { get; set; }
+
+    // Login-notification email (Resend) - same shape as the AI Assistant
+    // fields above: FromEmail/FromName are plain config (safe to return),
+    // the Resend API key itself is never in this DTO under any field name.
+    public string NotificationsFromEmail { get; set; } = string.Empty;
+
+    public string NotificationsFromName { get; set; } = string.Empty;
+
+    public bool NotificationsApiKeyConfigured { get; set; }
 
     // Whether the CURRENT caller (this request's OAuth login or configured
     // Personal Access Token) has admin authority — computed per-request in

@@ -78,8 +78,7 @@ public class HealthController : ControllerBase
         // everyone else needs no frontend change.
         var view = await _settings.GetViewAsync();
 
-        var isAdmin = AdminGate.IsAdminOrBootstrap(this, view)
-            || await AdminGate.IsAdminViaPersonalAccessTokenAsync(this, view);
+        var isAdmin = AdminGate.IsAdminOrBootstrap(this, view);
 
         return Ok(new
         {

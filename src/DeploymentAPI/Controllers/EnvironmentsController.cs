@@ -129,7 +129,8 @@ public class EnvironmentsController : ControllerBase
         if (definition == null)
             return NotFound(new { message = $"No environment named \"{name}\"." });
 
-        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var (key, authDenied) = RequireAuth.RequireUserId(this);
+        if (authDenied != null) return authDenied;
 
         if (definition.CloudProvider == "aws")
         {

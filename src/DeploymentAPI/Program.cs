@@ -4,10 +4,12 @@ using DeploymentAPI.Configuration;
 using DeploymentAPI.DTOs.Common;
 using DeploymentAPI.Filters;
 using DeploymentAPI.Helpers;
+using DeploymentAPI.Models;
 using DeploymentAPI.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.HttpOverrides;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.IdentityModel.Tokens;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -76,6 +78,9 @@ builder.Services.Configure<JwtSettings>(
 
 builder.Services.Configure<GitHubOAuthSettings>(
     builder.Configuration.GetSection("GitHubOAuth"));
+
+builder.Services.Configure<GoogleOAuthSettings>(
+    builder.Configuration.GetSection("GoogleOAuth"));
 
 builder.Services.Configure<AuthorizationSettings>(
     builder.Configuration.GetSection("Auth"));
@@ -189,7 +194,19 @@ builder.Services.AddScoped<SettingsService>();
 // Scoped — reads that service's already-parsed DATABASE_URL connection
 // string rather than re-parsing it.
 builder.Services.AddScoped<DatabaseManagementService>();
+// Scoped for the same reason as DatabaseManagementService above - it
+// depends on SettingsService (Scoped) to read the Resend API key.
+builder.Services.AddScoped<IEmailService, ResendEmailService>();
 builder.Services.AddScoped<AuthService>();
+builder.Services.AddScoped<GoogleAuthService>();
+// Singleton - PasswordHasher<TUser>'s default implementation is stateless,
+// same reasoning as any other pure-function service in this app. Scoped
+// AccountAuthService (below) depends on SettingsService (Scoped), which in
+// turn depends on THIS - a Singleton depending on a Scoped service would be
+// the captive-dependency mistake DatabaseManagementService's own comment
+// warns about; this is the opposite, safe direction.
+builder.Services.AddSingleton<IPasswordHasher<PortalUserAccount>, PasswordHasher<PortalUserAccount>>();
+builder.Services.AddScoped<AccountAuthService>();
 builder.Services.AddScoped<SonarApiService>();
 builder.Services.AddScoped<SmokeTestService>();
 builder.Services.AddScoped<ExternalHealthCheckService>();
@@ -454,40 +471,48 @@ if (!app.Environment.IsDevelopment())
 app.UseCors("ReactPolicy");
 
 //
-// Session activity — records that this browser/device (see PortalIdentity)
-// made a request just now (Services page's Users tab shows this as "Last
-// Active"), and rejects outright if an admin has blocked this specific
-// session (see SettingsService.BlockPatUserAsync) - stronger than clearing
-// their credentials, since a blocked session is refused even with a still-
-// valid token. Runs before auth/controllers so a blocked session can't
-// reach anything at all, not just admin-gated routes.
-//
-app.Use(async (context, next) =>
-{
-    var key = PortalIdentity.GetOrCreateKey(context);
-
-    var settings = context.RequestServices.GetRequiredService<SettingsService>();
-
-    if (await settings.IsPatUserBlockedAsync(key))
-    {
-        context.Response.StatusCode = StatusCodes.Status403Forbidden;
-        await context.Response.WriteAsJsonAsync(new { message = "This session has been blocked by the portal admin." });
-        return;
-    }
-
-    var userAgent = context.Request.Headers.UserAgent.ToString();
-    var ipAddress = context.Connection.RemoteIpAddress?.ToString();
-    var endpoint = $"{context.Request.Method} {context.Request.Path}";
-    context.RequestServices.GetRequiredService<SessionActivityService>().Touch(key, userAgent, ipAddress, endpoint);
-
-    await next();
-});
-
-//
 // Authentication / Authorization
 //
 app.UseAuthentication();
 app.UseAuthorization();
+
+//
+// Account activity — records that this account (see RequireAuth) made a
+// request just now (Services page's Users tab shows this as "Last
+// Active"), and rejects outright if an admin has blocked this specific
+// account (see SettingsService.BlockPatUserAsync) - stronger than clearing
+// their credentials, since a blocked account is refused even with a still-
+// valid token. Moved to run AFTER UseAuthentication (unlike its
+// PortalIdentity-session-keyed predecessor, which ran before it) since
+// both the block list and activity tracking are now keyed by the
+// authenticated account's own id, not an anonymous per-browser session -
+// there's nothing to check or record yet for a request that hasn't logged
+// in (see AccountAuthController/AuthController's own login/signup routes,
+// which this simply lets straight through unblocked-by-definition).
+//
+app.Use(async (context, next) =>
+{
+    if (context.User.Identity?.IsAuthenticated == true)
+    {
+        var key = RequireAuth.ResolveUserId(context);
+
+        var settings = context.RequestServices.GetRequiredService<SettingsService>();
+
+        if (await settings.IsPatUserBlockedAsync(key))
+        {
+            context.Response.StatusCode = StatusCodes.Status403Forbidden;
+            await context.Response.WriteAsJsonAsync(new { message = "This account has been blocked by the portal admin." });
+            return;
+        }
+
+        var userAgent = context.Request.Headers.UserAgent.ToString();
+        var ipAddress = context.Connection.RemoteIpAddress?.ToString();
+        var endpoint = $"{context.Request.Method} {context.Request.Path}";
+        context.RequestServices.GetRequiredService<SessionActivityService>().Touch(key, userAgent, ipAddress, endpoint);
+    }
+
+    await next();
+});
 
 //
 // Per-user GitHub credentials — loads the current request's logged-in
@@ -539,18 +564,27 @@ app.Use(async (context, next) =>
 {
     var path = context.Request.Path;
 
-    if (!path.StartsWithSegments("/api") || mfaBlockAllowlist.Any(p => path.StartsWithSegments(p)))
+    // Not-yet-authenticated requests fall through unevaluated - there's no
+    // account here to check yet, and the downstream controller's own
+    // RequireAuth check (or AdminGate, for the still-active PAT-based
+    // routes) already produces the right 401/403 for those on its own.
+    // This mirrors the allowlist below in spirit (both exist to keep
+    // pre-login/still-getting-set-up traffic moving) but is a distinct
+    // check, not a redundant one - the allowlist covers specific PATHS
+    // that must stay reachable even for an already-blocked account, while
+    // this covers accounts that were never authenticated in the first
+    // place.
+    if (!path.StartsWithSegments("/api") || mfaBlockAllowlist.Any(p => path.StartsWithSegments(p))
+        || context.User.Identity?.IsAuthenticated != true)
     {
         await next();
         return;
     }
 
     var settings = context.RequestServices.GetRequiredService<SettingsService>();
-    var githubAuth = context.RequestServices.GetRequiredService<GitHubAuthService>();
-    var key = PortalIdentity.GetOrCreateKey(context);
+    var key = RequireAuth.ResolveUserId(context);
 
-    var login = githubAuth.HasToken ? await githubAuth.GetAuthenticatedLoginAsync() : null;
-    var policy = await MfaPolicy.EvaluateAsync(settings, key, login);
+    var policy = await MfaPolicy.EvaluateAsync(settings, key);
 
     if (policy.Blocked)
     {

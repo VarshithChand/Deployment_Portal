@@ -46,7 +46,8 @@ public class ContainerServicesController : ControllerBase
     [HttpGet("azurecontainerapps")]
     public async Task<IActionResult> GetAzureContainerApps()
     {
-        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var (key, authDenied) = RequireAuth.RequireUserId(this);
+        if (authDenied != null) return authDenied;
         var creds = await _settings.GetUserAzureCredentialsAsync(key);
 
         return Ok(await _management.GetAzureContainerAppsAsync(creds));
@@ -55,7 +56,8 @@ public class ContainerServicesController : ControllerBase
     [HttpGet("azurecontainerapps/{resourceGroup}/{name}")]
     public async Task<IActionResult> GetAzureContainerAppDetail(string resourceGroup, string name)
     {
-        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var (key, authDenied) = RequireAuth.RequireUserId(this);
+        if (authDenied != null) return authDenied;
         var creds = await _settings.GetUserAzureCredentialsAsync(key);
 
         return Ok(await _management.GetAzureContainerAppDetailAsync(creds, resourceGroup, name));
@@ -64,7 +66,8 @@ public class ContainerServicesController : ControllerBase
     [HttpPost("azurecontainerapps/{resourceGroup}/{name}/scale")]
     public async Task<IActionResult> ScaleAzureContainerApp(string resourceGroup, string name, [FromBody] AzureContainerAppScaleRequestDto request)
     {
-        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var (key, authDenied) = RequireAuth.RequireUserId(this);
+        if (authDenied != null) return authDenied;
         var creds = await _settings.GetUserAzureCredentialsAsync(key);
         var actor = await ResolveAzureActorLabelAsync(key, creds);
 
@@ -77,7 +80,8 @@ public class ContainerServicesController : ControllerBase
     [HttpPost("azurecontainerapps/{resourceGroup}/{name}/start")]
     public async Task<IActionResult> StartAzureContainerApp(string resourceGroup, string name)
     {
-        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var (key, authDenied) = RequireAuth.RequireUserId(this);
+        if (authDenied != null) return authDenied;
         var creds = await _settings.GetUserAzureCredentialsAsync(key);
         var actor = await ResolveAzureActorLabelAsync(key, creds);
 
@@ -90,7 +94,8 @@ public class ContainerServicesController : ControllerBase
     [HttpPost("azurecontainerapps/{resourceGroup}/{name}/stop")]
     public async Task<IActionResult> StopAzureContainerApp(string resourceGroup, string name)
     {
-        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var (key, authDenied) = RequireAuth.RequireUserId(this);
+        if (authDenied != null) return authDenied;
         var creds = await _settings.GetUserAzureCredentialsAsync(key);
         var actor = await ResolveAzureActorLabelAsync(key, creds);
 
@@ -103,7 +108,8 @@ public class ContainerServicesController : ControllerBase
     [HttpPost("azurecontainerapps/{resourceGroup}/{name}/revisions/{revisionName}/restart")]
     public async Task<IActionResult> RestartAzureContainerAppRevision(string resourceGroup, string name, string revisionName)
     {
-        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var (key, authDenied) = RequireAuth.RequireUserId(this);
+        if (authDenied != null) return authDenied;
         var creds = await _settings.GetUserAzureCredentialsAsync(key);
         var actor = await ResolveAzureActorLabelAsync(key, creds);
 
@@ -116,7 +122,8 @@ public class ContainerServicesController : ControllerBase
     [HttpDelete("azurecontainerapps/{resourceGroup}/{name}")]
     public async Task<IActionResult> DeleteAzureContainerApp(string resourceGroup, string name)
     {
-        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var (key, authDenied) = RequireAuth.RequireUserId(this);
+        if (authDenied != null) return authDenied;
         var creds = await _settings.GetUserAzureCredentialsAsync(key);
         var actor = await ResolveAzureActorLabelAsync(key, creds);
 
@@ -129,7 +136,8 @@ public class ContainerServicesController : ControllerBase
     [HttpGet("azurecontainerapps/{resourceGroup}/{name}/metrics")]
     public async Task<IActionResult> GetAzureContainerAppMetrics(string resourceGroup, string name, [FromQuery] int rangeMinutes = 60)
     {
-        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var (key, authDenied) = RequireAuth.RequireUserId(this);
+        if (authDenied != null) return authDenied;
         var creds = await _settings.GetUserAzureCredentialsAsync(key);
 
         return Ok(await _management.GetAzureContainerAppMetricsAsync(creds, resourceGroup, name, rangeMinutes));
@@ -146,7 +154,8 @@ public class ContainerServicesController : ControllerBase
     [HttpGet("cloudrun")]
     public async Task<IActionResult> GetCloudRunServices()
     {
-        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var (key, authDenied) = RequireAuth.RequireUserId(this);
+        if (authDenied != null) return authDenied;
         var creds = await _settings.GetUserGcpCredentialsAsync(key);
 
         return Ok(await _management.GetCloudRunServicesAsync(creds));
@@ -155,7 +164,8 @@ public class ContainerServicesController : ControllerBase
     [HttpPost("cloudrun/{name}/scale")]
     public async Task<IActionResult> ScaleCloudRunService(string name, [FromBody] GcpCloudRunScaleRequestDto request)
     {
-        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var (key, authDenied) = RequireAuth.RequireUserId(this);
+        if (authDenied != null) return authDenied;
         var creds = await _settings.GetUserGcpCredentialsAsync(key);
 
         var result = await _management.ScaleCloudRunServiceAsync(creds, name, request.MinInstances, request.MaxInstances);
@@ -167,7 +177,8 @@ public class ContainerServicesController : ControllerBase
     [HttpPost("cloudrun/{name}/redeploy")]
     public async Task<IActionResult> RedeployCloudRunService(string name)
     {
-        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var (key, authDenied) = RequireAuth.RequireUserId(this);
+        if (authDenied != null) return authDenied;
         var creds = await _settings.GetUserGcpCredentialsAsync(key);
 
         var result = await _management.RedeployCloudRunServiceAsync(creds, name);
@@ -179,7 +190,8 @@ public class ContainerServicesController : ControllerBase
     [HttpDelete("cloudrun/{name}")]
     public async Task<IActionResult> DeleteCloudRunService(string name)
     {
-        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var (key, authDenied) = RequireAuth.RequireUserId(this);
+        if (authDenied != null) return authDenied;
         var creds = await _settings.GetUserGcpCredentialsAsync(key);
 
         var result = await _management.DeleteCloudRunServiceAsync(creds, name);
@@ -191,7 +203,8 @@ public class ContainerServicesController : ControllerBase
     [HttpGet("cloudrun/{name}/metrics")]
     public async Task<IActionResult> GetCloudRunMetrics(string name, [FromQuery] int rangeMinutes = 60)
     {
-        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var (key, authDenied) = RequireAuth.RequireUserId(this);
+        if (authDenied != null) return authDenied;
         var creds = await _settings.GetUserGcpCredentialsAsync(key);
 
         return Ok(await _management.GetCloudRunMetricsAsync(creds, name, rangeMinutes));
@@ -202,7 +215,8 @@ public class ContainerServicesController : ControllerBase
     [HttpGet("cloudrun/{name}/revisions")]
     public async Task<IActionResult> GetCloudRunRevisions(string name)
     {
-        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var (key, authDenied) = RequireAuth.RequireUserId(this);
+        if (authDenied != null) return authDenied;
         var creds = await _settings.GetUserGcpCredentialsAsync(key);
 
         return Ok(await _management.GetCloudRunRevisionsAsync(creds, name));
@@ -211,7 +225,8 @@ public class ContainerServicesController : ControllerBase
     [HttpPost("cloudrun/{name}/traffic")]
     public async Task<IActionResult> UpdateCloudRunTraffic(string name, [FromBody] GcpCloudRunTrafficUpdateRequestDto request)
     {
-        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var (key, authDenied) = RequireAuth.RequireUserId(this);
+        if (authDenied != null) return authDenied;
         var creds = await _settings.GetUserGcpCredentialsAsync(key);
 
         var result = await _management.UpdateCloudRunTrafficAsync(creds, name, request.Traffic);
@@ -223,7 +238,8 @@ public class ContainerServicesController : ControllerBase
     [HttpPost("cloudrun/{name}/rollback")]
     public async Task<IActionResult> RollbackCloudRun(string name, [FromBody] GcpCloudRunRollbackRequestDto request)
     {
-        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var (key, authDenied) = RequireAuth.RequireUserId(this);
+        if (authDenied != null) return authDenied;
         var creds = await _settings.GetUserGcpCredentialsAsync(key);
 
         var result = await _management.RollbackCloudRunAsync(creds, name, request.RevisionName);

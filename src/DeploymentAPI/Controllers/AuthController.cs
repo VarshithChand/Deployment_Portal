@@ -21,6 +21,7 @@ public class AuthController : ControllerBase
     private readonly SessionActivityService _activity;
     private readonly GitHubApiService _github;
     private readonly NotificationService _notifications;
+    private readonly IEmailService _email;
 
     public AuthController(
         AuthService auth,
@@ -28,7 +29,8 @@ public class AuthController : ControllerBase
         SettingsService settings,
         SessionActivityService activity,
         GitHubApiService github,
-        NotificationService notifications)
+        NotificationService notifications,
+        IEmailService email)
     {
         _auth = auth;
         _oauthOptions = oauthOptions;
@@ -36,23 +38,12 @@ public class AuthController : ControllerBase
         _activity = activity;
         _github = github;
         _notifications = notifications;
+        _email = email;
     }
 
-    // Local dev serves frontend and backend from the same origin (via the
-    // Vite proxy), so Lax is enough there. A real deployment typically has
-    // the frontend on its own domain (e.g. a static host) talking to the
-    // backend on another (e.g. Fly.io), which makes every API call
-    // cross-site — SameSite=None is required for the browser to attach the
-    // cookie at all in that case, and browsers only honor None when Secure
-    // is also set, which is why this is keyed off Request.IsHttps rather
-    // than being a fixed value.
-    private CookieOptions CrossSiteCookieOptions(DateTimeOffset expires) => new()
-    {
-        HttpOnly = true,
-        SameSite = Request.IsHttps ? SameSiteMode.None : SameSiteMode.Lax,
-        Secure = Request.IsHttps,
-        Expires = expires
-    };
+    // See Helpers/AuthCookie.cs - shared with AccountAuthController now
+    // that a second controller sets this same cookie.
+    private CookieOptions CrossSiteCookieOptions(DateTimeOffset expires) => AuthCookie.CrossSiteOptions(Request, expires);
 
     [HttpGet("github/login")]
     public IActionResult Login()
@@ -75,12 +66,15 @@ public class AuthController : ControllerBase
 
         try
         {
-            var (login, role) = await _auth.ExchangeCodeForUserAsync(code);
-            var jwt = _auth.IssueJwt(login, role);
+            var (login, role, email) = await _auth.ExchangeCodeForUserAsync(code);
 
-            Response.Cookies.Append("portal_token", jwt, CrossSiteCookieOptions(DateTimeOffset.UtcNow.AddHours(8)));
-
-            return Redirect(frontendUrl);
+            // State validated, code exchanged, identity resolved, allowlist
+            // check passed - "successful login" as far as GitHub is
+            // concerned. OAuthLoginFinisher decides whether that's enough
+            // to issue a real session yet, or whether this account's MFA
+            // has to be satisfied first (same gate password login already
+            // goes through - see AccountAuthController).
+            return await OAuthLoginFinisher.FinishAsync(this, _settings, _activity, _auth, _email, login, role, email, frontendUrl);
         }
         catch (UnauthorizedAccessException)
         {

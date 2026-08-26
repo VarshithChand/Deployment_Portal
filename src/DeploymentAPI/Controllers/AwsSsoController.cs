@@ -29,7 +29,8 @@ public class AwsSsoController : ControllerBase
         if (string.IsNullOrWhiteSpace(request.StartUrl))
             return BadRequest(new { message = "Your AWS SSO start URL is required." });
 
-        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var (key, authDenied) = RequireAuth.RequireUserId(this);
+        if (authDenied != null) return authDenied;
 
         try
         {
@@ -48,7 +49,8 @@ public class AwsSsoController : ControllerBase
         if (string.IsNullOrWhiteSpace(pendingId))
             return BadRequest(new { message = "pendingId is required." });
 
-        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var (key, authDenied) = RequireAuth.RequireUserId(this);
+        if (authDenied != null) return authDenied;
         var result = await _sso.PollAsync(key, pendingId);
 
         return Ok(result);
@@ -60,7 +62,8 @@ public class AwsSsoController : ControllerBase
         if (string.IsNullOrWhiteSpace(pendingId))
             return BadRequest(new { message = "pendingId is required." });
 
-        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var (key, authDenied) = RequireAuth.RequireUserId(this);
+        if (authDenied != null) return authDenied;
         var accounts = await _sso.ListAccountsAndRolesAsync(key, pendingId);
 
         if (accounts == null)
@@ -79,7 +82,8 @@ public class AwsSsoController : ControllerBase
         if (string.IsNullOrWhiteSpace(request.PendingId) || string.IsNullOrWhiteSpace(request.AccountId) || string.IsNullOrWhiteSpace(request.RoleName))
             return BadRequest(new { message = "pendingId, accountId, and roleName are required." });
 
-        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var (key, authDenied) = RequireAuth.RequireUserId(this);
+        if (authDenied != null) return authDenied;
 
         var accounts = await _sso.ListAccountsAndRolesAsync(key, request.PendingId);
         var account = accounts?.FirstOrDefault(a => a.AccountId == request.AccountId);

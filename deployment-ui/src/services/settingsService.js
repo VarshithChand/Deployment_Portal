@@ -237,6 +237,22 @@ export const testAiConnection = async () => {
     return response.data;
 };
 
+// Resend login-notification email - same shared/admin-only shape as AI
+// Assistant above. The saved settings view never echoes the API key back,
+// only notificationsApiKeyConfigured/notificationsFromEmail/notificationsFromName.
+export const saveNotificationSettings = async (payload) => {
+    const response = await settingsApi.post("/notifications", payload);
+    return response.data;
+};
+
+// Sends a real test email to whatever address is passed in, using whatever
+// Resend config is currently SAVED (see SettingsController.TestNotifications)
+// - not anything unsaved sitting in the form.
+export const testNotificationEmail = async (toEmail) => {
+    const response = await settingsApi.post("/notifications/test", { toEmail });
+    return response.data;
+};
+
 export const clearSettings = async (section) => {
     const response = await settingsApi.delete(`/${section}`);
     return response.data;

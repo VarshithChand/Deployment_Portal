@@ -13,13 +13,11 @@ public class ApiKeyDto
 
     public bool Revoked { get; set; }
 
-    // Resolved server-side from the key's OwnerKey (the creating session's
-    // PortalIdentity key - see SecurityApiKeysController.ToDto) - that raw
-    // value is deliberately NOT exposed on this DTO. It's the same literal
-    // bearer value that determines whose saved GitHub PAT a request uses
-    // (see PortalIdentity.GetOrCreateKey/PatUserSummaryDto.Key), so an
-    // admin viewing this list could otherwise replay it as their own
-    // X-Session-Id and silently act as whoever created that key. Never
+    // Resolved server-side from the key's OwnerKey (the creating account's
+    // own id - see SecurityApiKeysController.ToDto/RequireAuth) - that raw
+    // value is deliberately NOT exposed on this DTO, same "don't hand out
+    // an identifier that could be misused" caution every other internal id
+    // in this app gets. Never
     // read by the frontend (confirmed via grep) - OwnerLogin is all the
     // Security tab actually needs to show. "Unknown owner" covers a key
     // created before its creator ever configured a GitHub token, or whose

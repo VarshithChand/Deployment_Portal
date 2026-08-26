@@ -512,7 +512,7 @@ public class AiToolsService
 
     private async Task<UserAwsCredentials> AwsCredsAsync() => await _settings.GetUserAwsCredentialsAsync(SessionKey());
 
-    private string SessionKey() => PortalIdentity.GetOrCreateKey(_httpContextAccessor.HttpContext!);
+    private string SessionKey() => RequireAuth.ResolveUserId(_httpContextAccessor.HttpContext!);
 
     private async Task<object> GetAwsOverviewAsync()
     {

@@ -2,7 +2,9 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
 using DeploymentAPI.DTOs;
+using DeploymentAPI.Models;
 using Microsoft.AspNetCore.DataProtection;
+using Microsoft.AspNetCore.Identity;
 using Newtonsoft.Json.Linq;
 using Npgsql;
 
@@ -39,6 +41,13 @@ public class SettingsService
     // fresh, ephemeral key.
     private readonly IDataProtector _protector;
 
+    // Hashes/verifies account passwords (PBKDF2-HMACSHA256, versioned) -
+    // see the Users region below. TUser is only used as a generic-type
+    // anchor by PasswordHasher<TUser>'s default implementation, never
+    // actually read, so a throwaway PortalUserAccount with just Id set is
+    // enough at every call site.
+    private readonly IPasswordHasher<PortalUserAccount> _passwordHasher;
+
     // CREATE TABLE IF NOT EXISTS is idempotent and cheap, but there's no
     // reason to round-trip it on every single read/write within the same
     // process — a race between two requests both finding this false is
@@ -58,9 +67,10 @@ public class SettingsService
     // to a second real read.
     private JObject? _cachedRoot;
 
-    public SettingsService(IHostEnvironment env, ActivityLogService log, IDataProtectionProvider dataProtectionProvider, SessionActivityService activity)
+    public SettingsService(IHostEnvironment env, ActivityLogService log, IDataProtectionProvider dataProtectionProvider, SessionActivityService activity, IPasswordHasher<PortalUserAccount> passwordHasher)
     {
         _activity = activity;
+        _passwordHasher = passwordHasher;
 
         // SETTINGS_FILE_PATH lets a deployment point this at a mounted
         // persistent volume instead of the app's own content root. DATABASE_URL
@@ -216,6 +226,19 @@ public class SettingsService
     public async Task<SettingsViewDto> GetViewAsync()
     {
         var root = await ReadRootAsync();
+
+        // Ensures the one-time super-admin seed (see
+        // GetOrCreateUsersSectionAsync) has run by the time ANYTHING reads
+        // the admin allowlist - GetViewAsync is the most universally-called
+        // entry point in this file (AdminGate, Bootstrap, Settings itself),
+        // so this is where a brand-new deploy is guaranteed to seed on its
+        // very first request, not just whenever a Users-region method
+        // happens to be called first.
+        var (_, seeded) = await GetOrCreateUsersSectionAsync(root);
+
+        if (seeded)
+            await WriteRootAsync(root);
+
         return BuildView(root);
     }
 
@@ -1347,6 +1370,258 @@ public class SettingsService
             ai?["Model"]?.ToString() ?? string.Empty);
     }
 
+    // Login-notification email (Resend) - same portal-wide, admin-only
+    // model as AI Assistant above. The saved view (BuildView) never echoes
+    // the key back, only NotificationsApiKeyConfigured/FromEmail/FromName.
+    public async Task<SettingsViewDto> SaveNotificationSettingsAsync(NotificationSettingsUpdateDto update)
+    {
+        var root = await ReadRootAsync();
+        var notifications = root["Notifications"] as JObject ?? new JObject();
+
+        notifications["FromEmail"] = (update.FromEmail ?? string.Empty).Trim();
+        notifications["FromName"] = (update.FromName ?? string.Empty).Trim();
+
+        if (!string.IsNullOrWhiteSpace(update.ApiKey))
+            notifications["ResendApiKey"] = Protect(update.ApiKey.Trim());
+
+        root["Notifications"] = notifications;
+
+        await WriteRootAsync(root);
+
+        _log.LogInfo("Settings", $"Notification settings saved (from: {update.FromEmail})"
+            + (string.IsNullOrWhiteSpace(update.ApiKey) ? "" : ", API key updated"));
+
+        return BuildView(root);
+    }
+
+    public async Task<NotificationCredentials> GetNotificationCredentialsAsync()
+    {
+        var root = await ReadRootAsync();
+        var notifications = root["Notifications"] as JObject;
+
+        return new NotificationCredentials(
+            Unprotect(notifications?["ResendApiKey"]?.ToString()),
+            notifications?["FromEmail"]?.ToString() ?? string.Empty,
+            notifications?["FromName"]?.ToString() ?? string.Empty);
+    }
+
+    // ==================== Users (real accounts) ====================
+    // Replaces the old PAT-login model, where "logged in" just meant a
+    // GitHub PAT was saved against an anonymous PortalIdentity session key.
+    // Stored as root["Users"][id], same one-blob pattern as every other
+    // section - see PortalUserAccount's own comment for the Id scheme
+    // (raw GitHub username / "google:"+sub / "usr_"+random hex) and why it's
+    // deliberately opaque rather than a uniform GUID.
+    //
+    // Password hashes are one-way (never decrypted), unlike every other
+    // secret in this file - they're Protect()'d anyway before storage as
+    // defense in depth (consistent with "when in doubt, protect it"), even
+    // though a leaked hash alone is already useless without also breaking
+    // PBKDF2 itself.
+    private async Task<(JObject Users, bool Seeded)> GetOrCreateUsersSectionAsync(JObject root)
+    {
+        var users = root["Users"] as JObject;
+
+        if (users != null)
+            return (users, false);
+
+        users = new JObject();
+        root["Users"] = users;
+
+        // One-time seed, only when this instance has never had ANY account
+        // created yet - mirrors how an empty admin allowlist means
+        // "bootstrap mode" elsewhere in this file. Without this, a fresh
+        // deploy would have no way to reach Database Management (super-
+        // admin-gated) at all, since nothing could ever satisfy that gate.
+        const string seedEmail = "v.varshith.2004@gmail.com";
+        const string seedId = "usr_seed_super_admin";
+
+        var seedEntry = new JObject
+        {
+            ["Email"] = seedEmail,
+            ["PasswordHash"] = Protect(_passwordHasher.HashPassword(new PortalUserAccount { Id = seedId }, "Dp@123")),
+            ["DisplayName"] = "Varshith Chand",
+            ["Provider"] = "password",
+            ["CreatedAtUtc"] = DateTime.UtcNow
+        };
+
+        users[seedId] = seedEntry;
+
+        var auth = root["Auth"] as JObject ?? new JObject();
+
+        var adminEmails = (auth["AdminEmails"] as JArray) ?? new JArray();
+
+        if (!adminEmails.Any(e => string.Equals(e.ToString(), seedEmail, StringComparison.OrdinalIgnoreCase)))
+            adminEmails.Add(seedEmail);
+
+        auth["AdminEmails"] = adminEmails;
+
+        if (string.IsNullOrWhiteSpace(auth["SuperAdminEmail"]?.ToString()))
+            auth["SuperAdminEmail"] = seedEmail;
+
+        root["Auth"] = auth;
+
+        _log.LogInfo("Settings", $"Seeded the initial super-admin account ({seedEmail}) - change its password after first login.");
+
+        return (users, true);
+    }
+
+    public async Task<PortalUserAccount?> FindUserByEmailAsync(string email)
+    {
+        var root = await ReadRootAsync();
+        var (users, seeded) = await GetOrCreateUsersSectionAsync(root);
+
+        if (seeded)
+            await WriteRootAsync(root);
+
+        var match = users.Properties()
+            .FirstOrDefault(p => string.Equals(
+                (p.Value as JObject)?["Email"]?.ToString(), email, StringComparison.OrdinalIgnoreCase));
+
+        return match == null ? null : ParseUser(match.Name, (JObject)match.Value!);
+    }
+
+    public async Task<PortalUserAccount?> GetUserByIdAsync(string id)
+    {
+        var root = await ReadRootAsync();
+        var (users, seeded) = await GetOrCreateUsersSectionAsync(root);
+
+        if (seeded)
+            await WriteRootAsync(root);
+
+        return users[id] is JObject entry ? ParseUser(id, entry) : null;
+    }
+
+    // plaintextPassword is null for a Google/GitHub-only account (nothing to
+    // hash - LinkedGoogleSub/LinkedGitHubLogin is what lets them sign in).
+    public async Task<PortalUserAccount> CreateUserAsync(string id, string email, string? plaintextPassword, string provider, string? displayName = null)
+    {
+        var root = await ReadRootAsync();
+        var (users, _) = await GetOrCreateUsersSectionAsync(root);
+
+        var entry = new JObject
+        {
+            ["Email"] = email.Trim().ToLowerInvariant(),
+            ["PasswordHash"] = plaintextPassword == null
+                ? null
+                : Protect(_passwordHasher.HashPassword(new PortalUserAccount { Id = id }, plaintextPassword)),
+            ["DisplayName"] = displayName,
+            ["Provider"] = provider,
+            ["CreatedAtUtc"] = DateTime.UtcNow
+        };
+
+        users[id] = entry;
+        await WriteRootAsync(root);
+
+        _log.LogInfo("Settings", $"Account created ({provider}): {MaskKey(email)}.");
+
+        return ParseUser(id, entry)!;
+    }
+
+    public async Task UpdateUserLastLoginAsync(string id)
+    {
+        var root = await ReadRootAsync();
+        var (users, _) = await GetOrCreateUsersSectionAsync(root);
+
+        if (users[id] is JObject entry)
+        {
+            entry["LastLoginAtUtc"] = DateTime.UtcNow;
+            await WriteRootAsync(root);
+        }
+    }
+
+    // Called after a successful Google/GitHub OAuth exchange for an email
+    // that already has a password (or other-provider) account - links
+    // rather than creating a duplicate, so the same person reaches the same
+    // account/MFA enrollment/re-keyed data regardless of which of the 3
+    // methods they used this time. See AccountAuthService.
+    public async Task LinkProviderAsync(string id, string? gitHubLogin, string? googleSub)
+    {
+        var root = await ReadRootAsync();
+        var (users, _) = await GetOrCreateUsersSectionAsync(root);
+
+        if (users[id] is not JObject entry)
+            return;
+
+        if (gitHubLogin != null)
+            entry["LinkedGitHubLogin"] = gitHubLogin;
+
+        if (googleSub != null)
+            entry["LinkedGoogleSub"] = googleSub;
+
+        await WriteRootAsync(root);
+    }
+
+    // Verifies a plaintext password against the stored hash for that user -
+    // AccountAuthService never sees the hash itself or touches
+    // IPasswordHasher directly, matching how every other secret's crypto
+    // (Protect/Unprotect) stays inside this file. Null user or no password
+    // set (a Google/GitHub-only account) both correctly fail verification
+    // rather than throwing.
+    public async Task<bool> VerifyUserPasswordAsync(string id, string plaintextPassword)
+    {
+        var root = await ReadRootAsync();
+        var (users, seeded) = await GetOrCreateUsersSectionAsync(root);
+
+        if (seeded)
+            await WriteRootAsync(root);
+
+        var storedHash = Unprotect((users[id] as JObject)?["PasswordHash"]?.ToString());
+
+        if (string.IsNullOrEmpty(storedHash))
+            return false;
+
+        var result = _passwordHasher.VerifyHashedPassword(new PortalUserAccount { Id = id }, storedHash, plaintextPassword);
+
+        return result is PasswordVerificationResult.Success or PasswordVerificationResult.SuccessRehashNeeded;
+    }
+
+    private static PortalUserAccount? ParseUser(string id, JObject entry) => new()
+    {
+        Id = id,
+        Email = entry["Email"]?.ToString() ?? string.Empty,
+        DisplayName = entry["DisplayName"]?.ToString(),
+        LinkedGitHubLogin = entry["LinkedGitHubLogin"]?.ToString(),
+        LinkedGoogleSub = entry["LinkedGoogleSub"]?.ToString(),
+        Provider = entry["Provider"]?.ToString() ?? "password",
+        CreatedAtUtc = entry["CreatedAtUtc"]?.Value<DateTime>() ?? DateTime.UtcNow,
+        LastLoginAtUtc = entry["LastLoginAtUtc"]?.Value<DateTime>()
+    };
+
+    // Same shape as SaveAdminUsernamesAsync, just the email-based lists -
+    // deliberately a SEPARATE method (not merged into that one's DTO) so
+    // saving the GitHub-username allowlist can never accidentally wipe the
+    // email allowlist, or vice versa.
+    public async Task<SettingsViewDto> SaveAdminEmailsAsync(List<string> adminEmails, List<string> viewerEmails)
+    {
+        var root = await ReadRootAsync();
+        var auth = root["Auth"] as JObject ?? new JObject();
+
+        auth["AdminEmails"] = new JArray(adminEmails.Select(e => e.Trim().ToLowerInvariant()));
+        auth["ViewerEmails"] = new JArray(viewerEmails.Select(e => e.Trim().ToLowerInvariant()));
+
+        root["Auth"] = auth;
+        await WriteRootAsync(root);
+
+        _log.LogInfo("Settings", $"Email allowlist saved: {adminEmails.Count} admin(s), {viewerEmails.Count} viewer(s).");
+
+        return BuildView(root);
+    }
+
+    public async Task<SettingsViewDto> SetSuperAdminEmailAsync(string email)
+    {
+        var root = await ReadRootAsync();
+        var auth = root["Auth"] as JObject ?? new JObject();
+
+        auth["SuperAdminEmail"] = email.Trim().ToLowerInvariant();
+        root["Auth"] = auth;
+        await WriteRootAsync(root);
+
+        _log.LogInfo("Settings", $"Super-admin email set to {MaskKey(email)}.");
+
+        return BuildView(root);
+    }
+
     // Forces every visitor's browser to refresh to the latest deployed
     // frontend build (see AppVersionController) - a portal-wide counter,
     // same shared/admin-writable storage model as every other section
@@ -1463,7 +1738,8 @@ public class SettingsService
         ["docker"] = ("Docker", "Password"),
         ["github-oauth"] = ("GitHubOAuth", "ClientSecret"),
         ["admins"] = ("Auth", null),
-        ["ai"] = ("AiAssistant", "GeminiApiKey")
+        ["ai"] = ("AiAssistant", "GeminiApiKey"),
+        ["notifications"] = ("Notifications", "ResendApiKey")
     };
 
     // Resets just the CALLER's own credentials (GitHub, AWS, Azure, GCP) -
@@ -1522,6 +1798,7 @@ public class SettingsService
         root.Remove("Docker");
         root.Remove("GitHubOAuth");
         root.Remove("AiAssistant");
+        root.Remove("Notifications");
 
         await WriteRootAsync(root);
 
@@ -1982,14 +2259,19 @@ public class SettingsService
             entries.Select(p => ResolvePatOwnerStatusAsync(
                 Unprotect(((JObject)p.Value!)["PersonalAccessToken"]!.ToString()) ?? string.Empty)));
 
-        // Only meaningful for a row that resolved to a real login - same
-        // "no confirmed identity, nothing to look up" reasoning as the
-        // "Unknown (...)" label itself.
+        // Keyed by each row's OWN entry name (the account's own id - see
+        // RequireAuth/AccountAuthService), never by `statuses[i].Login`
+        // (the CONNECTED PAT's live-resolved GitHub owner). Those are two
+        // different things now that a GitHub PAT is just something an
+        // account optionally connects for API calls, unrelated to which
+        // account it is (see PortalIdentity.cs's own header comment) - an
+        // email/password account could have any PAT connected, or none,
+        // and MFA is keyed by the account's own id either way.
         var mfaEnabledFlags = await Task.WhenAll(
-            statuses.Select(s => string.IsNullOrWhiteSpace(s.Login) ? Task.FromResult(false) : IsMfaEnabledAsync(s.Login!)));
+            entries.Select(p => IsMfaEnabledAsync(p.Name)));
 
         var mfaRequiredFlags = await Task.WhenAll(
-            statuses.Select(s => string.IsNullOrWhiteSpace(s.Login) ? Task.FromResult(false) : IsMfaRequiredByAdminAsync(s.Login!)));
+            entries.Select(p => IsMfaRequiredByAdminAsync(p.Name)));
 
         return entries.Select((p, i) =>
         {
@@ -3040,12 +3322,21 @@ public class SettingsService
         var oauth = root["GitHubOAuth"] as JObject;
         var auth = root["Auth"] as JObject;
         var ai = root["AiAssistant"] as JObject;
+        var notifications = root["Notifications"] as JObject;
 
         var admins = (auth?["AdminGitHubUsernames"] as JArray)?
             .Select(x => x.ToString())
             .ToList() ?? new List<string>();
 
         var suspendedAdmins = (auth?["SuspendedAdminGitHubUsernames"] as JArray)?
+            .Select(x => x.ToString())
+            .ToList() ?? new List<string>();
+
+        var adminEmails = (auth?["AdminEmails"] as JArray)?
+            .Select(x => x.ToString())
+            .ToList() ?? new List<string>();
+
+        var suspendedAdminEmails = (auth?["SuspendedAdminEmails"] as JArray)?
             .Select(x => x.ToString())
             .ToList() ?? new List<string>();
 
@@ -3060,10 +3351,17 @@ public class SettingsService
 
             AdminGitHubUsernames = admins,
             SuspendedAdminGitHubUsernames = suspendedAdmins,
+            AdminEmails = adminEmails,
+            SuspendedAdminEmails = suspendedAdminEmails,
+            SuperAdminEmail = auth?["SuperAdminEmail"]?.ToString(),
 
             AiProvider = "Google Gemini",
             AiModel = ai?["Model"]?.ToString() ?? string.Empty,
-            AiApiKeyConfigured = !string.IsNullOrWhiteSpace(ai?["GeminiApiKey"]?.ToString())
+            AiApiKeyConfigured = !string.IsNullOrWhiteSpace(ai?["GeminiApiKey"]?.ToString()),
+
+            NotificationsFromEmail = notifications?["FromEmail"]?.ToString() ?? string.Empty,
+            NotificationsFromName = notifications?["FromName"]?.ToString() ?? string.Empty,
+            NotificationsApiKeyConfigured = !string.IsNullOrWhiteSpace(notifications?["ResendApiKey"]?.ToString())
         };
     }
 

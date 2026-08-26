@@ -35,7 +35,8 @@ public class AzureDevOpsController : ControllerBase
     [HttpGet("status")]
     public async Task<IActionResult> GetStatus()
     {
-        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var (key, authDenied) = RequireAuth.RequireUserId(this);
+        if (authDenied != null) return authDenied;
         var creds = await _settings.GetUserPaasCredentialsAsync(Provider, key);
 
         return Ok(new AzureDevOpsStatusDto
@@ -51,7 +52,8 @@ public class AzureDevOpsController : ControllerBase
         if (await CredentialGate.DenyUnlessUnlockedAsync(this, _settings, _activity, Provider) is IActionResult locked)
             return locked;
 
-        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var (key, authDenied) = RequireAuth.RequireUserId(this);
+        if (authDenied != null) return authDenied;
         var existing = await _settings.GetUserPaasCredentialsAsync(Provider, key);
         var effectiveOrg = string.IsNullOrWhiteSpace(request.Organization) ? existing.AccountId : request.Organization;
 
@@ -72,7 +74,8 @@ public class AzureDevOpsController : ControllerBase
         if (await CredentialGate.DenyUnlessUnlockedAsync(this, _settings, _activity, Provider) is IActionResult locked)
             return locked;
 
-        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var (key, authDenied) = RequireAuth.RequireUserId(this);
+        if (authDenied != null) return authDenied;
         await _settings.ClearUserPaasCredentialsAsync(Provider, key);
         _activity.RevokeCredentialUnlock(key, Provider);
 
@@ -84,7 +87,8 @@ public class AzureDevOpsController : ControllerBase
     [HttpGet("projects")]
     public async Task<IActionResult> GetProjects()
     {
-        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var (key, authDenied) = RequireAuth.RequireUserId(this);
+        if (authDenied != null) return authDenied;
         var creds = await _settings.GetUserPaasCredentialsAsync(Provider, key);
         return Ok(await _azureDevOps.GetProjectsAsync(creds));
     }
@@ -94,7 +98,8 @@ public class AzureDevOpsController : ControllerBase
     [HttpGet("projects/{project}/running-builds")]
     public async Task<IActionResult> GetRunningBuilds(string project)
     {
-        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var (key, authDenied) = RequireAuth.RequireUserId(this);
+        if (authDenied != null) return authDenied;
         var creds = await _settings.GetUserPaasCredentialsAsync(Provider, key);
         return Ok(await _azureDevOps.GetRunningBuildsAsync(creds, project));
     }
@@ -102,7 +107,8 @@ public class AzureDevOpsController : ControllerBase
     [HttpGet("projects/{project}/history")]
     public async Task<IActionResult> GetHistory(string project)
     {
-        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var (key, authDenied) = RequireAuth.RequireUserId(this);
+        if (authDenied != null) return authDenied;
         var creds = await _settings.GetUserPaasCredentialsAsync(Provider, key);
         return Ok(await _azureDevOps.GetHistoryAsync(creds, project));
     }
@@ -112,7 +118,8 @@ public class AzureDevOpsController : ControllerBase
     [HttpGet("repositories")]
     public async Task<IActionResult> GetRepositories()
     {
-        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var (key, authDenied) = RequireAuth.RequireUserId(this);
+        if (authDenied != null) return authDenied;
         var creds = await _settings.GetUserPaasCredentialsAsync(Provider, key);
         return Ok(await _azureDevOps.GetRepositoriesAsync(creds));
     }
@@ -120,7 +127,8 @@ public class AzureDevOpsController : ControllerBase
     [HttpGet("projects/{project}/repositories/{repositoryId}/branches")]
     public async Task<IActionResult> GetBranches(string project, string repositoryId)
     {
-        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var (key, authDenied) = RequireAuth.RequireUserId(this);
+        if (authDenied != null) return authDenied;
         var creds = await _settings.GetUserPaasCredentialsAsync(Provider, key);
         return Ok(await _azureDevOps.GetBranchesAsync(creds, project, repositoryId));
     }
@@ -131,7 +139,8 @@ public class AzureDevOpsController : ControllerBase
     [HttpPost("projects/{project}/repositories/{repositoryId}/branches")]
     public async Task<IActionResult> CreateBranch(string project, string repositoryId, AzureDevOpsCreateBranchDto request)
     {
-        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var (key, authDenied) = RequireAuth.RequireUserId(this);
+        if (authDenied != null) return authDenied;
         var creds = await _settings.GetUserPaasCredentialsAsync(Provider, key);
 
         if (string.IsNullOrWhiteSpace(request.NewBranchName) || string.IsNullOrWhiteSpace(request.SourceObjectId))
@@ -143,7 +152,8 @@ public class AzureDevOpsController : ControllerBase
     [HttpDelete("projects/{project}/repositories/{repositoryId}/branches/{branchName}")]
     public async Task<IActionResult> DeleteBranch(string project, string repositoryId, string branchName, [FromQuery] string objectId)
     {
-        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var (key, authDenied) = RequireAuth.RequireUserId(this);
+        if (authDenied != null) return authDenied;
         var creds = await _settings.GetUserPaasCredentialsAsync(Provider, key);
 
         if (string.IsNullOrWhiteSpace(objectId))
@@ -157,7 +167,8 @@ public class AzureDevOpsController : ControllerBase
     [HttpGet("projects/{project}/pipelines")]
     public async Task<IActionResult> GetPipelines(string project)
     {
-        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var (key, authDenied) = RequireAuth.RequireUserId(this);
+        if (authDenied != null) return authDenied;
         var creds = await _settings.GetUserPaasCredentialsAsync(Provider, key);
         return Ok(await _azureDevOps.GetPipelinesAsync(creds, project));
     }
@@ -167,7 +178,8 @@ public class AzureDevOpsController : ControllerBase
     [HttpGet("projects/{project}/pipelines/{pipelineId}")]
     public async Task<IActionResult> GetPipelineDetail(string project, int pipelineId)
     {
-        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var (key, authDenied) = RequireAuth.RequireUserId(this);
+        if (authDenied != null) return authDenied;
         var creds = await _settings.GetUserPaasCredentialsAsync(Provider, key);
         return Ok(await _azureDevOps.GetPipelineDetailAsync(creds, project, pipelineId));
     }
@@ -175,7 +187,8 @@ public class AzureDevOpsController : ControllerBase
     [HttpGet("projects/{project}/pipelines/{pipelineId}/runs")]
     public async Task<IActionResult> GetRuns(string project, int pipelineId)
     {
-        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var (key, authDenied) = RequireAuth.RequireUserId(this);
+        if (authDenied != null) return authDenied;
         var creds = await _settings.GetUserPaasCredentialsAsync(Provider, key);
         return Ok(await _azureDevOps.GetRunsAsync(creds, project, pipelineId));
     }
@@ -188,7 +201,8 @@ public class AzureDevOpsController : ControllerBase
     [HttpGet("projects/{project}/repositories/{repositoryId}/parameters")]
     public async Task<IActionResult> GetPipelineParameters(string project, string repositoryId, [FromQuery] string yamlPath)
     {
-        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var (key, authDenied) = RequireAuth.RequireUserId(this);
+        if (authDenied != null) return authDenied;
         var creds = await _settings.GetUserPaasCredentialsAsync(Provider, key);
 
         if (string.IsNullOrWhiteSpace(yamlPath))
@@ -204,7 +218,8 @@ public class AzureDevOpsController : ControllerBase
     [HttpPost("projects/{project}/pipelines/{pipelineId}/runs")]
     public async Task<IActionResult> RunPipeline(string project, int pipelineId, [FromBody] AzureDevOpsRunPipelineRequestDto? request)
     {
-        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var (key, authDenied) = RequireAuth.RequireUserId(this);
+        if (authDenied != null) return authDenied;
         var creds = await _settings.GetUserPaasCredentialsAsync(Provider, key);
         return Ok(await _azureDevOps.RunPipelineAsync(creds, project, pipelineId, request?.Branch, request?.TemplateParameters));
     }
@@ -214,7 +229,8 @@ public class AzureDevOpsController : ControllerBase
     [HttpGet("projects/{project}/pipelines/{pipelineId}/artifact-history")]
     public async Task<IActionResult> GetArtifactHistory(string project, int pipelineId)
     {
-        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var (key, authDenied) = RequireAuth.RequireUserId(this);
+        if (authDenied != null) return authDenied;
         var creds = await _settings.GetUserPaasCredentialsAsync(Provider, key);
         return Ok(await _azureDevOps.GetArtifactHistoryAsync(creds, project, pipelineId));
     }
@@ -224,7 +240,8 @@ public class AzureDevOpsController : ControllerBase
     [HttpGet("projects/{project}/pullrequests")]
     public async Task<IActionResult> GetPullRequests(string project)
     {
-        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var (key, authDenied) = RequireAuth.RequireUserId(this);
+        if (authDenied != null) return authDenied;
         var creds = await _settings.GetUserPaasCredentialsAsync(Provider, key);
         return Ok(await _azureDevOps.GetPullRequestsAsync(creds, project));
     }
@@ -235,7 +252,8 @@ public class AzureDevOpsController : ControllerBase
     [HttpPost("projects/{project}/repositories/{repositoryId}/pullrequests/{pullRequestId}/approve")]
     public async Task<IActionResult> ApprovePullRequest(string project, string repositoryId, int pullRequestId)
     {
-        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var (key, authDenied) = RequireAuth.RequireUserId(this);
+        if (authDenied != null) return authDenied;
         var creds = await _settings.GetUserPaasCredentialsAsync(Provider, key);
         return Ok(await _azureDevOps.ApprovePullRequestAsync(creds, project, repositoryId, pullRequestId));
     }
@@ -243,7 +261,8 @@ public class AzureDevOpsController : ControllerBase
     [HttpPost("projects/{project}/repositories/{repositoryId}/pullrequests/{pullRequestId}/complete")]
     public async Task<IActionResult> CompletePullRequest(string project, string repositoryId, int pullRequestId)
     {
-        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var (key, authDenied) = RequireAuth.RequireUserId(this);
+        if (authDenied != null) return authDenied;
         var creds = await _settings.GetUserPaasCredentialsAsync(Provider, key);
         return Ok(await _azureDevOps.CompletePullRequestAsync(creds, project, repositoryId, pullRequestId));
     }
@@ -253,7 +272,8 @@ public class AzureDevOpsController : ControllerBase
     [HttpGet("feeds")]
     public async Task<IActionResult> GetFeeds()
     {
-        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var (key, authDenied) = RequireAuth.RequireUserId(this);
+        if (authDenied != null) return authDenied;
         var creds = await _settings.GetUserPaasCredentialsAsync(Provider, key);
         return Ok(await _azureDevOps.GetFeedsAsync(creds));
     }
@@ -261,7 +281,8 @@ public class AzureDevOpsController : ControllerBase
     [HttpGet("feeds/{feedId}/packages")]
     public async Task<IActionResult> GetPackages(string feedId)
     {
-        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var (key, authDenied) = RequireAuth.RequireUserId(this);
+        if (authDenied != null) return authDenied;
         var creds = await _settings.GetUserPaasCredentialsAsync(Provider, key);
         return Ok(await _azureDevOps.GetPackagesAsync(creds, feedId));
     }
@@ -269,7 +290,8 @@ public class AzureDevOpsController : ControllerBase
     [HttpGet("feeds/{feedId}/packages/{packageId}/versions")]
     public async Task<IActionResult> GetPackageVersions(string feedId, string packageId)
     {
-        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var (key, authDenied) = RequireAuth.RequireUserId(this);
+        if (authDenied != null) return authDenied;
         var creds = await _settings.GetUserPaasCredentialsAsync(Provider, key);
         return Ok(await _azureDevOps.GetPackageVersionsAsync(creds, feedId, packageId));
     }

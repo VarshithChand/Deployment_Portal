@@ -30,7 +30,8 @@ public class SourceControlController : ControllerBase
     [HttpGet("codeCommit/repositories")]
     public async Task<IActionResult> GetCodeCommitRepositories([FromQuery] string? region)
     {
-        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var (key, authDenied) = RequireAuth.RequireUserId(this);
+        if (authDenied != null) return authDenied;
         var creds = await _settings.GetUserAwsCredentialsAsync(key);
 
         return Ok(await _sourceControl.GetCodeCommitRepositoriesAsync(creds, region));
@@ -39,7 +40,8 @@ public class SourceControlController : ControllerBase
     [HttpGet("codeCommit/repositories/{repositoryName}/branches")]
     public async Task<IActionResult> GetCodeCommitBranches(string repositoryName, [FromQuery] string? region)
     {
-        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var (key, authDenied) = RequireAuth.RequireUserId(this);
+        if (authDenied != null) return authDenied;
         var creds = await _settings.GetUserAwsCredentialsAsync(key);
 
         return Ok(await _sourceControl.GetCodeCommitBranchesAsync(creds, region, repositoryName));

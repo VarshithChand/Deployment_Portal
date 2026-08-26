@@ -47,7 +47,8 @@ public class ElasticBeanstalkController : ControllerBase
     [HttpGet("applications")]
     public async Task<IActionResult> GetApplications([FromQuery] string? region)
     {
-        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var (key, authDenied) = RequireAuth.RequireUserId(this);
+        if (authDenied != null) return authDenied;
         var creds = await _settings.GetUserAwsCredentialsAsync(key);
 
         return Ok(await _beanstalk.GetApplicationsAsync(creds, region));
@@ -56,7 +57,8 @@ public class ElasticBeanstalkController : ControllerBase
     [HttpGet("environments")]
     public async Task<IActionResult> GetEnvironments([FromQuery] string? region)
     {
-        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var (key, authDenied) = RequireAuth.RequireUserId(this);
+        if (authDenied != null) return authDenied;
         var creds = await _settings.GetUserAwsCredentialsAsync(key);
 
         return Ok(await _beanstalk.GetEnvironmentsAsync(creds, region));
@@ -65,7 +67,8 @@ public class ElasticBeanstalkController : ControllerBase
     [HttpGet("environments/{environmentName}")]
     public async Task<IActionResult> GetEnvironmentDetail(string environmentName, [FromQuery] string? region)
     {
-        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var (key, authDenied) = RequireAuth.RequireUserId(this);
+        if (authDenied != null) return authDenied;
         var creds = await _settings.GetUserAwsCredentialsAsync(key);
 
         return Ok(await _beanstalk.GetEnvironmentDetailAsync(creds, region, environmentName));
@@ -74,7 +77,8 @@ public class ElasticBeanstalkController : ControllerBase
     [HttpGet("applications/{applicationName}/versions")]
     public async Task<IActionResult> GetApplicationVersions(string applicationName, [FromQuery] string? region)
     {
-        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var (key, authDenied) = RequireAuth.RequireUserId(this);
+        if (authDenied != null) return authDenied;
         var creds = await _settings.GetUserAwsCredentialsAsync(key);
 
         return Ok(await _beanstalk.GetApplicationVersionsAsync(creds, region, applicationName));
@@ -86,7 +90,8 @@ public class ElasticBeanstalkController : ControllerBase
         if (string.IsNullOrWhiteSpace(request.VersionLabel))
             return BadRequest("versionLabel is required.");
 
-        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var (key, authDenied) = RequireAuth.RequireUserId(this);
+        if (authDenied != null) return authDenied;
         var creds = await _settings.GetUserAwsCredentialsAsync(key);
         var actor = await ResolveActorLabelAsync(key, creds);
 
@@ -99,7 +104,8 @@ public class ElasticBeanstalkController : ControllerBase
     [HttpPost("environments/{environmentName}/restart")]
     public async Task<IActionResult> RestartAppServer(string environmentName, [FromQuery] string? region)
     {
-        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var (key, authDenied) = RequireAuth.RequireUserId(this);
+        if (authDenied != null) return authDenied;
         var creds = await _settings.GetUserAwsCredentialsAsync(key);
         var actor = await ResolveActorLabelAsync(key, creds);
 
@@ -112,7 +118,8 @@ public class ElasticBeanstalkController : ControllerBase
     [HttpPost("environments/{environmentName}/rebuild")]
     public async Task<IActionResult> RebuildEnvironment(string environmentName, [FromQuery] string? region)
     {
-        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var (key, authDenied) = RequireAuth.RequireUserId(this);
+        if (authDenied != null) return authDenied;
         var creds = await _settings.GetUserAwsCredentialsAsync(key);
         var actor = await ResolveActorLabelAsync(key, creds);
 
@@ -125,7 +132,8 @@ public class ElasticBeanstalkController : ControllerBase
     [HttpPost("environments/{environmentName}/scale")]
     public async Task<IActionResult> ScaleEnvironment(string environmentName, [FromBody] EbScaleRequestDto request, [FromQuery] string? region)
     {
-        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var (key, authDenied) = RequireAuth.RequireUserId(this);
+        if (authDenied != null) return authDenied;
         var creds = await _settings.GetUserAwsCredentialsAsync(key);
         var actor = await ResolveActorLabelAsync(key, creds);
 
@@ -141,7 +149,8 @@ public class ElasticBeanstalkController : ControllerBase
         if (string.IsNullOrWhiteSpace(request.Name))
             return BadRequest("name is required.");
 
-        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var (key, authDenied) = RequireAuth.RequireUserId(this);
+        if (authDenied != null) return authDenied;
         var creds = await _settings.GetUserAwsCredentialsAsync(key);
         var actor = await ResolveActorLabelAsync(key, creds);
 
@@ -154,7 +163,8 @@ public class ElasticBeanstalkController : ControllerBase
     [HttpGet("environments/{environmentName}/events")]
     public async Task<IActionResult> GetEnvironmentEvents(string environmentName, [FromQuery] string? region)
     {
-        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var (key, authDenied) = RequireAuth.RequireUserId(this);
+        if (authDenied != null) return authDenied;
         var creds = await _settings.GetUserAwsCredentialsAsync(key);
 
         return Ok(await _beanstalk.GetEnvironmentEventsAsync(creds, region, environmentName));
@@ -163,7 +173,8 @@ public class ElasticBeanstalkController : ControllerBase
     [HttpGet("environments/{environmentName}/metrics")]
     public async Task<IActionResult> GetEnvironmentMetrics(string environmentName, [FromQuery] string autoScalingGroupName, [FromQuery] string? region, [FromQuery] int rangeMinutes = 60)
     {
-        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var (key, authDenied) = RequireAuth.RequireUserId(this);
+        if (authDenied != null) return authDenied;
         var creds = await _settings.GetUserAwsCredentialsAsync(key);
 
         return Ok(await _beanstalk.GetEnvironmentMetricsAsync(creds, region, autoScalingGroupName, rangeMinutes));
@@ -172,7 +183,8 @@ public class ElasticBeanstalkController : ControllerBase
     [HttpDelete("environments/{environmentName}")]
     public async Task<IActionResult> TerminateEnvironment(string environmentName, [FromQuery] string? region)
     {
-        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var (key, authDenied) = RequireAuth.RequireUserId(this);
+        if (authDenied != null) return authDenied;
         var creds = await _settings.GetUserAwsCredentialsAsync(key);
         var actor = await ResolveActorLabelAsync(key, creds);
 

@@ -21,7 +21,7 @@ public static class AdminGate
 {
     public static bool IsAdminOrBootstrap(ControllerBase controller, SettingsViewDto view)
     {
-        if (view.AdminGitHubUsernames.Count == 0)
+        if (view.AdminGitHubUsernames.Count == 0 && view.AdminEmails.Count == 0)
             return true;
 
         if (controller.User.Identity?.IsAuthenticated != true || !controller.User.IsInRole("Admin"))
@@ -31,19 +31,32 @@ public static class AdminGate
         // sign-in (see AuthService) and doesn't notice a LATER allowlist
         // change on its own - a plain Remove or Suspend from Admin Access
         // wouldn't take effect until this token naturally expired. Cross-
-        // checking the live allowlist/suspended-list here, using the login
-        // already embedded in the same token (ClaimTypes.Name - no extra
-        // GitHub API call), is what makes both take effect on this
-        // session's very next request instead.
+        // checking the live allowlist/suspended-list here, using the
+        // identifiers already embedded in the same token (Name for a GitHub
+        // username, Email for every login method - no extra API call), is
+        // what makes both take effect on this session's very next request
+        // instead. Checked in parallel (either qualifies) so an existing
+        // GitHub-OAuth admin's access is unaffected by the new email
+        // allowlist existing at all.
         var claimLogin = controller.User.FindFirst(ClaimTypes.Name)?.Value;
+        var claimEmail = controller.User.FindFirst(ClaimTypes.Email)?.Value;
 
-        if (claimLogin == null)
+        var onUsernameList = claimLogin != null
+            && view.AdminGitHubUsernames.Any(u => string.Equals(u, claimLogin, StringComparison.OrdinalIgnoreCase));
+
+        var onEmailList = claimEmail != null
+            && view.AdminEmails.Any(e => string.Equals(e, claimEmail, StringComparison.OrdinalIgnoreCase));
+
+        if (!onUsernameList && !onEmailList)
             return false;
 
-        if (!view.AdminGitHubUsernames.Any(u => string.Equals(u, claimLogin, StringComparison.OrdinalIgnoreCase)))
-            return false;
+        var suspendedByUsername = claimLogin != null
+            && view.SuspendedAdminGitHubUsernames.Any(u => string.Equals(u, claimLogin, StringComparison.OrdinalIgnoreCase));
 
-        return !view.SuspendedAdminGitHubUsernames.Any(u => string.Equals(u, claimLogin, StringComparison.OrdinalIgnoreCase));
+        var suspendedByEmail = claimEmail != null
+            && view.SuspendedAdminEmails.Any(e => string.Equals(e, claimEmail, StringComparison.OrdinalIgnoreCase));
+
+        return !suspendedByUsername && !suspendedByEmail;
     }
 
     // CSRF guard: the actual authorization above relies on the portal_token
@@ -88,32 +101,28 @@ public static class AdminGate
         if (IsAdminOrBootstrap(controller, view))
             return null;
 
-        if (view.AdminGitHubUsernames.Count == 0)
-            return controller.StatusCode(403, new { message = $"Admin login required to {action}." });
+        // No PAT-based fallback below this point - a configured GitHub PAT
+        // belonging to an admin's username used to grant Admin authority
+        // here with no real login and no MFA, the same "PAT proves
+        // identity" pattern removed from login itself. Admin authority now
+        // only ever comes from a real logged-in session's JWT, checked
+        // above by IsAdminOrBootstrap, or the page-scoped grant below.
+        if (controller.User.Identity?.IsAuthenticated == true && pageKey != null)
+        {
+            var claimLogin = controller.User.FindFirst(ClaimTypes.Name)?.Value;
+            var claimEmail = controller.User.FindFirst(ClaimTypes.Email)?.Value;
 
-        var auth = controller.HttpContext.RequestServices.GetRequiredService<GitHubAuthService>();
-
-        if (!auth.HasToken)
-            return controller.StatusCode(403, new { message = $"Admin login required to {action}." });
-
-        // Resolved once here (not via IsAdminViaPersonalAccessTokenAsync,
-        // which only returns a bool) so a denial can say WHY: no token at
-        // all, a token GitHub itself couldn't verify right now (invalid,
-        // or rate-limited - see GitHubAuthService's cache on this exact
-        // call), or a verified identity that just isn't on the allowlist.
-        // Those are three different problems with three different fixes,
-        // and a generic "Admin login required" couldn't tell them apart -
-        // including for someone whose token IS genuinely an admin's, but
-        // couldn't be confirmed in the moment.
-        var login = await auth.GetAuthenticatedLoginAsync();
-
-        if (await IsAdminForRequestAsync(settings, view, login, pageKey))
-            return null;
+            if ((claimLogin != null && await settings.IsGrantedPageAdminAsync(pageKey, claimLogin))
+                || (claimEmail != null && await settings.IsGrantedPageAdminAsync(pageKey, claimEmail)))
+            {
+                return null;
+            }
+        }
 
         if (allowRepoWrite && await HasRepoWriteAccessAsync(controller))
             return null;
 
-        return controller.StatusCode(403, new { message = $"Admin login required to {action}. {BuildDenialDetail(login, pageKey)}" });
+        return controller.StatusCode(403, new { message = $"Admin login required to {action}. {BuildDenialDetail(controller, pageKey)}" });
     }
 
     private static async Task<bool> HasRepoWriteAccessAsync(ControllerBase controller)
@@ -123,83 +132,76 @@ public static class AdminGate
         return owner.Configured && owner.CanDeploy;
     }
 
-    private static async Task<bool> IsAdminForRequestAsync(SettingsService settings, SettingsViewDto view, string? login, string? pageKey)
+    private static string BuildDenialDetail(ControllerBase controller, string? pageKey)
     {
-        if (login == null)
-            return false;
+        if (controller.User.Identity?.IsAuthenticated != true)
+            return "Sign in first - admin access couldn't be confirmed for a session that isn't logged in.";
 
-        var onAllowlist = view.AdminGitHubUsernames.Any(u => string.Equals(u, login, StringComparison.OrdinalIgnoreCase));
-        var suspended = view.SuspendedAdminGitHubUsernames.Any(u => string.Equals(u, login, StringComparison.OrdinalIgnoreCase));
+        var identity = controller.User.FindFirst(ClaimTypes.Email)?.Value
+            ?? controller.User.FindFirst(ClaimTypes.Name)?.Value
+            ?? "your account";
 
-        if (onAllowlist && !suspended)
-            return true;
-
-        return pageKey != null && await settings.IsGrantedPageAdminAsync(pageKey, login);
-    }
-
-    private static string BuildDenialDetail(string? login, string? pageKey)
-    {
-        if (login == null)
-        {
-            return "Unable to verify your Personal Access Token with GitHub right now (it may be invalid, " +
-                   "or GitHub's API may be rate-limited) — admin access couldn't be confirmed. Try again " +
-                   "shortly, or check your token in Settings.";
-        }
-
-        return $"The GitHub account this Personal Access Token belongs to (@{login}) isn't in the admin allowlist" +
+        return $"'{identity}' isn't in the admin allowlist" +
                (pageKey != null ? " and hasn't been granted access to this page." : ".");
     }
 
-    // Alternate path to the same "Admin" authority as a real GitHub OAuth
-    // login: this session's own configured Personal Access Token belongs to
-    // an allowlisted username. Lets an admin act through the PAT they
-    // already configure for every other GitHub action in this portal,
-    // without also having to complete a separate OAuth login just to
-    // qualify for admin-gated actions like Sidebar Access.
-    public static async Task<bool> IsAdminViaPersonalAccessTokenAsync(ControllerBase controller, SettingsViewDto view)
-    {
-        if (view.AdminGitHubUsernames.Count == 0)
-            return false;
-
-        var auth = controller.HttpContext.RequestServices.GetRequiredService<GitHubAuthService>();
-        var login = await auth.GetAuthenticatedLoginAsync();
-
-        return login != null
-            && view.AdminGitHubUsernames.Any(u => string.Equals(u, login, StringComparison.OrdinalIgnoreCase))
-            && !view.SuspendedAdminGitHubUsernames.Any(u => string.Equals(u, login, StringComparison.OrdinalIgnoreCase));
-    }
-
-    // Database Management is deliberately restricted to one specific GitHub
-    // identity, not "anyone on the general AdminGitHubUsernames allowlist" —
-    // that's an explicit, standalone requirement (a second, narrower gate on
-    // top of AdminGate's usual admin check), not a stand-in for it. Every
-    // other admin-only feature in this portal stays on the regular allowlist.
+    // Database Management is deliberately restricted to one specific
+    // identity, not "anyone on the general AdminGitHubUsernames/AdminEmails
+    // allowlist" — that's an explicit, standalone requirement (a second,
+    // narrower gate on top of AdminGate's usual admin check), not a
+    // stand-in for it. Every other admin-only feature in this portal stays
+    // on the regular allowlist. Kept as a legacy fallback (see
+    // IsSuperAdminAsync below) alongside the configurable SuperAdminEmail
+    // setting - a pre-existing GitHub-OAuth super-admin's access doesn't
+    // change just because SuperAdminEmail now exists.
     private const string SuperAdminLogin = "VarshithChand";
 
-    // Resolves the caller's real GitHub username the same way the rest of
-    // AdminGate does it in two different places (DenyUnlessAdminAsync's PAT
-    // fallback, IsAdminViaPersonalAccessTokenAsync) — OAuth login first (see
-    // AuthService: ClaimTypes.Name holds the raw GitHub "login" field), then
-    // the configured Personal Access Token's owner. Pulled out once here so
-    // the super-admin check below doesn't need to duplicate either path.
-    public static async Task<string?> ResolveCallerLoginAsync(ControllerBase controller)
+    // Resolves the caller's identity from their JWT alone - a PAT no longer
+    // proves anything about WHO someone is anywhere in this app (see
+    // DenyUnlessAdminAsync's own comment), only real login claims do.
+    // Prefers Name (a GitHub username, when that's how this session logged
+    // in) since that's what most existing callers (activity-log "actor"
+    // labels) expect to display; falls back to Email for an email/password
+    // or Google account, which has no GitHub username at all.
+    public static Task<string?> ResolveCallerLoginAsync(ControllerBase controller)
     {
-        if (controller.User.Identity?.IsAuthenticated == true)
-        {
-            var claimLogin = controller.User.FindFirst(ClaimTypes.Name)?.Value;
+        if (controller.User.Identity?.IsAuthenticated != true)
+            return Task.FromResult<string?>(null);
 
-            if (!string.IsNullOrWhiteSpace(claimLogin))
-                return claimLogin;
-        }
+        var claimLogin = controller.User.FindFirst(ClaimTypes.Name)?.Value;
 
-        var auth = controller.HttpContext.RequestServices.GetRequiredService<GitHubAuthService>();
-        return await auth.GetAuthenticatedLoginAsync();
+        if (!string.IsNullOrWhiteSpace(claimLogin))
+            return Task.FromResult<string?>(claimLogin);
+
+        var claimEmail = controller.User.FindFirst(ClaimTypes.Email)?.Value;
+
+        return Task.FromResult(string.IsNullOrWhiteSpace(claimEmail) ? null : claimEmail);
     }
 
     public static async Task<bool> IsSuperAdminAsync(ControllerBase controller)
     {
-        var login = await ResolveCallerLoginAsync(controller);
-        return login != null && string.Equals(login, SuperAdminLogin, StringComparison.OrdinalIgnoreCase);
+        if (controller.User.Identity?.IsAuthenticated != true)
+            return false;
+
+        var claimLogin = controller.User.FindFirst(ClaimTypes.Name)?.Value;
+
+        if (claimLogin != null && string.Equals(claimLogin, SuperAdminLogin, StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        var claimEmail = controller.User.FindFirst(ClaimTypes.Email)?.Value;
+
+        if (claimEmail == null)
+            return false;
+
+        // Resolved via DI (matching HasRepoWriteAccessAsync's own pattern
+        // above) rather than adding a SettingsService parameter to this
+        // method - DenyUnlessSuperAdminAsync below has ~50 existing call
+        // sites across the app, all with the current 2-arg signature.
+        var settings = controller.HttpContext.RequestServices.GetRequiredService<SettingsService>();
+        var view = await settings.GetViewAsync();
+
+        return !string.IsNullOrWhiteSpace(view.SuperAdminEmail)
+            && string.Equals(claimEmail, view.SuperAdminEmail, StringComparison.OrdinalIgnoreCase);
     }
 
     // Same CSRF guard as DenyUnlessAdminAsync (see HasSessionHeader) plus the

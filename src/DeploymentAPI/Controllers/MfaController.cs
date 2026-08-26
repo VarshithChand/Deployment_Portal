@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using System.Text.RegularExpressions;
 using DeploymentAPI.DTOs;
 using DeploymentAPI.Helpers;
@@ -6,17 +7,20 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace DeploymentAPI.Controllers;
 
-// Self-service MFA enrollment/management for the CURRENTLY connected
-// session's own GitHub identity (see
-// GitHubAuthService.GetAuthenticatedLoginAsync - cached, unlike the raw
-// per-token resolution MfaGate uses for a not-yet-saved token). A session
-// has to already be successfully connected once (unprotected, the very
-// first time - same as any real service's own MFA setup) before it can
-// turn MFA on for itself. Login-time enforcement (does THIS login's MFA
-// have to be satisfied before a NEW token gets saved) lives in MfaGate,
-// called from SettingsController.SaveMyGitHub - a completely separate
-// concern from this controller's own already-authenticated management
-// actions.
+// Self-service MFA enrollment/management for the CURRENTLY logged-in
+// account, whichever of the 3 login methods (email/password, Google,
+// GitHub OAuth) it used - identity is resolved from the JWT's own Name
+// claim (see RequireLogin below), the same canonical identifier
+// AuthService.IssueJwt already puts there for every login method (a GitHub
+// username, "google:"+sub, or the account's own generated Id). This used
+// to resolve identity via a live GitHubAuthService/PAT lookup, which only
+// ever worked for a connected GitHub token - MFA itself was never actually
+// GitHub-specific (see Mfa[login] in SettingsService, keyed by this exact
+// same kind of opaque string already), only its identity resolution was.
+// Login-time enforcement (does THIS login's MFA have to be satisfied
+// before a NEW token gets saved) lives in MfaGate, called from
+// SettingsController.SaveMyGitHub - a completely separate concern from
+// this controller's own already-authenticated management actions.
 [ApiController]
 [Route("api/mfa")]
 public class MfaController : ControllerBase
@@ -28,25 +32,23 @@ public class MfaController : ControllerBase
     private static readonly Regex EmailRegex = new(@"^[^@\s]+@[^@\s]+\.[^@\s]+$", RegexOptions.Compiled, TimeSpan.FromSeconds(1));
 
     private readonly SettingsService _settings;
-    private readonly GitHubAuthService _githubAuth;
     private readonly NotificationService _notifications;
 
-    public MfaController(SettingsService settings, GitHubAuthService githubAuth, NotificationService notifications)
+    public MfaController(SettingsService settings, NotificationService notifications)
     {
         _settings = settings;
-        _githubAuth = githubAuth;
         _notifications = notifications;
     }
 
-    private async Task<(string? Login, IActionResult? Denied)> RequireLoginAsync()
+    private (string? Login, IActionResult? Denied) RequireLogin()
     {
-        if (!_githubAuth.HasToken)
-            return (null, StatusCode(403, new { message = "Connect a GitHub token first." }));
+        if (User.Identity?.IsAuthenticated != true)
+            return (null, StatusCode(403, new { message = "Sign in first." }));
 
-        var login = await _githubAuth.GetAuthenticatedLoginAsync();
+        var login = User.FindFirst(ClaimTypes.Name)?.Value;
 
         if (string.IsNullOrWhiteSpace(login))
-            return (null, StatusCode(403, new { message = "Unable to verify your GitHub identity right now." }));
+            return (null, StatusCode(403, new { message = "Unable to verify your identity right now." }));
 
         return (login, null);
     }
@@ -54,7 +56,7 @@ public class MfaController : ControllerBase
     [HttpGet("status")]
     public async Task<IActionResult> GetStatus()
     {
-        var (login, denied) = await RequireLoginAsync();
+        var (login, denied) = RequireLogin();
         if (denied != null) return denied;
 
         return Ok(new { enabled = await _settings.IsMfaEnabledAsync(login!) });
@@ -69,7 +71,7 @@ public class MfaController : ControllerBase
     [HttpPost("enroll")]
     public async Task<IActionResult> Enroll()
     {
-        var (login, denied) = await RequireLoginAsync();
+        var (login, denied) = RequireLogin();
         if (denied != null) return denied;
 
         if (await _settings.IsMfaEnabledAsync(login!))
@@ -94,7 +96,7 @@ public class MfaController : ControllerBase
     [HttpPost("enroll/verify")]
     public async Task<IActionResult> VerifyEnrollment(MfaCodeRequestDto request)
     {
-        var (login, denied) = await RequireLoginAsync();
+        var (login, denied) = RequireLogin();
         if (denied != null) return denied;
 
         var lockout = await MfaLockoutPolicy.CheckAsync(_settings, login!);
@@ -128,7 +130,7 @@ public class MfaController : ControllerBase
     [HttpPost("disable")]
     public async Task<IActionResult> Disable(MfaCodeRequestDto request)
     {
-        var (login, denied) = await RequireLoginAsync();
+        var (login, denied) = RequireLogin();
         if (denied != null) return denied;
 
         if (!await _settings.IsMfaEnabledAsync(login!))
@@ -167,7 +169,7 @@ public class MfaController : ControllerBase
     [HttpGet("notification-email")]
     public async Task<IActionResult> GetNotificationEmail()
     {
-        var (login, denied) = await RequireLoginAsync();
+        var (login, denied) = RequireLogin();
         if (denied != null) return denied;
 
         return Ok(new { email = await _settings.GetMfaNotificationEmailAsync(login!) });
@@ -176,7 +178,7 @@ public class MfaController : ControllerBase
     [HttpPost("notification-email")]
     public async Task<IActionResult> SetNotificationEmail(MfaNotificationEmailRequestDto request)
     {
-        var (login, denied) = await RequireLoginAsync();
+        var (login, denied) = RequireLogin();
         if (denied != null) return denied;
 
         var email = request.Email?.Trim() ?? string.Empty;

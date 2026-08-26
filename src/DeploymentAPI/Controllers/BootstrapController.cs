@@ -53,19 +53,21 @@ public class BootstrapController : ControllerBase
     [HttpGet]
     public async Task<IActionResult> Get()
     {
-        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        // Never denies - this endpoint must keep working for a
+        // not-yet-authenticated visitor (it's how the frontend learns it
+        // needs to show the login page at all). Resolves to a sentinel
+        // that every Get*Async(key) call below naturally treats as
+        // "nothing configured," same as before login was mandatory.
+        var key = RequireAuth.TryResolveUserIdOrAnonymous(this);
 
         var settingsView = await _settings.GetViewAsync();
 
-        var isAdmin = AdminGate.IsAdminOrBootstrap(this, settingsView)
-            || await AdminGate.IsAdminViaPersonalAccessTokenAsync(this, settingsView);
-
-        settingsView.IsAdminSession = isAdmin;
+        settingsView.IsAdminSession = AdminGate.IsAdminOrBootstrap(this, settingsView);
         settingsView.IsSuperAdminSession = await AdminGate.IsSuperAdminAsync(this);
 
         // Page-scoped grants (see PageAdminGrants) - resolved via the same
-        // caller-login logic AdminGate itself uses (OAuth claim first, then
-        // this session's configured PAT owner), so this always matches
+        // caller-login logic AdminGate itself uses (JWT claims only, since
+        // a PAT no longer proves identity anywhere), so this always matches
         // exactly what the backend's own pageKey-aware gate checks decide,
         // never a second, potentially-drifting resolution.
         var callerLogin = await AdminGate.ResolveCallerLoginAsync(this);
@@ -73,8 +75,11 @@ public class BootstrapController : ControllerBase
 
         // Same reconnaissance-value reasoning as SettingsController.Get -
         // only an admin (or bootstrap mode) gets the real allowlist.
-        if (!isAdmin)
+        if (!settingsView.IsAdminSession)
+        {
             settingsView.AdminGitHubUsernames = new List<string>();
+            settingsView.AdminEmails = new List<string>();
+        }
 
         // These four are independent of each other and of the isAdmin
         // resolution above - each just reads the same settings blob
@@ -119,14 +124,14 @@ public class BootstrapController : ControllerBase
         var identityLabel = identityLabelTask.Result;
         var tokenOwner = tokenOwnerTask.Result;
 
-        // tokenOwner.Login (just resolved above) is already the live,
-        // confirmed GitHub identity behind this session's token - reusing
-        // it here means checking MFA status costs no extra GitHub call.
         // The actual Show/Mandatory/Blocked computation lives in one
         // shared place (MfaPolicy) so this reported state can never
         // quietly drift from what Program.cs's enforcement middleware
-        // actually allows through - see that middleware's comment.
-        var mfaPolicy = await MfaPolicy.EvaluateAsync(_settings, key, tokenOwner?.Login);
+        // actually allows through - see that middleware's comment. `key`
+        // is the sentinel for a not-yet-authenticated visitor (see
+        // RequireAuth.TryResolveUserIdOrAnonymous above), which correctly
+        // evaluates to "nothing configured, nothing to show" here too.
+        var mfaPolicy = await MfaPolicy.EvaluateAsync(_settings, key);
 
         var authenticated = User.Identity?.IsAuthenticated == true;
 

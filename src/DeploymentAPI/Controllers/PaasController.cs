@@ -44,7 +44,8 @@ public class PaasController : ControllerBase
         if (ValidateProvider(provider, out var normalized) is IActionResult invalid)
             return invalid;
 
-        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var (key, authDenied) = RequireAuth.RequireUserId(this);
+        if (authDenied != null) return authDenied;
         var creds = await _settings.GetUserPaasCredentialsAsync(normalized, key);
 
         return Ok(await _paas.GetStatusAsync(normalized, creds));
@@ -62,7 +63,8 @@ public class PaasController : ControllerBase
         if (ValidateProvider(provider, out var normalized) is IActionResult invalid)
             return invalid;
 
-        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var (key, authDenied) = RequireAuth.RequireUserId(this);
+        if (authDenied != null) return authDenied;
         var creds = await _settings.GetUserPaasCredentialsAsync(normalized, key);
 
         return Ok(await _paas.GetServiceMetricsAsync(normalized, creds, serviceId));
@@ -77,7 +79,8 @@ public class PaasController : ControllerBase
         if (await CredentialGate.DenyUnlessUnlockedAsync(this, _settings, _activity, normalized) is IActionResult denied)
             return denied;
 
-        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var (key, authDenied) = RequireAuth.RequireUserId(this);
+        if (authDenied != null) return authDenied;
         var existing = await _settings.GetUserPaasCredentialsAsync(normalized, key);
 
         var effectiveToken = string.IsNullOrWhiteSpace(request.Token) ? existing.Token : request.Token;
@@ -107,7 +110,8 @@ public class PaasController : ControllerBase
         if (await CredentialGate.DenyUnlessUnlockedAsync(this, _settings, _activity, normalized) is IActionResult denied)
             return denied;
 
-        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var (key, authDenied) = RequireAuth.RequireUserId(this);
+        if (authDenied != null) return authDenied;
         await _settings.ClearUserPaasCredentialsAsync(normalized, key);
         _activity.RevokeCredentialUnlock(key, normalized);
 

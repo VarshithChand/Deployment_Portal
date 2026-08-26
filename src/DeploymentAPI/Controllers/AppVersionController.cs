@@ -46,8 +46,17 @@ public class AppVersionController : ControllerBase
         if (string.IsNullOrWhiteSpace(request.Commit))
             return BadRequest(new { message = "commit is required." });
 
-        var key = PortalIdentity.GetOrCreateKey(HttpContext);
-        _activity.RecordFrontendBuild(key, request.Commit, request.Version, request.Environment);
+        // Fires once per app load - including the login page itself, which
+        // has no account to attribute this to yet. A no-op there (still
+        // 200s, the frontend doesn't need to know/care) rather than denying
+        // - same "stays reachable pre-login" reasoning as this controller's
+        // GET above, and there's nothing meaningful to record for "User
+        // Versions" against no account anyway.
+        if (User.Identity?.IsAuthenticated == true)
+        {
+            var (key, _) = RequireAuth.RequireUserId(this);
+            _activity.RecordFrontendBuild(key!, request.Commit, request.Version, request.Environment);
+        }
 
         return Ok();
     }

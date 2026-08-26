@@ -123,8 +123,10 @@ public class AiController : ControllerBase
     // be cautious about logging full conversations).
     private void LogUsage(AiChatContextDto? context, List<string> toolsUsed)
     {
-        var key = PortalIdentity.GetOrCreateKey(HttpContext);
-        var actor = $"session {key[..Math.Min(8, key.Length)]}";
+        // Always succeeds - only ever called from Chat() above, after
+        // DenyUnlessAdminAsync already guarantees an authenticated caller.
+        var (key, _) = RequireAuth.RequireUserId(this);
+        var actor = $"account {key![..Math.Min(8, key.Length)]}";
 
         var contextNote = !string.IsNullOrWhiteSpace(context?.CurrentTab) ? $" (context: {context.CurrentTab})" : "";
         var toolsNote = toolsUsed.Count > 0 ? $" — tools used: {string.Join(", ", toolsUsed)}" : "";

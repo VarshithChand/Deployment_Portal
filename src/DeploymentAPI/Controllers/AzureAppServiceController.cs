@@ -46,7 +46,8 @@ public class AzureAppServiceController : ControllerBase
     [HttpGet("apps")]
     public async Task<IActionResult> GetApps()
     {
-        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var (key, authDenied) = RequireAuth.RequireUserId(this);
+        if (authDenied != null) return authDenied;
         var creds = await _settings.GetUserAzureCredentialsAsync(key);
 
         return Ok(await _management.GetAppServicesAsync(creds));
@@ -55,7 +56,8 @@ public class AzureAppServiceController : ControllerBase
     [HttpGet("apps/{resourceGroup}/{name}")]
     public async Task<IActionResult> GetAppDetail(string resourceGroup, string name)
     {
-        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var (key, authDenied) = RequireAuth.RequireUserId(this);
+        if (authDenied != null) return authDenied;
         var creds = await _settings.GetUserAzureCredentialsAsync(key);
 
         return Ok(await _management.GetAppServiceDetailAsync(creds, resourceGroup, name));
@@ -81,7 +83,8 @@ public class AzureAppServiceController : ControllerBase
 
     private async Task<IActionResult> RunLifecycle(string resourceGroup, string name, string? slot, Func<UserAzureCredentials, string, string, string?, Task<CloudServiceActionResultDto>> actionFn, string label)
     {
-        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var (key, authDenied) = RequireAuth.RequireUserId(this);
+        if (authDenied != null) return authDenied;
         var creds = await _settings.GetUserAzureCredentialsAsync(key);
         var actor = await ResolveActorLabelAsync(key, creds);
 
@@ -94,7 +97,8 @@ public class AzureAppServiceController : ControllerBase
     [HttpPost("apps/{resourceGroup}/{name}/slots/{slot}/swap")]
     public async Task<IActionResult> SwapSlot(string resourceGroup, string name, string slot, [FromBody] AzureSlotSwapRequestDto request)
     {
-        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var (key, authDenied) = RequireAuth.RequireUserId(this);
+        if (authDenied != null) return authDenied;
         var creds = await _settings.GetUserAzureCredentialsAsync(key);
         var actor = await ResolveActorLabelAsync(key, creds);
 
@@ -110,7 +114,8 @@ public class AzureAppServiceController : ControllerBase
         if (request.Items == null || request.Items.Count == 0)
             return BadRequest("At least one item is required.");
 
-        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var (key, authDenied) = RequireAuth.RequireUserId(this);
+        if (authDenied != null) return authDenied;
         var creds = await _settings.GetUserAzureCredentialsAsync(key);
         var actor = await ResolveActorLabelAsync(key, creds);
 
@@ -125,7 +130,8 @@ public class AzureAppServiceController : ControllerBase
     [HttpGet("apps/{resourceGroup}/{name}/variables")]
     public async Task<IActionResult> GetVariables(string resourceGroup, string name, [FromQuery] string? slot)
     {
-        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var (key, authDenied) = RequireAuth.RequireUserId(this);
+        if (authDenied != null) return authDenied;
         var creds = await _settings.GetUserAzureCredentialsAsync(key);
 
         return Ok(await _management.GetEnvVarsAsync(creds, resourceGroup, name, slot));
@@ -137,7 +143,8 @@ public class AzureAppServiceController : ControllerBase
         if (string.IsNullOrWhiteSpace(request.Name))
             return BadRequest("name is required.");
 
-        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var (key, authDenied) = RequireAuth.RequireUserId(this);
+        if (authDenied != null) return authDenied;
         var creds = await _settings.GetUserAzureCredentialsAsync(key);
         var actor = await ResolveActorLabelAsync(key, creds);
 
@@ -150,7 +157,8 @@ public class AzureAppServiceController : ControllerBase
     [HttpPost("apps/{resourceGroup}/{name}/scale")]
     public async Task<IActionResult> Scale(string resourceGroup, string name, [FromBody] AzureAppServiceScaleRequestDto request)
     {
-        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var (key, authDenied) = RequireAuth.RequireUserId(this);
+        if (authDenied != null) return authDenied;
         var creds = await _settings.GetUserAzureCredentialsAsync(key);
         var actor = await ResolveActorLabelAsync(key, creds);
 
@@ -164,7 +172,8 @@ public class AzureAppServiceController : ControllerBase
     [HttpDelete("apps/{resourceGroup}/{name}")]
     public async Task<IActionResult> DeleteApp(string resourceGroup, string name)
     {
-        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var (key, authDenied) = RequireAuth.RequireUserId(this);
+        if (authDenied != null) return authDenied;
         var creds = await _settings.GetUserAzureCredentialsAsync(key);
         var actor = await ResolveActorLabelAsync(key, creds);
 
@@ -177,7 +186,8 @@ public class AzureAppServiceController : ControllerBase
     [HttpDelete("apps/{resourceGroup}/{name}/slots/{slot}")]
     public async Task<IActionResult> DeleteSlot(string resourceGroup, string name, string slot)
     {
-        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var (key, authDenied) = RequireAuth.RequireUserId(this);
+        if (authDenied != null) return authDenied;
         var creds = await _settings.GetUserAzureCredentialsAsync(key);
         var actor = await ResolveActorLabelAsync(key, creds);
 
@@ -190,7 +200,8 @@ public class AzureAppServiceController : ControllerBase
     [HttpGet("apps/{resourceGroup}/{name}/metrics")]
     public async Task<IActionResult> GetMetrics(string resourceGroup, string name, [FromQuery] string? slot, [FromQuery] int rangeMinutes = 60)
     {
-        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var (key, authDenied) = RequireAuth.RequireUserId(this);
+        if (authDenied != null) return authDenied;
         var creds = await _settings.GetUserAzureCredentialsAsync(key);
 
         return Ok(await _management.GetMetricsAsync(creds, resourceGroup, name, slot, rangeMinutes));

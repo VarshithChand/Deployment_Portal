@@ -65,7 +65,8 @@ public class ObservabilityController : ControllerBase
         if (ValidateHostProvider(provider) is IActionResult invalid)
             return invalid;
 
-        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var (key, authDenied) = RequireAuth.RequireUserId(this);
+        if (authDenied != null) return authDenied;
         var creds = await _settings.GetUserHostCredentialsAsync(provider, key);
 
         return Ok(new HostCredentialStatusDto
@@ -85,7 +86,8 @@ public class ObservabilityController : ControllerBase
         if (await CredentialGate.DenyUnlessUnlockedAsync(this, _settings, _activity, provider) is IActionResult locked)
             return locked;
 
-        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var (key, authDenied) = RequireAuth.RequireUserId(this);
+        if (authDenied != null) return authDenied;
         var existing = await _settings.GetUserHostCredentialsAsync(provider, key);
         var effectiveHostUrl = string.IsNullOrWhiteSpace(request.HostUrl) ? existing.HostUrl : request.HostUrl;
 
@@ -106,7 +108,8 @@ public class ObservabilityController : ControllerBase
         if (await CredentialGate.DenyUnlessUnlockedAsync(this, _settings, _activity, provider) is IActionResult locked)
             return locked;
 
-        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var (key, authDenied) = RequireAuth.RequireUserId(this);
+        if (authDenied != null) return authDenied;
         await _settings.ClearUserHostCredentialsAsync(provider, key);
         _activity.RevokeCredentialUnlock(key, provider);
 
@@ -121,7 +124,8 @@ public class ObservabilityController : ControllerBase
     [HttpGet("cloudwatch")]
     public async Task<IActionResult> GetCloudWatch([FromQuery] string? region)
     {
-        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var (key, authDenied) = RequireAuth.RequireUserId(this);
+        if (authDenied != null) return authDenied;
         var creds = await _settings.GetUserAwsCredentialsAsync(key);
 
         return Ok(await _observability.GetCloudWatchOverviewAsync(creds, region));
@@ -130,7 +134,8 @@ public class ObservabilityController : ControllerBase
     [HttpGet("xray")]
     public async Task<IActionResult> GetXRay([FromQuery] string? region)
     {
-        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var (key, authDenied) = RequireAuth.RequireUserId(this);
+        if (authDenied != null) return authDenied;
         var creds = await _settings.GetUserAwsCredentialsAsync(key);
 
         return Ok(await _observability.GetXRayOverviewAsync(creds, region));
@@ -139,7 +144,8 @@ public class ObservabilityController : ControllerBase
     [HttpGet("azuremonitor")]
     public async Task<IActionResult> GetAzureMonitor()
     {
-        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var (key, authDenied) = RequireAuth.RequireUserId(this);
+        if (authDenied != null) return authDenied;
         var creds = await _settings.GetUserAzureCredentialsAsync(key);
 
         return Ok(await _observability.GetAzureMonitorOverviewAsync(creds));
@@ -148,7 +154,8 @@ public class ObservabilityController : ControllerBase
     [HttpGet("cloudmonitoring")]
     public async Task<IActionResult> GetCloudMonitoring()
     {
-        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var (key, authDenied) = RequireAuth.RequireUserId(this);
+        if (authDenied != null) return authDenied;
         var creds = await _settings.GetUserGcpCredentialsAsync(key);
 
         return Ok(await _observability.GetCloudMonitoringOverviewAsync(creds));

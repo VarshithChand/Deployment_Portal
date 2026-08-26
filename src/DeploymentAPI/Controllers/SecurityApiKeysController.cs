@@ -56,8 +56,10 @@ public class SecurityApiKeysController : ControllerBase
         if (await AdminGate.DenyUnlessAdminAsync(this, _settings, "create an API key", "services") is IActionResult denied)
             return denied;
 
-        var ownerKey = PortalIdentity.GetOrCreateKey(HttpContext);
-        return Ok(await CreateForOwnerAsync(request, ownerKey));
+        var (ownerKey, authDenied) = RequireAuth.RequireUserId(this);
+        if (authDenied != null) return authDenied;
+
+        return Ok(await CreateForOwnerAsync(request, ownerKey!));
     }
 
     [HttpDelete("{id}")]
@@ -78,7 +80,9 @@ public class SecurityApiKeysController : ControllerBase
     [HttpGet("mine")]
     public async Task<IActionResult> GetMine()
     {
-        var callerKey = PortalIdentity.GetOrCreateKey(HttpContext);
+        var (callerKey, authDenied) = RequireAuth.RequireUserId(this);
+        if (authDenied != null) return authDenied;
+
         var patUsers = await _settings.GetPatUsersAsync();
 
         var dtos = (await _settings.GetApiKeysAsync())
@@ -96,8 +100,10 @@ public class SecurityApiKeysController : ControllerBase
         if (await CredentialGate.DenyUnlessUnlockedAsync(this, _settings, _activity, "apikey") is IActionResult locked)
             return locked;
 
-        var callerKey = PortalIdentity.GetOrCreateKey(HttpContext);
-        return Ok(await CreateForOwnerAsync(request, callerKey));
+        // Always succeeds here - DenyUnlessUnlockedAsync above already
+        // requires an authenticated caller.
+        var (callerKey, _) = RequireAuth.RequireUserId(this);
+        return Ok(await CreateForOwnerAsync(request, callerKey!));
     }
 
     [HttpDelete("mine/{id}")]
@@ -106,7 +112,9 @@ public class SecurityApiKeysController : ControllerBase
         if (await CredentialGate.DenyUnlessUnlockedAsync(this, _settings, _activity, "apikey") is IActionResult locked)
             return locked;
 
-        var callerKey = PortalIdentity.GetOrCreateKey(HttpContext);
+        // Always succeeds here - DenyUnlessUnlockedAsync above already
+        // requires an authenticated caller.
+        var (callerKey, _) = RequireAuth.RequireUserId(this);
         var owns = (await _settings.GetApiKeysAsync()).Any(k => k.Id == id && k.OwnerKey == callerKey);
 
         if (!owns)

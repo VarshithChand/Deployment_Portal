@@ -53,9 +53,17 @@ public class GitHubAuthService
 
         var context = _httpContextAccessor.HttpContext;
 
-        if (context != null)
+        // This runs unconditionally for every request (see the middleware
+        // in Program.cs), including the genuinely pre-login ones (signup,
+        // login, the OAuth callbacks themselves) - a not-yet-authenticated
+        // request simply has no account to load a GitHub connection for
+        // yet, so this leaves Owner/Repository/PersonalAccessToken at their
+        // defaults (HasToken/IsConfigured both false) rather than throwing,
+        // the same "nothing configured" outcome an anonymous visitor always
+        // saw before login was mandatory.
+        if (context?.User.Identity?.IsAuthenticated == true)
         {
-            var key = PortalIdentity.GetOrCreateKey(context);
+            var key = RequireAuth.ResolveUserId(context);
             var creds = await _settings.GetUserGitHubCredentialsAsync(key);
 
             _owner = creds.Owner;
