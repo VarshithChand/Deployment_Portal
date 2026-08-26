@@ -17,30 +17,20 @@ namespace DeploymentAPI.Helpers;
 // against, so MFA follows the person, not the browser.
 public static class MfaGate
 {
-    public static async Task<IActionResult?> DenyUnlessVerifiedAsync(
-        ControllerBase controller, SettingsService settings, NotificationService notifications,
-        string token, string? mfaCode, string? recoveryCode)
-    {
-        var login = await settings.ResolveGitHubLoginAsync(token);
-
-        // Couldn't resolve who this token belongs to (bad/expired token) -
-        // not this gate's job to report that; SaveUserGitHubCredentialsAsync
-        // proceeds with whatever was given either way, same as before this
-        // feature existed - a genuinely bad token still fails elsewhere
-        // (rejected at preview, or simply doesn't work once saved).
-        if (string.IsNullOrWhiteSpace(login))
-            return null;
-
-        return await DenyUnlessCodeVerifiedAsync(controller, settings, notifications, login, mfaCode, recoveryCode);
-    }
-
-    // Same verify/lockout logic as DenyUnlessVerifiedAsync above, but
-    // against an ALREADY-RESOLVED login - for actions gating the CURRENT
-    // session's own identity rather than a token about to be saved (e.g.
-    // removing the screen-lock PIN, see SettingsController.ClearMyPin).
-    // A no-op (returns null, action proceeds) whenever that login doesn't
-    // have MFA enabled at all - same "rides on top of an existing,
-    // optional protection" posture every MFA gate in this app already has.
+    // Gates an action on the CALLER'S OWN account MFA state - e.g. saving
+    // a GitHub PAT (SettingsController.SaveMyGitHub) or setting/clearing
+    // the screen-lock PIN (SaveMyPin/ClearMyPin). A no-op (returns null,
+    // action proceeds) whenever that account doesn't have MFA enabled at
+    // all - same "rides on top of an existing, optional protection"
+    // posture every MFA gate in this app already has. Used to resolve
+    // identity live off whatever GitHub PAT happened to be connected
+    // (either the token about to be saved, or the session's already-
+    // connected one) instead of taking the account id directly - a
+    // leftover from when a PAT was the login. A connected PAT is
+    // unrelated to who's logged in now (see RequireAuth/AccountAuthService),
+    // so that either could never be satisfied (no PAT connected) or
+    // checked a completely different person's MFA enrollment than the one
+    // the caller actually set up.
     public static async Task<IActionResult?> DenyUnlessCodeVerifiedAsync(
         ControllerBase controller, SettingsService settings, NotificationService notifications,
         string login, string? code, string? recoveryCode)

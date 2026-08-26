@@ -154,13 +154,19 @@ public class SettingsController : ControllerBase
         // MFA enforcement - the actual gate (PreviewMyGitHubToken's
         // MfaRequired flag is only a heads-up for the UI; this is what
         // stops a token from ever being persisted without it). Keyed by
-        // the token's own resolved GitHub login, not this session's key -
-        // MFA belongs to the person, same reasoning as Round 14's
-        // cross-session credential migration. Nothing is saved below
-        // until this passes, so a wrong/missing code leaves this session
-        // exactly where it was - no partial state to clean up.
+        // the CALLER'S OWN account id, not the token's resolved GitHub
+        // login - this used to live-resolve "who does this PAT belong to"
+        // and check that identity's MFA status, a leftover from when a PAT
+        // was the login. Login is a real account now, independent of any
+        // connected PAT (see AccountAuthService) - checking the token's
+        // own GitHub identity meant this either could never be satisfied
+        // (no PAT connected yet) or checked a completely different
+        // person's MFA enrollment than the one the caller actually set up.
+        // Nothing is saved below until this passes, so a wrong/missing
+        // code leaves this session exactly where it was - no partial state
+        // to clean up.
         if (!string.IsNullOrWhiteSpace(request.PersonalAccessToken)
-            && await MfaGate.DenyUnlessVerifiedAsync(this, _settings, _notifications, request.PersonalAccessToken.Trim(), request.MfaCode, request.RecoveryCode) is IActionResult mfaDenied)
+            && await MfaGate.DenyUnlessCodeVerifiedAsync(this, _settings, _notifications, key, request.MfaCode, request.RecoveryCode) is IActionResult mfaDenied)
         {
             return mfaDenied;
         }
@@ -541,21 +547,22 @@ public class SettingsController : ControllerBase
     }
 
     // Shared by SaveMyPin and ClearMyPin below - both require a fresh MFA
-    // code before taking effect when this session's GitHub identity has
-    // MFA enabled (a no-op otherwise, so either action works exactly as it
-    // always did for a session with no MFA). Neither offers a recovery-
-    // code fallback here by design (see SecurityPinSection.jsx) - setting/
-    // changing/removing the PIN isn't the "lost my phone" last-resort path
-    // Disable MFA is, so a live code is required outright.
-    private async Task<IActionResult?> DenyUnlessPinActionVerifiedAsync(string? code)
-    {
-        var login = await _githubAuth.GetAuthenticatedLoginAsync();
-
-        if (string.IsNullOrWhiteSpace(login))
-            return null;
-
-        return await MfaGate.DenyUnlessCodeVerifiedAsync(this, _settings, _notifications, login, code, null);
-    }
+    // code before taking effect when the CALLER'S OWN ACCOUNT has MFA
+    // enabled (a no-op otherwise, so either action works exactly as it
+    // always did for an account with no MFA). Takes the account id
+    // directly now - this used to live-resolve "who does this session's
+    // connected GitHub PAT belong to" via GitHubAuthService and check
+    // THAT identity's MFA status, a leftover from when a PAT was the
+    // login. A connected PAT is unrelated to who's logged in now (same
+    // reasoning as RequireAuth/MfaPolicy elsewhere in this file) - an
+    // account with no PAT connected at all could never satisfy this gate
+    // before, and one with a PAT connected was checked against the wrong
+    // person's MFA enrollment. Neither offers a recovery-code fallback
+    // here by design (see SecurityPinSection.jsx) - setting/changing/
+    // removing the PIN isn't the "lost my phone" last-resort path Disable
+    // MFA is, so a live code is required outright.
+    private async Task<IActionResult?> DenyUnlessPinActionVerifiedAsync(string key, string? code) =>
+        await MfaGate.DenyUnlessCodeVerifiedAsync(this, _settings, _notifications, key, code, null);
 
     [HttpPost("me/pin")]
     public async Task<IActionResult> SaveMyPin(SecurityPinUpdateDto request)
@@ -563,11 +570,12 @@ public class SettingsController : ControllerBase
         if (string.IsNullOrWhiteSpace(request.Pin) || request.Pin.Length < 4 || request.Pin.Length > 8 || !request.Pin.All(char.IsDigit))
             return BadRequest(new { message = "PIN must be 4 to 8 digits." });
 
-        if (await DenyUnlessPinActionVerifiedAsync(request.Code) is IActionResult denied)
-            return denied;
-
         var (key, authDenied) = RequireAuth.RequireUserId(this);
         if (authDenied != null) return authDenied;
+
+        if (await DenyUnlessPinActionVerifiedAsync(key, request.Code) is IActionResult denied)
+            return denied;
+
         await _settings.SetPinAsync(key, request.Pin);
         _activity.ClearFailedPinAttempts(key);
 
@@ -576,17 +584,18 @@ public class SettingsController : ControllerBase
 
     // Removing the PIN turns off both what it protects (the Credentials
     // tabs' unlock gate, and the "lock instead of wipe" idle behavior) -
-    // significant enough that, when this session's GitHub identity has MFA
-    // enabled, we require a fresh MFA code before it takes effect, same as
-    // disabling MFA itself already requires (see MfaController.Disable).
+    // significant enough that, when this account has MFA enabled, we
+    // require a fresh MFA code before it takes effect, same as disabling
+    // MFA itself already requires (see MfaController.Disable).
     [HttpDelete("me/pin")]
     public async Task<IActionResult> ClearMyPin(MfaCodeRequestDto request)
     {
-        if (await DenyUnlessPinActionVerifiedAsync(request?.Code) is IActionResult denied)
-            return denied;
-
         var (key, authDenied) = RequireAuth.RequireUserId(this);
         if (authDenied != null) return authDenied;
+
+        if (await DenyUnlessPinActionVerifiedAsync(key, request?.Code) is IActionResult denied)
+            return denied;
+
         await _settings.ClearPinAsync(key);
         _activity.ClearFailedPinAttempts(key);
         return Ok();

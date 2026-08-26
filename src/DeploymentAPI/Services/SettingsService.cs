@@ -2580,13 +2580,6 @@ public class SettingsService
 
     public string UnprotectValue(string value) => Unprotect(value)!;
 
-    // Public wrapper around the private ResolvePatOwnerLoginAsync below -
-    // MfaGate needs to resolve a not-yet-saved token's real owner the
-    // exact same way SaveUserGitHubCredentialsAsync's own duplicate-
-    // session check already does, without duplicating that logic or
-    // widening the private method's own access.
-    public Task<string?> ResolveGitHubLoginAsync(string token) => ResolvePatOwnerLoginAsync(token);
-
     public async Task<bool> IsMfaEnabledAsync(string login)
     {
         var root = await ReadRootAsync();
