@@ -1,15 +1,17 @@
 namespace DeploymentAPI.DTOs;
 
-// One row in the admin's "Sidebar Access" picker — a browser/device that
-// has configured a Personal Access Token, identified by its storage key
-// (see PortalIdentity) plus the actual GitHub account that token belongs
-// to (resolved live — see SettingsService.ResolvePatOwnerLoginAsync),
-// since two different PAT users can otherwise look identical (same
-// Owner/Repository, e.g. two teammates both deploying "org/repo").
+// One row in Services > Users (and the Sidebar Access picker) - one real
+// logged-in account (see PortalUserAccount), identified by its own id (see
+// SettingsService.GetPatUsersAsync). Name/field names kept as "Pat*" since
+// this predates real accounts and the frontend already reads these exact
+// field names throughout Services.jsx - only what populates them changed.
 public class PatUserSummaryDto
 {
     public string Key { get; set; } = string.Empty;
 
+    // The account's own login email (or display name/id as a fallback) -
+    // no longer a live-resolved GitHub PAT owner, since login is a real
+    // account now and its identity is already known without an API call.
     public string PatOwnerLogin { get; set; } = string.Empty;
 
     // Only ever meaningful when PatOwnerLogin resolved to a real login

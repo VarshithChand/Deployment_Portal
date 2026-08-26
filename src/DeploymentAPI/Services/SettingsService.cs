@@ -2202,57 +2202,30 @@ public class SettingsService
         await WriteRootAsync(root);
     }
 
-    // The list an admin picks from in Settings > Sidebar Access — every
-    // browser/device that has ever configured a Personal Access Token here,
-    // regardless of which repo. Only PAT users are listed (not every
-    // UserGitHubCredentials entry) since a session with no token can't
-    // trigger anything restriction would matter for. Labeled by owner/repo,
-    // not a resolved GitHub identity — that would mean a live API call per
-    // entry here, and some stored tokens may no longer even be valid.
+    // The list backing Settings > Services > Users (and the Sidebar Access
+    // picker) - one row per real logged-in account (see PortalUserAccount/
+    // AccountAuthService), not per connected GitHub PAT. Login is real
+    // accounts now (email/password, Google, or GitHub OAuth), so identity
+    // is already known - labeled by the account's own email/display name,
+    // no live GitHub lookup needed (that was only ever a proxy for
+    // identity back when a PAT WAS the login). A connected GitHub PAT
+    // (UserGitHubCredentials, keyed by this same account id) is still
+    // shown as supplementary Owner/Repository info when present, since
+    // that's still useful context for an admin, just no longer how the
+    // row is identified.
     public async Task<List<PatUserSummaryDto>> GetPatUsersAsync()
     {
         var root = await ReadRootAsync();
-        var users = root["UserGitHubCredentials"] as JObject;
+        var accounts = root["Users"] as JObject;
+        var gitHubCreds = root["UserGitHubCredentials"] as JObject;
         var access = root["SidebarAccess"] as JObject;
         var blocked = root["BlockedPatUsers"] as JArray;
 
-        if (users == null)
+        if (accounts == null)
             return new List<PatUserSummaryDto>();
 
-        var entries = users.Properties()
-            .Where(p => p.Value is JObject entry && !string.IsNullOrWhiteSpace(entry["PersonalAccessToken"]?.ToString()))
-            .ToList();
+        var entries = accounts.Properties().ToList();
 
-        // Two different browsers can configure the SAME repo (as in
-        // "VarshithChand/yaml" for both an admin's own session and a
-        // teammate's) — Owner/Repository alone can't tell them apart, so
-        // this resolves each token's actual GitHub identity live, the same
-        // way AdminGate does for the admin-authority check itself. Uses the
-        // richer status variant (not ResolvePatOwnerLoginAsync, kept
-        // unchanged for the security-sensitive eviction/migration callers
-        // that only need a plain match/no-match) so a genuinely bad
-        // credential and a merely-transient failure (GitHub rate limit, a
-        // network blip) don't collapse into the same misleading label.
-        //
-        // Unprotect() here is not optional - the stored value is the
-        // Data-Protection-encrypted ciphertext (see Protect() in
-        // SaveUserGitHubCredentialsAsync), never the raw token. Passing
-        // that ciphertext straight to GitHub as a Bearer token used to
-        // make every single row 401 regardless of whether the real
-        // underlying PAT was still valid - every row read "Unknown
-        // (invalid or expired token)" even for a token that worked fine.
-        var statuses = await Task.WhenAll(
-            entries.Select(p => ResolvePatOwnerStatusAsync(
-                Unprotect(((JObject)p.Value!)["PersonalAccessToken"]!.ToString()) ?? string.Empty)));
-
-        // Keyed by each row's OWN entry name (the account's own id - see
-        // RequireAuth/AccountAuthService), never by `statuses[i].Login`
-        // (the CONNECTED PAT's live-resolved GitHub owner). Those are two
-        // different things now that a GitHub PAT is just something an
-        // account optionally connects for API calls, unrelated to which
-        // account it is (see PortalIdentity.cs's own header comment) - an
-        // email/password account could have any PAT connected, or none,
-        // and MFA is keyed by the account's own id either way.
         var mfaEnabledFlags = await Task.WhenAll(
             entries.Select(p => IsMfaEnabledAsync(p.Name)));
 
@@ -2261,34 +2234,27 @@ public class SettingsService
 
         return entries.Select((p, i) =>
         {
-            var entry = (JObject)p.Value!;
+            var account = (JObject)p.Value!;
+            var email = account["Email"]?.ToString();
+            var displayName = account["DisplayName"]?.ToString();
+
+            var gitHubEntry = gitHubCreds?[p.Name] as JObject;
+            var ownerValue = gitHubEntry?["Owner"]?.ToString();
+            var repositoryValue = gitHubEntry?["Repository"]?.ToString();
+
             var restrictionCount = (access?[p.Name] as JObject)?.Properties().Count() ?? 0;
-            var (login, failureReason) = statuses[i];
-
-            var ownerValue = entry["Owner"]?.ToString();
-            var repositoryValue = entry["Repository"]?.ToString();
-
-            // A hint, not a claim - kept inside the "Unknown (...)" label
-            // (never its own separate value) so AdminUsersController's
-            // dedupe feature, which explicitly skips anything starting
-            // with "Unknown" because there's no CONFIRMED identity to
-            // safely group same-named strangers by, keeps skipping it.
-            // Configured Owner/Repository is a real clue for a human
-            // admin reading this table, but not proof of identity the way
-            // a resolved GitHub login is.
-            var configuredForHint = !string.IsNullOrWhiteSpace(ownerValue) && !string.IsNullOrWhiteSpace(repositoryValue)
-                ? $" — configured for {ownerValue}/{repositoryValue}"
-                : string.Empty;
 
             return new PatUserSummaryDto
             {
                 Key = p.Name,
-                PatOwnerLogin = login ?? $"Unknown ({failureReason}{configuredForHint})",
+                PatOwnerLogin = !string.IsNullOrWhiteSpace(email)
+                    ? email
+                    : (!string.IsNullOrWhiteSpace(displayName) ? displayName : p.Name),
                 Owner = ownerValue ?? string.Empty,
                 Repository = repositoryValue ?? string.Empty,
                 RestrictedTabCount = restrictionCount,
                 IsBlocked = blocked?.Any(k => k.ToString() == p.Name) ?? false,
-                IsSignedOut = entry["SignedOut"]?.Value<bool>() ?? false,
+                IsSignedOut = gitHubEntry?["SignedOut"]?.Value<bool>() ?? false,
                 IsMfaEnabled = mfaEnabledFlags[i],
                 IsMfaRequired = mfaRequiredFlags[i]
             };
@@ -3133,44 +3099,6 @@ public class SettingsService
         catch
         {
             return null;
-        }
-    }
-
-    // Same live /user lookup as ResolvePatOwnerLoginAsync above, for
-    // GetPatUsersAsync's admin-facing display specifically - distinguishes
-    // a genuinely bad credential (401, GitHub rejects the token itself)
-    // from a merely transient failure (rate limited, network error, a
-    // GitHub outage), which the plain string? version collapses into the
-    // same "null" either way. Kept as a separate method rather than
-    // changing ResolvePatOwnerLoginAsync's signature - its other callers
-    // (the one-session-per-account eviction/migration check) only ever
-    // need "did this resolve to a real login or not," not why it didn't.
-    private static async Task<(string? Login, string FailureReason)> ResolvePatOwnerStatusAsync(string token)
-    {
-        using var client = new HttpClient();
-
-        client.DefaultRequestHeaders.Add("Authorization", $"Bearer {token}");
-        client.DefaultRequestHeaders.Add("User-Agent", "DeploymentPortal");
-        client.DefaultRequestHeaders.Add("Accept", "application/vnd.github+json");
-
-        try
-        {
-            var response = await client.GetAsync("https://api.github.com/user");
-
-            if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized)
-                return (null, "invalid or expired token");
-
-            if (!response.IsSuccessStatusCode)
-                return (null, "unable to verify right now");
-
-            var json = await response.Content.ReadAsStringAsync();
-            var login = JObject.Parse(json)["login"]?.ToString();
-
-            return (login, "unable to verify right now");
-        }
-        catch
-        {
-            return (null, "unable to verify right now");
         }
     }
 
