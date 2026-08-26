@@ -30,6 +30,15 @@ public class PortalUserAccount
 
     public string? DisplayName { get; set; }
 
+    // Derived from the email's local part at signup time (e.g.
+    // "jane.doe" from "jane.doe@example.com"), deduplicated against
+    // existing accounts - see AccountAuthService.SignUpAsync. Lets a
+    // password account log in with either this or its email
+    // (LoginWithPasswordAsync), without requiring a separate field on the
+    // signup form. Null for Google/GitHub-only accounts - they never go
+    // through the password login form this exists for.
+    public string? Username { get; set; }
+
     // Set once an account has also signed in via that provider - lets one
     // account be reached through more than one login method without
     // creating a duplicate (see AccountAuthService's linking logic).

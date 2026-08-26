@@ -88,7 +88,7 @@ export default function LoginSignupPage({ onMfaRequired }) {
         e.preventDefault();
 
         if (!email.trim() || !password) {
-            setError("Email and password are required.");
+            setError(isSignup ? "Email and password are required." : "Email/username and password are required.");
             return;
         }
 
@@ -231,16 +231,22 @@ export default function LoginSignupPage({ onMfaRequired }) {
                     )}
 
                     <div className="form-group">
-                        <label htmlFor="login-email">Email</label>
+                        <label htmlFor="login-email">{isSignup ? "Email" : "Email or Username"}</label>
                         <div className="auth-page-field">
                             <EmailIcon />
                             <input
                                 id="login-email"
-                                type="email"
-                                placeholder="you@example.com"
+                                // Signup always creates a real account by email - a
+                                // username is derived automatically server-side (see
+                                // AccountAuthService.DeriveUniqueUsernameAsync), not
+                                // typed here. Login accepts either, so it can't use
+                                // type="email" (a browser would block submitting a
+                                // plain username as invalid).
+                                type={isSignup ? "email" : "text"}
+                                placeholder={isSignup ? "you@example.com" : "you@example.com or username"}
                                 value={email}
                                 onChange={(e) => setEmail(e.target.value)}
-                                autoComplete="email"
+                                autoComplete={isSignup ? "email" : "username"}
                                 autoFocus
                             />
                         </div>

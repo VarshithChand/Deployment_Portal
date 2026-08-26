@@ -15,8 +15,11 @@ export const signUp = async (email, password, displayName) => {
     return response.data;
 };
 
-export const logIn = async (email, password) => {
-    const response = await authApi.post("/login", { email, password });
+// identifier is an email or a username - see AccountAuthController.Login's
+// PasswordLoginRequestDto.EmailOrUsername, resolved server-side by
+// whichever this looks like.
+export const logIn = async (identifier, password) => {
+    const response = await authApi.post("/login", { emailOrUsername: identifier, password });
     if (response.data?.token) setAuthToken(response.data.token);
     return response.data;
 };

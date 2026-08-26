@@ -1467,6 +1467,25 @@ public class SettingsService
         return match == null ? null : ParseUser(match.Name, (JObject)match.Value!);
     }
 
+    // Mirrors FindUserByEmailAsync exactly, just against Username instead -
+    // see AccountAuthService.LoginWithPasswordAsync (resolves by whichever
+    // one the submitted identifier looks like) and SignUpAsync (checked
+    // here to keep a freshly-derived username unique before it's saved).
+    public async Task<PortalUserAccount?> FindUserByUsernameAsync(string username)
+    {
+        var root = await ReadRootAsync();
+        var (users, seeded) = await GetOrCreateUsersSectionAsync(root);
+
+        if (seeded)
+            await WriteRootAsync(root);
+
+        var match = users.Properties()
+            .FirstOrDefault(p => string.Equals(
+                (p.Value as JObject)?["Username"]?.ToString(), username, StringComparison.OrdinalIgnoreCase));
+
+        return match == null ? null : ParseUser(match.Name, (JObject)match.Value!);
+    }
+
     public async Task<PortalUserAccount?> GetUserByIdAsync(string id)
     {
         var root = await ReadRootAsync();
@@ -1480,7 +1499,10 @@ public class SettingsService
 
     // plaintextPassword is null for a Google/GitHub-only account (nothing to
     // hash - LinkedGoogleSub/LinkedGitHubLogin is what lets them sign in).
-    public async Task<PortalUserAccount> CreateUserAsync(string id, string email, string? plaintextPassword, string provider, string? displayName = null)
+    // username is null for the same accounts, and for any password account
+    // created before this existed - see AccountAuthService.SignUpAsync,
+    // the only caller that derives and passes one.
+    public async Task<PortalUserAccount> CreateUserAsync(string id, string email, string? plaintextPassword, string provider, string? displayName = null, string? username = null)
     {
         var root = await ReadRootAsync();
         var (users, _) = await GetOrCreateUsersSectionAsync(root);
@@ -1488,6 +1510,7 @@ public class SettingsService
         var entry = new JObject
         {
             ["Email"] = email.Trim().ToLowerInvariant(),
+            ["Username"] = username,
             ["PasswordHash"] = plaintextPassword == null
                 ? null
                 : Protect(_passwordHasher.HashPassword(new PortalUserAccount { Id = id }, plaintextPassword)),
@@ -1566,6 +1589,7 @@ public class SettingsService
     {
         Id = id,
         Email = entry["Email"]?.ToString() ?? string.Empty,
+        Username = entry["Username"]?.ToString(),
         DisplayName = entry["DisplayName"]?.ToString(),
         LinkedGitHubLogin = entry["LinkedGitHubLogin"]?.ToString(),
         LinkedGoogleSub = entry["LinkedGoogleSub"]?.ToString(),

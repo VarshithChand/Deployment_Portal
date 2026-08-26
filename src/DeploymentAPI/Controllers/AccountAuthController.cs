@@ -54,7 +54,7 @@ public class AccountAuthController : ControllerBase
     [HttpPost("login")]
     public async Task<IActionResult> Login(PasswordLoginRequestDto request)
     {
-        var result = await _accountAuth.LoginWithPasswordAsync(request.Email ?? string.Empty, request.Password ?? string.Empty);
+        var result = await _accountAuth.LoginWithPasswordAsync(request.EmailOrUsername ?? string.Empty, request.Password ?? string.Empty);
         return await FinishPrimaryFactorAsync(result);
     }
 

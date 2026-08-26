@@ -1,4 +1,5 @@
 using System.Security.Cryptography;
+using System.Text.RegularExpressions;
 using DeploymentAPI.Configuration;
 using DeploymentAPI.Models;
 using Microsoft.Extensions.Options;
@@ -38,27 +39,65 @@ public class AccountAuthService
             return AccountAuthResult.Fail("An account with this email already exists.");
 
         var id = "usr_" + Convert.ToHexString(RandomNumberGenerator.GetBytes(12)).ToLowerInvariant();
-        var user = await _settings.CreateUserAsync(id, normalizedEmail, password, "password", displayName);
+        var username = await DeriveUniqueUsernameAsync(normalizedEmail);
+        var user = await _settings.CreateUserAsync(id, normalizedEmail, password, "password", displayName, username);
 
         return await ResolveRoleAsync(user);
     }
 
-    public async Task<AccountAuthResult> LoginWithPasswordAsync(string email, string password)
+    // identifier is whatever was typed into the single login field -
+    // an email (contains '@') resolves against FindUserByEmailAsync same
+    // as always; anything else is tried as a username instead (see
+    // DeriveUniqueUsernameAsync below for where that comes from).
+    public async Task<AccountAuthResult> LoginWithPasswordAsync(string identifier, string password)
     {
-        var normalizedEmail = email.Trim().ToLowerInvariant();
-        var user = await _settings.FindUserByEmailAsync(normalizedEmail);
+        var normalized = identifier.Trim().ToLowerInvariant();
 
-        // Same message whether the email doesn't exist or the password is
-        // wrong - distinguishing the two would let an attacker enumerate
-        // which emails have accounts.
+        var user = normalized.Contains('@')
+            ? await _settings.FindUserByEmailAsync(normalized)
+            : await _settings.FindUserByUsernameAsync(normalized);
+
+        // Same message whether the identifier doesn't exist or the
+        // password is wrong - distinguishing the two would let an
+        // attacker enumerate which emails/usernames have accounts.
         if (user == null || !await _settings.VerifyUserPasswordAsync(user.Id, password))
-            return AccountAuthResult.Fail("Invalid email or password.");
+            return AccountAuthResult.Fail("Invalid email/username or password.");
 
         // LastLoginAtUtc is updated once the login actually completes (see
         // AccountAuthController.IssueSessionAsync), not here - for an
         // account with MFA enabled, the password alone hasn't finished a
         // login yet.
         return await ResolveRoleAsync(user);
+    }
+
+    // Derived from the email's local part (e.g. "jane.doe" from
+    // "jane.doe@example.com"), stripped down to what a username actually
+    // allows and de-duplicated against existing accounts - lets every
+    // password account log in by username without adding a separate,
+    // user-chosen field to the signup form. Falls back to a short random
+    // suffix on collision; if it somehow still can't find a free one
+    // after a few tries, the account is created without a username (email
+    // login still works - see CreateUserAsync's own null-is-fine handling).
+    private async Task<string?> DeriveUniqueUsernameAsync(string normalizedEmail)
+    {
+        var localPart = normalizedEmail.Split('@')[0];
+        var baseUsername = Regex.Replace(localPart, "[^a-z0-9._-]", "");
+
+        if (string.IsNullOrWhiteSpace(baseUsername))
+            baseUsername = "user";
+
+        if (await _settings.FindUserByUsernameAsync(baseUsername) == null)
+            return baseUsername;
+
+        for (var attempt = 0; attempt < 5; attempt++)
+        {
+            var candidate = $"{baseUsername}-{Convert.ToHexString(RandomNumberGenerator.GetBytes(2)).ToLowerInvariant()}";
+
+            if (await _settings.FindUserByUsernameAsync(candidate) == null)
+                return candidate;
+        }
+
+        return null;
     }
 
     // Shared by SignUpAsync/LoginWithPasswordAsync and Google login - given
