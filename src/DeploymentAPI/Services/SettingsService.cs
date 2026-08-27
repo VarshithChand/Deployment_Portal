@@ -1510,8 +1510,12 @@ public class SettingsService
     // hash - LinkedGoogleSub/LinkedGitHubLogin is what lets them sign in).
     // username is null for the same accounts, and for any password account
     // created before this existed - see AccountAuthService.SignUpAsync,
-    // the only caller that derives and passes one.
-    public async Task<PortalUserAccount> CreateUserAsync(string id, string email, string? plaintextPassword, string provider, string? displayName = null, string? username = null)
+    // the only caller that derives and passes one. emailVerified defaults
+    // true (Google/GitHub already proved the email via their own provider,
+    // and any other future caller shouldn't accidentally lock an account
+    // out) - AccountAuthService.SignUpAsync is the one caller that passes
+    // false, since a fresh password signup is exactly what needs proving.
+    public async Task<PortalUserAccount> CreateUserAsync(string id, string email, string? plaintextPassword, string provider, string? displayName = null, string? username = null, bool emailVerified = true)
     {
         var root = await ReadRootAsync();
         var (users, _) = await GetOrCreateUsersSectionAsync(root);
@@ -1525,7 +1529,8 @@ public class SettingsService
                 : Protect(_passwordHasher.HashPassword(new PortalUserAccount { Id = id }, plaintextPassword)),
             ["DisplayName"] = displayName,
             ["Provider"] = provider,
-            ["CreatedAtUtc"] = DateTime.UtcNow
+            ["CreatedAtUtc"] = DateTime.UtcNow,
+            ["EmailVerified"] = emailVerified
         };
 
         users[id] = entry;
@@ -1534,6 +1539,59 @@ public class SettingsService
         _log.LogInfo("Settings", $"Account created ({provider}): {MaskKey(email)}.");
 
         return ParseUser(id, entry)!;
+    }
+
+    // Overwrites whatever token was there before (see PortalUserAccount.
+    // EmailVerificationToken) - only the most recently issued link works,
+    // which is also what makes "resend the verification email" safe to
+    // offer later without needing separate invalidation logic.
+    public async Task SetEmailVerificationTokenAsync(string userId, string token, DateTime expiresAtUtc)
+    {
+        var root = await ReadRootAsync();
+        var (users, _) = await GetOrCreateUsersSectionAsync(root);
+
+        if (users[userId] is not JObject entry)
+            return;
+
+        entry["EmailVerificationToken"] = token;
+        entry["EmailVerificationTokenExpiresAtUtc"] = expiresAtUtc;
+
+        await WriteRootAsync(root);
+    }
+
+    // Linear scan over every account, same pattern FindUserByEmailAsync
+    // already uses - the Users section is never large enough for this to
+    // matter, and a token is looked up rarely (once, when the link in the
+    // welcome email is actually clicked) rather than on every request.
+    // Returns null for an unknown, already-consumed, or expired token -
+    // the caller (AccountAuthController.VerifyEmail) treats all three the
+    // same way, so there's no need to distinguish them here.
+    public async Task<PortalUserAccount?> VerifyEmailAsync(string token)
+    {
+        var root = await ReadRootAsync();
+        var (users, _) = await GetOrCreateUsersSectionAsync(root);
+
+        var match = users.Properties()
+            .FirstOrDefault(p => string.Equals(
+                (p.Value as JObject)?["EmailVerificationToken"]?.ToString(), token, StringComparison.Ordinal));
+
+        if (match?.Value is not JObject entry)
+            return null;
+
+        var expiresAt = entry["EmailVerificationTokenExpiresAtUtc"]?.Value<DateTime>();
+
+        if (expiresAt == null || expiresAt < DateTime.UtcNow)
+            return null;
+
+        entry["EmailVerified"] = true;
+        entry.Remove("EmailVerificationToken");
+        entry.Remove("EmailVerificationTokenExpiresAtUtc");
+
+        await WriteRootAsync(root);
+
+        _log.LogInfo("Settings", $"Email verified for account '{MaskKey(match.Name)}'.");
+
+        return ParseUser(match.Name, entry);
     }
 
     public async Task UpdateUserLastLoginAsync(string id)
@@ -1604,7 +1662,12 @@ public class SettingsService
         LinkedGoogleSub = entry["LinkedGoogleSub"]?.ToString(),
         Provider = entry["Provider"]?.ToString() ?? "password",
         CreatedAtUtc = entry["CreatedAtUtc"]?.Value<DateTime>() ?? DateTime.UtcNow,
-        LastLoginAtUtc = entry["LastLoginAtUtc"]?.Value<DateTime>()
+        LastLoginAtUtc = entry["LastLoginAtUtc"]?.Value<DateTime>(),
+        // Missing (any account created before this existed) defaults true -
+        // only a fresh signup going forward is ever explicitly created
+        // with this false, nothing retroactively locks an existing account
+        // out.
+        EmailVerified = entry["EmailVerified"]?.Value<bool>() ?? true
     };
 
     // Same shape as SaveAdminUsernamesAsync, just the email-based lists -

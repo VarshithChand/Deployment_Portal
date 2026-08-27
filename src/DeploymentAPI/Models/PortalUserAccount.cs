@@ -55,4 +55,21 @@ public class PortalUserAccount
     public DateTime CreatedAtUtc { get; set; }
 
     public DateTime? LastLoginAtUtc { get; set; }
+
+    // A fresh password signup can't log in until this flips true (see
+    // AccountAuthService.LoginWithPasswordAsync/AccountAuthController.
+    // VerifyEmail) - proven by clicking the link in the welcome email,
+    // which is the one-time registration-only step this exists for.
+    // Google/GitHub accounts are created with this already true - the
+    // provider already verified that email, so there's nothing left to
+    // prove here (and no separate password login path to gate anyway).
+    public bool EmailVerified { get; set; }
+
+    // Null once verified/consumed - see SettingsService.
+    // SetEmailVerificationTokenAsync/VerifyEmailAsync. A fresh token
+    // (re-sent on request) simply overwrites whatever was here before, so
+    // only the most recently issued link ever works.
+    public string? EmailVerificationToken { get; set; }
+
+    public DateTime? EmailVerificationTokenExpiresAtUtc { get; set; }
 }

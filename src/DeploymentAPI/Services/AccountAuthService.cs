@@ -15,6 +15,7 @@ namespace DeploymentAPI.Services;
 public class AccountAuthService
 {
     private const int MinPasswordLength = 8;
+    private static readonly TimeSpan EmailVerificationTtl = TimeSpan.FromHours(24);
 
     private readonly SettingsService _settings;
     private readonly IOptionsMonitor<AuthorizationSettings> _authzOptions;
@@ -40,9 +41,24 @@ public class AccountAuthService
 
         var id = "usr_" + Convert.ToHexString(RandomNumberGenerator.GetBytes(12)).ToLowerInvariant();
         var username = await DeriveUniqueUsernameAsync(normalizedEmail);
-        var user = await _settings.CreateUserAsync(id, normalizedEmail, password, "password", displayName, username);
+        var user = await _settings.CreateUserAsync(id, normalizedEmail, password, "password", displayName, username, emailVerified: false);
 
-        return await ResolveRoleAsync(user);
+        // A fresh password account can't log in - let alone get a role
+        // resolved or an MFA decision made - until the link in the
+        // welcome email is clicked (see AccountAuthController.VerifyEmail).
+        // The token is generated and stored here, then handed back on the
+        // User object itself so the controller (which owns building URLs
+        // and sending mail) can send it without a second round-trip to
+        // fetch it back.
+        var token = Convert.ToHexString(RandomNumberGenerator.GetBytes(32)).ToLowerInvariant();
+        var expiresAt = DateTime.UtcNow.Add(EmailVerificationTtl);
+
+        await _settings.SetEmailVerificationTokenAsync(id, token, expiresAt);
+
+        user.EmailVerificationToken = token;
+        user.EmailVerificationTokenExpiresAtUtc = expiresAt;
+
+        return AccountAuthResult.RequireVerification(user);
     }
 
     // identifier is whatever was typed into the single login field -
@@ -62,6 +78,17 @@ public class AccountAuthService
         // attacker enumerate which emails/usernames have accounts.
         if (user == null || !await _settings.VerifyUserPasswordAsync(user.Id, password))
             return AccountAuthResult.Fail("Invalid email/username or password.");
+
+        // Registration-only gate, not a login-time one otherwise - once
+        // verified this never blocks a login again. Correct credentials
+        // for a still-unverified account means they know the password but
+        // never finished signup, so re-pointing them at their inbox is
+        // more useful than a generic rejection.
+        if (!user.EmailVerified)
+        {
+            return AccountAuthResult.Fail(
+                "Verify your email before logging in - check your inbox for the link we sent when you signed up.");
+        }
 
         // LastLoginAtUtc is updated once the login actually completes (see
         // AccountAuthController.IssueSessionAsync), not here - for an
@@ -131,8 +158,18 @@ public class AccountAuthResult
 
     public string? Role { get; private init; }
 
+    // True only for a just-created password account (see
+    // AccountAuthService.SignUpAsync) - the controller checks this BEFORE
+    // the usual MFA-required check, since role/MFA don't matter yet for an
+    // account that hasn't proven its email at all. User.EmailVerificationToken
+    // is what the controller needs to build the verify link and send it.
+    public bool EmailVerificationRequired { get; private init; }
+
     public static AccountAuthResult Fail(string error) => new() { Success = false, Error = error };
 
     public static AccountAuthResult Ok(PortalUserAccount user, string role) =>
         new() { Success = true, User = user, Role = role };
+
+    public static AccountAuthResult RequireVerification(PortalUserAccount user) =>
+        new() { Success = true, User = user, EmailVerificationRequired = true };
 }

@@ -48,6 +48,14 @@ public class ResendEmailService : IEmailService
         return await SendAsync(toEmail, subject, html, logContext: "test email");
     }
 
+    public async Task<EmailSendResultDto> SendWelcomeVerificationEmailAsync(string toEmail, string username, string verifyUrl)
+    {
+        var subject = "Welcome to Deployment Portal — Verify your email";
+        var html = BuildWelcomeVerificationHtml(username, toEmail, verifyUrl);
+
+        return await SendAsync(toEmail, subject, html, logContext: $"welcome/verification email for '{username}'");
+    }
+
     private async Task<EmailSendResultDto> SendAsync(string toEmail, string subject, string html, string logContext)
     {
         if (string.IsNullOrWhiteSpace(toEmail))
@@ -173,6 +181,64 @@ public class ResendEmailService : IEmailService
         return !string.IsNullOrWhiteSpace(providerMessage)
             ? $"Resend couldn't send the email: {providerMessage}"
             : "Resend couldn't send the email right now.";
+    }
+
+    // Same table-based/inline-CSS constraint as BuildLoginNotificationHtml
+    // below. verifyUrl already points at AccountAuthController.VerifyEmail
+    // (a GET, so a plain link works with no JS/form needed) - clicking it
+    // is what actually activates the account; nothing here does that itself.
+    private static string BuildWelcomeVerificationHtml(string username, string email, string verifyUrl)
+    {
+        var encodedVerifyUrl = WebUtility.HtmlEncode(verifyUrl);
+
+        return $$"""
+        <!DOCTYPE html>
+        <html>
+        <body style="margin:0;padding:0;background:#f3f4f6;font-family:Segoe UI,Helvetica,Arial,sans-serif;">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f3f4f6;padding:32px 0;">
+        <tr><td align="center">
+        <table role="presentation" width="480" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:8px;overflow:hidden;border:1px solid #e5e7eb;">
+        <tr><td style="background:#4f46e5;padding:24px 32px;">
+        <span style="color:#ffffff;font-size:18px;font-weight:700;">Deployment Portal</span>
+        </td></tr>
+        <tr><td style="padding:32px;">
+        <h1 style="margin:0 0 16px;font-size:20px;color:#111827;">Welcome to Deployment Portal</h1>
+        <p style="margin:0 0 20px;font-size:14px;line-height:1.6;color:#374151;">
+        Thanks for creating an account. Confirm it's really you by verifying your email address below.
+        </p>
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f9fafb;border-radius:6px;margin-bottom:24px;">
+        <tr>
+        <td style="padding:16px 20px;font-size:13px;color:#6b7280;width:110px;">Username</td>
+        <td style="padding:16px 20px 16px 0;font-size:13px;color:#111827;font-weight:600;">{{WebUtility.HtmlEncode(username)}}</td>
+        </tr>
+        <tr>
+        <td style="padding:0 20px 16px;font-size:13px;color:#6b7280;">Email</td>
+        <td style="padding:0 20px 16px 0;font-size:13px;color:#111827;font-weight:600;">{{WebUtility.HtmlEncode(email)}}</td>
+        </tr>
+        </table>
+        <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 0 24px;">
+        <tr><td style="border-radius:6px;background:#4f46e5;">
+        <a href="{{encodedVerifyUrl}}" style="display:inline-block;padding:12px 28px;font-size:14px;font-weight:600;color:#ffffff;text-decoration:none;">Verify Your Email</a>
+        </td></tr>
+        </table>
+        <p style="margin:0 0 20px;font-size:12px;line-height:1.6;color:#9ca3af;">
+        If the button doesn't work, copy and paste this link into your browser:<br>
+        <a href="{{encodedVerifyUrl}}" style="color:#4f46e5;">{{encodedVerifyUrl}}</a>
+        </p>
+        <p style="margin:0;font-size:13px;line-height:1.6;color:#6b7280;">
+        Questions or need help? Contact us at
+        <a href="mailto:support@deploymentportal.in" style="color:#4f46e5;">support@deploymentportal.in</a>.
+        </p>
+        </td></tr>
+        <tr><td style="padding:20px 32px;background:#f9fafb;border-top:1px solid #e5e7eb;">
+        <p style="margin:0;font-size:11px;color:#9ca3af;">This link expires in 24 hours. If you didn't create this account, you can safely ignore this email.</p>
+        </td></tr>
+        </table>
+        </td></tr>
+        </table>
+        </body>
+        </html>
+        """;
     }
 
     // Simple, clean, table-based layout (inline CSS only) so it renders

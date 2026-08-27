@@ -1,16 +1,11 @@
-import { lazy, Suspense, useState } from "react";
+import { useState } from "react";
 
 import { signUp, logIn } from "../services/authLoginService";
 import { API_BASE } from "../api/apiBase";
 import Logo from "../components/common/Logo";
+import MandatoryMfaSetupScreen from "../components/MandatoryMfaSetupScreen";
 import useTheme from "../hooks/useTheme";
 import { SunIcon, MoonIcon } from "../components/layout/SidebarIcons";
-
-// Lazy for the same reason MfaEnforcementGate keeps this lazy - it pulls in
-// the qrcode library, which has no reason to sit in the bundle every
-// visitor downloads before ever reaching this page, let alone before ever
-// signing up at all.
-const MfaSection = lazy(() => import("../components/settings/credentials/MfaSection"));
 
 // Same stroke-weight/line-cap style as PatLoginPage's old KeyIcon, so
 // these read as part of the same icon set.
@@ -81,6 +76,16 @@ export default function LoginSignupPage({ onMfaRequired }) {
     // scoped to - registration specifically, not every un-enrolled login).
     const [needsMfaSetup, setNeedsMfaSetup] = useState(false);
 
+    // Set once a fresh signup's response comes back with
+    // emailVerificationRequired:true (see AccountAuthController.
+    // FinishPrimaryFactorAsync) - the account exists but nothing else about
+    // it (role, MFA, a session) is resolved yet, so there's nothing to do
+    // here but tell them to go click the link. The rest of "verify -> MFA
+    // setup -> dashboard" happens after they leave this tab entirely and
+    // click the emailed link, which lands them back on App.jsx instead
+    // (see its mfaSetupPending handling).
+    const [checkEmailSent, setCheckEmailSent] = useState(false);
+
     const isSignup = mode === "signup";
 
     async function handleSubmit(e) {
@@ -103,6 +108,12 @@ export default function LoginSignupPage({ onMfaRequired }) {
 
             if (!result.success) {
                 setError(result.message || "Unable to sign in.");
+                setSubmitting(false);
+                return;
+            }
+
+            if (result.emailVerificationRequired) {
+                setCheckEmailSent(true);
                 setSubmitting(false);
                 return;
             }
@@ -140,14 +151,25 @@ export default function LoginSignupPage({ onMfaRequired }) {
     // Mandatory, no skip/cancel back to the form - "register, then MFA,
     // then dashboard" is a straight line for a brand-new account, not a
     // dismissible nudge (see MfaEnforcementGate for the separate, skippable
-    // nudge that still applies to already-existing accounts).
+    // nudge that still applies to already-existing accounts). Only reached
+    // via Google/GitHub signup now - a password signup goes through
+    // checkEmailSent below instead, since email verification comes first.
     if (needsMfaSetup) {
+        return <MandatoryMfaSetupScreen onEnrolled={() => window.location.reload()} />;
+    }
+
+    // Terminal state for this tab - there is nothing left to submit here.
+    // The rest of the flow (verify -> mandatory MFA setup -> dashboard)
+    // continues only once they open the email and click the link, which
+    // lands them back on the app fresh (see App.jsx's mfaSetupPending
+    // handling of AccountAuthController.VerifyEmail's redirect).
+    if (checkEmailSent) {
 
         return (
 
             <div className="auth-page">
 
-                <div className="auth-page-card" role="main" aria-labelledby="mfa-setup-title">
+                <div className="auth-page-card" role="main" aria-labelledby="check-email-title">
 
                     <button
                         type="button"
@@ -163,17 +185,26 @@ export default function LoginSignupPage({ onMfaRequired }) {
                         <Logo showEyebrow={false} compact size={34} />
                     </div>
 
-                    <h1 id="mfa-setup-title" className="setup-gate-title">
-                        Secure your new account
+                    <h1 id="check-email-title" className="setup-gate-title">
+                        Check your email
                     </h1>
 
                     <p className="field-hint" style={{ textAlign: "center" }}>
-                        Set up multi-factor authentication to finish creating your account.
+                        We sent a verification link to <strong>{email.trim()}</strong>. Open it and click
+                        {" "}<strong>Verify Your Email</strong> to finish creating your account and set up MFA.
                     </p>
 
-                    <Suspense fallback={<p className="field-hint">Loading...</p>}>
-                        <MfaSection onEnrolled={() => window.location.reload()} />
-                    </Suspense>
+                    <p className="field-hint" style={{ textAlign: "center" }}>
+                        Didn&apos;t get it? Check spam, or{" "}
+                        <button
+                            type="button"
+                            className="token-help-link"
+                            style={{ background: "none", border: "none", padding: 0, cursor: "pointer" }}
+                            onClick={() => { setCheckEmailSent(false); setMode("login"); setError(""); }}
+                        >
+                            go back
+                        </button>.
+                    </p>
 
                 </div>
 

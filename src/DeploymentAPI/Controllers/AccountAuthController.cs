@@ -1,7 +1,9 @@
+using DeploymentAPI.Configuration;
 using DeploymentAPI.DTOs;
 using DeploymentAPI.Helpers;
 using DeploymentAPI.Services;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Options;
 
 namespace DeploymentAPI.Controllers;
 
@@ -27,6 +29,7 @@ public class AccountAuthController : ControllerBase
     private readonly SessionActivityService _activity;
     private readonly IEmailService _email;
     private readonly NotificationService _notifications;
+    private readonly IOptionsMonitor<GitHubOAuthSettings> _githubOAuthOptions;
 
     public AccountAuthController(
         AccountAuthService accountAuth,
@@ -34,7 +37,8 @@ public class AccountAuthController : ControllerBase
         SettingsService settings,
         SessionActivityService activity,
         IEmailService email,
-        NotificationService notifications)
+        NotificationService notifications,
+        IOptionsMonitor<GitHubOAuthSettings> githubOAuthOptions)
     {
         _accountAuth = accountAuth;
         _auth = auth;
@@ -42,6 +46,7 @@ public class AccountAuthController : ControllerBase
         _activity = activity;
         _email = email;
         _notifications = notifications;
+        _githubOAuthOptions = githubOAuthOptions;
     }
 
     [HttpPost("signup")]
@@ -63,6 +68,12 @@ public class AccountAuthController : ControllerBase
     // one got there.
     private async Task<IActionResult> FinishPrimaryFactorAsync(AccountAuthResult result)
     {
+        if (result.EmailVerificationRequired && result.User != null)
+        {
+            await SendWelcomeVerificationEmailAsync(result.User);
+            return Ok(new { success = true, emailVerificationRequired = true });
+        }
+
         if (!result.Success || result.User == null || result.Role == null)
             return Ok(new { success = false, message = result.Error });
 
@@ -160,6 +171,43 @@ public class AccountAuthController : ControllerBase
         return Ok();
     }
 
+    // Where the link in the welcome email actually lands. Consumes the
+    // token (SettingsService.VerifyEmailAsync clears it so it can't be
+    // replayed), then - since this account has now genuinely proven both
+    // its password AND its email in one flow - goes straight into the same
+    // role-resolve/MFA-or-session tail every other login path shares,
+    // rather than making them log in a second time right after verifying.
+    // The frontend tells the difference between "just verified" and a
+    // normal login via the mfaSetupPending query param below, which is what
+    // triggers the mandatory MFA enrollment screen for a brand new account
+    // instead of the ordinary MFA challenge screen.
+    [HttpGet("verify-email")]
+    public async Task<IActionResult> VerifyEmail([FromQuery] string token)
+    {
+        var frontendUrl = _githubOAuthOptions.CurrentValue.FrontendUrl.TrimEnd('/');
+
+        if (string.IsNullOrWhiteSpace(token))
+            return Redirect($"{frontendUrl}/?verifyError=1");
+
+        var user = await _settings.VerifyEmailAsync(token);
+
+        if (user == null)
+            return Redirect($"{frontendUrl}/?verifyError=1");
+
+        var result = _accountAuth.ResolveRoleSync(user);
+
+        if (!result.Success || result.Role == null)
+            return Redirect($"{frontendUrl}/?verifyError=1");
+
+        await IssueSessionAsync(user.Id, result.Role, user.Email);
+
+        // mfaSetupPending signals the frontend to show the mandatory MFA
+        // enrollment screen next - mirrors the existing post-signup
+        // needsMfaSetup flow (LoginSignupPage.jsx), just reached via the
+        // email link instead of an inline reload.
+        return Redirect($"{frontendUrl}/?emailVerified=1&mfaSetupPending=1");
+    }
+
     // The one place this flow actually issues a session - sets the same
     // portal_token cookie AuthController's GitHub OAuth callback does (see
     // AuthCookie), then fires the login-notification email in its own
@@ -179,6 +227,22 @@ public class AccountAuthController : ControllerBase
     // any same-site deployment rely on) but the frontend now also stores
     // this token and sends it back as an Authorization header, which has
     // no such restriction.
+    // Isolated try/catch, same reasoning as IssueSessionAsync's own login-
+    // notification send below: a Resend outage must never turn an
+    // otherwise-successful signup into an error response - the account
+    // still exists and the user can always ask for the link again later.
+    private async Task SendWelcomeVerificationEmailAsync(DeploymentAPI.Models.PortalUserAccount user)
+    {
+        try
+        {
+            var verifyUrl = $"{Request.Scheme}://{Request.Host}/api/auth/verify-email?token={user.EmailVerificationToken}";
+            await _email.SendWelcomeVerificationEmailAsync(user.Email, user.Username ?? user.Email, verifyUrl);
+        }
+        catch (Exception)
+        {
+        }
+    }
+
     private async Task<string> IssueSessionAsync(string userId, string role, string? email)
     {
         var jwt = _auth.IssueJwt(userId, role, email);

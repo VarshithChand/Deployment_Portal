@@ -25,4 +25,11 @@ public interface IEmailService
     // so the Resend configuration can be verified without waiting for a
     // real login.
     Task<EmailSendResultDto> SendTestEmailAsync(string toEmail);
+
+    // Sent once, right after signup - welcome message plus the link that
+    // actually activates the account (see AccountAuthService.SignUpAsync/
+    // AccountAuthController.VerifyEmail). Login-time notifications are a
+    // completely separate email (SendLoginNotificationAsync above) - this
+    // one only ever fires for the one-time registration flow.
+    Task<EmailSendResultDto> SendWelcomeVerificationEmailAsync(string toEmail, string username, string verifyUrl);
 }

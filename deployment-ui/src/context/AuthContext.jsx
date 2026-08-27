@@ -236,6 +236,16 @@ export default function AuthProvider({ children }) {
             clearQueryParam(params, "loggedOut");
         }
 
+        // Landed here via the welcome email's verify link (see
+        // AccountAuthController.VerifyEmail) - the account+session are
+        // already real at this point, mfaSetupPending (left alone here,
+        // App.jsx reads it) is what actually routes them into mandatory
+        // MFA enrollment next.
+        if (params.get("emailVerified")) {
+            toast.show("Email verified! Set up MFA to finish creating your account.");
+            clearQueryParam(params, "emailVerified");
+        }
+
         loadBootstrap();
 
         // eslint-disable-next-line react-hooks/exhaustive-deps
