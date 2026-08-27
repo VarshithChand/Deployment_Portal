@@ -1,7 +1,7 @@
 import { useState } from "react";
 
 import { signUp, logIn } from "../services/authLoginService";
-import { API_BASE } from "../api/apiBase";
+import { API_BASE, getSessionId } from "../api/apiBase";
 import Logo from "../components/common/Logo";
 import useTheme from "../hooks/useTheme";
 import { SunIcon, MoonIcon } from "../components/layout/SidebarIcons";
@@ -299,12 +299,12 @@ export default function LoginSignupPage({ onMfaRequired }) {
 
                 <div className="button-row" style={{ justifyContent: "center" }}>
 
-                    <a href={`${API_BASE}/api/auth/google/login`} className="btn btn-secondary">
+                    <a href={`${API_BASE}/api/auth/google/login?sid=${encodeURIComponent(getSessionId())}`} className="btn btn-secondary">
                         <GoogleIcon />
                         {" "}Google
                     </a>
 
-                    <a href={`${API_BASE}/api/auth/github/login`} className="btn btn-secondary">
+                    <a href={`${API_BASE}/api/auth/github/login?sid=${encodeURIComponent(getSessionId())}`} className="btn btn-secondary">
                         <GitHubIcon />
                         {" "}GitHub
                     </a>

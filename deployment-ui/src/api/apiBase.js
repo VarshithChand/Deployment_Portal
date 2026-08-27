@@ -19,7 +19,11 @@ export const API_BASE = import.meta.env.VITE_API_BASE_URL || "";
 // such restriction.
 const SESSION_STORAGE_KEY = "portalSessionId";
 
-function getSessionId() {
+// Exported so the GitHub/Google OAuth buttons (LoginSignupPage.jsx) can
+// pass this same id along as a ?sid= query param on their plain <a href>
+// navigation - see AuthController.Login/GoogleAuthController.Login and
+// PortalIdentity.SeedSessionCookie for why that hand-off matters.
+export function getSessionId() {
 
     let id = localStorage.getItem(SESSION_STORAGE_KEY);
 

@@ -67,4 +67,37 @@ public static class PortalIdentity
         context.Items[ItemsKey] = key;
         return key;
     }
+
+    // Lets a GitHub/Google OAuth Login() action seed the portal_session
+    // cookie to match this SAME browser's already-established X-Session-Id
+    // (see apiBase.js's getSessionId) BEFORE the OAuth round trip begins.
+    // Without this, the round trip (a plain <a href> top-level navigation,
+    // which can't carry a custom header) falls back to GetOrCreateKey's
+    // cookie branch and mints a brand-new random session id - a DIFFERENT
+    // key than the one the frontend sends as X-Session-Id on its very next
+    // XHR call once it's back. That mismatch meant SetPendingAccountLogin
+    // (written under the fresh cookie-derived key during the callback) was
+    // invisible to the frontend's login-mfa/pending poll (looked up under
+    // the header-derived key instead) - an MFA-enrolled account's OAuth
+    // login would silently drop the pending state and land back on the
+    // plain login page instead of the MFA code screen. Seeding the cookie
+    // here makes both lookups resolve to the identical key throughout.
+    //
+    // Trusting a client-supplied value here is safe: portal_session is
+    // just an opaque per-browser bucket key, not a credential - MFA still
+    // requires the real TOTP code to complete regardless of which bucket
+    // the pending state sits in, and the client already fully controls
+    // this same value via X-Session-Id/localStorage anyway.
+    public static void SeedSessionCookie(HttpContext context, string sessionId)
+    {
+        context.Response.Cookies.Append(SessionCookieName, sessionId, new CookieOptions
+        {
+            HttpOnly = true,
+            SameSite = context.Request.IsHttps ? SameSiteMode.None : SameSiteMode.Lax,
+            Secure = context.Request.IsHttps,
+            Expires = DateTimeOffset.UtcNow.AddYears(1)
+        });
+
+        context.Items[ItemsKey] = $"sess:{sessionId}";
+    }
 }

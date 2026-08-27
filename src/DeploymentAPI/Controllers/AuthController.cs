@@ -45,9 +45,17 @@ public class AuthController : ControllerBase
     // that a second controller sets this same cookie.
     private CookieOptions CrossSiteCookieOptions(DateTimeOffset expires) => AuthCookie.CrossSiteOptions(Request, expires);
 
+    // sid is this browser's existing X-Session-Id (see apiBase.js), passed
+    // as a query param because this is a plain <a href> top-level
+    // navigation, which can't attach a custom header - see
+    // PortalIdentity.SeedSessionCookie for why this matters (keeps the
+    // MFA-pending handoff working after the callback redirects back).
     [HttpGet("github/login")]
-    public IActionResult Login()
+    public IActionResult Login([FromQuery] string? sid)
     {
+        if (!string.IsNullOrWhiteSpace(sid))
+            PortalIdentity.SeedSessionCookie(HttpContext, sid);
+
         var state = Guid.NewGuid().ToString("N");
 
         Response.Cookies.Append("oauth_state", state, CrossSiteCookieOptions(DateTimeOffset.UtcNow.AddMinutes(10)));

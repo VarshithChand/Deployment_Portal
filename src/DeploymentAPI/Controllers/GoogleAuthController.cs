@@ -53,9 +53,17 @@ public class GoogleAuthController : ControllerBase
         _log = log;
     }
 
+    // sid is this browser's existing X-Session-Id (see apiBase.js), passed
+    // as a query param because this is a plain <a href> top-level
+    // navigation, which can't attach a custom header - see
+    // PortalIdentity.SeedSessionCookie for why this matters (keeps the
+    // MFA-pending handoff working after the callback redirects back).
     [HttpGet("login")]
-    public IActionResult Login()
+    public IActionResult Login([FromQuery] string? sid)
     {
+        if (!string.IsNullOrWhiteSpace(sid))
+            PortalIdentity.SeedSessionCookie(HttpContext, sid);
+
         var state = Guid.NewGuid().ToString("N");
 
         Response.Cookies.Append("google_oauth_state", state, AuthCookie.CrossSiteOptions(Request, DateTimeOffset.UtcNow.AddMinutes(10)));
