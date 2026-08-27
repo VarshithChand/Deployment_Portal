@@ -113,9 +113,6 @@ export default function GitHubAccessSection({
     isRateLimited,
     githubToken,
     setGithubToken,
-    githubMfaRequired,
-    githubMfaCode,
-    setGithubMfaCode,
     handleSaveGitHub,
     savingGitHub,
     handleClear
@@ -284,29 +281,6 @@ export default function GitHubAccessSection({
                 </a>
             )}
         </div>
-
-        {githubMfaRequired && (
-
-            <div className="form-group">
-                <label htmlFor="github-mfa-code">6-digit authenticator code</label>
-                <p className="field-hint" style={{ marginTop: 0 }}>
-                    Your account has MFA enabled — enter a fresh code to confirm this change.
-                </p>
-                <input
-                    id="github-mfa-code"
-                    type="text"
-                    inputMode="numeric"
-                    maxLength={6}
-                    className="form-control"
-                    placeholder="123456"
-                    value={githubMfaCode}
-                    onChange={(e) => setGithubMfaCode(e.target.value.replace(/\D/g, ""))}
-                    autoComplete="one-time-code"
-                    autoFocus
-                />
-            </div>
-
-        )}
 
         <div className="button-row">
 

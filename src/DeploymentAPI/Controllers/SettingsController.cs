@@ -151,25 +151,12 @@ public class SettingsController : ControllerBase
             return denied;
         }
 
-        // MFA enforcement - the actual gate (PreviewMyGitHubToken's
-        // MfaRequired flag is only a heads-up for the UI; this is what
-        // stops a token from ever being persisted without it). Keyed by
-        // the CALLER'S OWN account id, not the token's resolved GitHub
-        // login - this used to live-resolve "who does this PAT belong to"
-        // and check that identity's MFA status, a leftover from when a PAT
-        // was the login. Login is a real account now, independent of any
-        // connected PAT (see AccountAuthService) - checking the token's
-        // own GitHub identity meant this either could never be satisfied
-        // (no PAT connected yet) or checked a completely different
-        // person's MFA enrollment than the one the caller actually set up.
-        // Nothing is saved below until this passes, so a wrong/missing
-        // code leaves this session exactly where it was - no partial state
-        // to clean up.
-        if (!string.IsNullOrWhiteSpace(request.PersonalAccessToken)
-            && await MfaGate.DenyUnlessCodeVerifiedAsync(this, _settings, _notifications, key, request.MfaCode, request.RecoveryCode) is IActionResult mfaDenied)
-        {
-            return mfaDenied;
-        }
+        // No separate MFA re-check here anymore - this account already
+        // proved itself at login (MFA there, if enabled, already covers
+        // "is this really them"). Requiring a fresh code again just to
+        // connect a GitHub PAT was redundant friction on top of that, not
+        // a real second layer of protection - the CredentialGate PIN check
+        // above already covers replacing an existing connection.
 
         var result = await _settings.SaveUserGitHubCredentialsAsync(key, request);
 

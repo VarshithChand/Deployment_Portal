@@ -26,8 +26,6 @@ function describeAuthError(authError) {
 function describeLoggedOutReason(loggedOut) {
 
     switch (loggedOut) {
-        case "deploy":
-            return "You were signed out — a deployment was just triggered.";
         case "admin":
             return "You were signed out by the portal admin.";
         case "cleared":

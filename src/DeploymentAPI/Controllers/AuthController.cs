@@ -101,22 +101,23 @@ public class AuthController : ControllerBase
 
     // Anonymous and unconditional (same as /me being callable while
     // logged out) - every visitor, logged in or just browsing Public
-    // view, needs to be able to poll this to know a pipeline just ran, or
-    // that an admin just force-signed out this specific session (see
-    // AdminUsersController's logout action) - the second value is scoped
-    // to whichever session key this caller's own X-Session-Id resolves to,
-    // never anyone else's.
+    // view, needs to be able to poll this to know an admin just
+    // force-signed out this specific session (see AdminUsersController's
+    // logout action) - scoped to whichever session key this caller's own
+    // X-Session-Id resolves to, never anyone else's. Running a pipeline no
+    // longer force-signs out every active session portal-wide the way it
+    // used to (see PR history) - that made sense when most visitors were
+    // anonymous PAT sessions with nothing real to lose by a reload, but
+    // now that login is a real account, it just meant the very person who
+    // triggered the deploy got bounced back to the login page too.
     [HttpGet("session-epoch")]
-    public async Task<IActionResult> SessionEpoch()
+    public IActionResult SessionEpoch()
     {
-        var epoch = await _settings.GetForceLogoutEpochAsync();
-
         var key = PortalIdentity.GetOrCreateKey(HttpContext);
         var mine = _activity.GetForceLogoutAfter(key);
 
         return Ok(new
         {
-            forceLogoutEpoch = epoch,
             mySessionForceLogoutEpoch = mine?.ToString("o"),
             mySessionForceLogoutReason = mine != null ? _activity.GetForceLogoutReason(key) : null
         });

@@ -3212,38 +3212,6 @@ public class SettingsService
             await WriteRootAsync(root);
     }
 
-    // Bumped whenever a deployment is triggered through the portal (see
-    // DeploymentController.Deploy) - every browser session polls
-    // GET /api/auth/session-epoch and compares against the value it saw on
-    // its own last load. A changed value means "someone just ran a
-    // pipeline since I last checked," which is this portal's stand-in for
-    // "force every session to log out": there's no server-side session
-    // store to revoke (auth is a stateless JWT cookie, and most visitors
-    // aren't even OAuth-logged-in — see PortalIdentity), so the timestamp
-    // itself IS the signal, and each tab independently reacts to seeing it
-    // change rather than being individually revoked.
-    public async Task<string> BumpForceLogoutEpochAsync()
-    {
-        var root = await ReadRootAsync();
-        var session = root["Session"] as JObject ?? new JObject();
-
-        var stamp = DateTime.UtcNow.ToString("o");
-        session["ForceLogoutEpoch"] = stamp;
-        root["Session"] = session;
-
-        await WriteRootAsync(root);
-
-        _log.LogInfo("Settings", "Force-logout epoch bumped — a deployment run will sign out every active session.");
-
-        return stamp;
-    }
-
-    public async Task<string?> GetForceLogoutEpochAsync()
-    {
-        var root = await ReadRootAsync();
-        return root["Session"]?["ForceLogoutEpoch"]?.ToString();
-    }
-
     private static SettingsViewDto BuildView(JObject root)
     {
         var docker = root["Docker"] as JObject;
