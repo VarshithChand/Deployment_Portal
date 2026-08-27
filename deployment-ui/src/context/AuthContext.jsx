@@ -6,15 +6,23 @@ import useToast from "../hooks/useToast";
 
 export const AuthContext = createContext();
 
-function describeAuthError(authError) {
+// provider is "github" or "google" (see AuthController.Callback/
+// GoogleAuthController.Callback's redirect query strings) - previously
+// this always used GitHub's own wording regardless of which button was
+// actually clicked, which meant a failed Google sign-in showed "Your
+// GitHub account isn't authorized..." Defaults to "github" only for a
+// stray/older link that predates the provider param ever being added.
+function describeAuthError(authError, provider) {
+
+    const providerName = provider === "google" ? "Google" : "GitHub";
 
     switch (authError) {
         case "invalid_state":
             return "Login session expired, please try again.";
         case "not_allowed":
-            return "Your GitHub account isn't authorized to access this portal.";
+            return `Your ${providerName} account isn't authorized to access this portal.`;
         default:
-            return "GitHub login failed.";
+            return `${providerName} login failed.`;
     }
 
 }
@@ -231,8 +239,9 @@ export default function AuthProvider({ children }) {
         const authError = params.get("authError");
 
         if (authError) {
-            toast.show(describeAuthError(authError), "error");
+            toast.show(describeAuthError(authError, params.get("provider")), "error");
             clearQueryParam(params, "authError");
+            clearQueryParam(params, "provider");
         }
 
         const loggedOut = params.get("loggedOut");

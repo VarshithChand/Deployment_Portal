@@ -62,7 +62,7 @@ public class AuthController : ControllerBase
         var expectedState = Request.Cookies["oauth_state"];
 
         if (string.IsNullOrEmpty(state) || state != expectedState)
-            return Redirect($"{frontendUrl}?authError=invalid_state");
+            return Redirect($"{frontendUrl}?authError=invalid_state&provider=github");
 
         try
         {
@@ -78,11 +78,11 @@ public class AuthController : ControllerBase
         }
         catch (UnauthorizedAccessException)
         {
-            return Redirect($"{frontendUrl}?authError=not_allowed");
+            return Redirect($"{frontendUrl}?authError=not_allowed&provider=github");
         }
         catch (Exception)
         {
-            return Redirect($"{frontendUrl}?authError=login_failed");
+            return Redirect($"{frontendUrl}?authError=login_failed&provider=github");
         }
     }
 

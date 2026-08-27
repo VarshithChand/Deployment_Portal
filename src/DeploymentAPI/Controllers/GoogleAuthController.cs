@@ -31,6 +31,7 @@ public class GoogleAuthController : ControllerBase
     private readonly SessionActivityService _activity;
     private readonly IEmailService _email;
     private readonly IOptionsMonitor<GoogleOAuthSettings> _oauthOptions;
+    private readonly ActivityLogService _log;
 
     public GoogleAuthController(
         GoogleAuthService google,
@@ -39,7 +40,8 @@ public class GoogleAuthController : ControllerBase
         SettingsService settings,
         SessionActivityService activity,
         IEmailService email,
-        IOptionsMonitor<GoogleOAuthSettings> oauthOptions)
+        IOptionsMonitor<GoogleOAuthSettings> oauthOptions,
+        ActivityLogService log)
     {
         _google = google;
         _accountAuth = accountAuth;
@@ -48,6 +50,7 @@ public class GoogleAuthController : ControllerBase
         _activity = activity;
         _email = email;
         _oauthOptions = oauthOptions;
+        _log = log;
     }
 
     [HttpGet("login")]
@@ -67,7 +70,7 @@ public class GoogleAuthController : ControllerBase
         var expectedState = Request.Cookies["google_oauth_state"];
 
         if (string.IsNullOrEmpty(state) || state != expectedState)
-            return Redirect($"{frontendUrl}?authError=invalid_state");
+            return Redirect($"{frontendUrl}?authError=invalid_state&provider=google");
 
         try
         {
@@ -75,7 +78,7 @@ public class GoogleAuthController : ControllerBase
             var roleResult = _accountAuth.ResolveRoleSync(user);
 
             if (!roleResult.Success || roleResult.Role == null)
-                return Redirect($"{frontendUrl}?authError=not_allowed");
+                return Redirect($"{frontendUrl}?authError=not_allowed&provider=google");
 
             // Email verified by Google, identity resolved, allowlist check
             // passed. OAuthLoginFinisher decides whether that's enough to
@@ -87,11 +90,19 @@ public class GoogleAuthController : ControllerBase
         }
         catch (UnauthorizedAccessException)
         {
-            return Redirect($"{frontendUrl}?authError=not_allowed");
+            return Redirect($"{frontendUrl}?authError=not_allowed&provider=google");
         }
-        catch (Exception)
+        catch (Exception ex)
         {
-            return Redirect($"{frontendUrl}?authError=login_failed");
+            // Logged (message only, never any token/secret it might wrap)
+            // so a login_failed report can actually be diagnosed server-
+            // side afterward instead of only ever seeing the generic
+            // frontend toast - this exchange has several distinct failure
+            // modes (bad client secret, redirect_uri mismatch at Google's
+            // token endpoint, network error reaching Google) that all
+            // otherwise look identical from the browser.
+            _log.LogError("GoogleAuth", $"Google OAuth callback failed: {ex.Message}");
+            return Redirect($"{frontendUrl}?authError=login_failed&provider=google");
         }
     }
 }
