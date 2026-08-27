@@ -22,7 +22,18 @@ namespace DeploymentAPI.Helpers;
 // so both callers now just pass the authenticated account's own id.
 public static class MfaPolicy
 {
-    public record Result(bool Show, bool Mandatory, int SkipsUsed, bool Blocked);
+    // MustSetUp - blocked because this account was just created (password
+    // signup that just verified its email, or a first-time Google login)
+    // and has never had a chance to enroll yet (see PortalUserAccount.
+    // MustSetUpMfa). Unlike the other two reasons, this one blocks the
+    // very first time Show is true - there's no 2-skip grace period, since
+    // "finish registering" was never something to nudge and defer, only
+    // to complete. MfaEnforcementGate.jsx reads this to show the right
+    // copy (and no Skip button) instead of the cloud-credential/admin
+    // wording used for the other two reasons.
+    public enum BlockReason { None, MustSetUp, CloudCredential, AdminRequired }
+
+    public record Result(bool Show, bool Mandatory, int SkipsUsed, bool Blocked, BlockReason Reason);
 
     public static async Task<Result> EvaluateAsync(SettingsService settings, string userId)
     {
@@ -39,7 +50,12 @@ public static class MfaPolicy
         var show = !mfaEnabled;
 
         if (!show)
-            return new Result(false, false, 0, false);
+            return new Result(false, false, 0, false, BlockReason.None);
+
+        var mustSetUpMfa = await settings.MustSetUpMfaAsync(userId);
+
+        if (mustSetUpMfa)
+            return new Result(true, true, 0, true, BlockReason.MustSetUp);
 
         var mfaRequiredByAdmin = await settings.IsMfaRequiredByAdminAsync(userId);
 
@@ -55,7 +71,9 @@ public static class MfaPolicy
 
         var mandatory = hasCloudCredential || mfaRequiredByAdmin;
         var skipsUsed = await settings.GetMfaNudgeSkipCountAsync(userId);
+        var blocked = mandatory && skipsUsed >= 2;
+        var reason = !blocked ? BlockReason.None : mfaRequiredByAdmin ? BlockReason.AdminRequired : BlockReason.CloudCredential;
 
-        return new Result(show, mandatory, skipsUsed, mandatory && skipsUsed >= 2);
+        return new Result(show, mandatory, skipsUsed, blocked, reason);
     }
 }

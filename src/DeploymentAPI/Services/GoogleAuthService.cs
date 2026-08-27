@@ -107,6 +107,6 @@ public class GoogleAuthService
             return existing;
         }
 
-        return await _settings.CreateUserAsync(googleId, normalizedEmail, plaintextPassword: null, provider: "google", displayName: name);
+        return await _settings.CreateUserAsync(googleId, normalizedEmail, plaintextPassword: null, provider: "google", displayName: name, mustSetUpMfa: true);
     }
 }

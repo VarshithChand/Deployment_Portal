@@ -41,7 +41,7 @@ public class AccountAuthService
 
         var id = "usr_" + Convert.ToHexString(RandomNumberGenerator.GetBytes(12)).ToLowerInvariant();
         var username = await DeriveUniqueUsernameAsync(normalizedEmail);
-        var user = await _settings.CreateUserAsync(id, normalizedEmail, password, "password", displayName, username, emailVerified: false);
+        var user = await _settings.CreateUserAsync(id, normalizedEmail, password, "password", displayName, username, emailVerified: false, mustSetUpMfa: true);
 
         // A fresh password account can't log in - let alone get a role
         // resolved or an MFA decision made - until the link in the

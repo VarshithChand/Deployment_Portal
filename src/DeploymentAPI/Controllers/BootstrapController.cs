@@ -184,7 +184,14 @@ public class BootstrapController : ControllerBase
                 Show = mfaPolicy.Show,
                 Mandatory = mfaPolicy.Mandatory,
                 SkipsUsed = mfaPolicy.SkipsUsed,
-                Blocked = mfaPolicy.Blocked
+                Blocked = mfaPolicy.Blocked,
+                Reason = mfaPolicy.Reason switch
+                {
+                    MfaPolicy.BlockReason.MustSetUp => "mustSetUp",
+                    MfaPolicy.BlockReason.CloudCredential => "cloudCredential",
+                    MfaPolicy.BlockReason.AdminRequired => "adminRequired",
+                    _ => "none"
+                }
             }
         });
     }

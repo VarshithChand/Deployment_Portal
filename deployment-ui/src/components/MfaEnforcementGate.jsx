@@ -15,19 +15,29 @@ const MfaSection = lazy(() => import("./settings/credentials/MfaSection"));
 // Server-driven MFA policy nudge/enforcement (see BootstrapController's
 // MfaNudge block - every flag here is computed backend-side, never
 // decided by this component). Three states:
-//   - blocked: this session has an AWS/Azure/GCP credential saved, MFA
-//     isn't enabled yet, and the 2-skip budget is spent. Renders a full,
-//     non-dismissible page in place of the app shell - same "renders
-//     instead of children" precedent PinLockScreen already established
-//     for the screen-lock PIN.
+//   - blocked: either (a) this account was just created (password signup
+//     that just verified its email, or a first Google login) and has
+//     never had a chance to enroll yet - blocked from the very first
+//     bootstrap call, no skip budget at all (reason "mustSetUp" - see
+//     PortalUserAccount.MustSetUpMfa/MfaPolicy) - or (b) this session has
+//     an AWS/Azure/GCP credential saved (or an admin flagged it Required),
+//     MFA isn't enabled yet, and the 2-skip budget is spent. Either way,
+//     renders a full, non-dismissible page in place of the app shell -
+//     same "renders instead of children" precedent PinLockScreen already
+//     established for the screen-lock PIN, and (for "mustSetUp"
+//     specifically) what makes "register -> verify email -> MFA ->
+//     dashboard" a real server-enforced sequence instead of a one-time
+//     frontend redirect a refresh could quietly skip past.
 //   - show (not blocked): a small dismissible bottom banner. Free to
 //     skip - "Skip" always succeeds, it just also feeds the skip counter
 //     that eventually flips `blocked` once BOTH mandatory (a cloud
-//     credential exists) and the budget's spent.
+//     credential exists) and the budget's spent. Never reached for
+//     "mustSetUp" - that reason is blocked immediately, with no nudge
+//     phase at all.
 //   - neither: renders nothing.
 export default function MfaEnforcementGate() {
 
-    const { mfaNudgeShow, mfaNudgeMandatory, mfaNudgeBlocked, refresh } = useAuth();
+    const { mfaNudgeShow, mfaNudgeMandatory, mfaNudgeBlocked, mfaNudgeReason, refresh } = useAuth();
 
     const [dismissedForNow, setDismissedForNow] = useState(false);
     const [enrollOpen, setEnrollOpen] = useState(false);
@@ -60,18 +70,22 @@ export default function MfaEnforcementGate() {
 
     if (mfaNudgeBlocked) {
 
+        const isRegistration = mfaNudgeReason === "mustSetUp";
+
         return (
 
             <div className="auth-page" style={{ position: "fixed", inset: 0, zIndex: 1200 }}>
 
                 <div className="auth-page-card" style={{ maxWidth: 460 }}>
 
-                    <h1 className="setup-gate-title">Multi-Factor Authentication Required</h1>
+                    <h1 className="setup-gate-title">
+                        {isRegistration ? "Secure your new account" : "Multi-Factor Authentication Required"}
+                    </h1>
 
                     <p className="field-hint" style={{ textAlign: "center" }}>
-                        Your account has cloud credentials saved, which makes MFA mandatory for this
-                        portal. Finish enrolling below to continue — this screen won't go away until
-                        you do.
+                        {isRegistration
+                            ? "Set up multi-factor authentication to finish creating your account — this step can't be skipped."
+                            : "Your account has cloud credentials saved, which makes MFA mandatory for this portal. Finish enrolling below to continue — this screen won't go away until you do."}
                     </p>
 
                     <Suspense fallback={<p className="field-hint">Loading...</p>}>

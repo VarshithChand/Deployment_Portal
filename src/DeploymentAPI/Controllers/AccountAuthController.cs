@@ -174,13 +174,14 @@ public class AccountAuthController : ControllerBase
     // Where the link in the welcome email actually lands. Consumes the
     // token (SettingsService.VerifyEmailAsync clears it so it can't be
     // replayed), then - since this account has now genuinely proven both
-    // its password AND its email in one flow - goes straight into the same
-    // role-resolve/MFA-or-session tail every other login path shares,
-    // rather than making them log in a second time right after verifying.
-    // The frontend tells the difference between "just verified" and a
-    // normal login via the mfaSetupPending query param below, which is what
-    // triggers the mandatory MFA enrollment screen for a brand new account
-    // instead of the ordinary MFA challenge screen.
+    // its password AND its email in one flow - goes straight into a real
+    // session, same as any other successful login, rather than making them
+    // log in a second time right after verifying. Mandatory MFA enrollment
+    // isn't handled here as a redirect signal - it's enforced server-side
+    // on every request going forward via MfaPolicy/MfaEnforcementGate (see
+    // PortalUserAccount.MustSetUpMfa, set true at signup), so it applies
+    // consistently even if this tab is closed and reopened before finishing
+    // enrollment instead of only working for this one redirect.
     [HttpGet("verify-email")]
     public async Task<IActionResult> VerifyEmail([FromQuery] string token)
     {
@@ -201,11 +202,10 @@ public class AccountAuthController : ControllerBase
 
         await IssueSessionAsync(user.Id, result.Role, user.Email);
 
-        // mfaSetupPending signals the frontend to show the mandatory MFA
-        // enrollment screen next - mirrors the existing post-signup
-        // needsMfaSetup flow (LoginSignupPage.jsx), just reached via the
-        // email link instead of an inline reload.
-        return Redirect($"{frontendUrl}/?emailVerified=1&mfaSetupPending=1");
+        // emailVerified just triggers a one-time toast (see AuthContext) -
+        // MfaEnforcementGate takes it from here once bootstrap reports
+        // MustSetUpMfa, no further signal needed in the URL.
+        return Redirect($"{frontendUrl}/?emailVerified=1");
     }
 
     // The one place this flow actually issues a session - sets the same

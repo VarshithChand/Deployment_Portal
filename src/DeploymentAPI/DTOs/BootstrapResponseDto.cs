@@ -45,6 +45,12 @@ public class BootstrapMfaNudgeDto
     public int SkipsUsed { get; set; }
 
     public bool Blocked { get; set; }
+
+    // "mustSetUp" | "cloudCredential" | "adminRequired" | "none" - lets
+    // MfaEnforcementGate.jsx show the right copy (and, for mustSetUp, hide
+    // the Skip button entirely) instead of a single generic block message
+    // for what are three different reasons - see MfaPolicy.BlockReason.
+    public string Reason { get; set; } = "none";
 }
 
 // Same shape AuthController.Me already returns ({login, role}), plus the

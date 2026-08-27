@@ -72,4 +72,16 @@ public class PortalUserAccount
     public string? EmailVerificationToken { get; set; }
 
     public DateTime? EmailVerificationTokenExpiresAtUtc { get; set; }
+
+    // True from the moment this account first becomes real (email verified
+    // for a password account, or first login for Google) until MFA is
+    // actually enrolled - see MfaPolicy.EvaluateAsync, which folds this
+    // into Blocked unconditionally (no 2-skip grace period the way an
+    // existing account's cloud-credential/admin-required nudge gets). That
+    // makes the "register -> verify -> MFA -> dashboard" sequence a real
+    // server-enforced gate instead of a one-time frontend redirect signal
+    // that a refresh could silently drop. Cleared for good the moment
+    // VerifyMfaEnrollmentAsync succeeds - never re-armed just because MFA
+    // is later disabled.
+    public bool MustSetUpMfa { get; set; }
 }

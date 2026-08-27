@@ -7,7 +7,6 @@ import Footer from "./components/layout/Footer";
 import ErrorBoundary from "./components/common/ErrorBoundary";
 import LoginSignupPage from "./pages/LoginSignupPage";
 import MfaVerifyPage from "./pages/MfaVerifyPage";
-import MandatoryMfaSetupScreen from "./components/MandatoryMfaSetupScreen";
 import PeriodicSignOutMonitor from "./components/PeriodicSignOutMonitor";
 import GlobalLogoutMonitor from "./components/GlobalLogoutMonitor";
 import MfaEnforcementGate from "./components/MfaEnforcementGate";
@@ -130,30 +129,6 @@ function App(){
 
     }, []);
 
-    // True only right after landing here via the welcome email's verify
-    // link (see AccountAuthController.VerifyEmail's redirect and
-    // AuthContext's emailVerified toast handling above it) - the session
-    // cookie is already real by this point, so `configured` below flips
-    // true on its own; this is only what decides whether the mandatory,
-    // non-skippable MFA enrollment screen shows before the app shell does,
-    // same "register, then MFA, then dashboard" straight line
-    // LoginSignupPage's own needsMfaSetup enforces for a same-tab signup.
-    // Read once off the URL on mount, then the query param is stripped so
-    // a later refresh of this same tab doesn't re-trigger it.
-    const [mfaSetupPending, setMfaSetupPending] = useState(() => {
-
-        const params = new URLSearchParams(window.location.search);
-        const pending = params.get("mfaSetupPending") === "1";
-
-        if (pending) {
-            params.delete("mfaSetupPending");
-            const query = params.toString();
-            window.history.replaceState({}, "", window.location.pathname + (query ? `?${query}` : ""));
-        }
-
-        return pending;
-
-    });
 
     const checking = !oauthStatusChecked;
     // "configured" now means "a real account session exists" - user is set
@@ -257,10 +232,6 @@ function App(){
             />
         );
 
-    }
-
-    if (mfaSetupPending) {
-        return <MandatoryMfaSetupScreen onEnrolled={() => setMfaSetupPending(false)} />;
     }
 
     return(

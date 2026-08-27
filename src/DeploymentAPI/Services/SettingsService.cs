@@ -1515,7 +1515,13 @@ public class SettingsService
     // and any other future caller shouldn't accidentally lock an account
     // out) - AccountAuthService.SignUpAsync is the one caller that passes
     // false, since a fresh password signup is exactly what needs proving.
-    public async Task<PortalUserAccount> CreateUserAsync(string id, string email, string? plaintextPassword, string provider, string? displayName = null, string? username = null, bool emailVerified = true)
+    // mustSetUpMfa defaults false so any future caller doesn't accidentally
+    // lock a fresh account into a mandatory-enrollment block it was never
+    // meant to have - AccountAuthService.SignUpAsync and GoogleAuthService.
+    // ExchangeCodeForUserAsync are the two callers that pass true, since
+    // both are exactly the "this account has never had a chance to enroll
+    // yet" moment MfaPolicy.EvaluateAsync's unconditional block exists for.
+    public async Task<PortalUserAccount> CreateUserAsync(string id, string email, string? plaintextPassword, string provider, string? displayName = null, string? username = null, bool emailVerified = true, bool mustSetUpMfa = false)
     {
         var root = await ReadRootAsync();
         var (users, _) = await GetOrCreateUsersSectionAsync(root);
@@ -1530,7 +1536,8 @@ public class SettingsService
             ["DisplayName"] = displayName,
             ["Provider"] = provider,
             ["CreatedAtUtc"] = DateTime.UtcNow,
-            ["EmailVerified"] = emailVerified
+            ["EmailVerified"] = emailVerified,
+            ["MustSetUpMfa"] = mustSetUpMfa
         };
 
         users[id] = entry;
@@ -1667,7 +1674,12 @@ public class SettingsService
         // only a fresh signup going forward is ever explicitly created
         // with this false, nothing retroactively locks an existing account
         // out.
-        EmailVerified = entry["EmailVerified"]?.Value<bool>() ?? true
+        EmailVerified = entry["EmailVerified"]?.Value<bool>() ?? true,
+        // Missing defaults false for the same reason EmailVerified defaults
+        // true - only a fresh signup going forward is ever explicitly
+        // created with this flag, nothing retroactively forces an existing
+        // account through mandatory enrollment it was never promised.
+        MustSetUpMfa = entry["MustSetUpMfa"]?.Value<bool>() ?? false
     };
 
     // Same shape as SaveAdminUsernamesAsync, just the email-based lists -
@@ -2651,6 +2663,21 @@ public class SettingsService
         return entry?["Enabled"]?.Value<bool>() ?? false;
     }
 
+    // Feeds MfaPolicy.EvaluateAsync's unconditional (no 2-skip grace) block
+    // for a freshly-registered account - see PortalUserAccount.
+    // MustSetUpMfa. False for any login with no Users entry at all (a pure
+    // GitHub-OAuth account, which never gets one - see PortalUserAccount's
+    // own header comment on the Id scheme), which is the correct default:
+    // there's nothing to enforce for an account this mechanism doesn't
+    // track yet, same as EmailVerified defaulting true for the same reason.
+    public async Task<bool> MustSetUpMfaAsync(string userId)
+    {
+        var root = await ReadRootAsync();
+        var entry = (root["Users"] as JObject)?[userId] as JObject;
+
+        return entry?["MustSetUpMfa"]?.Value<bool>() ?? false;
+    }
+
     // Whether a super-admin has flagged this login as required to set up
     // MFA (see SetMfaRequiredAsync) - independent of whether they've
     // enrolled yet. Feeds BootstrapController's MfaNudge.Mandatory
@@ -2769,6 +2796,14 @@ public class SettingsService
         entry!["Enabled"] = true;
         entry["UpdatedAtUtc"] = now;
         entry["LastVerifiedAtUtc"] = now;
+
+        // Real enrollment finished - the account has now had its one
+        // mandatory chance to set MFA up (see PortalUserAccount.
+        // MustSetUpMfa), so the unconditional post-registration block in
+        // MfaPolicy.EvaluateAsync never needs to apply again for this
+        // account, even if MFA is later disabled.
+        if ((root["Users"] as JObject)?[login] is JObject userEntry)
+            userEntry["MustSetUpMfa"] = false;
 
         await WriteRootAsync(root);
 

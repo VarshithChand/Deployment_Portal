@@ -104,6 +104,11 @@ export default function AuthProvider({ children }) {
     const [mfaNudgeMandatory, setMfaNudgeMandatory] = useState(false);
     const [mfaNudgeBlocked, setMfaNudgeBlocked] = useState(false);
     const [mfaNudgeSkipsUsed, setMfaNudgeSkipsUsed] = useState(0);
+    // "mustSetUp" | "cloudCredential" | "adminRequired" | "none" - lets
+    // MfaEnforcementGate.jsx tell "this is a brand-new account finishing
+    // registration" apart from the other two block reasons, which get
+    // different copy and (for mustSetUp) no Skip button at all.
+    const [mfaNudgeReason, setMfaNudgeReason] = useState("none");
 
     // Which AWS identity (IAM username, or account/role for an SSO
     // session) this browser's saved credentials resolve to — shown as a
@@ -202,6 +207,7 @@ export default function AuthProvider({ children }) {
             setMfaNudgeMandatory(!!data.mfaNudge?.mandatory);
             setMfaNudgeBlocked(!!data.mfaNudge?.blocked);
             setMfaNudgeSkipsUsed(data.mfaNudge?.skipsUsed || 0);
+            setMfaNudgeReason(data.mfaNudge?.reason || "none");
 
         }
         catch (err) {
@@ -269,7 +275,7 @@ export default function AuthProvider({ children }) {
             tokenOwner, canApproveReleases: !!tokenOwner?.canApprove,
             isAdminSession, isSuperAdminSession, grantedPages, oauthStatusChecked, bootstrapError,
             awsIdentityLabel, pinConfigured,
-            mfaNudgeShow, mfaNudgeMandatory, mfaNudgeBlocked, mfaNudgeSkipsUsed
+            mfaNudgeShow, mfaNudgeMandatory, mfaNudgeBlocked, mfaNudgeSkipsUsed, mfaNudgeReason
         }}>
 
             {children}

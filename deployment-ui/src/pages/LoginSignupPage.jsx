@@ -3,7 +3,6 @@ import { useState } from "react";
 import { signUp, logIn } from "../services/authLoginService";
 import { API_BASE } from "../api/apiBase";
 import Logo from "../components/common/Logo";
-import MandatoryMfaSetupScreen from "../components/MandatoryMfaSetupScreen";
 import useTheme from "../hooks/useTheme";
 import { SunIcon, MoonIcon } from "../components/layout/SidebarIcons";
 
@@ -67,23 +66,16 @@ export default function LoginSignupPage({ onMfaRequired }) {
     const [submitting, setSubmitting] = useState(false);
     const [error, setError] = useState("");
 
-    // A brand-new account has nothing to verify yet (mfaRequired only ever
-    // means "an existing enrollment needs a code"), so without this a
-    // fresh signup would land straight on the dashboard with no MFA at
-    // all. Only signup sets this - an existing account logging in without
-    // MFA enabled keeps going straight to the dashboard as before, same as
-    // it always has (see the "when i am a new user" request this is
-    // scoped to - registration specifically, not every un-enrolled login).
-    const [needsMfaSetup, setNeedsMfaSetup] = useState(false);
-
     // Set once a fresh signup's response comes back with
     // emailVerificationRequired:true (see AccountAuthController.
     // FinishPrimaryFactorAsync) - the account exists but nothing else about
     // it (role, MFA, a session) is resolved yet, so there's nothing to do
     // here but tell them to go click the link. The rest of "verify -> MFA
     // setup -> dashboard" happens after they leave this tab entirely and
-    // click the emailed link, which lands them back on App.jsx instead
-    // (see its mfaSetupPending handling).
+    // click the emailed link (see AccountAuthController.VerifyEmail) -
+    // mandatory MFA enrollment itself is enforced server-side from there on
+    // (see MfaEnforcementGate/PortalUserAccount.MustSetUpMfa), not by
+    // anything in this component.
     const [checkEmailSent, setCheckEmailSent] = useState(false);
 
     const isSignup = mode === "signup";
@@ -123,19 +115,11 @@ export default function LoginSignupPage({ onMfaRequired }) {
                 return;
             }
 
-            // A fresh signup is already fully authenticated at this point
-            // (the token's issued, same as any other successful login) -
-            // just not reloaded into the app shell yet, which is what
-            // makes it safe to hold here for mandatory enrollment instead
-            // of reloading straight to the dashboard.
-            if (isSignup) {
-                setNeedsMfaSetup(true);
-                setSubmitting(false);
-                return;
-            }
-
             // Real session cookie now set server-side — reload so
-            // bootstrap picks it up and the normal app shell takes over.
+            // bootstrap picks it up and the normal app shell takes over
+            // (MfaEnforcementGate handles mandatory enrollment from there
+            // if this account still needs it - see PortalUserAccount.
+            // MustSetUpMfa).
             window.location.reload();
 
         }
@@ -148,21 +132,11 @@ export default function LoginSignupPage({ onMfaRequired }) {
 
     }
 
-    // Mandatory, no skip/cancel back to the form - "register, then MFA,
-    // then dashboard" is a straight line for a brand-new account, not a
-    // dismissible nudge (see MfaEnforcementGate for the separate, skippable
-    // nudge that still applies to already-existing accounts). Only reached
-    // via Google/GitHub signup now - a password signup goes through
-    // checkEmailSent below instead, since email verification comes first.
-    if (needsMfaSetup) {
-        return <MandatoryMfaSetupScreen onEnrolled={() => window.location.reload()} />;
-    }
-
     // Terminal state for this tab - there is nothing left to submit here.
     // The rest of the flow (verify -> mandatory MFA setup -> dashboard)
     // continues only once they open the email and click the link, which
-    // lands them back on the app fresh (see App.jsx's mfaSetupPending
-    // handling of AccountAuthController.VerifyEmail's redirect).
+    // lands them back on the app fresh (see AccountAuthController.
+    // VerifyEmail and MfaEnforcementGate).
     if (checkEmailSent) {
 
         return (
