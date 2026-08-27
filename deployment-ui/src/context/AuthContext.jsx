@@ -2,6 +2,7 @@ import { createContext, useCallback, useEffect, useState } from "react";
 
 import { getBootstrap } from "../services/bootstrapService";
 import { logout as logoutRequest } from "../services/authService";
+import { setAuthToken } from "../api/apiBase";
 import useToast from "../hooks/useToast";
 
 export const AuthContext = createContext();
@@ -253,12 +254,30 @@ export default function AuthProvider({ children }) {
 
         // Landed here via the welcome email's verify link (see
         // AccountAuthController.VerifyEmail) - the account+session are
-        // already real at this point, mfaSetupPending (left alone here,
-        // App.jsx reads it) is what actually routes them into mandatory
-        // MFA enrollment next.
+        // already real at this point; MfaEnforcementGate is what actually
+        // routes them into mandatory MFA enrollment next, once bootstrap
+        // reports MustSetUpMfa.
         if (params.get("emailVerified")) {
             toast.show("Email verified! Set up MFA to finish creating your account.");
             clearQueryParam(params, "emailVerified");
+        }
+
+        // Landed here via a GitHub/Google OAuth callback that issued a real
+        // session (see OAuthLoginFinisher.FinishAsync) - the portal_token
+        // cookie it also set is a genuine third-party cookie the moment
+        // this frontend and the API are on different origins, and
+        // Safari/Chrome increasingly refuse to persist those regardless of
+        // SameSite=None/Secure, same reasoning as apiBase.js's
+        // Authorization-header fallback for the plain fetch()-based login
+        // paths. A redirect can't hand back JSON, so the token rides in the
+        // URL instead - stored here (before loadBootstrap's very first
+        // call, so it's available immediately) and stripped right after so
+        // it doesn't linger in the address bar or browser history.
+        const token = params.get("token");
+
+        if (token) {
+            setAuthToken(token);
+            clearQueryParam(params, "token");
         }
 
         loadBootstrap();

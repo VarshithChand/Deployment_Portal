@@ -200,12 +200,18 @@ public class AccountAuthController : ControllerBase
         if (!result.Success || result.Role == null)
             return Redirect($"{frontendUrl}/?verifyError=1");
 
-        await IssueSessionAsync(user.Id, result.Role, user.Email);
+        var jwt = await IssueSessionAsync(user.Id, result.Role, user.Email);
 
         // emailVerified just triggers a one-time toast (see AuthContext) -
         // MfaEnforcementGate takes it from here once bootstrap reports
-        // MustSetUpMfa, no further signal needed in the URL.
-        return Redirect($"{frontendUrl}/?emailVerified=1");
+        // MustSetUpMfa, no further signal needed in the URL. The token
+        // param is the same third-party-cookie workaround
+        // OAuthLoginFinisher.FinishAsync uses - this is also a top-level
+        // redirect handing a session to a separately-hosted frontend, the
+        // exact situation the portal_token cookie alone can't be trusted
+        // to survive (see that method's own comment). AuthContext picks
+        // this up on mount and strips it right after.
+        return Redirect($"{frontendUrl}/?emailVerified=1&token={Uri.EscapeDataString(jwt)}");
     }
 
     // The one place this flow actually issues a session - sets the same

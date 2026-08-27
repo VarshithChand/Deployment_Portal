@@ -56,6 +56,17 @@ public static class OAuthLoginFinisher
             }
         }
 
-        return controller.Redirect(frontendUrl);
+        // The cookie above is still set (harmless, and what local dev and
+        // any same-site deployment rely on), but this redirect is the
+        // browser navigating cross-site from the OAuth provider back to
+        // THIS backend, then on to a separately-hosted frontend - the same
+        // third-party-cookie situation AccountAuthController.IssueSessionAsync
+        // already works around for the plain fetch()-based login paths (see
+        // its own comment). A redirect can't return JSON for the frontend
+        // to read the token from, so it's appended here instead - AuthContext
+        // picks it up on mount, stores it via setAuthToken, and strips it
+        // from the URL before anyone sees a raw JWT sitting in the address
+        // bar for more than an instant.
+        return controller.Redirect($"{frontendUrl}?token={Uri.EscapeDataString(jwt)}");
     }
 }
