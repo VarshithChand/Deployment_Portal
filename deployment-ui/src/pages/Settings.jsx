@@ -128,6 +128,14 @@ export default function Settings() {
     const [githubToken, setGithubToken] = useState("");
     const [githubTokenConfigured, setGithubTokenConfigured] = useState(false);
 
+    // Set once the backend rejects a save with MFA_REQUIRED/INVALID_MFA_CODE
+    // (see MfaGate.DenyUnlessCodeVerifiedAsync) - GitHubAccessSection shows
+    // the code field only once this is true, rather than always, since the
+    // vast majority of accounts have no MFA enabled and would otherwise see
+    // a field that's never actually needed.
+    const [githubMfaRequired, setGithubMfaRequired] = useState(false);
+    const [githubMfaCode, setGithubMfaCode] = useState("");
+
     const [repoPreview, setRepoPreview] = useState(null);
     const [repoPreviewLoading, setRepoPreviewLoading] = useState(false);
 
@@ -538,10 +546,13 @@ export default function Settings() {
             await saveMyGitHubSettings({
                 owner: parsed?.owner || null,
                 repository: parsed?.repository || null,
-                personalAccessToken: githubToken || null
+                personalAccessToken: githubToken || null,
+                mfaCode: githubMfaCode || null
             });
 
             setGithubToken("");
+            setGithubMfaRequired(false);
+            setGithubMfaCode("");
             toast.show(
                 parsed
                     ? `GitHub settings saved: ${parsed.owner}/${parsed.repository}`
@@ -560,6 +571,20 @@ export default function Settings() {
         catch (err) {
 
             console.error(err);
+
+            // MfaGate.DenyUnlessCodeVerifiedAsync rejects with one of these
+            // three codes when this account has MFA enabled - MFA_REQUIRED
+            // the first time (no code was sent at all), INVALID_MFA_CODE on
+            // a wrong one. Showing the code field (rather than just the
+            // generic toast) is what actually lets a second attempt work -
+            // without it, this was a dead end no code could ever get past.
+            const code = err.response?.data?.code;
+
+            if (code === "MFA_REQUIRED" || code === "INVALID_MFA_CODE") {
+                setGithubMfaRequired(true);
+                setGithubMfaCode("");
+            }
+
             toast.show(err.response?.data?.message || "Failed to save GitHub settings.", "error");
 
         }
@@ -1070,6 +1095,9 @@ export default function Settings() {
                     isRateLimited={isRateLimited}
                     githubToken={githubToken}
                     setGithubToken={setGithubToken}
+                    githubMfaRequired={githubMfaRequired}
+                    githubMfaCode={githubMfaCode}
+                    setGithubMfaCode={setGithubMfaCode}
                     handleSaveGitHub={handleSaveGitHub}
                     savingGitHub={savingGitHub}
                     handleClear={handleClear}
