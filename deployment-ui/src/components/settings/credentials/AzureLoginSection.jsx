@@ -175,7 +175,7 @@ export default function AzureLoginSection({ onCleared }) {
                         <label htmlFor="azure-subscription-id">Subscription ID (optional — for Azure Container Registry)</label>
                         <ClearableInput
                             id="azure-subscription-id"
-                            placeholder={status?.subscriptionId ? `Leave blank to keep "${status.subscriptionId}"` : ""}
+                            placeholder={status?.subscriptionId ? "Leave blank to keep current subscription ID" : ""}
                             value={form.subscriptionId}
                             onChange={(e) => setForm({ ...form, subscriptionId: e.target.value })}
                             onClear={() => setForm({ ...form, subscriptionId: "" })}
