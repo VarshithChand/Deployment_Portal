@@ -8154,60 +8154,68 @@ h1, h2, h3, .card-title, .page-title, .page-header h1, .stat-tile-value, .hero h
 }
 
 /* ==========================================
-   DASHBOARD GRID (single-viewport overview)
+   DASHBOARD GRID (dense overview, content-adaptive height)
    Every card the Dashboard renders keeps its own internal markup
    unchanged - this only controls how those existing .card elements get
-   placed and sized once they're inside .dashboard-grid, so the page
-   itself never needs scrolling: each panel gets a fixed share of the
-   viewport height and scrolls its OWN overflow internally instead.
-========================================== */
+   placed and sized once they're inside .dashboard-grid.
+
+   V1 of this tried to force the WHOLE grid to a fixed calc(100vh-Npx)
+   height split into fixed fr-ratio rows, on the theory that every panel
+   always has something to show. It doesn't: DeploymentActivityCard
+   (Runs) and BlockersSummaryCard both render nothing when there are no
+   runs/no pending approvals, and several others render nothing when
+   that integration isn't connected yet. A fixed fr-row still claimed
+   its FULL height share for an empty panel, which both wasted a huge
+   band of blank space in that row AND, because the total was fixed,
+   squeezed every row after it - the exact "empty row eating all the
+   space meant for Applications/Repositories below it" bug a screenshot
+   caught. Rows now size to their own content (grid-auto-rows:min-content)
+   instead of a pre-committed fraction - an empty/short panel just takes
+   the small height its own empty-state message needs, and that freed
+   space is naturally available to whatever row comes next, not
+   permanently reserved for a panel that isn't using it. Each .card still
+   caps its own height and scrolls internally (below) so one panel with a
+   lot of real content can't dominate the page - this trades a hard
+   guarantee of zero page scroll for a layout that never shows a
+   dead-space band regardless of which integrations happen to be
+   connected in a given environment. */
 
 .dashboard-grid{
     display:grid;
     grid-template-columns:repeat(12, 1fr);
-    /* Row 1: the KPI strip, sized to its own content. Row 2 is
-       Connections (SystemHealthCard) alone at full width - its 5 stat
-       tiles need real width to lay out in one line instead of stacking,
-       so it gets its own row rather than sharing one. Rows 3-6 split
-       the rest - taller for Runs/Blockers, progressively shorter for
-       secondary and detail-table panels, which lean on their own
-       scroll/pagination for anything that doesn't fit. */
-    grid-template-rows:auto 0.9fr 1.1fr 0.8fr 0.8fr 0.7fr;
+    grid-auto-rows:min-content;
+    /* Cards don't stretch to fill a row taller than their own content
+       (the old height:100% model needed a fixed row height to make
+       sense of) - each one is exactly as tall as it needs to be, up to
+       its own max-height cap below. */
+    align-items:start;
     gap:16px;
-    /* Fits within .app-content-column's flex-allocated space above
-       .app-footer, MINUS PageLayout's own "Overview" .page-title row
-       that sits above this grid inside the same .main - see PageLayout/
-       .main's flex chain (TopBar ~64px, footer ~90px incl. its own
-       margin, .main's own 60px vertical padding, .page-title's 32px
-       text + 25px margin-bottom ~= 65px). Kept generous on purpose:
-       each .card's own overflow-y:auto below is the real safety net if
-       this estimate runs a little short on an unusual viewport, not
-       pixel-perfect precision. */
-    height:calc(100vh - 300px);
-    min-height:640px;
 }
 
-/* Direct grid-item wrappers (the plain <div style="gridColumn: span N">
-   Dashboard.jsx wraps each card in) default to min-height:auto as grid
-   items, which resolves to their CONTENT's min-content size - a tall
-   table/list inside would silently grow the wrapper (and its whole grid
-   row) past the fr-unit share above, pushing the page back into a
-   whole-page scroll despite align-items:stretch. min-height:0 here is
-   what actually makes each row track hold to its computed height, so the
-   .card's own overflow-y:auto below is what absorbs any extra content -
-   not the grid row growing to fit it. */
+/* A grid item's default min-width is auto (its content's min-content
+   size), which lets a wide table/list silently force its whole column
+   TRACK wider than the span it was given, throwing off every other
+   column's width alongside it - min-width:0 here is what makes each
+   .card's own overflow-x:auto (below/table-scroll) the thing that
+   handles overflow instead. */
 .dashboard-grid > div{
     min-width:0;
-    min-height:0;
-    overflow:hidden;
 }
 
 .dashboard-grid .card{
-    height:100%;
-    min-height:0;
+    max-height:300px;
     margin-bottom:0;
     overflow-y:auto;
     overflow-x:hidden;
+}
+
+/* Applied to the WRAPPER div around a handful of panels that carry
+   genuinely more content than the rest (a real multi-row status table,
+   a paginated list) - System Health, Applications, Repositories - via a
+   descendant selector, since Dashboard.jsx doesn't control the
+   className each imported card puts on its own root .card. */
+.dashboard-grid .dash-card-lg .card{
+    max-height:420px;
 }
 
 .dashboard-grid .card .table-scroll{
@@ -8221,13 +8229,10 @@ h1, h2, h3, .card-title, .page-title, .page-header h1, .stat-tile-value, .hero h
            reverts to a normal scrolling stack - a single-viewport dense
            layout stops being legible once panels get this narrow. */
         grid-template-columns:1fr;
-        grid-template-rows:none;
-        height:auto;
-        min-height:0;
     }
 
-    .dashboard-grid .card{
-        height:auto;
+    .dashboard-grid .card,
+    .dashboard-grid .dash-card-lg .card{
         max-height:480px;
     }
 

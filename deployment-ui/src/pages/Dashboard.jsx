@@ -17,49 +17,56 @@ import QuickAccessCard from "../components/dashboard/QuickAccessCard";
 import BlockersSummaryCard from "../components/dashboard/BlockersSummaryCard";
 import ErrorsSummaryCard from "../components/dashboard/ErrorsSummaryCard";
 
-// One screen, no page scroll - a dense CSS grid (.dashboard-grid, see
-// global.css). Every card below is completely unchanged internally; only
-// WHERE each one sits and how tall its own slot is changed. Each grid
-// cell's .card scrolls its own overflow internally instead of the page
-// growing past the viewport.
+// A dense 12-column CSS grid (.dashboard-grid, see global.css) instead of
+// the long single-column stack this page used to be. Every card below is
+// completely unchanged internally; only WHERE each one sits, how wide its
+// slot is, and how tall it's ALLOWED to grow changed.
 //
-// Round 2 of this layout (first pass crammed 6 summary cards into
-// span-2 slivers - unreadable, see the truncated "Azur...", "DevC..."
-// labels that prompted this rework). Two real fixes this time, not just
-// narrower columns:
-//   - SystemHealthCard ("Connections") gets its OWN full-width row. Its
-//     5 stat tiles use a `minmax(260px,1fr)` auto-fit grid internally -
-//     squeezed into a shared 4-of-12-column slot, they had nowhere to go
-//     but stack into 5 separate rows, pushing its own status table out
-//     of view and forcing a stray horizontal scrollbar. Full width lets
-//     them lay out in one row like they're meant to.
-//   - PaasSummaryCard/ContainerRegistrySummaryCard/CodeQualitySummaryCard
-//     are dropped from this page entirely - SystemHealthCard's own
-//     status table already lists every one of those same integrations
-//     by category (see the screenshot that prompted this: "Container
-//     Registries / Container Registry / Healthy" is already a row
-//     there). They were duplicate information taking up a whole slot
-//     each, not information this page was missing - still reachable
-//     from the Sidebar like every other page, just not doubled up here.
+// Round 3 of this layout. Round 1 crammed 6 summary cards into span-2
+// slivers (unreadable). Round 2 fixed that but forced the whole grid to a
+// fixed viewport-height split into fixed-fraction rows, which assumed
+// every panel always has something to show - a screenshot caught
+// DeploymentActivityCard (Runs) and BlockersSummaryCard both rendering
+// nothing (no runs yet, no pending approvals) and their WHOLE row still
+// claiming its full height share as blank space, which squeezed every
+// row after it. Rows now size to their own content instead
+// (grid-auto-rows:min-content in global.css) - an empty panel just takes
+// the small height its empty-state message needs, freeing that space for
+// whatever comes next rather than permanently reserving it. Each .card
+// still caps its own height and scrolls internally, so one panel with a
+// lot of real content can't dominate the page - see .dash-card-lg below
+// for the few panels (System Health, Applications, Repositories) that get
+// a taller cap than the rest since they carry genuinely more content.
+//
+// This trades a hard guarantee of zero page scroll (Round 2's promise,
+// which broke down the moment a panel's content varied) for a layout
+// that never shows a dead-space band regardless of which integrations
+// happen to be connected in a given environment - in practice, on an
+// account with most things configured, everything still fits in view;
+// on a sparser one, whatever's genuinely missing just takes less room
+// instead of a placeholder that looks broken.
 //
 // Column spans below sum to 12 per row on purpose (CSS grid's default
-// auto-flow wraps to a new row once a row's tracks fill up, so the
-// explicit `grid-template-rows` in global.css lines up with this order
-// without any manual grid-row assignment):
-//   Row 1 (auto)     - OverviewStats                                (12)
-//   Row 2             - Connections (SystemHealthCard), full width   (12)
-//   Row 3 (tallest)   - Runs / Blockers                             (8+4)
-//   Row 4             - Monitoring / Errors / Domain               (4×3)
-//   Row 5             - Cloud Services / Source Control / Flow    (5+4+3)
-//   Row 6 (shortest)  - Quick Access / Applications / Repositories  (4×3)
-// "Runs" = DeploymentActivityCard, "Blockers" = pending approvals,
+// auto-flow wraps to a new row once a row's tracks fill up):
+//   OverviewStats                                                  (12)
+//   Connections (SystemHealthCard), full width - its 5 stat tiles
+//     need real width to lay out in one line instead of stacking     (12)
+//   Runs / Blockers                                                (8+4)
+//   Monitoring / Errors / Domain                                  (4×3)
+//   Cloud Services / Source Control / Integration Flow           (5+4+3)
+//   Quick Access / Applications table / Repositories table         (4×3)
 // "Domain" = EnvironmentsCard (each environment's own deployed URL) -
 // the closest existing concept to "domain" this app tracks.
 //
-// Below ~1100px width (global.css) the grid reverts to a normal
-// full-width scrolling stack - a 12-column dense layout stops being
-// legible once panels get that narrow, so tablet/mobile gets the old
-// straightforward-scroll behavior back instead of illegible slivers.
+// PaasSummaryCard/ContainerRegistrySummaryCard/CodeQualitySummaryCard are
+// deliberately NOT here - SystemHealthCard's own status table already
+// lists every one of those same integrations by category, so they were
+// duplicate information taking up a whole slot each. Still reachable
+// from the Sidebar like every other page, just not doubled up here.
+//
+// Below ~1100px width (global.css) the grid drops to one column and
+// every panel goes full-width - a 12-column dense layout stops being
+// legible once panels get that narrow.
 export default function Dashboard() {
 
     // Only `repository` is still needed here - it tells AllRepositoriesCard
@@ -99,7 +106,7 @@ export default function Dashboard() {
                     <OverviewStats />
                 </div>
 
-                <div style={{ gridColumn: "span 12" }}>
+                <div className="dash-card-lg" style={{ gridColumn: "span 12" }}>
                     <SystemHealthCard />
                 </div>
 
@@ -139,11 +146,11 @@ export default function Dashboard() {
                     <QuickAccessCard />
                 </div>
 
-                <div style={{ gridColumn: "span 4" }}>
+                <div className="dash-card-lg" style={{ gridColumn: "span 4" }}>
                     <AllApplicationsTable />
                 </div>
 
-                <div style={{ gridColumn: "span 4" }}>
+                <div className="dash-card-lg" style={{ gridColumn: "span 4" }}>
                     <AllRepositoriesCard repository={repository}>
                         <AzureDevOpsCard />
                     </AllRepositoriesCard>
