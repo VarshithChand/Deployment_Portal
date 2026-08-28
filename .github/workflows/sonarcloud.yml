@@ -31,6 +31,12 @@ jobs:
     name: Analyze
     runs-on: ubuntu-latest
 
+    # Only ever reads this repo (checkout) and pushes results to SonarCloud
+    # via its own SONAR_TOKEN secret - never touches the GITHUB_TOKEN for
+    # anything beyond that read.
+    permissions:
+      contents: read
+
     steps:
 
       - name: Checkout Repository

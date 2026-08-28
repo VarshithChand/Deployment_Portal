@@ -35,6 +35,11 @@ jobs:
   run:
     runs-on: ubuntu-latest
 
+    # Just echoes the selected inputs (see the file's own header comment) -
+    # never touches the checkout, contents, or anything else the default
+    # GITHUB_TOKEN scope would matter for.
+    permissions: {}
+
     steps:
       - name: Show selected configuration
         run: |

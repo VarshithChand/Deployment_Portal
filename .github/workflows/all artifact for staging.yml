@@ -85,6 +85,9 @@ jobs:
     if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
 
+    permissions:
+      contents: read
+
     outputs:
       service: ${{ steps.detect.outputs.service }}   # Admin | PMSCore | Security  (also the zip prefix)
       dir: ${{ steps.detect.outputs.dir }}           # AdminAPI | PMSCoreAPI | SecurityAPI
@@ -150,6 +153,9 @@ jobs:
     name: Build - ${{ needs.setup.outputs.service }}
     needs: setup
     runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
 
     env:
       DIR: ${{ needs.setup.outputs.dir }}
@@ -359,6 +365,9 @@ jobs:
 
     runs-on: ubuntu-latest
 
+    permissions:
+      contents: read
+
     environment:
       name: Staging
 
@@ -435,6 +444,9 @@ jobs:
     needs: stage
     runs-on: ubuntu-latest
 
+    permissions:
+      contents: read
+
     environment:
       name: RC
 
@@ -483,6 +495,9 @@ jobs:
       - deploy_rc
     runs-on: ubuntu-latest
 
+    permissions:
+      contents: read
+
     environment:
       name: Cluster01
 
@@ -527,6 +542,9 @@ jobs:
       - deploy_rc
     runs-on: ubuntu-latest
 
+    permissions:
+      contents: read
+
     environment:
       name: Cluster02
 
@@ -570,6 +588,9 @@ jobs:
       - stage
       - deploy_rc
     runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
 
     environment:
       name: Cluster03
@@ -618,6 +639,9 @@ jobs:
       - deploy_cluster03
     if: always()
     runs-on: ubuntu-latest
+
+    # Only echoes other jobs' outputs - never checks anything out.
+    permissions: {}
 
     steps:
       - name: Summary

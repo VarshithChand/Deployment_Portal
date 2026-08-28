@@ -11,6 +11,10 @@ jobs:
   test-cron:
     runs-on: ubuntu-latest
 
+    # Just echoes timestamps - never touches this repo's contents or
+    # anything else the default GITHUB_TOKEN scope would matter for.
+    permissions: {}
+
     steps:
       - name: Show times
         run: |

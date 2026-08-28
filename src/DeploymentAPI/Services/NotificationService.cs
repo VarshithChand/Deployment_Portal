@@ -4,6 +4,7 @@ using System.Text;
 using System.Text.Json;
 using DeploymentAPI.Configuration;
 using DeploymentAPI.DTOs;
+using DeploymentAPI.Helpers;
 using Microsoft.Extensions.Options;
 
 namespace DeploymentAPI.Services;
@@ -29,7 +30,7 @@ public class NotificationService
     public Task NotifyDeployTriggered(DeployDto request, long? runId)
     {
         var message =
-            $"{request.Mode} triggered: *{request.Workflow}* on branch *{request.Branch}*" +
+            $"{LogSanitizer.ForLog(request.Mode)} triggered: *{LogSanitizer.ForLog(request.Workflow)}* on branch *{LogSanitizer.ForLog(request.Branch)}*" +
             EnvironmentSuffix(request) +
             (runId != null ? $" (run #{runId})" : "");
 
@@ -41,7 +42,7 @@ public class NotificationService
         var success = run.Conclusion == "success";
 
         var message =
-            $"{request.Mode} {(success ? "succeeded" : "failed")}: *{request.Workflow}* on branch *{request.Branch}*" +
+            $"{LogSanitizer.ForLog(request.Mode)} {(success ? "succeeded" : "failed")}: *{LogSanitizer.ForLog(request.Workflow)}* on branch *{LogSanitizer.ForLog(request.Branch)}*" +
             EnvironmentSuffix(request) +
             $" (run #{run.Id})";
 
@@ -50,7 +51,10 @@ public class NotificationService
 
     // "Environment" is now just whichever input key a given workflow happens to
     // declare (varies per workflow), so look for a plausibly-named one instead
-    // of a fixed field.
+    // of a fixed field. The value (like every other field pulled straight from
+    // the request below) is sanitized before it ever reaches SendAll - see
+    // LogSanitizer, and the "No notification channels configured" log line
+    // that's the actual sink CodeQL flags this feeds into.
     private static string EnvironmentSuffix(DeployDto request)
     {
         var envKey = request.Inputs.Keys
@@ -59,7 +63,7 @@ public class NotificationService
         if (envKey == null || string.IsNullOrWhiteSpace(request.Inputs[envKey]))
             return "";
 
-        return $", environment *{request.Inputs[envKey]}*";
+        return $", environment *{LogSanitizer.ForLog(request.Inputs[envKey])}*";
     }
 
     private async Task SendAll(string message)

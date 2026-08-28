@@ -28,11 +28,20 @@ public class GlobalExceptionHandler : IExceptionHandler
     {
         var correlationId = httpContext.TraceIdentifier;
 
+        // Method/Path come straight off the raw request - an attacker fully
+        // controls the path (query string, encoded characters and all), so
+        // both are run through LogSanitizer before reaching either log sink
+        // below. Without that, a crafted path could plant a fake-looking log
+        // line (a fabricated [ERROR] entry, or content spoofing a different
+        // request) inside what's otherwise a genuine one.
+        var safeMethod = LogSanitizer.ForLog(httpContext.Request.Method);
+        var safePath = LogSanitizer.ForLog(httpContext.Request.Path.ToString());
+
         _logger.LogError(exception, "Unhandled exception for {Method} {Path} (correlation {CorrelationId})",
-            httpContext.Request.Method, httpContext.Request.Path, correlationId);
+            safeMethod, safePath, correlationId);
 
         _log.LogError("Server",
-            $"Unhandled {exception.GetType().Name} at {httpContext.Request.Method} {httpContext.Request.Path} (correlation {correlationId}).");
+            $"Unhandled {exception.GetType().Name} at {safeMethod} {safePath} (correlation {correlationId}).");
 
         var (statusCode, code, message) = Classify(exception);
 
