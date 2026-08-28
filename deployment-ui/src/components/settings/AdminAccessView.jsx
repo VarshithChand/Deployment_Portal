@@ -34,6 +34,10 @@ export default function AdminAccessView({
     adminUsernamesText,
     setAdminUsernamesText,
     handleSaveAdmins,
+    adminEmailsText,
+    setAdminEmailsText,
+    handleSaveAdminEmails,
+    savingAdminEmails,
     suspendedAdminUsernames,
     handleToggleSuspendAdmin,
     handleClear,
@@ -58,17 +62,31 @@ export default function AdminAccessView({
     const [tab, setTab] = useState("allowlist");
 
     // ---- Admin Allowlist (per-row, not a raw textarea) -----------------
+    //
+    // Two separate backend lists share one input/table now: a GitHub
+    // username (checked by AuthService.ExchangeCodeForUserAsync for a
+    // GitHub-OAuth login) or an email (checked by AccountAuthService.
+    // ResolveRoleSync/AuthService for every login method, including
+    // password and Google - see SettingsController.SaveAdminEmails' own
+    // comment on why that's "the actual source of truth going forward").
+    // A GitHub username can never contain "@" (not a legal character in
+    // one), so that single character reliably tells the two apart in both
+    // directions - no separate "type" state needed anywhere below.
+    const isEmailEntry = (value) => value.includes("@");
 
-    const [newAdminUsername, setNewAdminUsername] = useState("");
+    const [newAdminEntry, setNewAdminEntry] = useState("");
     const [savingRow, setSavingRow] = useState(null);
     const [blockingKey, setBlockingKey] = useState(null);
 
     const adminUsernames = adminUsernamesText.split(",").map((u) => u.trim()).filter(Boolean);
+    const adminEmails = adminEmailsText.split(",").map((e) => e.trim()).filter(Boolean);
 
     // Matches an allowlist entry to a real PAT session by GitHub login
     // (case-insensitive - GitHub usernames aren't case-sensitive) - used
     // for the Session column only; Suspend itself no longer needs one
-    // (see handleSuspendClick below).
+    // (see handleSuspendClick below). Never matches an email entry - a PAT
+    // session is keyed by GitHub login, which an email-only (password/
+    // Google) admin was never issued.
     function findPatUser(username) {
         return (patUsers || []).find((u) => u.patOwnerLogin?.toLowerCase() === username.toLowerCase());
     }
@@ -81,29 +99,40 @@ export default function AdminAccessView({
 
         e.preventDefault();
 
-        const username = newAdminUsername.trim();
+        const entry = newAdminEntry.trim();
 
-        if (!username) return;
+        if (!entry) return;
 
-        if (adminUsernames.some((u) => u.toLowerCase() === username.toLowerCase())) {
-            toast.show(`'${username}' is already on the allowlist.`, "error");
+        const isEmail = isEmailEntry(entry);
+        const list = isEmail ? adminEmails : adminUsernames;
+
+        if (list.some((v) => v.toLowerCase() === entry.toLowerCase())) {
+            toast.show(`'${entry}' is already on the allowlist.`, "error");
             return;
         }
 
-        const updated = [...adminUsernames, username];
+        const updated = [...list, isEmail ? entry.toLowerCase() : entry];
 
         try {
 
-            setSavingRow(username);
-            setAdminUsernamesText(updated.join(", "));
-            await handleSaveAdmins(updated);
-            setNewAdminUsername("");
+            setSavingRow(entry);
+
+            if (isEmail) {
+                setAdminEmailsText(updated.join(", "));
+                await handleSaveAdminEmails(updated);
+            }
+            else {
+                setAdminUsernamesText(updated.join(", "));
+                await handleSaveAdmins(updated);
+            }
+
+            setNewAdminEntry("");
 
         }
         catch (err) {
 
             console.error(err);
-            toast.show(err.response?.data?.message || "Failed to add that username.", "error");
+            toast.show(err.response?.data?.message || "Failed to add that entry.", "error");
 
         }
         finally {
@@ -114,11 +143,13 @@ export default function AdminAccessView({
 
     }
 
-    async function handleRemoveAdmin(username) {
+    async function handleRemoveAdmin(entry) {
+
+        const isEmail = isEmailEntry(entry);
 
         if (!(await confirm({
             title: "Remove from admin allowlist?",
-            message: `'${username}' loses the Admin role on their next login. This only removes ` +
+            message: `'${entry}' loses the Admin role on their next login. This only removes ` +
                 "admin privileges - it doesn't block or delete their account.",
             confirmLabel: "Remove",
             danger: true
@@ -126,19 +157,27 @@ export default function AdminAccessView({
             return;
         }
 
-        const updated = adminUsernames.filter((u) => u.toLowerCase() !== username.toLowerCase());
+        const list = isEmail ? adminEmails : adminUsernames;
+        const updated = list.filter((v) => v.toLowerCase() !== entry.toLowerCase());
 
         try {
 
-            setSavingRow(username);
-            setAdminUsernamesText(updated.join(", "));
-            await handleSaveAdmins(updated);
+            setSavingRow(entry);
+
+            if (isEmail) {
+                setAdminEmailsText(updated.join(", "));
+                await handleSaveAdminEmails(updated);
+            }
+            else {
+                setAdminUsernamesText(updated.join(", "));
+                await handleSaveAdmins(updated);
+            }
 
         }
         catch (err) {
 
             console.error(err);
-            toast.show(err.response?.data?.message || "Failed to remove that username.", "error");
+            toast.show(err.response?.data?.message || "Failed to remove that entry.", "error");
 
         }
         finally {
@@ -146,6 +185,27 @@ export default function AdminAccessView({
             setSavingRow(null);
 
         }
+
+    }
+
+    // Mirrors handleClear("admins", ...) below, just for the email list -
+    // that generic clear mechanism only ever touched AdminGitHubUsernames,
+    // so this calls the email save path directly with an empty list
+    // instead. handleSaveAdminEmails (in Settings.jsx) already carries its
+    // own bootstrap-mode warning if this would leave BOTH lists empty.
+    async function handleClearAdminEmails() {
+
+        if (!(await confirm({
+            title: "Clear saved data?",
+            message: "Clear all saved admin emails? This cannot be undone.",
+            confirmLabel: "Clear",
+            danger: true
+        }))) {
+            return;
+        }
+
+        setAdminEmailsText("");
+        await handleSaveAdminEmails([]);
 
     }
 
@@ -412,12 +472,14 @@ export default function AdminAccessView({
                 <h2 className="card-title">Admin Allowlist</h2>
 
                 <p className="empty-state" style={{ padding: "0 0 15px", textAlign: "left" }}>
-                    GitHub usernames that get the Admin role on login. Everyone else who logs in
-                    gets Viewer. <strong>Suspend</strong> strips Admin immediately — even from an
-                    already-signed-in session, no logout needed — while leaving them able to keep
-                    using the portal as a normal Viewer; the username stays on this list so
-                    <strong> Unsuspend</strong> restores Admin without retyping it.
-                    {" "}<strong>Remove</strong> deletes the username from this list entirely.
+                    A GitHub username or an email gets the Admin role on login (whichever this
+                    person actually signs in with — email/password and Google logins only ever
+                    match by email). Everyone else who logs in gets Viewer.
+                    {" "}<strong>Suspend</strong> (GitHub usernames only) strips Admin immediately —
+                    even from an already-signed-in session, no logout needed — while leaving them
+                    able to keep using the portal as a normal Viewer; the entry stays on this list
+                    so <strong>Unsuspend</strong> restores Admin without retyping it.
+                    {" "}<strong>Remove</strong> deletes the entry from this list entirely.
                     Neither one blocks someone from the portal — for that, use Services → Users.
                 </p>
 
@@ -425,22 +487,22 @@ export default function AdminAccessView({
 
                     <div style={{ flex: 1 }}>
                         <ClearableInput
-                            id="new-admin-username"
-                            placeholder="GitHub username"
-                            value={newAdminUsername}
-                            onChange={(e) => setNewAdminUsername(e.target.value)}
-                            onClear={() => setNewAdminUsername("")}
+                            id="new-admin-entry"
+                            placeholder="GitHub username or email"
+                            value={newAdminEntry}
+                            onChange={(e) => setNewAdminEntry(e.target.value)}
+                            onClear={() => setNewAdminEntry("")}
                             autoComplete="off"
                         />
                     </div>
 
-                    <button type="submit" className="btn btn-primary" disabled={!newAdminUsername.trim() || savingRow !== null}>
+                    <button type="submit" className="btn btn-primary" disabled={!newAdminEntry.trim() || savingRow !== null}>
                         Add
                     </button>
 
                 </form>
 
-                {adminUsernames.length === 0 ? (
+                {adminUsernames.length === 0 && adminEmails.length === 0 ? (
 
                     <p className="empty-state field-hint-bad">
                         Empty — bootstrap mode is active, every visitor is treated as Admin until
@@ -455,7 +517,7 @@ export default function AdminAccessView({
 
                             <thead>
                                 <tr>
-                                    <th>Username</th>
+                                    <th>Username or Email</th>
                                     <th>Session</th>
                                     <th><span className="visually-hidden">Actions</span></th>
                                 </tr>
@@ -463,21 +525,26 @@ export default function AdminAccessView({
 
                             <tbody>
 
-                                {adminUsernames.map((username) => {
+                                {[
+                                    ...adminUsernames.map((username) => ({ value: username, isEmail: false })),
+                                    ...adminEmails.map((email) => ({ value: email, isEmail: true }))
+                                ].map(({ value, isEmail }) => {
 
-                                    const patUser = findPatUser(username);
-                                    const busy = savingRow === username;
-                                    const suspended = isSuspended(username);
-                                    const toggling = blockingKey === username;
+                                    const patUser = !isEmail ? findPatUser(value) : null;
+                                    const busy = savingRow === value;
+                                    const suspended = !isEmail && isSuspended(value);
+                                    const toggling = blockingKey === value;
 
                                     return (
 
-                                        <tr key={username}>
+                                        <tr key={value}>
 
-                                            <td>@{username}</td>
+                                            <td>{isEmail ? value : `@${value}`}</td>
 
                                             <td>
-                                                {suspended ? (
+                                                {isEmail ? (
+                                                    <span className="badge badge-secondary">—</span>
+                                                ) : suspended ? (
                                                     <span className="badge badge-warning">Suspended</span>
                                                 ) : !patUser ? (
                                                     <span className="badge badge-secondary">No session</span>
@@ -492,20 +559,22 @@ export default function AdminAccessView({
 
                                                 <div className="button-row">
 
-                                                    <button
-                                                        type="button"
-                                                        className={`btn btn-sm ${suspended ? "btn-secondary" : "btn-danger"}`}
-                                                        onClick={() => handleSuspendClick(username)}
-                                                        disabled={toggling}
-                                                        aria-label={`${suspended ? "Unsuspend" : "Suspend"} @${username}`}
-                                                    >
-                                                        {toggling ? "..." : suspended ? "Unsuspend" : "Suspend"}
-                                                    </button>
+                                                    {!isEmail && (
+                                                        <button
+                                                            type="button"
+                                                            className={`btn btn-sm ${suspended ? "btn-secondary" : "btn-danger"}`}
+                                                            onClick={() => handleSuspendClick(value)}
+                                                            disabled={toggling}
+                                                            aria-label={`${suspended ? "Unsuspend" : "Suspend"} @${value}`}
+                                                        >
+                                                            {toggling ? "..." : suspended ? "Unsuspend" : "Suspend"}
+                                                        </button>
+                                                    )}
 
                                                     <button
                                                         type="button"
                                                         className="btn btn-danger btn-sm"
-                                                        onClick={() => handleRemoveAdmin(username)}
+                                                        onClick={() => handleRemoveAdmin(value)}
                                                         disabled={busy}
                                                     >
                                                         {busy ? "..." : "Remove"}
@@ -531,8 +600,12 @@ export default function AdminAccessView({
 
                 <div className="button-row" style={{ marginTop: "16px" }}>
 
-                    <button type="button" className="btn btn-danger" onClick={() => handleClear("admins", "admin allowlist")}>
-                        Clear Entire Allowlist
+                    <button type="button" className="btn btn-danger" onClick={() => handleClear("admins", "admin username allowlist")}>
+                        Clear Usernames
+                    </button>
+
+                    <button type="button" className="btn btn-danger" onClick={handleClearAdminEmails}>
+                        Clear Emails
                     </button>
 
                 </div>

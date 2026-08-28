@@ -8,6 +8,7 @@ import {
     saveDockerSettings,
     saveGitHubOAuthSettings,
     saveAdminUsernames,
+    saveAdminEmails,
     suspendAdmin,
     unsuspendAdmin,
     saveAiSettings,
@@ -161,6 +162,8 @@ export default function Settings() {
 
     const [adminUsernamesText, setAdminUsernamesText] = useState("");
     const [suspendedAdminUsernames, setSuspendedAdminUsernames] = useState([]);
+    const [adminEmailsText, setAdminEmailsText] = useState("");
+    const [savingAdminEmails, setSavingAdminEmails] = useState(false);
 
     const [aiModel, setAiModel] = useState("");
     const [aiApiKey, setAiApiKey] = useState("");
@@ -217,6 +220,7 @@ export default function Settings() {
 
             setAdminUsernamesText((data.adminGitHubUsernames || []).join(", "));
             setSuspendedAdminUsernames(data.suspendedAdminGitHubUsernames || []);
+            setAdminEmailsText((data.adminEmails || []).join(", "));
 
             setAiModel(data.aiModel || "");
             setAiApiKeyConfigured(!!data.aiApiKeyConfigured);
@@ -816,6 +820,62 @@ export default function Settings() {
 
     }
 
+    // Email equivalent of handleSaveAdmins above - see AdminAccessView's
+    // Admin Allowlist tab, which now saves to whichever of the two lists
+    // matches the format typed (an "@" means email). Same `emailsOverride`
+    // reasoning as handleSaveAdmins: a per-row Add/Remove computes its own
+    // next list and needs to save it directly rather than re-parsing
+    // adminEmailsText, which wouldn't reflect this tick's change yet.
+    async function handleSaveAdminEmails(emailsOverride) {
+
+        const emails = emailsOverride ?? adminEmailsText
+            .split(",")
+            .map((e) => e.trim())
+            .filter(Boolean);
+
+        // Bootstrap mode (AdminGate.IsAdminOrBootstrap) only kicks in when
+        // BOTH allowlists are empty at once - same "don't silently reopen
+        // an already-live portal to strangers" reasoning as
+        // handleSaveAdmins, just checked against the OTHER list too here.
+        const usernameCount = adminUsernamesText.split(",").map((u) => u.trim()).filter(Boolean).length;
+
+        if (emails.length === 0 && usernameCount === 0 && !(await confirm({
+            title: "Clear the admin allowlist?",
+            message:
+                "Both the username and email admin lists would be empty after this save, which " +
+                "leaves NO admins configured — every visitor to this portal (including strangers) " +
+                "will be treated as Admin until someone configures this again.",
+            confirmLabel: "Save Empty Allowlist",
+            danger: true
+        }))) {
+            return;
+        }
+
+        try {
+
+            setSavingAdminEmails(true);
+
+            await saveAdminEmails(emails);
+
+            toast.show("Admin allowlist saved.", "success");
+
+            load();
+
+        }
+        catch (err) {
+
+            console.error(err);
+            toast.show(err.response?.data?.message || "Failed to save admin allowlist.", "error");
+
+        }
+        finally {
+
+            setSavingAdminEmails(false);
+
+        }
+
+    }
+
     // Toggles one admin's suspended flag - unlike Remove above, the
     // username stays on the allowlist, just treated as a Viewer until
     // unsuspended (see AdminGate.IsAdminOrBootstrap). Takes effect on
@@ -1189,6 +1249,10 @@ export default function Settings() {
                     setAdminUsernamesText={setAdminUsernamesText}
                     handleSaveAdmins={handleSaveAdmins}
                     savingAdmins={savingAdmins}
+                    adminEmailsText={adminEmailsText}
+                    setAdminEmailsText={setAdminEmailsText}
+                    handleSaveAdminEmails={handleSaveAdminEmails}
+                    savingAdminEmails={savingAdminEmails}
                     suspendedAdminUsernames={suspendedAdminUsernames}
                     handleToggleSuspendAdmin={handleToggleSuspendAdmin}
                     handleClear={handleClear}

@@ -206,6 +206,18 @@ export const saveAdminUsernames = async (payload) => {
     return response.data;
 };
 
+// Email equivalent of saveAdminUsernames above - the actual source of
+// truth for Admin/Viewer role going forward, since it's the one
+// identifier every login method (email/password, Google, GitHub) can
+// resolve (see AccountAuthService.ResolveRoleSync/AuthService.
+// ExchangeCodeForUserAsync). viewerEmails is always sent empty - nothing
+// in this app currently reads that list back (every non-admin login
+// already gets Viewer by default), so there's no UI for it to manage.
+export const saveAdminEmails = async (adminEmails) => {
+    const response = await settingsApi.post("/admin-emails", { adminEmails, viewerEmails: [] });
+    return response.data;
+};
+
 // Suspends/unsuspends one admin in place (stays on the allowlist, just
 // treated as a Viewer until unsuspended) - distinct from re-saving the
 // allowlist without them, which is what Remove does instead.
