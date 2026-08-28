@@ -402,7 +402,17 @@ export default function CredentialsView({
     }
 
     const groupedModeKeys = new Set(CREDENTIAL_GROUPS.flatMap((g) => g.modes));
-    const ungroupedModes = MODES.filter((m) => !groupedModeKeys.has(m.key));
+    // "resend" (Notifications) is super-admin-only, same tier as the
+    // Render/Cloudflare/Netlify/Vercel deploy-role sections below - not
+    // just hidden from Viewers but from regular Admins too, since this
+    // controls which Resend account every login-notification email for
+    // the whole portal actually sends through. Backend independently
+    // enforces the same tier (SaveNotifications/TestNotifications now use
+    // DenyUnlessSuperAdminAsync) - this is just keeping the tab from
+    // showing a form a non-super-admin couldn't use anyway.
+    const ungroupedModes = MODES
+        .filter((m) => !groupedModeKeys.has(m.key))
+        .filter((m) => m.key !== "resend" || isSuperAdminSession);
 
     return (
 
@@ -1162,7 +1172,7 @@ export default function CredentialsView({
 
             )}
 
-            {mode === "resend" && (
+            {mode === "resend" && isSuperAdminSession && (
 
             <CredentialPinGate provider="resend" unlocked={unlockedProviders.has("resend")} onUnlocked={markAllUnlocked}>
 

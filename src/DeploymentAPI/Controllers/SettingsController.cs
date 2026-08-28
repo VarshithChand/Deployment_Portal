@@ -801,13 +801,18 @@ public class SettingsController : ControllerBase
         return Ok(await _ai.TestConnectionAsync(creds.ApiKey!, creds.Model));
     }
 
-    // Resend login-notification email - same admin-only, portal-wide,
-    // PIN-gated model as AI Assistant above. The saved view never echoes
-    // the key back, only NotificationsApiKeyConfigured/FromEmail/FromName.
+    // Super-admin-only, same tier as SaveAdmins/SuspendAdmin below - not
+    // just the general AdminGate.DenyUnlessAdminAsync every other section
+    // here uses. This controls which Resend account every login-
+    // notification email for the WHOLE portal sends through (a portal-
+    // wide setting, not per-caller), so any regular admin being able to
+    // repoint it is a bigger step than "changing settings" - same
+    // reasoning Database Management/the admin allowlist already apply to
+    // themselves.
     [HttpPost("notifications")]
     public async Task<IActionResult> SaveNotifications(NotificationSettingsUpdateDto request)
     {
-        if (await AdminGate.DenyUnlessAdminAsync(this, _settings, "change settings") is IActionResult denied)
+        if (await AdminGate.DenyUnlessSuperAdminAsync(this, "change settings") is IActionResult denied)
             return denied;
 
         if (await CredentialGate.DenyUnlessUnlockedAsync(this, _settings, _activity, "resend") is IActionResult locked)
@@ -824,7 +829,7 @@ public class SettingsController : ControllerBase
     [HttpPost("notifications/test")]
     public async Task<IActionResult> TestNotifications(EmailTestRequestDto request)
     {
-        if (await AdminGate.DenyUnlessAdminAsync(this, _settings, "send a test email") is IActionResult denied)
+        if (await AdminGate.DenyUnlessSuperAdminAsync(this, "send a test email") is IActionResult denied)
             return denied;
 
         if (string.IsNullOrWhiteSpace(request.ToEmail))
