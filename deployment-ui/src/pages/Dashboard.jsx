@@ -17,26 +17,37 @@ import CodeQualitySummaryCard from "../components/dashboard/CodeQualitySummaryCa
 import ObservabilitySummaryCard from "../components/dashboard/ObservabilitySummaryCard";
 import EnvironmentsCard from "../components/dashboard/EnvironmentsCard";
 import QuickAccessCard from "../components/dashboard/QuickAccessCard";
+import BlockersSummaryCard from "../components/dashboard/BlockersSummaryCard";
+import ErrorsSummaryCard from "../components/dashboard/ErrorsSummaryCard";
 
-// "One container, then drill in" ordering (see security_findings.txt's
-// Round 94 entry): SystemHealthCard is the single place every connected
-// integration's real status/response-time lives - what used to require
-// scanning 6+ separate summary cards to answer "is everything OK right
-// now." IntegrationFlowCard answers "how does it all connect" right
-// below it. Everything after that is unchanged in spirit from the prior
-// redesign - resource counts, activity, applications, then the per-area
-// detail cards (Source Control gets the same compact-glance-then-full-
-// browser split every other area already has), Quick Access last as a
-// standing navigation aid.
+// One screen, no page scroll - a dense CSS grid (.dashboard-grid, see
+// global.css) instead of the long single-column stack this page used to
+// be. Every card below is completely unchanged internally; only WHERE
+// each one sits and how tall its own slot is changed. Each grid cell's
+// .card scrolls its own overflow (global.css's `.dashboard-grid .card`
+// rule) instead of the page growing past the viewport - a long table or
+// list inside one panel gets its own small scrollbar, same as any real
+// ops dashboard, rather than pushing everything below it further down
+// the page.
 //
-// Every card still fetches through its OWN hook call, but almost all of
-// those hooks are now the shared ones in src/hooks/ (useCloudProviderStatus,
-// useSharedCloudInventories, usePaasApplications, useGithubDeploymentActivity,
-// useContainerRegistryStatus, useSonarStatus, useObservabilityStatus,
-// useAzureDevOpsStatus) - the same underlying data is deduped across
-// however many cards ask for it, instead of each card firing its own
-// request the way this Dashboard used to. Dashboard.jsx itself is still
-// a plain composition with no data of its own beyond `repository`.
+// Column spans below sum to 12 per row on purpose (CSS grid's default
+// auto-flow wraps to a new row the moment a row's tracks fill up, so the
+// explicit `grid-template-rows` in global.css lines up with this order
+// without any manual grid-row assignment):
+//   Row 1 (auto height)  - OverviewStats                              (12)
+//   Row 2 (tallest)       - Connections / Runs / Blockers            (4+5+3)
+//   Row 3                 - Monitoring / Errors / Domain / Cloud      (3×4)
+//   Row 4 (compact)       - 6 smaller integration summaries           (2×6)
+//   Row 5                 - Applications table / Repositories table   (6+6)
+// "Connections" = SystemHealthCard (every integration's live status),
+// "Runs" = DeploymentActivityCard, "Blockers" = pending approvals,
+// "Domain" = EnvironmentsCard (each environment's own deployed URL) -
+// the closest existing concept to "domain" this app tracks.
+//
+// Below ~1100px width (global.css) the grid reverts to a normal
+// full-width scrolling stack - a 12-column dense layout stops being
+// legible once panels get that narrow, so tablet/mobile gets the old
+// straightforward-scroll behavior back instead of illegible slivers.
 export default function Dashboard() {
 
     // Only `repository` is still needed here - it tells AllRepositoriesCard
@@ -70,61 +81,75 @@ export default function Dashboard() {
 
             }
 
-            <SystemHealthCard />
+            <div className="dashboard-grid">
 
-            <br />
+                <div style={{ gridColumn: "span 12" }}>
+                    <OverviewStats />
+                </div>
 
-            <IntegrationFlowCard />
+                <div style={{ gridColumn: "span 4" }}>
+                    <SystemHealthCard />
+                </div>
 
-            <br />
+                <div style={{ gridColumn: "span 5" }}>
+                    <DeploymentActivityCard />
+                </div>
 
-            <OverviewStats />
+                <div style={{ gridColumn: "span 3" }}>
+                    <BlockersSummaryCard />
+                </div>
 
-            <br />
+                <div style={{ gridColumn: "span 3" }}>
+                    <ObservabilitySummaryCard />
+                </div>
 
-            <DeploymentActivityCard />
+                <div style={{ gridColumn: "span 3" }}>
+                    <ErrorsSummaryCard />
+                </div>
 
-            <br />
+                <div style={{ gridColumn: "span 3" }}>
+                    <EnvironmentsCard />
+                </div>
 
-            <AllApplicationsTable />
+                <div style={{ gridColumn: "span 3" }}>
+                    <CloudServicesCard />
+                </div>
 
-            <br />
+                <div style={{ gridColumn: "span 2" }}>
+                    <IntegrationFlowCard />
+                </div>
 
-            <SourceControlSummaryCard />
+                <div style={{ gridColumn: "span 2" }}>
+                    <SourceControlSummaryCard />
+                </div>
 
-            <br />
+                <div style={{ gridColumn: "span 2" }}>
+                    <PaasSummaryCard />
+                </div>
 
-            <AllRepositoriesCard repository={repository}>
-                <AzureDevOpsCard />
-            </AllRepositoriesCard>
+                <div style={{ gridColumn: "span 2" }}>
+                    <ContainerRegistrySummaryCard />
+                </div>
 
-            <br />
+                <div style={{ gridColumn: "span 2" }}>
+                    <CodeQualitySummaryCard />
+                </div>
 
-            <CloudServicesCard />
+                <div style={{ gridColumn: "span 2" }}>
+                    <QuickAccessCard />
+                </div>
 
-            <br />
+                <div style={{ gridColumn: "span 6" }}>
+                    <AllApplicationsTable />
+                </div>
 
-            <PaasSummaryCard />
+                <div style={{ gridColumn: "span 6" }}>
+                    <AllRepositoriesCard repository={repository}>
+                        <AzureDevOpsCard />
+                    </AllRepositoriesCard>
+                </div>
 
-            <br />
-
-            <ContainerRegistrySummaryCard />
-
-            <br />
-
-            <CodeQualitySummaryCard />
-
-            <br />
-
-            <ObservabilitySummaryCard />
-
-            <br />
-
-            <EnvironmentsCard />
-
-            <br />
-
-            <QuickAccessCard />
+            </div>
 
         </PageLayout>
 
