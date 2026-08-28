@@ -89,9 +89,11 @@ export default function BlockersSummaryCard() {
                                 onClick={() => setTab("approvals")}
                             >
                                 <span className="dash-mini-list-title">{item.workflowName}</span>
-                                <span className="dash-mini-list-sub">
-                                    {item.branch} &middot; {item.triggeredBy}
-                                    {item.environments?.length > 0 && ` → ${item.environments.map((e) => e.name).join(", ")}`}
+                                <span className="dash-mini-list-sub-row">
+                                    <span className="dash-mini-list-sub">
+                                        {item.branch} &middot; {item.triggeredBy}
+                                        {item.environments?.length > 0 && ` → ${item.environments.map((e) => e.name).join(", ")}`}
+                                    </span>
                                 </span>
                             </button>
 

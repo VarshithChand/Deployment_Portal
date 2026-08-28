@@ -8165,12 +8165,14 @@ h1, h2, h3, .card-title, .page-title, .page-header h1, .stat-tile-value, .hero h
 .dashboard-grid{
     display:grid;
     grid-template-columns:repeat(12, 1fr);
-    /* Row 1: the KPI strip, sized to its own content. Rows 2-5 split the
-       remaining height - taller for the panels called out most often
-       (Connections/Runs/Blockers), progressively shorter for secondary
-       and detail-table panels, which lean on their own scroll/pagination
-       for anything that doesn't fit. */
-    grid-template-rows:auto 1.3fr 1fr 0.9fr 0.9fr;
+    /* Row 1: the KPI strip, sized to its own content. Row 2 is
+       Connections (SystemHealthCard) alone at full width - its 5 stat
+       tiles need real width to lay out in one line instead of stacking,
+       so it gets its own row rather than sharing one. Rows 3-6 split
+       the rest - taller for Runs/Blockers, progressively shorter for
+       secondary and detail-table panels, which lean on their own
+       scroll/pagination for anything that doesn't fit. */
+    grid-template-rows:auto 0.9fr 1.1fr 0.8fr 0.8fr 0.7fr;
     gap:16px;
     /* Fits within .app-content-column's flex-allocated space above
        .app-footer, MINUS PageLayout's own "Overview" .page-title row
@@ -8249,12 +8251,18 @@ h1, h2, h3, .card-title, .page-title, .page-header h1, .stat-tile-value, .hero h
     border-bottom:none;
 }
 
+/* Two lines per row - title gets the FULL width on its own line (was
+   squeezed to max-width:40% sharing a line with the subtitle before,
+   which is what truncated "SonarCloud workflow name" down to
+   "SonarCloud ..." in practice); subtitle + status badge share the
+   second line instead, where a short repo/branch string and a small
+   badge actually fit comfortably together. */
 .dash-mini-list-link{
     display:flex;
-    align-items:center;
-    gap:8px;
+    flex-direction:column;
+    gap:2px;
     width:100%;
-    padding:8px 4px;
+    padding:8px 6px;
     background:none;
     border:none;
     text-align:left;
@@ -8273,7 +8281,14 @@ h1, h2, h3, .card-title, .page-title, .page-header h1, .stat-tile-value, .hero h
     white-space:nowrap;
     overflow:hidden;
     text-overflow:ellipsis;
-    max-width:40%;
+    max-width:100%;
+}
+
+.dash-mini-list-sub-row{
+    display:flex;
+    align-items:center;
+    gap:8px;
+    min-width:0;
 }
 
 .dash-mini-list-sub{
@@ -8283,4 +8298,5 @@ h1, h2, h3, .card-title, .page-title, .page-header h1, .stat-tile-value, .hero h
     overflow:hidden;
     text-overflow:ellipsis;
     flex:1;
+    min-width:0;
 }

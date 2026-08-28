@@ -56,8 +56,10 @@ export default function ErrorsSummaryCard() {
                                 onClick={() => setTab("history")}
                             >
                                 <span className="dash-mini-list-title">{run.name || run.repo}</span>
-                                <span className="dash-mini-list-sub">{run.repo}</span>
-                                <StatusBadge status={run.conclusion} />
+                                <span className="dash-mini-list-sub-row">
+                                    <span className="dash-mini-list-sub">{run.repo}</span>
+                                    <StatusBadge status={run.conclusion} />
+                                </span>
                             </button>
 
                         </li>

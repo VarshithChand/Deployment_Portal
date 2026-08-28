@@ -11,9 +11,6 @@ import SourceControlSummaryCard from "../components/dashboard/SourceControlSumma
 import AllRepositoriesCard from "../components/dashboard/AllRepositoriesCard";
 import AzureDevOpsCard from "../components/dashboard/AzureDevOpsCard";
 import CloudServicesCard from "../components/dashboard/CloudServicesCard";
-import PaasSummaryCard from "../components/dashboard/PaasSummaryCard";
-import ContainerRegistrySummaryCard from "../components/dashboard/ContainerRegistrySummaryCard";
-import CodeQualitySummaryCard from "../components/dashboard/CodeQualitySummaryCard";
 import ObservabilitySummaryCard from "../components/dashboard/ObservabilitySummaryCard";
 import EnvironmentsCard from "../components/dashboard/EnvironmentsCard";
 import QuickAccessCard from "../components/dashboard/QuickAccessCard";
@@ -21,25 +18,40 @@ import BlockersSummaryCard from "../components/dashboard/BlockersSummaryCard";
 import ErrorsSummaryCard from "../components/dashboard/ErrorsSummaryCard";
 
 // One screen, no page scroll - a dense CSS grid (.dashboard-grid, see
-// global.css) instead of the long single-column stack this page used to
-// be. Every card below is completely unchanged internally; only WHERE
-// each one sits and how tall its own slot is changed. Each grid cell's
-// .card scrolls its own overflow (global.css's `.dashboard-grid .card`
-// rule) instead of the page growing past the viewport - a long table or
-// list inside one panel gets its own small scrollbar, same as any real
-// ops dashboard, rather than pushing everything below it further down
-// the page.
+// global.css). Every card below is completely unchanged internally; only
+// WHERE each one sits and how tall its own slot is changed. Each grid
+// cell's .card scrolls its own overflow internally instead of the page
+// growing past the viewport.
+//
+// Round 2 of this layout (first pass crammed 6 summary cards into
+// span-2 slivers - unreadable, see the truncated "Azur...", "DevC..."
+// labels that prompted this rework). Two real fixes this time, not just
+// narrower columns:
+//   - SystemHealthCard ("Connections") gets its OWN full-width row. Its
+//     5 stat tiles use a `minmax(260px,1fr)` auto-fit grid internally -
+//     squeezed into a shared 4-of-12-column slot, they had nowhere to go
+//     but stack into 5 separate rows, pushing its own status table out
+//     of view and forcing a stray horizontal scrollbar. Full width lets
+//     them lay out in one row like they're meant to.
+//   - PaasSummaryCard/ContainerRegistrySummaryCard/CodeQualitySummaryCard
+//     are dropped from this page entirely - SystemHealthCard's own
+//     status table already lists every one of those same integrations
+//     by category (see the screenshot that prompted this: "Container
+//     Registries / Container Registry / Healthy" is already a row
+//     there). They were duplicate information taking up a whole slot
+//     each, not information this page was missing - still reachable
+//     from the Sidebar like every other page, just not doubled up here.
 //
 // Column spans below sum to 12 per row on purpose (CSS grid's default
-// auto-flow wraps to a new row the moment a row's tracks fill up, so the
+// auto-flow wraps to a new row once a row's tracks fill up, so the
 // explicit `grid-template-rows` in global.css lines up with this order
 // without any manual grid-row assignment):
-//   Row 1 (auto height)  - OverviewStats                              (12)
-//   Row 2 (tallest)       - Connections / Runs / Blockers            (4+5+3)
-//   Row 3                 - Monitoring / Errors / Domain / Cloud      (3×4)
-//   Row 4 (compact)       - 6 smaller integration summaries           (2×6)
-//   Row 5                 - Applications table / Repositories table   (6+6)
-// "Connections" = SystemHealthCard (every integration's live status),
+//   Row 1 (auto)     - OverviewStats                                (12)
+//   Row 2             - Connections (SystemHealthCard), full width   (12)
+//   Row 3 (tallest)   - Runs / Blockers                             (8+4)
+//   Row 4             - Monitoring / Errors / Domain               (4×3)
+//   Row 5             - Cloud Services / Source Control / Flow    (5+4+3)
+//   Row 6 (shortest)  - Quick Access / Applications / Repositories  (4×3)
 // "Runs" = DeploymentActivityCard, "Blockers" = pending approvals,
 // "Domain" = EnvironmentsCard (each environment's own deployed URL) -
 // the closest existing concept to "domain" this app tracks.
@@ -87,63 +99,51 @@ export default function Dashboard() {
                     <OverviewStats />
                 </div>
 
-                <div style={{ gridColumn: "span 4" }}>
+                <div style={{ gridColumn: "span 12" }}>
                     <SystemHealthCard />
                 </div>
 
-                <div style={{ gridColumn: "span 5" }}>
+                <div style={{ gridColumn: "span 8" }}>
                     <DeploymentActivityCard />
                 </div>
 
-                <div style={{ gridColumn: "span 3" }}>
+                <div style={{ gridColumn: "span 4" }}>
                     <BlockersSummaryCard />
                 </div>
 
-                <div style={{ gridColumn: "span 3" }}>
+                <div style={{ gridColumn: "span 4" }}>
                     <ObservabilitySummaryCard />
                 </div>
 
-                <div style={{ gridColumn: "span 3" }}>
+                <div style={{ gridColumn: "span 4" }}>
                     <ErrorsSummaryCard />
                 </div>
 
-                <div style={{ gridColumn: "span 3" }}>
+                <div style={{ gridColumn: "span 4" }}>
                     <EnvironmentsCard />
                 </div>
 
-                <div style={{ gridColumn: "span 3" }}>
+                <div style={{ gridColumn: "span 5" }}>
                     <CloudServicesCard />
                 </div>
 
-                <div style={{ gridColumn: "span 2" }}>
-                    <IntegrationFlowCard />
-                </div>
-
-                <div style={{ gridColumn: "span 2" }}>
+                <div style={{ gridColumn: "span 4" }}>
                     <SourceControlSummaryCard />
                 </div>
 
-                <div style={{ gridColumn: "span 2" }}>
-                    <PaasSummaryCard />
+                <div style={{ gridColumn: "span 3" }}>
+                    <IntegrationFlowCard />
                 </div>
 
-                <div style={{ gridColumn: "span 2" }}>
-                    <ContainerRegistrySummaryCard />
-                </div>
-
-                <div style={{ gridColumn: "span 2" }}>
-                    <CodeQualitySummaryCard />
-                </div>
-
-                <div style={{ gridColumn: "span 2" }}>
+                <div style={{ gridColumn: "span 4" }}>
                     <QuickAccessCard />
                 </div>
 
-                <div style={{ gridColumn: "span 6" }}>
+                <div style={{ gridColumn: "span 4" }}>
                     <AllApplicationsTable />
                 </div>
 
-                <div style={{ gridColumn: "span 6" }}>
+                <div style={{ gridColumn: "span 4" }}>
                     <AllRepositoriesCard repository={repository}>
                         <AzureDevOpsCard />
                     </AllRepositoriesCard>
