@@ -1,0 +1,22 @@
+name: Keep Backend Awake
+
+# Render's free tier spins the deployment-portal-sec0 service down after
+# ~15 minutes with no traffic - the next request then pays a 15-60s cold
+# start. Pinging the health endpoint often enough that it never goes that
+# long idle keeps the portal responsive for anyone opening it after a gap,
+# without needing a paid Render plan.
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Ping backend health endpoint
+        run: |
+          curl -sf -o /dev/null -w "HTTP %{http_code} in %{time_total}s\n" \
+            https://deployment-portal-sec0.onrender.com/api/health
