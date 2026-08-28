@@ -723,9 +723,21 @@ public class CloudServicesController : ControllerBase
     // link - a known, already-accepted limitation (see ActivityLogService's
     // own comment), not a persisted audit store.
 
+    // Admin-gated, not just RequireAuth - ActivityLogService.GetRecent()
+    // is a single portal-wide log with no per-account scoping at all, the
+    // exact same underlying store LogsController/SecurityAuditLogController
+    // already gate behind AdminGate for that reason. This action was
+    // missing that check entirely (a leftover gap, not a deliberate
+    // choice - every other action in this controller already requires at
+    // least RequireAuth) - any caller, logged in or not, could pull any
+    // other account's Cloud Services action history by guessing/trying
+    // resource names.
     [HttpGet("audit")]
-    public IActionResult GetResourceAuditHistory([FromQuery] string resource)
+    public async Task<IActionResult> GetResourceAuditHistory([FromQuery] string resource)
     {
+        if (await AdminGate.DenyUnlessAdminAsync(this, _settings, "view the activity log") is IActionResult denied)
+            return denied;
+
         if (string.IsNullOrWhiteSpace(resource))
             return Ok(new List<LogEntryDto>());
 

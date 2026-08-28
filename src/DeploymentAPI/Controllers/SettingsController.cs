@@ -59,11 +59,19 @@ public class SettingsController : ControllerBase
         // usernames to an anonymous/non-admin visitor once configured is
         // pure reconnaissance value (exactly who to target to gain admin
         // access here) for no functional benefit, since they can't act on
-        // it either way.
+        // it either way. SuspendedAdmin* and SuperAdminEmail are the exact
+        // same reconnaissance risk (an anonymous caller could hit this
+        // endpoint with no login at all and learn precisely who to
+        // target/phish) and aren't used by any pre-login/non-admin UI
+        // either - SuperAdminEmail in particular has no frontend reader at
+        // all, it was just never blanked here.
         if (!view.IsAdminSession)
         {
             view.AdminGitHubUsernames = new List<string>();
             view.AdminEmails = new List<string>();
+            view.SuspendedAdminGitHubUsernames = new List<string>();
+            view.SuspendedAdminEmails = new List<string>();
+            view.SuperAdminEmail = null;
         }
 
         return Ok(view);

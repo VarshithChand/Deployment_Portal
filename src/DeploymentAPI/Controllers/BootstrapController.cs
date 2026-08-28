@@ -74,11 +74,18 @@ public class BootstrapController : ControllerBase
         settingsView.GrantedPages = await _settings.GetGrantedPagesForLoginAsync(callerLogin);
 
         // Same reconnaissance-value reasoning as SettingsController.Get -
-        // only an admin (or bootstrap mode) gets the real allowlist.
+        // only an admin (or bootstrap mode) gets the real allowlist. Also
+        // blanks SuspendedAdmin*/SuperAdminEmail for the same reason - this
+        // endpoint is hit by every visitor, logged in or not, before
+        // login even happens, so any field left un-blanked here is
+        // effectively public with zero auth required at all.
         if (!settingsView.IsAdminSession)
         {
             settingsView.AdminGitHubUsernames = new List<string>();
             settingsView.AdminEmails = new List<string>();
+            settingsView.SuspendedAdminGitHubUsernames = new List<string>();
+            settingsView.SuspendedAdminEmails = new List<string>();
+            settingsView.SuperAdminEmail = null;
         }
 
         // These four are independent of each other and of the isAdmin
