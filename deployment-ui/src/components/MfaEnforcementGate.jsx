@@ -2,6 +2,7 @@ import { lazy, Suspense, useState } from "react";
 
 import useAuth from "../hooks/useAuth";
 import { skipMfaNudge } from "../services/settingsService";
+import performSignOut from "../utils/performSignOut";
 
 // Lazy, not a normal import - this component is mounted eagerly in App.jsx
 // (it has to be, to decide on every render whether to block the app), but
@@ -22,12 +23,14 @@ const MfaSection = lazy(() => import("./settings/credentials/MfaSection"));
 //     PortalUserAccount.MustSetUpMfa/MfaPolicy) - or (b) this session has
 //     an AWS/Azure/GCP credential saved (or an admin flagged it Required),
 //     MFA isn't enabled yet, and the 2-skip budget is spent. Either way,
-//     renders a full, non-dismissible page in place of the app shell -
-//     same "renders instead of children" precedent PinLockScreen already
-//     established for the screen-lock PIN, and (for "mustSetUp"
-//     specifically) what makes "register -> verify email -> MFA ->
-//     dashboard" a real server-enforced sequence instead of a one-time
-//     frontend redirect a refresh could quietly skip past.
+//     renders a full page in place of the app shell - same "renders
+//     instead of children" precedent PinLockScreen already established for
+//     the screen-lock PIN, and (for "mustSetUp" specifically) what makes
+//     "register -> verify email -> MFA -> dashboard" a real server-
+//     enforced sequence instead of a one-time frontend redirect a refresh
+//     could quietly skip past. Its own Cancel button doesn't weaken that -
+//     it signs the session out entirely rather than letting it through, so
+//     the only way past this screen is still finishing real enrollment.
 //   - show (not blocked): a small dismissible bottom banner. Free to
 //     skip - "Skip" always succeeds, it just also feeds the skip counter
 //     that eventually flips `blocked` once BOTH mandatory (a cloud
@@ -42,6 +45,21 @@ export default function MfaEnforcementGate() {
     const [dismissedForNow, setDismissedForNow] = useState(false);
     const [enrollOpen, setEnrollOpen] = useState(false);
     const [skipping, setSkipping] = useState(false);
+    const [signingOut, setSigningOut] = useState(false);
+
+    // Not a skip - performSignOut clears this session entirely (the same
+    // sign-out Settings' own Danger Zone uses), landing back on the plain
+    // login page. The account itself still needs MFA set up the next time
+    // anyone signs into it (see MfaPolicy.EvaluateAsync) - this only lets
+    // someone abandon a session they're stuck on (wrong account, no
+    // authenticator app handy right now, etc.) instead of being trapped
+    // behind this screen with no way out but closing the tab.
+    async function handleCancel() {
+
+        setSigningOut(true);
+        await performSignOut();
+
+    }
 
     async function handleSkip() {
 
@@ -91,6 +109,12 @@ export default function MfaEnforcementGate() {
                     <Suspense fallback={<p className="field-hint">Loading...</p>}>
                         <MfaSection onEnrolled={refresh} />
                     </Suspense>
+
+                    <div className="button-row" style={{ marginTop: 16, justifyContent: "center" }}>
+                        <button type="button" className="btn" onClick={handleCancel} disabled={signingOut}>
+                            {signingOut ? "Signing out..." : "Cancel"}
+                        </button>
+                    </div>
 
                 </div>
 
