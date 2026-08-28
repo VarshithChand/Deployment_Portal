@@ -11,6 +11,15 @@ name: SonarCloud Analysis
 #   SONAR_TOKEN         - a SonarCloud token with "Execute Analysis" on this project
 #   SONAR_ORGANIZATION  - your SonarCloud organization key
 #   SONAR_PROJECT_KEY    - this project's key (must match what's saved in the portal)
+#
+# sonar.cpd.exclusions below only opts these two files OUT of duplication
+# (copy-paste) detection - they're still fully scanned for every other
+# rule. Both are large static data catalogs (AWS/Azure service names,
+# categories, icons) - SonarCloud's duplication detector flags their
+# structurally-similar-but-semantically-distinct entries as copy-paste,
+# which isn't something refactoring could meaningfully fix (there's no
+# shared logic to extract from a data table), unlike genuine duplicated
+# code elsewhere in the project.
 ##############################################################################
 
 on:
@@ -89,7 +98,8 @@ jobs:
             /d:sonar.token="$SONAR_TOKEN" \
             /d:sonar.host.url="https://sonarcloud.io" \
             /d:sonar.sources="src,deployment-ui/src" \
-            /d:sonar.exclusions="**/bin/**,**/obj/**,deployment-ui/dist/**,deployment-ui/node_modules/**"
+            /d:sonar.exclusions="**/bin/**,**/obj/**,deployment-ui/dist/**,deployment-ui/node_modules/**" \
+            /d:sonar.cpd.exclusions="deployment-ui/src/data/awsServiceCatalog.js,deployment-ui/src/data/azureServiceCatalog.js"
 
       - name: Restore And Build All Projects
         run: |

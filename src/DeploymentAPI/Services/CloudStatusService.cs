@@ -1180,6 +1180,16 @@ public class CloudStatusService
             return result;
         }
 
+        // resourceId gets concatenated directly after the hardcoded ARM
+        // host below - see SsrfGuard.IsValidAzureResourceId for why an
+        // unvalidated value here is a real SSRF risk (the userinfo-
+        // authority trick), not just a theoretical one.
+        if (!SsrfGuard.IsValidAzureResourceId(resourceId))
+        {
+            result.Error = "Invalid resource ID.";
+            return result;
+        }
+
         try
         {
             var token = await GetAzureAccessTokenAsync(credentials.TenantId!, credentials.ClientId!, credentials.ClientSecret!);

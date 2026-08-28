@@ -108,7 +108,7 @@ public class AccountAuthService
     private async Task<string?> DeriveUniqueUsernameAsync(string normalizedEmail)
     {
         var localPart = normalizedEmail.Split('@')[0];
-        var baseUsername = Regex.Replace(localPart, "[^a-z0-9._-]", "");
+        var baseUsername = Regex.Replace(localPart, "[^a-z0-9._-]", "", RegexOptions.None, TimeSpan.FromSeconds(1));
 
         if (string.IsNullOrWhiteSpace(baseUsername))
             baseUsername = "user";

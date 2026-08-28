@@ -712,7 +712,7 @@ public class SecurityTestingScanService
 
             findings.Add(new SecurityFindingDto
             {
-                Severity = status is 401 or 403 ? "LOW" : status is >= 200 and < 300 ? "INFO" : "INFO",
+                Severity = status is 401 or 403 ? "LOW" : "INFO",
                 Title = status is 401 or 403
                     ? $"{path} appears to require authentication (HTTP {status})"
                     : status is >= 200 and < 300

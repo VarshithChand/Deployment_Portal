@@ -18,8 +18,8 @@ public static class SecretRedaction
 
     private static readonly System.Text.RegularExpressions.Regex[] SecretLinePatterns =
     {
-        new(@"AKIA[0-9A-Z]{16}", System.Text.RegularExpressions.RegexOptions.Compiled),
-        new(@"(?i)(password|passwd|secret|token|api[_-]?key)\s*[:=]\s*\S+", System.Text.RegularExpressions.RegexOptions.Compiled)
+        new(@"AKIA[0-9A-Z]{16}", System.Text.RegularExpressions.RegexOptions.Compiled, TimeSpan.FromSeconds(1)),
+        new(@"(?i)(password|passwd|secret|token|api[_-]?key)\s*[:=]\s*\S+", System.Text.RegularExpressions.RegexOptions.Compiled, TimeSpan.FromSeconds(1))
     };
 
     public static string RedactLogLine(string line)

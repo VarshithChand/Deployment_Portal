@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Sockets;
+using System.Text.RegularExpressions;
 
 namespace DeploymentAPI.Helpers;
 
@@ -78,4 +79,39 @@ public static class SsrfGuard
 
         return false;
     }
+
+    // Azure resource IDs (nsgResourceId, resourceId) get concatenated
+    // directly after the hardcoded "https://management.azure.com" host in
+    // several ARM calls (CloudServiceManagementService's NSG rule methods,
+    // CloudStatusService.GetAzureResourceDetailAsync) - a caller-supplied
+    // value, not one this app generates itself. Uri.EscapeDataString isn't
+    // an option there (it would also escape the "/" separators a multi-
+    // segment resource ID needs), so this instead requires the WHOLE
+    // string to already be exactly the safe shape a real ARM resource ID
+    // has: only [A-Za-z0-9._()/-], never "@", ":", "?", "#", or whitespace.
+    // That closes the userinfo-authority trick a raw "@" would otherwise
+    // allow (a value like "@evil.com/x" turns "https://management.azure.
+    // com@evil.com/x" into a request to evil.com, with management.azure.
+    // com merely read as bogus userinfo) - which would also hand that
+    // request's live Azure Bearer token to whatever host it retargeted to.
+    private static readonly Regex AzureResourceIdRegex = new(
+        @"^/subscriptions/[A-Za-z0-9-]{36}/resourceGroups/[A-Za-z0-9._()-]{1,90}/providers/[A-Za-z0-9./_-]+$",
+        RegexOptions.None, TimeSpan.FromSeconds(1));
+
+    public static bool IsValidAzureResourceId(string? resourceId) =>
+        !string.IsNullOrWhiteSpace(resourceId) && AzureResourceIdRegex.IsMatch(resourceId);
+
+    // Same reasoning as IsValidAzureResourceId, for the ACR loginServer
+    // that becomes the actual outbound request HOST (not just a path
+    // segment) in CloudServiceManagementService's ACR methods - here an
+    // unvalidated value is a direct arbitrary-host SSRF, not just the
+    // userinfo trick, and the request carries a live Azure Bearer token.
+    // Real ACR login servers are always exactly "<name>.azurecr.io" -
+    // Azure's own naming rule for the registry name part is 5-50 lowercase
+    // alphanumeric characters.
+    private static readonly Regex AcrLoginServerRegex = new(
+        @"^[a-z0-9]{5,50}\.azurecr\.io$", RegexOptions.None, TimeSpan.FromSeconds(1));
+
+    public static bool IsValidAcrLoginServer(string? loginServer) =>
+        !string.IsNullOrWhiteSpace(loginServer) && AcrLoginServerRegex.IsMatch(loginServer);
 }

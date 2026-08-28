@@ -368,6 +368,14 @@ public class CloudServiceManagementService
 
     private static async Task<string?> GetAcrAccessTokenAsync(UserAzureCredentials credentials, string loginServer)
     {
+        // Every ACR call in this class routes through here first, and
+        // loginServer becomes the outbound request's actual HOST below
+        // (not just a path segment) - an unvalidated value is a direct
+        // arbitrary-host SSRF that would also hand this Azure Bearer token
+        // to whatever host it names. See SsrfGuard.IsValidAcrLoginServer.
+        if (!SsrfGuard.IsValidAcrLoginServer(loginServer))
+            return null;
+
         var aadToken = await CloudStatusService.GetAzureAccessTokenAsync(credentials.TenantId!, credentials.ClientId!, credentials.ClientSecret!);
 
         if (aadToken == null)
@@ -922,7 +930,7 @@ public class CloudServiceManagementService
     // publisher/offer/sku strings, VM creation fails with ARM's own real
     // "image not found" error (surfaced via DescribeArmErrorAsync), not a
     // silent wrong image.
-    public static readonly Dictionary<string, string> VmSizeCatalog = new(StringComparer.OrdinalIgnoreCase)
+    public static readonly IReadOnlyDictionary<string, string> VmSizeCatalog = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
     {
         ["Standard_B1s"] = "B1s — 1 vCPU, 1 GiB RAM (burstable, smallest)",
         ["Standard_B2s"] = "B2s — 2 vCPU, 4 GiB RAM (burstable)",
@@ -932,7 +940,7 @@ public class CloudServiceManagementService
 
     public record VmImageRef(string Publisher, string Offer, string Sku, string Version, bool IsWindows, string Label);
 
-    public static readonly Dictionary<string, VmImageRef> VmImageCatalog = new(StringComparer.OrdinalIgnoreCase)
+    public static readonly IReadOnlyDictionary<string, VmImageRef> VmImageCatalog = new Dictionary<string, VmImageRef>(StringComparer.OrdinalIgnoreCase)
     {
         ["ubuntu-22-04"] = new VmImageRef("Canonical", "0001-com-ubuntu-server-jammy", "22_04-lts-gen2", "latest", false, "Ubuntu Server 22.04 LTS"),
         ["windows-server-2022"] = new VmImageRef("MicrosoftWindowsServer", "WindowsServer", "2022-datacenter-azure-edition", "latest", true, "Windows Server 2022 Datacenter")
@@ -1779,6 +1787,16 @@ public class CloudServiceManagementService
             return result;
         }
 
+        // nsgResourceId gets concatenated directly after the hardcoded ARM
+        // host below - see SsrfGuard.IsValidAzureResourceId for why an
+        // unvalidated value here is a real SSRF risk, not just a
+        // theoretical one.
+        if (!SsrfGuard.IsValidAzureResourceId(nsgResourceId))
+        {
+            result.Error = "Invalid network security group resource ID.";
+            return result;
+        }
+
         try
         {
             var token = await CloudStatusService.GetAzureAccessTokenAsync(credentials.TenantId!, credentials.ClientId!, credentials.ClientSecret!);
@@ -1829,6 +1847,11 @@ public class CloudServiceManagementService
         if (string.IsNullOrWhiteSpace(nsgResourceId))
             return new CloudServiceActionResultDto { Success = false, Error = "This VM has no network security group attached." };
 
+        // See SsrfGuard.IsValidAzureResourceId - nsgResourceId gets
+        // concatenated directly after the hardcoded ARM host below.
+        if (!SsrfGuard.IsValidAzureResourceId(nsgResourceId))
+            return new CloudServiceActionResultDto { Success = false, Error = "Invalid network security group resource ID." };
+
         try
         {
             var token = await CloudStatusService.GetAzureAccessTokenAsync(credentials.TenantId!, credentials.ClientId!, credentials.ClientSecret!);
@@ -1875,6 +1898,11 @@ public class CloudServiceManagementService
 
         if (string.IsNullOrWhiteSpace(nsgResourceId))
             return new CloudServiceActionResultDto { Success = false, Error = "This VM has no network security group attached." };
+
+        // See SsrfGuard.IsValidAzureResourceId - nsgResourceId gets
+        // concatenated directly after the hardcoded ARM host below.
+        if (!SsrfGuard.IsValidAzureResourceId(nsgResourceId))
+            return new CloudServiceActionResultDto { Success = false, Error = "Invalid network security group resource ID." };
 
         try
         {
@@ -2737,7 +2765,8 @@ public class CloudServiceManagementService
             if (string.IsNullOrWhiteSpace(image))
                 return result;
 
-            var ecrMatch = System.Text.RegularExpressions.Regex.Match(image, @"^\d+\.dkr\.ecr\.[a-z0-9-]+\.amazonaws\.com/([^:]+):?(.*)$");
+            var ecrMatch = System.Text.RegularExpressions.Regex.Match(image, @"^\d+\.dkr\.ecr\.[a-z0-9-]+\.amazonaws\.com/([^:]+):?(.*)$",
+                System.Text.RegularExpressions.RegexOptions.None, TimeSpan.FromSeconds(1));
 
             if (!ecrMatch.Success)
                 return result;
