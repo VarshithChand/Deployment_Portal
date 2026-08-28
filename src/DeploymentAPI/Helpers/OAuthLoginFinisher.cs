@@ -46,7 +46,8 @@ public static class OAuthLoginFinisher
         {
             try
             {
-                await email.SendLoginNotificationAsync(userEmail, userId, DateTime.UtcNow);
+                var displayLogin = await RequireAuth.ResolveDisplayLoginAsync(userId, userEmail, settings);
+                await email.SendLoginNotificationAsync(userEmail, displayLogin, DateTime.UtcNow);
             }
             catch (Exception)
             {

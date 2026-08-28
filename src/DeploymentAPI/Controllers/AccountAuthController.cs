@@ -260,7 +260,8 @@ public class AccountAuthController : ControllerBase
         {
             try
             {
-                await _email.SendLoginNotificationAsync(email, userId, DateTime.UtcNow);
+                var displayLogin = await RequireAuth.ResolveDisplayLoginAsync(userId, email, _settings);
+                await _email.SendLoginNotificationAsync(email, displayLogin, DateTime.UtcNow);
             }
             catch (Exception)
             {
