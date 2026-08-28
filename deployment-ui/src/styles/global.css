@@ -8222,6 +8222,18 @@ h1, h2, h3, .card-title, .page-title, .page-header h1, .stat-tile-value, .hero h
     overflow-x:auto;
 }
 
+/* The "nothing connected yet" onboarding banner (DashboardGetStartedBanner)
+   that replaces the hero strip's tiles entirely when zero integrations are
+   connected - a solid accent top border is enough to read as "this one
+   wants your attention" without a full tinted-background treatment that
+   would need its own light/dark tuning. border-image would ignore .card's
+   border-radius and cut across the rounded corners, so a plain border-color
+   on just the top edge instead. */
+.dashboard-grid .dash-get-started{
+    border-top:3px solid var(--heading-accent);
+    max-height:none;
+}
+
 @media (max-width:1100px){
 
     .dashboard-grid{

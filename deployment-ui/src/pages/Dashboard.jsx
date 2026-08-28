@@ -2,9 +2,9 @@ import { useGithubResources } from "../hooks/useGithubResources";
 
 import PageLayout from "../components/layout/PageLayout";
 
+import DashboardOverviewStrip from "../components/dashboard/DashboardOverviewStrip";
 import SystemHealthCard from "../components/dashboard/SystemHealthCard";
 import IntegrationFlowCard from "../components/dashboard/IntegrationFlowCard";
-import OverviewStats from "../components/dashboard/OverviewStats";
 import DeploymentActivityCard from "../components/dashboard/DeploymentActivityCard";
 import AllApplicationsTable from "../components/dashboard/AllApplicationsTable";
 import SourceControlSummaryCard from "../components/dashboard/SourceControlSummaryCard";
@@ -17,71 +17,58 @@ import QuickAccessCard from "../components/dashboard/QuickAccessCard";
 import BlockersSummaryCard from "../components/dashboard/BlockersSummaryCard";
 import ErrorsSummaryCard from "../components/dashboard/ErrorsSummaryCard";
 
-// A dense 12-column CSS grid (.dashboard-grid, see global.css) instead of
-// the long single-column stack this page used to be. Every card below is
-// completely unchanged internally; only WHERE each one sits, how wide its
-// slot is, and how tall it's ALLOWED to grow changed.
+// Round 4 - a real rework, not another span/order shuffle on the same
+// skeleton. Two things drove it:
 //
-// Round 3 of this layout. Round 1 crammed 6 summary cards into span-2
-// slivers (unreadable). Round 2 fixed that but forced the whole grid to a
-// fixed viewport-height split into fixed-fraction rows, which assumed
-// every panel always has something to show - a screenshot caught
-// DeploymentActivityCard (Runs) and BlockersSummaryCard both rendering
-// nothing (no runs yet, no pending approvals) and their WHOLE row still
-// claiming its full height share as blank space, which squeezed every
-// row after it. Rows now size to their own content instead
-// (grid-auto-rows:min-content in global.css) - an empty panel just takes
-// the small height its empty-state message needs, freeing that space for
-// whatever comes next rather than permanently reserving it. Each .card
-// still caps its own height and scrolls internally, so one panel with a
-// lot of real content can't dominate the page - see .dash-card-lg below
-// for the few panels (System Health, Applications, Repositories) that get
-// a taller cap than the rest since they carry genuinely more content.
+// 1. A production DB swap wiped every saved credential mid-session, and
+//    the round-3 layout responded to "nothing connected" with a wall of
+//    separate "Not Connected"/"0" cards - technically correct, but reads
+//    as broken rather than empty. DashboardOverviewStrip now owns that
+//    decision once, centrally: zero integrations connected swaps the
+//    entire hero row for one onboarding banner with a single next action,
+//    instead of a dozen panels each saying the same "nothing here" thing
+//    their own way.
+// 2. System Health's own 5 summary tiles (Overall Status/Connected/
+//    Healthy/etc) used to sit stacked directly above its own Connections
+//    table, both fighting for the same "how's everything doing" job. The
+//    tiles moved into the hero strip (SystemHealthTiles, reading the same
+//    useSystemHealthSummary the table reads - see that hook and
+//    SystemHealthCard) so the table further down is free to just be the
+//    table, and the hero strip is one place that answers "is anything
+//    wrong" before scrolling to a single row of it.
 //
-// This trades a hard guarantee of zero page scroll (Round 2's promise,
-// which broke down the moment a panel's content varied) for a layout
-// that never shows a dead-space band regardless of which integrations
-// happen to be connected in a given environment - in practice, on an
-// account with most things configured, everything still fits in view;
-// on a sparser one, whatever's genuinely missing just takes less room
-// instead of a placeholder that looks broken.
+// Everything below the hero keeps round 3's content-adaptive grid
+// (grid-auto-rows:min-content, per-card max-height + internal scroll -
+// see .dashboard-grid in global.css) since that part was working: no
+// panel's empty state can starve another panel's height anymore. What
+// changed is the grouping itself:
+//   Hero strip (resource counts + health tiles, or the onboarding banner)  (12)
+//   Connections (the detailed per-integration table)                      (12)
+//   Runs                              /  Errors + Blockers stacked        (8+4)
+//   Monitoring / Domain / Cloud Services                                (4×3)
+//   Source Control / Integration Flow / Quick Access                    (4×3)
+//   Applications table          /  Repositories table                     (6+6)
+// "Domain" = EnvironmentsCard (each environment's own deployed URL) - the
+// closest existing concept to "domain" this app tracks. Applications and
+// Repositories each get half the page's width now instead of sharing a
+// row with Quick Access - both are real data tables and benefit more from
+// width than the summary cards around them do.
 //
-// Column spans below sum to 12 per row on purpose (CSS grid's default
-// auto-flow wraps to a new row once a row's tracks fill up):
-//   OverviewStats                                                  (12)
-//   Connections (SystemHealthCard), full width - its 5 stat tiles
-//     need real width to lay out in one line instead of stacking     (12)
-//   Runs / Blockers                                                (8+4)
-//   Monitoring / Errors / Domain                                  (4×3)
-//   Cloud Services / Source Control / Integration Flow           (5+4+3)
-//   Quick Access / Applications table / Repositories table         (4×3)
-// "Domain" = EnvironmentsCard (each environment's own deployed URL) -
-// the closest existing concept to "domain" this app tracks.
-//
-// PaasSummaryCard/ContainerRegistrySummaryCard/CodeQualitySummaryCard are
-// deliberately NOT here - SystemHealthCard's own status table already
-// lists every one of those same integrations by category, so they were
-// duplicate information taking up a whole slot each. Still reachable
-// from the Sidebar like every other page, just not doubled up here.
-//
-// Below ~1100px width (global.css) the grid drops to one column and
-// every panel goes full-width - a 12-column dense layout stops being
-// legible once panels get that narrow.
+// Below ~1100px width (global.css) the grid drops to one column and every
+// panel goes full-width.
 export default function Dashboard() {
 
     // Only `repository` is still needed here - it tells AllRepositoriesCard
-    // which card to mark "Current". branches/artifacts/workflows backed the
+    // which card to mark "Current". branches/artifacts/workflows backed a
     // removed Repository Statistics card; still fetched by the shared hook
     // (Deploy needs them too) but no longer read on this page.
     //
-    // Deliberately NOT blocking the page on `loading` here anymore - this
-    // hook's loading starts true and only clears once AuthContext's own
-    // bootstrap check resolves, so gating the whole Dashboard behind it
-    // meant the page title and every card's own shell sat behind a blank
-    // spinner for a full network round trip. Each card already manages its
-    // own loading/empty state independently - none of them actually needed
-    // this page-level gate to behave correctly, only to paint later than
-    // they had to.
+    // Deliberately NOT blocking the page on `loading` here - this hook's
+    // loading starts true and only clears once AuthContext's own bootstrap
+    // check resolves, so gating the whole Dashboard behind it meant the
+    // page title and every card's own shell sat behind a blank spinner for
+    // a full network round trip. Each card already manages its own
+    // loading/empty state independently.
     const { repository, error } = useGithubResources({ includeRepository: true });
 
     return (
@@ -103,7 +90,7 @@ export default function Dashboard() {
             <div className="dashboard-grid">
 
                 <div style={{ gridColumn: "span 12" }}>
-                    <OverviewStats />
+                    <DashboardOverviewStrip />
                 </div>
 
                 <div className="dash-card-lg" style={{ gridColumn: "span 12" }}>
@@ -114,7 +101,8 @@ export default function Dashboard() {
                     <DeploymentActivityCard />
                 </div>
 
-                <div style={{ gridColumn: "span 4" }}>
+                <div style={{ gridColumn: "span 4", display: "flex", flexDirection: "column", gap: "16px" }}>
+                    <ErrorsSummaryCard />
                     <BlockersSummaryCard />
                 </div>
 
@@ -123,14 +111,10 @@ export default function Dashboard() {
                 </div>
 
                 <div style={{ gridColumn: "span 4" }}>
-                    <ErrorsSummaryCard />
-                </div>
-
-                <div style={{ gridColumn: "span 4" }}>
                     <EnvironmentsCard />
                 </div>
 
-                <div style={{ gridColumn: "span 5" }}>
+                <div style={{ gridColumn: "span 4" }}>
                     <CloudServicesCard />
                 </div>
 
@@ -138,7 +122,7 @@ export default function Dashboard() {
                     <SourceControlSummaryCard />
                 </div>
 
-                <div style={{ gridColumn: "span 3" }}>
+                <div style={{ gridColumn: "span 4" }}>
                     <IntegrationFlowCard />
                 </div>
 
@@ -146,11 +130,11 @@ export default function Dashboard() {
                     <QuickAccessCard />
                 </div>
 
-                <div className="dash-card-lg" style={{ gridColumn: "span 4" }}>
+                <div className="dash-card-lg" style={{ gridColumn: "span 6" }}>
                     <AllApplicationsTable />
                 </div>
 
-                <div className="dash-card-lg" style={{ gridColumn: "span 4" }}>
+                <div className="dash-card-lg" style={{ gridColumn: "span 6" }}>
                     <AllRepositoriesCard repository={repository}>
                         <AzureDevOpsCard />
                     </AllRepositoriesCard>
