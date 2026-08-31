@@ -1568,7 +1568,15 @@ public class GitHubApiService
 
         CommitSha = x["head_sha"]?.ToString() ?? string.Empty,
 
-        HtmlUrl = x["html_url"]?.ToString() ?? string.Empty
+        HtmlUrl = x["html_url"]?.ToString() ?? string.Empty,
+
+        RunStartedAt = DateTime.TryParse(x["run_started_at"]?.ToString(), out var startedAt)
+            ? startedAt
+            : null,
+
+        UpdatedAt = DateTime.TryParse(x["updated_at"]?.ToString(), out var updatedAt)
+            ? updatedAt
+            : null
     };
 
     //===========================================================

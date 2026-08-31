@@ -26,4 +26,13 @@ public class WorkflowDto
     public string CommitSha { get; set; } = string.Empty;
 
     public string HtmlUrl { get; set; } = string.Empty;
+
+    // Both already come free in the same runs-list response GitHub returns
+    // for CreatedAt/Branch/etc above - added for the Dashboard's flight
+    // board to show a real run duration (UpdatedAt - RunStartedAt once the
+    // run has finished) instead of inventing one. Null for a run that
+    // hasn't started executing yet (still queued).
+    public DateTime? RunStartedAt { get; set; }
+
+    public DateTime? UpdatedAt { get; set; }
 }
