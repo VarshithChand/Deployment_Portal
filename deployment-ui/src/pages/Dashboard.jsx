@@ -17,35 +17,33 @@ import QuickAccessCard from "../components/dashboard/QuickAccessCard";
 import BlockersSummaryCard from "../components/dashboard/BlockersSummaryCard";
 import ErrorsSummaryCard from "../components/dashboard/ErrorsSummaryCard";
 
-// Round 5 - the previous three rounds all used a single 12-column CSS
-// Grid (.dashboard-grid) and kept hitting the same underlying bug in
-// different shapes: every card placed in the same grid ROW is forced to
-// the height of the tallest card in that row, whatever the others
-// actually contain. Rounds 1-3 fixed the cases that bug showed up as
-// (a fixed-fraction row claiming full height for an empty panel, then an
-// auto-packed row doing the same) but a fourth screenshot caught it again
-// in a new spot: AllApplicationsTable renders nothing when no PaaS apps
-// are configured, and it shared a grid row with AllRepositoriesCard - the
-// empty cell couldn't shrink below the row height Repositories set, so it
-// sat there as a blank rectangle the width of half the page. Grid cannot
-// avoid this without a masonry mode most browsers don't support, so this
-// round replaces the grid itself: three independent flex columns
-// (.dashboard-columns/.dashboard-column in global.css), each stacking its
-// own cards top-to-bottom with its OWN height, never synced to what the
-// columns beside it contain. A card that renders nothing just contributes
-// nothing to its column's height - it can no longer leave blank space
-// behind, because there's no shared row forcing a taller neighbor's
-// height onto it.
+// Round 6 - rounds 1-3 used CSS Grid and kept hitting the same bug in
+// different shapes: every card in the same grid ROW is forced to the
+// height of that row's tallest card. Round 5 replaced the grid with
+// three independent flex columns to kill that - but then split the page
+// into TWO separate column groups (a 3-column row of summary cards,
+// followed by a separate 2-column row for the Applications/Repositories
+// tables). That reintroduced the exact same problem one level up: the
+// "Environments" column is short (one card), its neighbors aren't, and
+// the second group couldn't start until the FIRST group's tallest column
+// finished - so a visible gap sat under "Environments" while the row
+// above it was still "in progress" height-wise. A screenshot caught it.
+//
+// Fix: there is only ONE column group now. Applications and Repositories
+// are just two more cards appended to the end of the Monitoring/Domain/
+// Cloud-Services column and the Source-Control/Integration-Flow/Quick-
+// Access column respectively (marked .dash-card-lg for their taller
+// height cap), instead of a second row that has to wait for the first to
+// finish. A short column just keeps flowing into whatever's assigned
+// next - there is no row boundary left for a height mismatch to stall on.
 //
 // Layout, top to bottom:
 //   Hero strip (resource counts + health tiles, or the onboarding banner) - full width
 //   Connections (the detailed per-integration table)                      - full width
-//   Three columns:
-//     Runs, Errors, Blockers                              (wider column)
-//     Monitoring, Domain (Environments), Cloud Services
-//     Source Control, Integration Flow, Quick Access
-//   Two columns:
-//     Applications table   /   Repositories table
+//   Three persistent columns:
+//     Runs, Errors, Blockers                                        (wider column)
+//     Monitoring, Domain (Environments), Cloud Services, Applications table
+//     Source Control, Integration Flow, Quick Access, Repositories table
 // "Domain" = EnvironmentsCard (each environment's own deployed URL) - the
 // closest existing concept to "domain" this app tracks. Runs/Errors/
 // Blockers share a column because they're causally linked (what's
@@ -106,26 +104,20 @@ export default function Dashboard() {
                         <ObservabilitySummaryCard />
                         <EnvironmentsCard />
                         <CloudServicesCard />
+                        <div className="dash-card-lg">
+                            <AllApplicationsTable />
+                        </div>
                     </div>
 
                     <div className="dashboard-column">
                         <SourceControlSummaryCard />
                         <IntegrationFlowCard />
                         <QuickAccessCard />
-                    </div>
-
-                </div>
-
-                <div className="dashboard-columns">
-
-                    <div className="dashboard-column dash-card-lg">
-                        <AllApplicationsTable />
-                    </div>
-
-                    <div className="dashboard-column dash-card-lg">
-                        <AllRepositoriesCard repository={repository}>
-                            <AzureDevOpsCard />
-                        </AllRepositoriesCard>
+                        <div className="dash-card-lg">
+                            <AllRepositoriesCard repository={repository}>
+                                <AzureDevOpsCard />
+                            </AllRepositoriesCard>
+                        </div>
                     </div>
 
                 </div>
