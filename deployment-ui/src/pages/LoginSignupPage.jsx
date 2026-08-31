@@ -26,6 +26,27 @@ function PasswordIcon() {
     );
 }
 
+// Open eye - shown while the password is masked, click to reveal.
+function EyeIcon() {
+    return (
+        <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true">
+            <path d="M1.5 9S4.5 3.5 9 3.5 16.5 9 16.5 9 13.5 14.5 9 14.5 1.5 9 1.5 9Z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+            <circle cx="9" cy="9" r="2.25" stroke="currentColor" strokeWidth="1.5" />
+        </svg>
+    );
+}
+
+// Slashed eye - shown while the password is revealed, click to mask again.
+function EyeOffIcon() {
+    return (
+        <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true">
+            <path d="M2.3 5.4C1.2 6.6 1.5 9 1.5 9s3 5.5 7.5 5.5c1.09 0 2.08-.32 2.95-.79M14.6 12c1.16-1.16 1.9-3 1.9-3s-3-5.5-7.5-5.5c-.62 0-1.2.1-1.76.28" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+            <path d="M7.1 7.1a2.25 2.25 0 0 0 3.18 3.18" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+            <path d="M2 2l14 14" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+        </svg>
+    );
+}
+
 // Google's real 4-color "G" mark - brand recognition matters for an OAuth
 // button, so this is the standard glyph, not an abstracted icon-set piece.
 function GoogleIcon() {
@@ -77,6 +98,7 @@ export default function LoginSignupPage({ onMfaRequired }) {
     // (see MfaEnforcementGate/PortalUserAccount.MustSetUpMfa), not by
     // anything in this component.
     const [checkEmailSent, setCheckEmailSent] = useState(false);
+    const [showPassword, setShowPassword] = useState(false);
 
     const isSignup = mode === "signup";
 
@@ -263,12 +285,21 @@ export default function LoginSignupPage({ onMfaRequired }) {
                             <PasswordIcon />
                             <input
                                 id="login-password"
-                                type="password"
+                                type={showPassword ? "text" : "password"}
                                 placeholder={isSignup ? "At least 8 characters" : "Your password"}
                                 value={password}
                                 onChange={(e) => setPassword(e.target.value)}
                                 autoComplete={isSignup ? "new-password" : "current-password"}
                             />
+                            <button
+                                type="button"
+                                className="auth-page-field-toggle"
+                                onClick={() => setShowPassword((v) => !v)}
+                                aria-label={showPassword ? "Hide password" : "Show password"}
+                                aria-pressed={showPassword}
+                            >
+                                {showPassword ? <EyeOffIcon /> : <EyeIcon />}
+                            </button>
                         </div>
                     </div>
 

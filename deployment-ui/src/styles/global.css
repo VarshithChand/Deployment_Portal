@@ -6846,6 +6846,31 @@ textarea{
     font-size:14.5px;
     font-family:inherit;
 }
+/* Show/hide toggle for LoginSignupPage's password field - a plain icon
+   button sharing the same muted color as the field's own leading icon,
+   not a bordered/backgrounded button, so it reads as part of the field
+   rather than a separate control. */
+.auth-page-field-toggle{
+    flex-shrink:0;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    padding:6px;
+    margin:0 -6px 0 0;
+    border:0;
+    background:none;
+    border-radius:8px;
+    color:var(--text-muted);
+    cursor:pointer;
+    transition:color .15s ease;
+}
+.auth-page-field-toggle:hover{
+    color:var(--text);
+}
+.auth-page-field-toggle:focus-visible{
+    outline:2px solid var(--heading-accent);
+    outline-offset:1px;
+}
 
 /* Six-box code entry for MfaVerifyPage's TOTP field specifically (always
    exactly 6 digits - see SettingsService.TotpDigits) - NOT used for the
