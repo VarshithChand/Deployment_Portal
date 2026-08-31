@@ -128,6 +128,15 @@ export default function Settings() {
     const [githubRepoUrl, setGithubRepoUrl] = useState("");
     const [githubToken, setGithubToken] = useState("");
     const [githubTokenConfigured, setGithubTokenConfigured] = useState(false);
+    const [githubPatExpiresAt, setGithubPatExpiresAt] = useState("");
+    // What the server actually had before this page load - lets the save
+    // handler below tell "field was always blank" apart from "user just
+    // cleared a previously-saved date", since the backend needs an
+    // explicit clear signal rather than treating blank as "remove it" (a
+    // caller that doesn't know this field exists at all also sends it
+    // blank, and that must NOT wipe an existing value - see
+    // GitHubSettingsUpdateDto.ClearPatExpiry).
+    const [githubPatExpiresAtOriginal, setGithubPatExpiresAtOriginal] = useState("");
 
     const [repoPreview, setRepoPreview] = useState(null);
     const [repoPreviewLoading, setRepoPreviewLoading] = useState(false);
@@ -210,6 +219,11 @@ export default function Settings() {
                     : ""
             );
             setGithubTokenConfigured(!!myGitHub.gitHubTokenConfigured);
+            // date input wants "YYYY-MM-DD" - the API sends a full ISO
+            // timestamp, so only the date portion is kept.
+            const loadedExpiry = myGitHub.patExpiresAt ? myGitHub.patExpiresAt.slice(0, 10) : "";
+            setGithubPatExpiresAt(loadedExpiry);
+            setGithubPatExpiresAtOriginal(loadedExpiry);
 
             setDockerRegistry(data.dockerRegistry || "");
             setDockerUsername(data.dockerUsername || "");
@@ -542,7 +556,13 @@ export default function Settings() {
             await saveMyGitHubSettings({
                 owner: parsed?.owner || null,
                 repository: parsed?.repository || null,
-                personalAccessToken: githubToken || null
+                personalAccessToken: githubToken || null,
+                patExpiresAt: githubPatExpiresAt || null,
+                // Only true when a date WAS previously loaded and the field
+                // is now empty - a form that never had one and is still
+                // blank must never send this, or a caller unaware of this
+                // field (e.g. a fresh first-time connect) would trip it.
+                clearPatExpiry: !!githubPatExpiresAtOriginal && !githubPatExpiresAt
             });
 
             setGithubToken("");
@@ -1130,6 +1150,8 @@ export default function Settings() {
                     isRateLimited={isRateLimited}
                     githubToken={githubToken}
                     setGithubToken={setGithubToken}
+                    githubPatExpiresAt={githubPatExpiresAt}
+                    setGithubPatExpiresAt={setGithubPatExpiresAt}
                     handleSaveGitHub={handleSaveGitHub}
                     savingGitHub={savingGitHub}
                     handleClear={handleClear}

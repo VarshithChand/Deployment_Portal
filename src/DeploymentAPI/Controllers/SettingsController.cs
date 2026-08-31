@@ -121,7 +121,8 @@ public class SettingsController : ControllerBase
             IsConfigured = creds.IsConfigured,
             WasSignedOut = await _settings.IsPatUserSignedOutAsync(key),
             PreviousOwner = creds.PreviousOwner,
-            PreviousRepository = creds.PreviousRepository
+            PreviousRepository = creds.PreviousRepository,
+            PatExpiresAt = creds.PatExpiresAt
         });
     }
 
@@ -178,7 +179,8 @@ public class SettingsController : ControllerBase
             GitHubOwner = creds.Owner,
             GitHubRepository = creds.Repository,
             GitHubTokenConfigured = creds.TokenConfigured,
-            IsConfigured = creds.IsConfigured
+            IsConfigured = creds.IsConfigured,
+            PatExpiresAt = creds.PatExpiresAt
         });
     }
 

@@ -4,7 +4,11 @@ namespace DeploymentAPI.DTOs;
 // configures their own instead of the whole portal sharing a single one.
 public record UserGitHubCredentials(
     string Owner, string Repository, string? PersonalAccessToken,
-    string? PreviousOwner = null, string? PreviousRepository = null)
+    string? PreviousOwner = null, string? PreviousRepository = null,
+    // Self-reported, not read from GitHub - the API has no endpoint that
+    // exposes a classic PAT's expiration date, so this is only ever as
+    // accurate as whatever the user typed in when they saved it.
+    DateTime? PatExpiresAt = null)
 {
     public bool TokenConfigured => !string.IsNullOrWhiteSpace(PersonalAccessToken);
 

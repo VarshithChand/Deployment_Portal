@@ -261,12 +261,18 @@ public class SettingsService
         // this goes back to reporting the real value.
         var signedOut = entry?["SignedOut"]?.Value<bool>() ?? false;
 
+        var expiryToken = entry?["PatExpiresAt"];
+        DateTime? patExpiresAt = expiryToken != null && expiryToken.Type != JTokenType.Null
+            ? expiryToken.Value<DateTime>()
+            : null;
+
         return new UserGitHubCredentials(
             entry?["Owner"]?.ToString() ?? string.Empty,
             entry?["Repository"]?.ToString() ?? string.Empty,
             signedOut ? null : Unprotect(entry?["PersonalAccessToken"]?.ToString()),
             entry?["PreviousOwner"]?.ToString(),
-            entry?["PreviousRepository"]?.ToString());
+            entry?["PreviousRepository"]?.ToString(),
+            patExpiresAt);
     }
 
     // The raw SignedOut flag, unmasked by GetUserGitHubCredentialsAsync's
@@ -528,6 +534,11 @@ public class SettingsService
             entry.Remove("SignedOut");
         }
 
+        if (update.ClearPatExpiry)
+            entry.Remove("PatExpiresAt");
+        else if (update.PatExpiresAt.HasValue)
+            entry["PatExpiresAt"] = update.PatExpiresAt.Value;
+
         users[login] = entry;
         root["UserGitHubCredentials"] = users;
 
@@ -547,6 +558,10 @@ public class SettingsService
         if (root["UserGitHubCredentials"] is JObject users && users[login] is JObject entry)
         {
             entry.Remove("PersonalAccessToken");
+            // A stored expiry date is meaningless once the token it
+            // describes is gone - dropped here so the next token saved
+            // doesn't inherit a stale expiry from a completely different PAT.
+            entry.Remove("PatExpiresAt");
             await WriteRootAsync(root);
 
             _log.LogInfo("Settings", $"GitHub token cleared for '{login}'.");

@@ -151,6 +151,8 @@ export default function CredentialsView({
     isRateLimited,
     githubToken,
     setGithubToken,
+    githubPatExpiresAt,
+    setGithubPatExpiresAt,
     handleSaveGitHub,
     savingGitHub,
     handleClear,
@@ -513,6 +515,8 @@ export default function CredentialsView({
                             isRateLimited={isRateLimited}
                             githubToken={githubToken}
                             setGithubToken={setGithubToken}
+                            githubPatExpiresAt={githubPatExpiresAt}
+                            setGithubPatExpiresAt={setGithubPatExpiresAt}
                             handleSaveGitHub={handleSaveGitHub}
                             savingGitHub={savingGitHub}
                             handleClear={handleClearAndRelock}
@@ -533,6 +537,8 @@ export default function CredentialsView({
                         isRateLimited={isRateLimited}
                         githubToken={githubToken}
                         setGithubToken={setGithubToken}
+                        githubPatExpiresAt={githubPatExpiresAt}
+                        setGithubPatExpiresAt={setGithubPatExpiresAt}
                         handleSaveGitHub={handleSaveGitHub}
                         savingGitHub={savingGitHub}
                         handleClear={handleClearAndRelock}

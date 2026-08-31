@@ -98,6 +98,32 @@ function UserRepoResults({ userRepoResults, onPick }) {
 
 }
 
+// Self-reported "when does this token expire" status - GitHub's API
+// doesn't expose a classic PAT's expiration anywhere, so this is only ever
+// as accurate as what was typed in when the token was saved. Pure
+// function of the date string so it recomputes on every render without
+// its own state/effect.
+function expiryStatus(dateStr) {
+
+    if (!dateStr) return null;
+
+    const target = new Date(`${dateStr}T00:00:00`);
+
+    if (Number.isNaN(target.getTime())) return null;
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const days = Math.round((target - today) / 86400000);
+
+    if (days < 0) return { tone: "danger", label: `Expired ${Math.abs(days)} day${Math.abs(days) === 1 ? "" : "s"} ago` };
+    if (days === 0) return { tone: "danger", label: "Expires today" };
+    if (days <= 14) return { tone: "warning", label: `Expires in ${days} day${days === 1 ? "" : "s"}` };
+
+    return { tone: "success", label: `Expires in ${days} days` };
+
+}
+
 // Pulled out of CredentialsView - the repo-switcher/URL-validity/preview
 // nested ternaries here were the single largest contributor to that
 // component's own cognitive complexity.
@@ -113,10 +139,14 @@ export default function GitHubAccessSection({
     isRateLimited,
     githubToken,
     setGithubToken,
+    githubPatExpiresAt,
+    setGithubPatExpiresAt,
     handleSaveGitHub,
     savingGitHub,
     handleClear
 }) {
+
+    const expiry = expiryStatus(githubPatExpiresAt);
 
     return (
 
@@ -280,6 +310,29 @@ export default function GitHubAccessSection({
                         : "Generate a token on GitHub →"}
                 </a>
             )}
+        </div>
+
+        <div className="form-group">
+            <label htmlFor="github-pat-expiry">
+                Token expiry date (optional)
+                {" "}
+                {expiry && (
+                    <span className={`badge badge-${expiry.tone}`}>{expiry.label}</span>
+                )}
+            </label>
+            <p className="field-hint" style={{ marginTop: 0 }}>
+                GitHub doesn't expose a token's expiration through its API, so this is
+                self-reported — set it to whatever expiry you picked when you generated the
+                token, and the portal will warn you here as it gets close.
+            </p>
+            <input
+                id="github-pat-expiry"
+                type="date"
+                className="form-control"
+                style={{ maxWidth: "220px" }}
+                value={githubPatExpiresAt}
+                onChange={(e) => setGithubPatExpiresAt(e.target.value)}
+            />
         </div>
 
         <div className="button-row">
