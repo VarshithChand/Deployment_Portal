@@ -1201,7 +1201,9 @@ const CSS = `
 .aw-root{
   color:var(--text);
   height:100vh; overflow-y:auto; -webkit-font-smoothing:antialiased;
+  scrollbar-width:none; -ms-overflow-style:none;
 }
+.aw-root::-webkit-scrollbar{display:none;}
 .aw-root *{box-sizing:border-box;}
 .aw-root .mono{font-family:'JetBrains Mono',ui-monospace,monospace; font-feature-settings:"tnum";}
 .aw-root button{font-family:inherit; cursor:pointer;}
