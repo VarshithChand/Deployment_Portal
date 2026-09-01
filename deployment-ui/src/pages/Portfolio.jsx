@@ -25,20 +25,20 @@ function LinkedInIcon({ size = 16 }) {
 }
 
 /* ============================================================
-   Varshith Chand Vuyyuru's real profile - the PROJECTS/STACK below are
-   the user's own supplied content, verbatim (not resume-derived - this
-   is broader than the resume: real production work at VIPS/RxApps360
-   plus a self-hosted DevOps platform). Every field below is real -
-   role/headline/blurb/location/education/availability are grounded in
-   the resume's own positioning ("Aspiring DevOps Engineer") rather than
-   the generic template prose this component originally shipped with.
+   Varshith Chand Vuyyuru's real profile. PROJECTS/STACK below were
+   confirmed with the user directly (2026-09-01) - the handed-over
+   "build log" template's own project list (RxApps360, VIPS Cloud PMS,
+   a self-hosted Forgejo/Woodpecker platform, an AWS scheduler) turned
+   out to be example content too, NOT real work, so it's replaced here
+   with the resume's own two projects (Deployment Portal, EduVault) and
+   its own Technical Skills list - nothing invented beyond that.
    ============================================================ */
 const PROFILE = {
   name: "Varshith Chand Vuyyuru",
   role: "Aspiring DevOps Engineer",
-  headline: "I build the pipelines, tests, and infrastructure that ship software safely.",
+  headline: "I build the pipelines and infrastructure that ship software reliably.",
   blurb:
-    "I work across CI/CD, cloud infrastructure, and containerized deployments — plus the automated tests and internal tools that keep them honest — using AWS, Azure, GCP, Docker, and Kubernetes.",
+    "I work across CI/CD, cloud infrastructure, and containerized deployments — building the internal tools that tie it together — using AWS, Azure, GCP, Docker, and Kubernetes.",
   location: "Bapatla, Andhra Pradesh",
   education: "B.Tech, AI & ML",
   focus: "Deployment Portal",
@@ -53,58 +53,30 @@ const PROJECTS = [
     title: "Deployment Portal",
     kind: "Internal",
     role: "Designed & built end to end",
-    desc: "One control panel to trigger, watch and approve deployments across GitHub Actions, AWS, Azure, GCP and a dozen registries — instead of hopping between every provider's console. ~380 endpoints behind a single API, with mandatory MFA, three sign-in methods and role-gated access.",
-    stack: [".NET 10", "React 19", "Vite", "Postgres", "Render", "Cloudflare"],
+    desc: "An internal control panel to trigger, monitor, and approve GitHub Actions workflows across GitHub, AWS, Azure, and GCP from one place, instead of switching between every provider's own console — with email/password + Google/GitHub OAuth sign-in, mandatory TOTP MFA, and role-gated Admin/Viewer access enforced on every request.",
+    stack: [".NET 10", "React 19", "Vite", "PostgreSQL", "Render", "Cloudflare Workers"],
     link: "https://deploymentportal.in",
     linkLabel: "deploymentportal.in",
   },
   {
-    title: "Self-hosted DevOps platform",
-    kind: "Self-hosted",
-    role: "Architecture & setup",
-    desc: "A full DevOps stack on a single Ubuntu + Docker box: Forgejo for git, Woodpecker for CI, Harbor for images, plus Traefik, Postgres, Redis, MinIO and a Prometheus/Grafana/Loki monitoring stack — with docs so anyone can connect and onboard.",
-    stack: ["Docker", "Forgejo", "Woodpecker", "Harbor", "Traefik", "Grafana"],
-  },
-  {
-    title: "RxApps360 release automation",
-    kind: "Production",
-    role: "CI/CD ownership",
-    desc: "GitHub Actions pipelines for three .NET APIs on a healthcare platform. One run builds, tests, publishes, rotates the stored artifacts, and takes the release through Stage → RC → three clusters — every step gated by environment approvals.",
-    stack: ["GitHub Actions", ".NET 8", "Multi-cluster", "Approval gates"],
-  },
-  {
-    title: "RxApps360 E2E testing",
-    kind: "Production",
-    role: "Test automation lead",
-    desc: "Playwright + TypeScript end-to-end suites for the RxAsset and RxPlan modules. Factory-function page objects, MFA-based login, and data-driven checks that capture form values and verify them against details across 14 tabs — with API responses intercepted to confirm the data's real, and every failure rolled into one report.",
-    stack: ["Playwright", "TypeScript", "POM", "API interception"],
-  },
-  {
-    title: "VIPS Cloud PMS pipelines",
-    kind: "Production",
-    role: "Pipeline engineering",
-    desc: "Azure DevOps CI/CD for ~18 APIs behind the Piccotello property-management system. Sprint/patch artifact naming, a searchable build picker at deploy time, per-API selective builds, multi-cluster targets, and post-deploy smoke tests that hit each service's health endpoint.",
-    stack: ["Azure DevOps", "YAML", "Smoke tests", "Multi-cluster"],
-  },
-  {
-    title: "AWS Schedule Orchestrator",
-    kind: "Production",
+    title: "EduVault",
+    kind: "Project",
     role: "Built solo",
-    desc: "Pure bash + jq + AWS CLI, driven by GitHub Actions and Issues — no Lambda. Starts and stops ECS services and RDS instances twice a day across dev and acpt to cut idle cost. State lives in git, and operators file issues to schedule one-offs or place holds.",
-    stack: ["Bash", "AWS CLI", "GitHub Actions", "ECS", "RDS"],
+    desc: "A role-based, cloud-based document management system deployed on AWS EC2, containerized with Docker for a consistent runtime, with a Jenkins CI/CD pipeline handling automated testing and deployment on a hardened Linux environment.",
+    stack: ["Flask", "AWS EC2", "Docker", "Jenkins", "Linux", "Git"],
   },
 ];
 
 const STACK = [
-  { group: "Languages", items: ["C# / .NET", "TypeScript", "Bash", "SQL", "Python"] },
-  { group: "CI/CD", items: ["GitHub Actions", "Azure DevOps", "Woodpecker CI"] },
-  { group: "Cloud & hosting", items: ["AWS", "Azure", "GCP", "Render", "Cloudflare"] },
-  { group: "Containers & registries", items: ["Docker", "Kubernetes", "Harbor", "ECR", "GHCR"] },
-  { group: "Testing & quality", items: ["Playwright", "SonarQube", "CodeQL", "ESLint"] },
-  { group: "Data & observability", items: ["PostgreSQL", "Redis", "MinIO", "Prometheus", "Grafana", "Loki"] },
+  { group: "Languages", items: ["Python", "C#", "JavaScript", "YAML"] },
+  { group: "Development", items: ["ASP.NET Core", "Flask", "Django", "React", "REST APIs", "JWT & OAuth 2.0"] },
+  { group: "Cloud", items: ["AWS", "Azure", "GCP"] },
+  { group: "CI/CD & DevOps", items: ["Jenkins", "GitHub Actions", "Azure DevOps Pipelines", "Docker", "Kubernetes", "Ansible", "Terraform"] },
+  { group: "Monitoring", items: ["Prometheus", "Grafana"] },
+  { group: "Data & Tools", items: ["PostgreSQL", "Render", "Cloudflare Workers", "Git", "GitHub", "Maven", "Linux", "Windows"] },
 ];
 
-const KIND_COLOR = { Production: "#3ee08f", Internal: "#37d5cf", "Self-hosted": "#f5b44e" };
+const KIND_COLOR = { Internal: "#37d5cf", Project: "#9b8cff" };
 
 function PipelineGraph() {
   return (
@@ -296,9 +268,9 @@ export default function Portfolio() {
           <div className="about-text">
             <p>
               I'm an aspiring DevOps Engineer working mostly in the .NET and cloud world —
-              CI/CD pipelines in GitHub Actions and Azure DevOps, containerized deployments,
-              Playwright suites that verify real behaviour, and the occasional internal tool
-              when the existing consoles get in the way.
+              CI/CD pipelines in GitHub Actions and Jenkins, containerized deployments on
+              AWS/Azure/GCP, and the occasional internal tool when the existing consoles
+              get in the way.
             </p>
             <p>
               I like problems where the answer is "make this boring and reliable" — repeatable
