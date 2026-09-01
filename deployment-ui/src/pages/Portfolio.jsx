@@ -248,7 +248,7 @@ export default function Portfolio() {
 
       {/* ---------------- stack ---------------- */}
       <section id="stack" className="section">
-        <div className="sec-head"><h2>Toolbox</h2></div>
+        <div className="sec-head"><h2>Tech Stack</h2></div>
         <div className="stack-grid">
           {STACK.map(g => (
             <div key={g.group} className="stack-group">
@@ -329,7 +329,7 @@ export default function Portfolio() {
           </div>
         ))}
 
-        <h2>Toolbox</h2>
+        <h2>Tech Stack</h2>
         <ul>
           {STACK.map((g) => (
             <li key={g.group}><strong>{g.group}:</strong> {g.items.join(", ")}</li>
