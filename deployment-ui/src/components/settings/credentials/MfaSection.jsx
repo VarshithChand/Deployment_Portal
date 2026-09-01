@@ -23,7 +23,16 @@ import {
 // (server-computed, only updated via a fresh bootstrap call), since this
 // component's own `refresh()` above only re-checks ITS OWN status, not the
 // app-wide nudge/block state that lives in AuthContext.
-export default function MfaSection({ onEnrolled }) {
+// showCancelEnrollButton (default true): hidden by MfaEnforcementGate's
+// MANDATORY blocked screen specifically - that screen already has its own
+// "Cancel" button (which actually signs the session out, the real exit
+// from a screen that can't otherwise be skipped), so this component's own
+// "Cancel" - which only resets the QR view back to "not enrolling" and
+// leaves you exactly as stuck - was a second, identically-labeled button
+// doing something confusingly different. The nudge dialog's own
+// "Set Up Now" flow keeps this button (its own dialog "Close" reads as a
+// clearly different action, not a same-label collision).
+export default function MfaSection({ onEnrolled, showCancelEnrollButton = true }) {
 
     const toast = useToast();
 
@@ -283,9 +292,11 @@ export default function MfaSection({ onEnrolled }) {
                             {isLocked ? `Locked (${lockoutFormatted})` : verifying ? "Verifying..." : "Verify & Enable"}
                         </button>
 
-                        <button type="button" className="btn" onClick={cancelEnroll} disabled={verifying}>
-                            Cancel
-                        </button>
+                        {showCancelEnrollButton && (
+                            <button type="button" className="btn" onClick={cancelEnroll} disabled={verifying}>
+                                Cancel
+                            </button>
+                        )}
 
                     </div>
 

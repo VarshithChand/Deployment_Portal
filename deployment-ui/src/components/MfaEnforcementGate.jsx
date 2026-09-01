@@ -107,7 +107,7 @@ export default function MfaEnforcementGate() {
                     </p>
 
                     <Suspense fallback={<p className="field-hint">Loading...</p>}>
-                        <MfaSection onEnrolled={refresh} />
+                        <MfaSection onEnrolled={refresh} showCancelEnrollButton={false} />
                     </Suspense>
 
                     <div className="button-row" style={{ marginTop: 16, justifyContent: "center" }}>
