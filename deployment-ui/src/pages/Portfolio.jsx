@@ -1,863 +1,512 @@
 import { useEffect, useState } from "react";
 import {
-    Mail, Phone, MapPin, ExternalLink, GraduationCap, Briefcase,
-    Award, Sparkles, Code, Cloud, GitBranch, Box,
-    FileCode, Activity, Database, Workflow, Download, ChevronDown,
-    Printer, Info, ShieldCheck, Network
+  Mail, ArrowUpRight, MapPin, GraduationCap,
+  Terminal, FileText, Copy, Check
 } from "lucide-react";
 
-import FlowDiagram from "../components/portfolio/FlowDiagram";
-import GitHubPanel from "../components/portfolio/GitHubPanel";
-import {
-    PROFILE, HERO_STACK, ABOUT_STACK, ABOUT_PARAGRAPHS, SKILL_CATEGORIES,
-    CAPABILITIES, ENGINEERING_FOCUS, CURRENTLY_BUILDING, DEPLOYMENT_PORTAL,
-    EDUVAULT, DEVOPS_LIFECYCLE_FLOW, CICD_FLOW, IAC_FLOW, AUTOMATION_FLOW,
-    AUTOMATION_AREAS, CLOUD_PROVIDERS, SECURITY_ITEMS,
-    DEPLOYMENT_PORTAL_SECURITY_HIGHLIGHTS, MONITORING_ITEMS, EXPERIENCE,
-    TRAINING, EDUCATION, SOFT_SKILLS, ATS_KEYWORDS
-} from "../data/portfolioData";
+// GitHub/LinkedIn brand marks aren't in this app's installed lucide-react
+// version (dropped upstream) - same gap Dashboard.jsx/LoginSignupPage.jsx
+// already hit, same fix: the plain octocat/LinkedIn "in" SVG paths inline,
+// not a lucide import.
+function GitHubIcon({ size = 16 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+      <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.5 7.5 0 0 1 4 0c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z" />
+    </svg>
+  );
+}
 
-// The login page's third no-login tool (see LoginSignupPage's toolsMenu) -
-// a static, 100% client-side page built entirely from Varshith Chand
-// Vuyyuru's own resume (see data/portfolioData.js - that file is the
-// single source of truth; nothing here invents a company, certification,
-// metric, or technology). The one live network call this page makes is
-// GitHubPanel's own read-only fetch straight to GitHub's public API - no
-// backend of this app is involved either way. Scoped under .pf-root and
-// built from this app's own theme tokens (var(--card-bg)/--heading-
-// accent/etc), so it matches the rest of the app and follows the light/
-// dark toggle rather than being a disconnected fixed-palette page.
-const ICONS = {
-    Cloud, GitBranch, Box, FileCode, Activity, Code, Database, Workflow, ShieldCheck
+function LinkedInIcon({ size = 16 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+      <path d="M14.82 0H1.18C.53 0 0 .52 0 1.16v13.68C0 15.48.53 16 1.18 16h13.64c.65 0 1.18-.52 1.18-1.16V1.16C16 .52 15.47 0 14.82 0ZM4.75 13.63H2.37V6h2.38v7.63ZM3.56 4.96c-.76 0-1.38-.62-1.38-1.38 0-.76.62-1.38 1.38-1.38.76 0 1.38.62 1.38 1.38 0 .76-.61 1.38-1.38 1.38Zm10.07 8.67h-2.37V9.92c0-.87-.02-1.99-1.21-1.99-1.22 0-1.4.95-1.4 1.93v3.77H6.28V6h2.28v1.04h.03c.32-.6 1.09-1.22 2.24-1.22 2.4 0 2.84 1.58 2.84 3.63v4.18Z" />
+    </svg>
+  );
+}
+
+/* ============================================================
+   Varshith Chand Vuyyuru's real profile - the PROJECTS/STACK below are
+   the user's own supplied content, verbatim (not resume-derived - this
+   is broader than the resume: real production work at VIPS/RxApps360
+   plus a self-hosted DevOps platform). Only name/links/résumé were
+   templated when this component was handed over; those are filled in
+   with the same facts already established elsewhere on this login page
+   (data/portfolioData.js's PROFILE, before this replaced it).
+   ============================================================ */
+const PROFILE = {
+  name: "Varshith Chand Vuyyuru",
+  role: "Test automation & platform engineering",
+  headline: "I build the pipelines and tools that ship other people's code.",
+  blurb:
+    "I make software ship safely and repeatedly — end-to-end tests that catch real regressions, CI/CD that deploys across clusters without drama, and internal tools that put all of it in one place.",
+  location: "Hyderabad, India",
+  education: "B.Tech, AI & ML",
+  focus: "Deployment Portal",
+  availability: "Open to platform / DevOps / SDET roles",
+  email: "v.varshith.2004@gmail.com",
+  github: "https://github.com/VarshithChand",
+  linkedin: "https://linkedin.com/in/varshith-chand-vuyyuru",
 };
 
-function GitHubIcon() {
-    return (
-        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
-            <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.5 7.5 0 0 1 4 0c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z" />
-        </svg>
-    );
-}
+const PROJECTS = [
+  {
+    title: "Deployment Portal",
+    kind: "Internal",
+    role: "Designed & built end to end",
+    desc: "One control panel to trigger, watch and approve deployments across GitHub Actions, AWS, Azure, GCP and a dozen registries — instead of hopping between every provider's console. ~380 endpoints behind a single API, with mandatory MFA, three sign-in methods and role-gated access.",
+    stack: [".NET 10", "React 19", "Vite", "Postgres", "Render", "Cloudflare"],
+    link: "https://deploymentportal.in",
+    linkLabel: "deploymentportal.in",
+  },
+  {
+    title: "Self-hosted DevOps platform",
+    kind: "Self-hosted",
+    role: "Architecture & setup",
+    desc: "A full DevOps stack on a single Ubuntu + Docker box: Forgejo for git, Woodpecker for CI, Harbor for images, plus Traefik, Postgres, Redis, MinIO and a Prometheus/Grafana/Loki monitoring stack — with docs so anyone can connect and onboard.",
+    stack: ["Docker", "Forgejo", "Woodpecker", "Harbor", "Traefik", "Grafana"],
+  },
+  {
+    title: "RxApps360 release automation",
+    kind: "Production",
+    role: "CI/CD ownership",
+    desc: "GitHub Actions pipelines for three .NET APIs on a healthcare platform. One run builds, tests, publishes, rotates the stored artifacts, and takes the release through Stage → RC → three clusters — every step gated by environment approvals.",
+    stack: ["GitHub Actions", ".NET 8", "Multi-cluster", "Approval gates"],
+  },
+  {
+    title: "RxApps360 E2E testing",
+    kind: "Production",
+    role: "Test automation lead",
+    desc: "Playwright + TypeScript end-to-end suites for the RxAsset and RxPlan modules. Factory-function page objects, MFA-based login, and data-driven checks that capture form values and verify them against details across 14 tabs — with API responses intercepted to confirm the data's real, and every failure rolled into one report.",
+    stack: ["Playwright", "TypeScript", "POM", "API interception"],
+  },
+  {
+    title: "VIPS Cloud PMS pipelines",
+    kind: "Production",
+    role: "Pipeline engineering",
+    desc: "Azure DevOps CI/CD for ~18 APIs behind the Piccotello property-management system. Sprint/patch artifact naming, a searchable build picker at deploy time, per-API selective builds, multi-cluster targets, and post-deploy smoke tests that hit each service's health endpoint.",
+    stack: ["Azure DevOps", "YAML", "Smoke tests", "Multi-cluster"],
+  },
+  {
+    title: "AWS Schedule Orchestrator",
+    kind: "Production",
+    role: "Built solo",
+    desc: "Pure bash + jq + AWS CLI, driven by GitHub Actions and Issues — no Lambda. Starts and stops ECS services and RDS instances twice a day across dev and acpt to cut idle cost. State lives in git, and operators file issues to schedule one-offs or place holds.",
+    stack: ["Bash", "AWS CLI", "GitHub Actions", "ECS", "RDS"],
+  },
+];
 
-function LinkedInIcon() {
-    return (
-        <svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
-            <path d="M14.82 0H1.18C.53 0 0 .52 0 1.16v13.68C0 15.48.53 16 1.18 16h13.64c.65 0 1.18-.52 1.18-1.16V1.16C16 .52 15.47 0 14.82 0ZM4.75 13.63H2.37V6h2.38v7.63ZM3.56 4.96c-.76 0-1.38-.62-1.38-1.38 0-.76.62-1.38 1.38-1.38.76 0 1.38.62 1.38 1.38 0 .76-.61 1.38-1.38 1.38Zm10.07 8.67h-2.37V9.92c0-.87-.02-1.99-1.21-1.99-1.22 0-1.4.95-1.4 1.93v3.77H6.28V6h2.28v1.04h.03c.32-.6 1.09-1.22 2.24-1.22 2.4 0 2.84 1.58 2.84 3.63v4.18Z" />
-        </svg>
-    );
-}
+const STACK = [
+  { group: "Languages", items: ["C# / .NET", "TypeScript", "Bash", "SQL", "Python"] },
+  { group: "CI/CD", items: ["GitHub Actions", "Azure DevOps", "Woodpecker CI"] },
+  { group: "Cloud & hosting", items: ["AWS", "Azure", "GCP", "Render", "Cloudflare"] },
+  { group: "Containers & registries", items: ["Docker", "Kubernetes", "Harbor", "ECR", "GHCR"] },
+  { group: "Testing & quality", items: ["Playwright", "SonarQube", "CodeQL", "ESLint"] },
+  { group: "Data & observability", items: ["PostgreSQL", "Redis", "MinIO", "Prometheus", "Grafana", "Loki"] },
+];
 
-const DP_TABS = ["Overview", "Architecture", "Features", "Security", "CI/CD", "Challenges"];
+const KIND_COLOR = { Production: "#3ee08f", Internal: "#37d5cf", "Self-hosted": "#f5b44e" };
 
-function DeploymentPortalProject() {
+function PipelineGraph() {
+  return (
+    <svg className="pipe" viewBox="0 0 440 300" role="img"
+      aria-label="A CI/CD pipeline: commit, build, test, then deploy to three clusters">
+      <defs>
+        <linearGradient id="flow" x1="0" x2="1">
+          <stop offset="0" stopColor="#37d5cf" stopOpacity="0" />
+          <stop offset="1" stopColor="#37d5cf" />
+        </linearGradient>
+      </defs>
 
-    const [tab, setTab] = useState("Overview");
-    const p = DEPLOYMENT_PORTAL;
+      {/* connectors */}
+      <path className="wire" d="M70 150 H150" />
+      <path className="wire live" d="M180 150 H260" />
+      <path className="wire" d="M290 150 C320 150 320 70 355 70" />
+      <path className="wire" d="M290 150 H355" />
+      <path className="wire" d="M290 150 C320 150 320 230 355 230" />
 
-    return (
+      {/* nodes */}
+      <g className="node">
+        <rect x="18" y="132" width="52" height="36" rx="9" />
+        <text x="44" y="154">commit</text>
+      </g>
+      <g className="node">
+        <rect x="112" y="132" width="56" height="36" rx="9" />
+        <text x="140" y="154">build</text>
+      </g>
+      <g className="node active">
+        <rect x="222" y="132" width="56" height="36" rx="9" />
+        <text x="250" y="154">test</text>
+        <circle className="pulse" cx="250" cy="127" r="3.5" />
+      </g>
 
-        <article className="pf-featured-project">
-
-            <div className="pf-featured-head">
-
-                <div>
-                    <span className="pf-eyebrow">Featured Project</span>
-                    <h3>{p.name}</h3>
-                    <p className="pf-featured-tagline">{p.tagline}</p>
-                </div>
-
-                <div className="pf-project-links">
-                    {p.github && (
-                        <a className="pf-link-btn" href={p.github} target="_blank" rel="noreferrer">
-                            <GitHubIcon /> GitHub <ExternalLink size={12} />
-                        </a>
-                    )}
-                    <a className="pf-link-btn" href="#top" onClick={(e) => { e.preventDefault(); window.scrollTo({ top: 0, behavior: "smooth" }); }}>
-                        <ChevronDown size={14} style={{ transform: "rotate(180deg)" }} /> Back to Top
-                    </a>
-                </div>
-
-            </div>
-
-            <div className="pf-skill-tags" style={{ marginBottom: 18 }}>
-                {p.stack.map((tech) => <span key={tech} className="pf-tag pf-tag-accent">{tech}</span>)}
-            </div>
-
-            <div className="pf-tabs-row" role="tablist">
-                {DP_TABS.map((t) => (
-                    <button
-                        key={t}
-                        type="button"
-                        role="tab"
-                        aria-selected={tab === t}
-                        className={`pf-tab-btn${tab === t ? " on" : ""}`}
-                        onClick={() => setTab(t)}
-                    >
-                        {t}
-                    </button>
-                ))}
-            </div>
-
-            <div className="pf-tab-panel">
-
-                {tab === "Overview" && (
-                    <>
-                        <p>{p.overview}</p>
-                        <p className="pf-live-note">
-                            <ShieldCheck size={13} /> This portfolio is itself served from the Deployment
-                            Portal's own login page — the app you're looking at right now is the live one.
-                        </p>
-                    </>
-                )}
-
-                {tab === "Architecture" && (
-
-                    <>
-                        <p style={{ marginBottom: 16 }}>{p.architecture.summary}</p>
-
-                        <div className="pf-arch">
-
-                            <div className="pf-arch-node pf-arch-node-wide">
-                                <strong>{p.architecture.nodes[0].label}</strong>
-                                <span>{p.architecture.nodes[0].detail}</span>
-                            </div>
-
-                            <ChevronDown className="pf-arch-arrow" size={16} aria-hidden="true" />
-
-                            <div className="pf-arch-node pf-arch-node-wide">
-                                <strong>{p.architecture.nodes[1].label}</strong>
-                                <span>{p.architecture.nodes[1].detail}</span>
-                            </div>
-
-                            <ChevronDown className="pf-arch-arrow" size={16} aria-hidden="true" />
-
-                            <div className="pf-arch-branch">
-                                {p.architecture.nodes.slice(2, 5).map((n) => (
-                                    <div className="pf-arch-node" key={n.id}>
-                                        <strong>{n.label}</strong>
-                                        <span>{n.detail}</span>
-                                    </div>
-                                ))}
-                            </div>
-
-                            <ChevronDown className="pf-arch-arrow" size={16} aria-hidden="true" />
-
-                            <div className="pf-arch-node pf-arch-node-wide pf-arch-node-accent">
-                                <strong>{p.architecture.nodes[5].label}</strong>
-                                <span>{p.architecture.nodes[5].detail}</span>
-                            </div>
-
-                        </div>
-                    </>
-
-                )}
-
-                {tab === "Features" && (
-                    <ul className="pf-project-points">
-                        {p.features.map((f) => <li key={f}>{f}</li>)}
-                    </ul>
-                )}
-
-                {tab === "Security" && (
-
-                    <>
-                        <ul className="pf-project-points" style={{ marginBottom: 14 }}>
-                            {p.security.map((s) => <li key={s}>{s}</li>)}
-                        </ul>
-                        <div className="pf-skill-tags">
-                            {DEPLOYMENT_PORTAL_SECURITY_HIGHLIGHTS.map((s) => (
-                                <span key={s} className="pf-tag pf-tag-accent">{s}</span>
-                            ))}
-                        </div>
-                    </>
-
-                )}
-
-                {tab === "CI/CD" && (
-                    <ul className="pf-project-points">
-                        {p.cicd.map((c) => <li key={c}>{c}</li>)}
-                        <li>{p.deployment}</li>
-                    </ul>
-                )}
-
-                {tab === "Challenges" && (
-                    <ul className="pf-project-points">
-                        {p.challenges.map((c) => <li key={c}>{c}</li>)}
-                    </ul>
-                )}
-
-            </div>
-
-        </article>
-
-    );
-
-}
-
-function EduVaultProject() {
-
-    const p = EDUVAULT;
-
-    return (
-
-        <article className="pf-project-card">
-
-            <div className="pf-project-head">
-                <h3>{p.name}</h3>
-                <span className="pf-project-year">{p.year}</span>
-            </div>
-
-            <p className="pf-project-stack">{p.tagline}</p>
-
-            <div className="pf-skill-tags" style={{ margin: "10px 0 14px" }}>
-                {p.stack.map((tech) => <span key={tech} className="pf-tag">{tech}</span>)}
-            </div>
-
-            <p style={{ fontSize: 12.5, color: "var(--text-muted)", marginBottom: 14 }}>{p.overview}</p>
-
-            <ul className="pf-project-points" style={{ marginBottom: 16 }}>
-                {p.features.map((f) => <li key={f}>{f}</li>)}
-            </ul>
-
-            <p className="pf-mini-arch-label">{p.infrastructure.summary}</p>
-
-            <div className="pf-mini-flow">
-                {p.infrastructure.nodes.map((n, i) => (
-                    <span key={n.id} className="pf-mini-flow-item">
-                        <span className="pf-mini-flow-node">{n.label}</span>
-                        {i < p.infrastructure.nodes.length - 1 && <span className="pf-mini-flow-arrow">→</span>}
-                    </span>
-                ))}
-            </div>
-
-        </article>
-
-    );
-
-}
-
-function Section({ id, title, icon: Icon, note, children, className = "" }) {
-    return (
-        <section id={id} className={`pf-section ${className}`}>
-            <h2 className="pf-section-title">
-                {Icon && <Icon size={17} />}
-                {title}
-            </h2>
-            {note && <p className="pf-section-note"><Info size={12} /> {note}</p>}
-            {children}
-        </section>
-    );
+      {[70, 150, 230].map((y, i) => (
+        <g className="node cluster" key={i}>
+          <rect x="355" y={y - 16} width="70" height="32" rx="9" />
+          <circle cx="367" cy={y} r="3.5" fill="#3ee08f" />
+          <text x="378" y={y + 4} textAnchor="start">cluster 0{i + 1}</text>
+        </g>
+      ))}
+    </svg>
+  );
 }
 
 export default function Portfolio() {
+  const [copied, setCopied] = useState(false);
 
-    // SEO for a page that has no real URL/route of its own (this app has
-    // no router - see NavigationContext) - the best available approximation
-    // is updating document.title/meta while this component is mounted, and
-    // restoring whatever the login page had before on unmount, so leaving
-    // this tool doesn't leave a stale title behind.
-    useEffect(() => {
+  const copyEmail = () => {
+    navigator.clipboard?.writeText(PROFILE.email).catch(() => {});
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1600);
+  };
 
-        const prevTitle = document.title;
-        document.title = `${PROFILE.name} | DevOps Engineer`;
+  // SEO for a page with no real URL/route of its own (this app has no
+  // router - see NavigationContext) - the best available approximation
+  // is updating document.title/meta while this component is mounted, and
+  // restoring whatever the login page had before on unmount.
+  useEffect(() => {
 
-        let meta = document.querySelector('meta[name="description"]');
-        const prevDescription = meta?.getAttribute("content") ?? null;
-        const createdMeta = !meta;
+    const prevTitle = document.title;
+    document.title = `${PROFILE.name} | ${PROFILE.role}`;
 
-        if (!meta) {
-            meta = document.createElement("meta");
-            meta.setAttribute("name", "description");
-            document.head.appendChild(meta);
-        }
+    let meta = document.querySelector('meta[name="description"]');
+    const prevDescription = meta?.getAttribute("content") ?? null;
+    const createdMeta = !meta;
 
-        meta.setAttribute(
-            "content",
-            "DevOps and Cloud Engineer portfolio showcasing AWS, Azure, GCP, Kubernetes, Docker, Terraform, CI/CD, automation, and cloud projects."
-        );
-
-        return () => {
-            document.title = prevTitle;
-            if (createdMeta) meta.remove();
-            else if (prevDescription !== null) meta.setAttribute("content", prevDescription);
-        };
-
-    }, []);
-
-    function handleDownloadResume() {
-        // No PDF-generation toolchain/dependency in this app - this opens
-        // the browser's own print dialog against the print-only resume
-        // block below (.pf-print-resume, hidden everywhere except
-        // @media print), which every modern browser can save as a real
-        // PDF. Content is the exact same portfolioData as the rest of
-        // this page, not a separate hand-maintained copy.
-        window.print();
+    if (!meta) {
+      meta = document.createElement("meta");
+      meta.setAttribute("name", "description");
+      document.head.appendChild(meta);
     }
 
-    return (
+    meta.setAttribute("content", PROFILE.blurb);
 
-        <div className="pf-root" id="top">
-            <style>{CSS}</style>
+    return () => {
+      document.title = prevTitle;
+      if (createdMeta) meta.remove();
+      else if (prevDescription !== null) meta.setAttribute("content", prevDescription);
+    };
 
-            {/* ---------------- hero ---------------- */}
-            <section className="pf-hero">
+  }, []);
 
-                <span className="pf-eyebrow">Portfolio</span>
+  // No PDF-generation toolchain/dependency in this app - opens the
+  // browser's own print dialog against the print-only resume block below
+  // (.pf-print-resume, hidden everywhere except @media print), which
+  // every modern browser can save as a real PDF. Built from this exact
+  // component's own PROFILE/PROJECTS/STACK, not a separately maintained copy.
+  function handleDownloadResume() {
+    window.print();
+  }
 
-                <h1>{PROFILE.name}</h1>
-                <p className="pf-title">{PROFILE.tagline}</p>
-                <p className="pf-tagline">{PROFILE.positioning} {PROFILE.summary}</p>
+  return (
+    <div className="pf-root">
+      <style>{CSS}</style>
 
-                <div className="pf-hero-stack" aria-hidden="true">
-                    {HERO_STACK.map((t) => <span key={t} className="pf-hero-stack-item">{t}</span>)}
-                </div>
+      {/* ---------------- nav ---------------- */}
+      <nav className="nav">
+        <a href="#top" className="mark"><Terminal size={15} />{PROFILE.name}</a>
+        <div className="nav-links">
+          <a href="#work">Work</a>
+          <a href="#stack">Stack</a>
+          <a href="#about">About</a>
+          <a href="#contact">Contact</a>
+        </div>
+        <button type="button" className="resume" onClick={handleDownloadResume}>
+          <FileText size={14} /> Résumé
+        </button>
+      </nav>
 
-                <div className="pf-link-row">
-                    <a className="pf-link-btn pf-link-btn-primary" href="#projects" onClick={(e) => { e.preventDefault(); document.getElementById("projects")?.scrollIntoView({ behavior: "smooth" }); }}>
-                        View Projects
-                    </a>
-                    <a className="pf-link-btn" href={PROFILE.github} target="_blank" rel="noreferrer">
-                        <GitHubIcon /> GitHub
-                    </a>
-                    <a className="pf-link-btn" href={PROFILE.linkedin} target="_blank" rel="noreferrer">
-                        <LinkedInIcon /> LinkedIn
-                    </a>
-                    <button type="button" className="pf-link-btn" onClick={handleDownloadResume}>
-                        <Download size={14} /> Download Resume
-                    </button>
-                    <a className="pf-link-btn" href="#contact" onClick={(e) => { e.preventDefault(); document.getElementById("contact")?.scrollIntoView({ behavior: "smooth" }); }}>
-                        <Mail size={14} /> Contact Me
-                    </a>
-                </div>
+      {/* ---------------- hero ---------------- */}
+      <header id="top" className="hero">
+        <div className="hero-text">
+          <span className="role">{PROFILE.role}</span>
+          <h1>{PROFILE.headline}</h1>
+          <p className="blurb">{PROFILE.blurb}</p>
 
-                <div className="pf-contact-row">
-                    <a className="pf-contact-chip" href={`mailto:${PROFILE.email}`}>
-                        <Mail size={13} /> {PROFILE.email}
-                    </a>
-                    <a className="pf-contact-chip" href={`tel:${PROFILE.phone}`}>
-                        <Phone size={13} /> {PROFILE.phone}
-                    </a>
-                    <span className="pf-contact-chip pf-contact-chip-static">
-                        <MapPin size={13} /> {PROFILE.location}
-                    </span>
-                </div>
+          <div className="readout mono">
+            <span><i>focus</i>{PROFILE.focus}</span>
+            <span><i>based</i>{PROFILE.location}</span>
+            <span><i>learning</i>{PROFILE.education}</span>
+            <span className="avail"><span className="adot" />{PROFILE.availability}</span>
+          </div>
 
-            </section>
+          <div className="hero-cta">
+            <a href="#work" className="btn primary">See my work</a>
+            <a href="#contact" className="btn ghost">Get in touch</a>
+          </div>
+        </div>
+        <div className="hero-art"><PipelineGraph /></div>
+      </header>
 
-            {/* ---------------- about ---------------- */}
-            <Section title="About">
-                {ABOUT_PARAGRAPHS.map((para) => <p key={para} className="pf-about-para">{para}</p>)}
-                <div className="pf-skill-tags" style={{ marginTop: 12 }}>
-                    {ABOUT_STACK.map((t) => <span key={t} className="pf-tag">{t}</span>)}
-                </div>
-            </Section>
-
-            {/* ---------------- engineering focus ---------------- */}
-            <Section title="Engineering Focus" icon={ShieldCheck}>
-                <div className="pf-skill-tags">
-                    {ENGINEERING_FOCUS.map((t) => <span key={t} className="pf-tag pf-tag-accent">{t}</span>)}
-                </div>
-            </Section>
-
-            {/* ---------------- skills ---------------- */}
-            <Section title="Technical Skills" icon={Code}>
-                <div className="pf-skills-grid">
-                    {SKILL_CATEGORIES.map((group) => {
-                        const GroupIcon = ICONS[group.icon] || Code;
-                        return (
-                            <div key={group.key} className="pf-skill-card">
-                                <div className="pf-skill-head">
-                                    <GroupIcon size={15} />
-                                    <span>{group.label}</span>
-                                </div>
-                                <div className="pf-skill-tags">
-                                    {group.items.map((item) => <span key={item} className="pf-tag">{item}</span>)}
-                                </div>
-                            </div>
-                        );
-                    })}
-                </div>
-            </Section>
-
-            {/* ---------------- what i build ---------------- */}
-            <Section title="What I Build" icon={Workflow}>
-                <div className="pf-capabilities-grid">
-                    {CAPABILITIES.map((cap) => {
-                        const CapIcon = ICONS[cap.icon] || Code;
-                        return (
-                            <div key={cap.key} className="pf-capability-card">
-                                <div className="pf-skill-head"><CapIcon size={16} /><span>{cap.title}</span></div>
-                                <p>{cap.description}</p>
-                                <div className="pf-mini-flow">
-                                    {cap.flow.map((step, i) => (
-                                        <span key={step} className="pf-mini-flow-item">
-                                            <span className="pf-mini-flow-node">{step}</span>
-                                            {i < cap.flow.length - 1 && <span className="pf-mini-flow-arrow">→</span>}
-                                        </span>
-                                    ))}
-                                </div>
-                            </div>
-                        );
-                    })}
-                </div>
-            </Section>
-
-            {/* ---------------- projects ---------------- */}
-            <section id="projects" className="pf-section">
-                <h2 className="pf-section-title"><Briefcase size={17} /> Featured Projects</h2>
-                <DeploymentPortalProject />
-                <div style={{ height: 18 }} />
-                <EduVaultProject />
-            </section>
-
-            {/* ---------------- devops architecture ---------------- */}
-            <Section title="DevOps Architecture" icon={Network}>
-                <FlowDiagram steps={DEVOPS_LIFECYCLE_FLOW} />
-            </Section>
-
-            {/* ---------------- cloud ---------------- */}
-            <Section title="Cloud" icon={Cloud}>
-                <div className="pf-cloud-grid">
-                    {CLOUD_PROVIDERS.map((provider) => (
-                        <div key={provider.key} className="pf-skill-card">
-                            <div className="pf-skill-head"><Cloud size={15} /><span>{provider.label}</span></div>
-                            {provider.services.length > 0 ? (
-                                <div className="pf-skill-tags">
-                                    {provider.services.map((s) => <span key={s} className="pf-tag">{s}</span>)}
-                                </div>
-                            ) : (
-                                <p className="pf-muted-note">Working knowledge — no specific managed services to list yet.</p>
-                            )}
-                        </div>
-                    ))}
-                </div>
-            </Section>
-
-            {/* ---------------- ci/cd ---------------- */}
-            <Section title="CI/CD" icon={GitBranch}>
-                <FlowDiagram steps={CICD_FLOW} />
-                <div className="pf-skill-tags" style={{ marginTop: 16 }}>
-                    {["GitHub Actions", "Jenkins", "Azure DevOps", "Maven", "Docker"].map((t) => (
-                        <span key={t} className="pf-tag pf-tag-accent">{t}</span>
-                    ))}
-                </div>
-            </Section>
-
-            {/* ---------------- infrastructure as code ---------------- */}
-            <Section title="Infrastructure as Code" icon={FileCode}>
-                <p className="pf-about-para">
-                    Terraform and Ansible for provisioning and configuring infrastructure as code
-                    instead of hand-configuring it, with YAML as the format tying pipelines and
-                    configuration together.
-                </p>
-                <FlowDiagram steps={IAC_FLOW} dense />
-            </Section>
-
-            {/* ---------------- security ---------------- */}
-            <Section title="Security & Authentication" icon={ShieldCheck}>
-                <p className="pf-about-para">
-                    Security is part of the architecture in my projects, not a bolt-on — the
-                    Deployment Portal's own auth layer is JWT sessions behind Google/GitHub OAuth,
-                    mandatory TOTP MFA, and server-enforced role-based access.
-                </p>
-                <div className="pf-skill-tags" style={{ marginBottom: 16 }}>
-                    {SECURITY_ITEMS.map((t) => <span key={t} className="pf-tag">{t}</span>)}
-                </div>
-                <div className="pf-skill-card">
-                    <div className="pf-skill-head"><ShieldCheck size={15} /><span>In Deployment Portal specifically</span></div>
-                    <div className="pf-skill-tags">
-                        {DEPLOYMENT_PORTAL_SECURITY_HIGHLIGHTS.map((t) => <span key={t} className="pf-tag pf-tag-accent">{t}</span>)}
-                    </div>
-                </div>
-            </Section>
-
-            {/* ---------------- monitoring ---------------- */}
-            <Section
-                title="Monitoring & Observability"
-                icon={Activity}
-                note="Illustrative — this is a portfolio visualization of the monitoring stack I use, not a live production dashboard."
-            >
-                <div className="pf-skill-tags">
-                    {MONITORING_ITEMS.map((t) => <span key={t} className="pf-tag">{t}</span>)}
-                </div>
-            </Section>
-
-            {/* ---------------- automation ---------------- */}
-            <Section title="Automation" icon={Workflow}>
-                <FlowDiagram steps={AUTOMATION_FLOW} />
-                <div className="pf-skill-tags" style={{ marginTop: 16 }}>
-                    {AUTOMATION_AREAS.map((t) => <span key={t} className="pf-tag pf-tag-accent">{t}</span>)}
-                </div>
-            </Section>
-
-            {/* ---------------- experience ---------------- */}
-            <Section title="Experience" icon={Briefcase}>
-                <div className="pf-cert-list">
-                    {EXPERIENCE.map((item) => (
-                        <div key={item.title} className="pf-cert-item">
-                            <Briefcase size={15} className="pf-cert-icon" />
-                            <div>
-                                <span className="pf-kind-badge">Internship</span>
-                                <strong> {item.title}</strong> — {item.org}
-                                <div className="pf-skill-tags" style={{ marginTop: 6 }}>
-                                    {item.skills.map((s) => <span key={s} className="pf-tag">{s}</span>)}
-                                </div>
-                            </div>
-                        </div>
-                    ))}
-                </div>
-            </Section>
-
-            {/* ---------------- education ---------------- */}
-            <Section title="Education" icon={GraduationCap}>
-                <div className="pf-timeline">
-                    {EDUCATION.map((entry) => (
-                        <div key={entry.school} className="pf-timeline-item">
-                            <div className="pf-timeline-dot" />
-                            <div className="pf-timeline-body">
-                                <div className="pf-timeline-row">
-                                    <strong>{entry.school}</strong>
-                                    <span className="pf-timeline-year">{entry.year}</span>
-                                </div>
-                                <p>{entry.detail}</p>
-                                <span className="pf-timeline-meta">{entry.meta}</span>
-                            </div>
-                        </div>
-                    ))}
-                </div>
-            </Section>
-
-            {/* ---------------- certifications & training ---------------- */}
-            <Section
-                title="Certifications & Training"
-                icon={Award}
-                note="No formal (exam-issued) certifications yet — shown below as training, distinct from that."
-            >
-                <div className="pf-cert-list">
-                    {TRAINING.map((item) => (
-                        <div key={item.title} className="pf-cert-item">
-                            <Award size={15} className="pf-cert-icon" />
-                            <div>
-                                <span className="pf-kind-badge pf-kind-badge-training">Training</span>
-                                <strong> {item.title}</strong> — {item.org}
-                                <div className="pf-skill-tags" style={{ marginTop: 6 }}>
-                                    {item.skills.map((s) => <span key={s} className="pf-tag">{s}</span>)}
-                                </div>
-                            </div>
-                        </div>
-                    ))}
-                </div>
-            </Section>
-
-            {/* ---------------- github ---------------- */}
-            <Section title="GitHub" icon={Code}>
-                <p className="pf-about-para">
-                    <a href={PROFILE.github} target="_blank" rel="noreferrer" className="pf-inline-link">
-                        <GitHubIcon /> {PROFILE.githubUsername}
-                    </a> — repositories below are pulled live from GitHub, not hand-listed.
-                </p>
-                <GitHubPanel username={PROFILE.githubUsername} profileUrl={PROFILE.github} />
-            </Section>
-
-            {/* ---------------- currently building ---------------- */}
-            <Section title="Currently Building" icon={Sparkles}>
-                <ul className="pf-project-points">
-                    {CURRENTLY_BUILDING.map((item) => <li key={item}>{item}</li>)}
-                </ul>
-            </Section>
-
-            {/* ---------------- soft skills ---------------- */}
-            <Section title="Soft Skills">
-                <div className="pf-skill-tags">
-                    {SOFT_SKILLS.map((skill) => <span key={skill} className="pf-tag pf-tag-accent">{skill}</span>)}
-                </div>
-            </Section>
-
-            {/* ---------------- contact ---------------- */}
-            <Section id="contact" title="Contact" icon={Mail}>
-                <p className="pf-about-para">
-                    Reachable directly — no contact form here, since one that doesn't actually
-                    send anywhere isn't worth pretending to work.
-                </p>
-                <div className="pf-link-row">
-                    <a className="pf-link-btn pf-link-btn-primary" href={`mailto:${PROFILE.email}`}>
-                        <Mail size={14} /> {PROFILE.email}
-                    </a>
-                    <a className="pf-link-btn" href={PROFILE.linkedin} target="_blank" rel="noreferrer">
-                        <LinkedInIcon /> LinkedIn
-                    </a>
-                    <a className="pf-link-btn" href={PROFILE.github} target="_blank" rel="noreferrer">
-                        <GitHubIcon /> GitHub
-                    </a>
-                    <button type="button" className="pf-link-btn" onClick={handleDownloadResume}>
-                        <Printer size={14} /> Download Resume
-                    </button>
-                </div>
-            </Section>
-
-            {/* ---------------- footer / ats keywords ---------------- */}
-            <footer className="pf-footer">
-                <div className="pf-skill-tags">
-                    {ATS_KEYWORDS.map((k) => <span key={k} className="pf-tag">{k}</span>)}
-                </div>
-            </footer>
-
-            {/* ---------------- print-only resume ---------------- */}
-            <div className="pf-print-resume" aria-hidden="true">
-
-                <h1>{PROFILE.name}</h1>
-                <p>
-                    {PROFILE.phone} | {PROFILE.email} | {PROFILE.location}<br />
-                    {PROFILE.linkedin.replace("https://", "")} | {PROFILE.github.replace("https://", "")}
-                </p>
-                <p>{PROFILE.summary}</p>
-
-                <h2>Education</h2>
-                <ul>
-                    {EDUCATION.map((e) => (
-                        <li key={e.school}>{e.school} — {e.detail} ({e.meta}), {e.year}</li>
-                    ))}
-                </ul>
-
-                <h2>Technical Skills</h2>
-                <ul>
-                    {SKILL_CATEGORIES.map((g) => (
-                        <li key={g.key}><strong>{g.label}:</strong> {g.items.join(", ")}</li>
-                    ))}
-                </ul>
-
-                <h2>Projects</h2>
-                <p><strong>{DEPLOYMENT_PORTAL.name}</strong> ({DEPLOYMENT_PORTAL.year}) — {DEPLOYMENT_PORTAL.stack.join(", ")}</p>
-                <ul>
-                    {DEPLOYMENT_PORTAL.features.map((f) => <li key={f}>{f}</li>)}
-                </ul>
-                <p><strong>{EDUVAULT.name} — {EDUVAULT.tagline}</strong> ({EDUVAULT.year}) — {EDUVAULT.stack.join(", ")}</p>
-                <ul>
-                    {EDUVAULT.features.map((f) => <li key={f}>{f}</li>)}
-                </ul>
-
-                <h2>Experience</h2>
-                <ul>
-                    {EXPERIENCE.map((e) => (
-                        <li key={e.title}><strong>{e.title} (Internship)</strong> — {e.org}: {e.skills.join(", ")}</li>
-                    ))}
-                </ul>
-
-                <h2>Training</h2>
-                <ul>
-                    {TRAINING.map((e) => (
-                        <li key={e.title}><strong>{e.title}</strong> — {e.org}: {e.skills.join(", ")}</li>
-                    ))}
-                </ul>
-
-                <h2>Soft Skills</h2>
-                <p>{SOFT_SKILLS.join(" · ")}</p>
-
-            </div>
-
+      {/* ---------------- work ---------------- */}
+      <section id="work" className="section">
+        <div className="sec-head">
+          <h2>Selected work</h2>
+          <span className="sec-meta mono">{PROJECTS.length} shipped systems</span>
         </div>
 
-    );
+        <ol className="log">
+          {PROJECTS.map((p, i) => (
+            <li key={i} className="entry">
+              <span className="spine-node" style={{ background: KIND_COLOR[p.kind] }} />
+              <div className="entry-meta">
+                <span className="kind" style={{ color: KIND_COLOR[p.kind] }}>
+                  <span className="kdot" style={{ background: KIND_COLOR[p.kind] }} />{p.kind}
+                </span>
+                <span className="erole">{p.role}</span>
+              </div>
+              <div className="entry-body">
+                <div className="entry-title">
+                  <h3>{p.title}</h3>
+                  {p.link && (
+                    <a href={p.link} className="entry-link mono" target="_blank" rel="noreferrer"
+                       onClick={e => { if (p.link.startsWith("#")) e.preventDefault(); }}>
+                      {p.linkLabel}<ArrowUpRight size={13} />
+                    </a>
+                  )}
+                </div>
+                <p>{p.desc}</p>
+                <div className="tags">
+                  {p.stack.map(t => <span key={t} className="tag mono">{t}</span>)}
+                </div>
+              </div>
+            </li>
+          ))}
+        </ol>
+      </section>
 
+      {/* ---------------- stack ---------------- */}
+      <section id="stack" className="section">
+        <div className="sec-head"><h2>Toolbox</h2></div>
+        <div className="stack-grid">
+          {STACK.map(g => (
+            <div key={g.group} className="stack-group">
+              <h4>{g.group}</h4>
+              <div className="tags">
+                {g.items.map(t => <span key={t} className="tag mono">{t}</span>)}
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* ---------------- about ---------------- */}
+      <section id="about" className="section about">
+        <div className="sec-head"><h2>About</h2></div>
+        <div className="about-grid">
+          <div className="about-text">
+            <p>
+              I'm a test automation and platform engineer working mostly in the .NET and
+              cloud world. Day to day that means Playwright suites that verify real behaviour,
+              Azure DevOps and GitHub Actions pipelines that deploy across clusters, and the
+              occasional internal tool when the existing consoles get in the way.
+            </p>
+            <p>
+              I like problems where the answer is "make this boring and reliable" — repeatable
+              releases, honest health checks, and automation that a teammate can pick up without
+              a handover call. Right now I'm building the Deployment Portal and finishing a
+              B.Tech in AI & ML.
+            </p>
+          </div>
+          <ul className="about-facts mono">
+            <li><MapPin size={14} />{PROFILE.location}</li>
+            <li><GraduationCap size={14} />{PROFILE.education}</li>
+            <li><Terminal size={14} />Currently: {PROFILE.focus}</li>
+          </ul>
+        </div>
+      </section>
+
+      {/* ---------------- contact ---------------- */}
+      <section id="contact" className="section contact">
+        <div className="contact-inner">
+          <h2>Let's talk.</h2>
+          <p>{PROFILE.availability}. The fastest way to reach me is email.</p>
+          <div className="contact-actions">
+            <button className="btn primary" onClick={copyEmail}>
+              {copied ? <><Check size={15} /> Copied</> : <><Copy size={15} /> {PROFILE.email}</>}
+            </button>
+            <a href={`mailto:${PROFILE.email}`} className="btn ghost"><Mail size={15} /> Email me</a>
+          </div>
+          <div className="socials">
+            <a href={PROFILE.github} target="_blank" rel="noreferrer"><GitHubIcon size={16} /> GitHub</a>
+            <a href={PROFILE.linkedin} target="_blank" rel="noreferrer"><LinkedInIcon size={16} /> LinkedIn</a>
+          </div>
+        </div>
+      </section>
+
+      <footer className="pf-footer">
+        <span className="mono">© {new Date().getFullYear()} {PROFILE.name}</span>
+        <span className="mono">Built by hand · no template</span>
+      </footer>
+
+      {/* ---------------- print-only resume ---------------- */}
+      <div className="pf-print-resume" aria-hidden="true">
+        <h1>{PROFILE.name}</h1>
+        <p>{PROFILE.role}</p>
+        <p>
+          {PROFILE.email} | {PROFILE.location}<br />
+          {PROFILE.github.replace("https://", "")} | {PROFILE.linkedin.replace("https://", "")}
+        </p>
+        <p>{PROFILE.blurb}</p>
+
+        <h2>Selected Work</h2>
+        {PROJECTS.map((p) => (
+          <div key={p.title}>
+            <p><strong>{p.title}</strong> ({p.kind}) — {p.role}</p>
+            <p>{p.desc}</p>
+            <p><em>{p.stack.join(", ")}</em></p>
+          </div>
+        ))}
+
+        <h2>Toolbox</h2>
+        <ul>
+          {STACK.map((g) => (
+            <li key={g.group}><strong>{g.group}:</strong> {g.items.join(", ")}</li>
+          ))}
+        </ul>
+
+        <h2>Education</h2>
+        <p>{PROFILE.education}</p>
+      </div>
+
+    </div>
+  );
 }
 
 const CSS = `
-.pf-root{--pf-gap:22px; font-family:inherit; color:var(--text); max-width:1400px; margin:0 auto;}
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+.pf-root{
+  --bg:#0b0e13; --panel:#141a23; --panel2:#10161e; --line:#232d3b; --line2:#2c3948;
+  --text:#e6edf5; --muted:#8b98ab; --faint:#5a6675; --teal:#37d5cf;
+  font-family:'Space Grotesk',system-ui,sans-serif; color:var(--text);
+  background:
+    radial-gradient(1000px 620px at 78% -10%, #16303048, transparent),
+    var(--bg);
+  -webkit-font-smoothing:antialiased; scroll-behavior:smooth;
+}
 .pf-root *{box-sizing:border-box;}
+.mono{font-family:'JetBrains Mono',ui-monospace,monospace;}
+.pf-root a{color:inherit; text-decoration:none;}
+.pf-root button{font-family:inherit; cursor:pointer;}
+:focus-visible{outline:2px solid var(--teal); outline-offset:3px; border-radius:6px;}
+.section, .hero, .nav{max-width:940px; margin:0 auto; padding-left:28px; padding-right:28px;}
 
-.pf-hero{
-  padding:38px 34px; margin-bottom:var(--pf-gap);
-  background:var(--card-bg); border:1px solid var(--stroke); border-radius:18px;
-  box-shadow:var(--card-shadow); backdrop-filter:blur(22px) saturate(160%);
-}
-.pf-eyebrow{
-  display:inline-block; font-size:11px; font-weight:700; letter-spacing:.08em; text-transform:uppercase;
-  color:var(--heading-accent); background:color-mix(in srgb, var(--heading-accent) 14%, transparent);
-  border:1px solid color-mix(in srgb, var(--heading-accent) 30%, transparent);
-  padding:4px 10px; border-radius:999px; margin-bottom:14px;
-}
-.pf-hero h1{margin:0; font-size:32px; font-weight:700; letter-spacing:-.02em; color:var(--text);}
-.pf-title{margin:6px 0 0; font-size:15px; font-weight:600; color:var(--heading-accent);}
-.pf-tagline{margin:12px 0 0; font-size:13.5px; line-height:1.6; color:var(--text-muted); max-width:70ch;}
+/* nav */
+.nav{display:flex; align-items:center; gap:22px; padding-top:22px; padding-bottom:22px;
+  position:sticky; top:0; z-index:10; backdrop-filter:blur(10px);
+  background:linear-gradient(180deg,#0b0e13ee,#0b0e1300);}
+.mark{display:flex; align-items:center; gap:9px; font-weight:600; font-size:14px; letter-spacing:-.01em;}
+.mark svg{color:var(--teal);}
+.nav-links{display:flex; gap:22px; margin-left:auto; font-size:13.5px; color:var(--muted);}
+.nav-links a{position:relative; padding:3px 0;}
+.nav-links a:hover{color:var(--text);}
+.nav-links a::after{content:""; position:absolute; left:0; right:0; bottom:-2px; height:1.5px; background:var(--teal);
+  transform:scaleX(0); transform-origin:left; transition:transform .2s;}
+.nav-links a:hover::after{transform:scaleX(1);}
+.resume{display:flex; align-items:center; gap:7px; font-size:13px; color:var(--muted);
+  border:1px solid var(--line2); padding:7px 12px; border-radius:9px; transition:.15s; background:transparent;}
+.resume:hover{border-color:var(--teal); color:var(--teal);}
 
-.pf-hero-stack{display:flex; flex-wrap:wrap; gap:8px; margin-top:18px;}
-.pf-hero-stack-item{
-  font-size:11px; font-weight:600; padding:5px 10px; border-radius:7px; color:var(--text-muted);
-  background:var(--card-bg-strong); border:1px solid var(--border); font-family:'JetBrains Mono',ui-monospace,monospace;
-}
+/* hero */
+.hero{display:grid; grid-template-columns:1.15fr .85fr; gap:40px; align-items:center;
+  padding-top:64px; padding-bottom:80px;}
+.role{font-size:13px; color:var(--teal); font-family:'JetBrains Mono',monospace;}
+.hero h1{margin:18px 0 0; font-size:44px; line-height:1.06; font-weight:600; letter-spacing:-.035em; max-width:15ch;}
+.blurb{margin:20px 0 0; font-size:15.5px; line-height:1.6; color:var(--muted); max-width:52ch;}
+.readout{display:flex; flex-direction:column; gap:8px; margin:26px 0 0; font-size:12.5px; color:var(--muted);}
+.readout span{display:flex; align-items:center; gap:10px;}
+.readout i{font-style:normal; color:var(--faint); width:64px; display:inline-block;}
+.avail{color:var(--text) !important;}
+.adot{width:8px; height:8px; border-radius:50%; background:#3ee08f; box-shadow:0 0 0 3px #3ee08f22; animation:blink 2s infinite;}
+@keyframes blink{50%{opacity:.4}}
+.hero-cta{display:flex; gap:12px; margin-top:32px;}
+.btn{display:inline-flex; align-items:center; gap:8px; font-size:14px; font-weight:600; padding:11px 20px; border-radius:11px; transition:.15s; border:1px solid transparent;}
+.btn.primary{background:var(--teal); color:#04211f;}
+.btn.primary:hover{filter:brightness(1.08);}
+.btn.ghost{border-color:var(--line2); color:var(--text);}
+.btn.ghost:hover{border-color:var(--teal); color:var(--teal);}
 
-.pf-contact-row{display:flex; flex-wrap:wrap; gap:8px; margin-top:18px;}
-.pf-contact-chip{
-  display:inline-flex; align-items:center; gap:6px; padding:7px 12px; border-radius:9px;
-  border:1px solid var(--stroke); background:var(--card-bg-strong); color:var(--text); font-size:12.5px;
-  text-decoration:none; transition:border-color .15s ease, color .15s ease;
-}
-a.pf-contact-chip:hover{border-color:var(--heading-accent); color:var(--heading-accent);}
-.pf-contact-chip svg{color:var(--text-muted); flex:0 0 auto;}
-.pf-contact-chip-static{cursor:default;}
+.hero-art{display:flex; justify-content:center;}
+.pipe{width:100%; max-width:400px;}
+.pipe .wire{fill:none; stroke:var(--line2); stroke-width:1.5;}
+.pipe .wire.live{stroke:url(#flow); stroke-width:2; stroke-dasharray:6 6; animation:flow 1.2s linear infinite;}
+@keyframes flow{to{stroke-dashoffset:-24;}}
+.pipe .node rect{fill:#10161e; stroke:var(--line2); stroke-width:1.5;}
+.pipe .node text{fill:var(--muted); font-family:'JetBrains Mono',monospace; font-size:11px; text-anchor:middle;}
+.pipe .node.active rect{stroke:var(--teal);}
+.pipe .node.active text{fill:var(--teal);}
+.pipe .node.cluster text{fill:var(--muted);}
+.pipe .pulse{fill:var(--teal); animation:pp 1.6s ease-in-out infinite;}
+@keyframes pp{0%,100%{opacity:.3; r:3}50%{opacity:1; r:4.5}}
 
-.pf-link-row{display:flex; flex-wrap:wrap; gap:10px; margin-top:16px;}
-.pf-link-btn{
-  display:inline-flex; align-items:center; gap:8px; padding:9px 14px; border-radius:9px;
-  border:1px solid var(--stroke); background:var(--card-bg-strong); color:var(--text); font-size:13px; font-weight:600;
-  text-decoration:none; transition:border-color .15s ease, background .15s ease, transform .15s ease;
-  cursor:pointer; font-family:inherit;
-}
-.pf-link-btn:hover{border-color:var(--heading-accent); background:var(--table-row-hover); transform:translateY(-1px);}
-.pf-link-btn-primary{background:var(--heading-accent); border-color:var(--heading-accent); color:#fff;}
-.pf-link-btn-primary:hover{background:var(--heading-accent); filter:brightness(1.08); color:#fff;}
+/* section shells */
+.section{padding-top:56px; padding-bottom:56px; border-top:1px solid var(--line);}
+.sec-head{display:flex; align-items:baseline; justify-content:space-between; margin-bottom:34px;}
+.sec-head h2{margin:0; font-size:15px; font-weight:600; color:var(--muted); letter-spacing:.01em;}
+.sec-meta{font-size:12px; color:var(--faint);}
 
-.pf-section{
-  padding:26px 30px; margin-bottom:var(--pf-gap);
-  background:var(--card-bg); border:1px solid var(--stroke); border-radius:18px;
-  box-shadow:var(--card-shadow); backdrop-filter:blur(22px) saturate(160%);
-  scroll-margin-top:20px;
-}
-.pf-section-title{
-  display:flex; align-items:center; gap:8px; margin:0 0 14px; font-size:15px; font-weight:700;
-  letter-spacing:-.01em; color:var(--text);
-}
-.pf-section-title svg{color:var(--heading-accent);}
-.pf-section-note{
-  display:flex; align-items:center; gap:6px; margin:-6px 0 16px; font-size:11.5px; color:var(--text-muted);
-  font-style:italic;
-}
-.pf-about-para{margin:0 0 10px; font-size:13px; line-height:1.65; color:var(--text-muted); max-width:80ch;}
-.pf-muted-note{font-size:12px; color:var(--text-muted); font-style:italic; margin:0;}
+/* work — build log */
+.log{list-style:none; margin:0; padding:0 0 0 4px; position:relative;}
+.log::before{content:""; position:absolute; left:5px; top:6px; bottom:6px; width:1.5px; background:var(--line);}
+.entry{position:relative; display:grid; grid-template-columns:170px 1fr; gap:32px; padding:0 0 42px 34px;}
+.entry:last-child{padding-bottom:4px;}
+.spine-node{position:absolute; left:0; top:6px; width:12px; height:12px; border-radius:50%; border:3px solid var(--bg);}
+.entry-meta{display:flex; flex-direction:column; gap:7px; padding-top:2px;}
+.kind{display:flex; align-items:center; gap:7px; font-size:12.5px; font-weight:600;}
+.kdot{width:7px; height:7px; border-radius:50%;}
+.erole{font-size:12.5px; color:var(--faint);}
+.entry-body h3{margin:0; font-size:20px; font-weight:600; letter-spacing:-.02em; transition:color .15s;}
+.entry:hover .entry-body h3{color:var(--teal);}
+.entry-title{display:flex; align-items:center; gap:14px; flex-wrap:wrap; margin-bottom:10px;}
+.entry-link{display:inline-flex; align-items:center; gap:3px; font-size:12px; color:var(--teal);}
+.entry-link:hover{text-decoration:underline;}
+.entry-body p{margin:0 0 14px; font-size:14.5px; line-height:1.6; color:var(--muted); max-width:60ch;}
+.tags{display:flex; flex-wrap:wrap; gap:7px;}
+.tag{font-size:11.5px; color:var(--muted); background:var(--panel2); border:1px solid var(--line);
+  border-radius:7px; padding:4px 9px;}
 
-.pf-skills-grid{display:grid; grid-template-columns:repeat(auto-fill, minmax(240px, 1fr)); gap:14px;}
-.pf-skill-card{padding:16px; border:1px solid var(--stroke); border-radius:12px; background:var(--card-bg-strong);}
-.pf-skill-head{display:flex; align-items:center; gap:8px; font-size:12.5px; font-weight:700; color:var(--heading-accent); margin-bottom:10px;}
-.pf-skill-tags{display:flex; flex-wrap:wrap; gap:6px;}
-.pf-tag{
-  font-size:11.5px; padding:5px 9px; border-radius:7px; color:var(--text-muted);
-  background:var(--table-row-hover); border:1px solid var(--border);
-}
-.pf-tag-accent{color:var(--heading-accent); border-color:color-mix(in srgb, var(--heading-accent) 30%, transparent);}
+/* stack */
+.stack-grid{display:grid; grid-template-columns:repeat(2,1fr); gap:28px 40px;}
+.stack-group h4{margin:0 0 12px; font-size:13px; font-weight:600; color:var(--text);}
 
-.pf-capabilities-grid{display:grid; grid-template-columns:repeat(auto-fit, minmax(260px, 1fr)); gap:14px;}
-.pf-capability-card{padding:16px; border:1px solid var(--stroke); border-radius:12px; background:var(--card-bg-strong);}
-.pf-capability-card p{margin:0 0 12px; font-size:12px; line-height:1.5; color:var(--text-muted);}
+/* about */
+.about-grid{display:grid; grid-template-columns:1.6fr 1fr; gap:44px;}
+.about-text p{margin:0 0 16px; font-size:15px; line-height:1.65; color:var(--muted); max-width:58ch;}
+.about-text p:last-child{margin-bottom:0;}
+.about-facts{list-style:none; margin:0; padding:20px; background:var(--panel2); border:1px solid var(--line);
+  border-radius:14px; display:flex; flex-direction:column; gap:14px; font-size:13px; color:var(--muted); height:fit-content;}
+.about-facts li{display:flex; align-items:center; gap:11px;}
+.about-facts svg{color:var(--teal); flex:0 0 auto;}
 
-.pf-mini-flow{display:flex; flex-wrap:wrap; align-items:center; gap:4px;}
-.pf-mini-flow-item{display:inline-flex; align-items:center; gap:4px;}
-.pf-mini-flow-node{
-  font-size:11px; font-weight:600; padding:4px 8px; border-radius:6px; color:var(--text);
-  background:var(--table-row-hover); border:1px solid var(--border); font-family:'JetBrains Mono',ui-monospace,monospace;
-}
-.pf-mini-flow-arrow{color:var(--text-muted); font-size:12px;}
-.pf-mini-arch-label{font-size:11.5px; color:var(--text-muted); margin:0 0 8px; font-style:italic;}
+/* contact */
+.contact{border-top:1px solid var(--line);}
+.contact-inner{text-align:center; padding:20px 0;}
+.contact-inner h2{margin:0; font-size:38px; font-weight:600; letter-spacing:-.03em; color:var(--text);}
+.contact-inner > p{margin:14px auto 0; font-size:15px; color:var(--muted); max-width:46ch;}
+.contact-actions{display:flex; gap:12px; justify-content:center; margin-top:28px; flex-wrap:wrap;}
+.contact-actions .primary{font-family:'JetBrains Mono',monospace; font-size:13px;}
+.socials{display:flex; gap:26px; justify-content:center; margin-top:26px; font-size:13.5px; color:var(--muted);}
+.socials a{display:flex; align-items:center; gap:8px;}
+.socials a:hover{color:var(--teal);}
 
-.pf-flow{display:flex; flex-wrap:wrap; align-items:stretch; gap:0;}
-.pf-flow-step-wrap{display:flex; align-items:center;}
-.pf-flow-step{
-  padding:10px 14px; border-radius:9px; background:var(--card-bg-strong); border:1px solid var(--stroke);
-  font-size:12.5px; font-weight:600; color:var(--text); white-space:nowrap;
-}
-.pf-flow-dense .pf-flow-step{background:color-mix(in srgb, var(--heading-accent) 8%, var(--card-bg-strong));}
-.pf-flow-arrow{color:var(--heading-accent); display:flex; align-items:center; margin:0 6px; flex:0 0 auto;}
-@media (max-width:720px){
-  .pf-flow{flex-direction:column; align-items:flex-start;}
-  .pf-flow-step-wrap{flex-direction:column; align-items:flex-start; width:100%;}
-  .pf-flow-arrow{transform:rotate(90deg); margin:4px 0 4px 14px;}
-}
-
-.pf-cloud-grid{display:grid; grid-template-columns:repeat(auto-fit, minmax(240px, 1fr)); gap:14px;}
-
-.pf-featured-project{padding:20px; border:1px solid var(--stroke); border-radius:14px; background:var(--card-bg-strong);}
-.pf-featured-head{display:flex; flex-wrap:wrap; align-items:flex-start; justify-content:space-between; gap:14px; margin-bottom:14px;}
-.pf-featured-head h3{margin:6px 0 4px; font-size:19px; font-weight:700; color:var(--text);}
-.pf-featured-tagline{margin:0; font-size:12.5px; color:var(--text-muted); max-width:60ch;}
-.pf-project-links{display:flex; gap:8px; flex-wrap:wrap;}
-
-.pf-tabs-row{display:flex; flex-wrap:wrap; gap:6px; border-bottom:1px solid var(--border); padding-bottom:10px; margin-bottom:16px;}
-.pf-tab-btn{
-  padding:7px 12px; border-radius:8px; border:1px solid transparent; background:transparent;
-  color:var(--text-muted); font-size:12px; font-weight:600; font-family:inherit; cursor:pointer;
-}
-.pf-tab-btn:hover{color:var(--text);}
-.pf-tab-btn.on{background:var(--card-bg); border-color:var(--stroke); color:var(--heading-accent);}
-.pf-tab-panel p{margin:0; font-size:13px; line-height:1.6; color:var(--text-muted);}
-.pf-live-note{
-  display:flex; align-items:center; gap:6px; margin-top:10px !important; font-size:11.5px !important;
-  color:var(--viz-good) !important;
-}
-.pf-project-points{margin:0; padding-left:18px; display:flex; flex-direction:column; gap:6px;}
-.pf-project-points li{font-size:12.5px; line-height:1.55; color:var(--text-muted);}
-
-.pf-arch{display:flex; flex-direction:column; align-items:center; gap:6px;}
-.pf-arch-node{
-  display:flex; flex-direction:column; align-items:center; gap:2px; padding:12px 16px; min-width:150px;
-  border:1px solid var(--stroke); border-radius:10px; background:var(--card-bg); text-align:center;
-}
-.pf-arch-node strong{font-size:12.5px; color:var(--text);}
-.pf-arch-node span{font-size:10.5px; color:var(--text-muted);}
-.pf-arch-node-wide{min-width:220px;}
-.pf-arch-node-accent{border-color:var(--heading-accent); background:color-mix(in srgb, var(--heading-accent) 10%, var(--card-bg));}
-.pf-arch-arrow{color:var(--heading-accent);}
-.pf-arch-branch{display:flex; flex-wrap:wrap; justify-content:center; gap:10px;}
-
-.pf-projects-grid{display:grid; grid-template-columns:repeat(auto-fit, minmax(320px, 1fr)); gap:16px;}
-.pf-project-card{padding:18px; border:1px solid var(--stroke); border-radius:12px; background:var(--card-bg-strong);}
-.pf-project-head{display:flex; align-items:baseline; justify-content:space-between; gap:10px;}
-.pf-project-head h3{margin:0; font-size:14.5px; font-weight:700; color:var(--text);}
-.pf-project-year{font-size:11.5px; color:var(--text-muted); flex:0 0 auto;}
-.pf-project-stack{margin:6px 0 4px; font-size:12px; color:var(--text-muted);}
-
-.pf-timeline{display:flex; flex-direction:column; gap:0;}
-.pf-timeline-item{display:flex; gap:14px; padding:12px 0; border-top:1px solid var(--border);}
-.pf-timeline-item:first-child{border-top:0; padding-top:0;}
-.pf-timeline-dot{width:8px; height:8px; border-radius:50%; background:var(--heading-accent); margin-top:6px; flex:0 0 auto;}
-.pf-timeline-body{flex:1; min-width:0;}
-.pf-timeline-row{display:flex; align-items:baseline; justify-content:space-between; gap:10px;}
-.pf-timeline-row strong{font-size:13.5px; color:var(--text);}
-.pf-timeline-year{font-size:11.5px; color:var(--text-muted); flex:0 0 auto;}
-.pf-timeline-body p{margin:4px 0 0; font-size:12.5px; color:var(--text-muted);}
-.pf-timeline-meta{display:inline-block; margin-top:4px; font-size:11px; color:var(--heading-accent);}
-
-.pf-cert-list{display:flex; flex-direction:column; gap:16px;}
-.pf-cert-item{display:flex; gap:12px; align-items:flex-start;}
-.pf-cert-icon{color:var(--heading-accent); flex:0 0 auto; margin-top:2px;}
-.pf-cert-item strong{font-size:13px; color:var(--text);}
-.pf-kind-badge{
-  display:inline-block; font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.04em;
-  padding:2px 7px; border-radius:5px; background:var(--table-row-hover); color:var(--text-muted); margin-right:2px;
-}
-.pf-kind-badge-training{color:var(--heading-accent); background:color-mix(in srgb, var(--heading-accent) 14%, transparent);}
-
-.pf-github-panel{margin-top:4px;}
-.pf-github-head{display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:12px;}
-.pf-github-note{margin:0; font-size:11px; color:var(--text-muted); font-style:italic;}
-.pf-spin{animation:pf-spin 0.9s linear infinite;}
-@keyframes pf-spin{to{transform:rotate(360deg);}}
-.pf-github-grid{display:grid; grid-template-columns:repeat(auto-fit, minmax(240px, 1fr)); gap:12px;}
-.pf-github-card{
-  display:block; padding:14px; border:1px solid var(--stroke); border-radius:10px; background:var(--card-bg-strong);
-  text-decoration:none; color:var(--text); transition:border-color .15s ease, transform .15s ease;
-}
-.pf-github-card:hover{border-color:var(--heading-accent); transform:translateY(-1px);}
-.pf-github-card-head{display:flex; align-items:center; justify-content:space-between; gap:8px;}
-.pf-github-name{font-size:13px; font-weight:700; color:var(--heading-accent); font-family:'JetBrains Mono',ui-monospace,monospace;}
-.pf-github-card-head svg{color:var(--text-muted); flex:0 0 auto;}
-.pf-github-desc{margin:8px 0 10px; font-size:11.5px; color:var(--text-muted); line-height:1.5;}
-.pf-github-meta{display:flex; flex-wrap:wrap; gap:10px; font-size:10.5px; color:var(--text-muted);}
-.pf-github-meta span{display:inline-flex; align-items:center; gap:3px;}
-
-.pf-inline-link{display:inline-flex; align-items:center; gap:6px; color:var(--heading-accent); font-weight:600; text-decoration:none;}
-.pf-inline-link:hover{text-decoration:underline;}
-
-.pf-footer{padding:20px 30px; text-align:center;}
-.pf-footer .pf-skill-tags{justify-content:center;}
+.pf-footer{max-width:940px; margin:0 auto; padding:26px 28px 40px; display:flex; justify-content:space-between;
+  border-top:1px solid var(--line); font-size:11.5px; color:var(--faint);}
 
 .pf-print-resume{display:none;}
 
-@media (max-width:640px){
-  .pf-hero{padding:28px 22px;}
-  .pf-section{padding:20px 18px;}
-  .pf-hero h1{font-size:26px;}
-  .pf-featured-head{flex-direction:column;}
+@media (max-width:820px){
+  .hero{grid-template-columns:1fr; gap:28px; padding-top:44px; padding-bottom:56px;}
+  .hero-art{order:-1; justify-content:flex-start;}
+  .hero h1{font-size:34px;}
+  .entry{grid-template-columns:1fr; gap:12px;}
+  .entry-meta{flex-direction:row; gap:16px; align-items:center;}
+  .stack-grid, .about-grid{grid-template-columns:1fr; gap:24px;}
+  .nav-links{display:none;}
 }
-
+@media (prefers-reduced-motion:reduce){
+  .pipe .wire.live,.pipe .pulse,.adot{animation:none !important;}
+  .pf-root{scroll-behavior:auto;}
+}
 @media print{
   .pf-root > *:not(.pf-print-resume){display:none !important;}
   .pf-print-resume{
