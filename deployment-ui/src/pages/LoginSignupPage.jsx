@@ -1235,6 +1235,11 @@ const CSS = `
 .aw-root .aw-tools-view{width:100%; min-height:100vh; padding:60px 40px;}
 .aw-root .aw-tools-view-inner{width:100%; max-width:1400px; margin:0 auto;}
 .aw-root .aw-tools-view-inner .main{padding:0; max-width:none;}
+/* .aw-root .card below is scoped for the LOGIN card specifically
+   (max-width:400px) - without this override it also clamps every .card
+   Template Tester/External APIs/Portfolio render, since they mount inside
+   this same .aw-root wrapper too. */
+.aw-root .aw-tools-view-inner .card{max-width:none; width:100%;}
 @media (max-width:640px){
   .aw-root .aw-tools-view{padding:56px 18px 30px;}
 }
