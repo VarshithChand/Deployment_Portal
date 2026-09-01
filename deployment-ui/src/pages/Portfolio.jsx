@@ -28,21 +28,21 @@ function LinkedInIcon({ size = 16 }) {
    Varshith Chand Vuyyuru's real profile - the PROJECTS/STACK below are
    the user's own supplied content, verbatim (not resume-derived - this
    is broader than the resume: real production work at VIPS/RxApps360
-   plus a self-hosted DevOps platform). Only name/links/résumé were
-   templated when this component was handed over; those are filled in
-   with the same facts already established elsewhere on this login page
-   (data/portfolioData.js's PROFILE, before this replaced it).
+   plus a self-hosted DevOps platform). Every field below is real -
+   role/headline/blurb/location/education/availability are grounded in
+   the resume's own positioning ("Aspiring DevOps Engineer") rather than
+   the generic template prose this component originally shipped with.
    ============================================================ */
 const PROFILE = {
   name: "Varshith Chand Vuyyuru",
-  role: "Test automation & platform engineering",
-  headline: "I build the pipelines and tools that ship other people's code.",
+  role: "Aspiring DevOps Engineer",
+  headline: "I build the pipelines, tests, and infrastructure that ship software safely.",
   blurb:
-    "I make software ship safely and repeatedly — end-to-end tests that catch real regressions, CI/CD that deploys across clusters without drama, and internal tools that put all of it in one place.",
-  location: "Hyderabad, India",
+    "I work across CI/CD, cloud infrastructure, and containerized deployments — plus the automated tests and internal tools that keep them honest — using AWS, Azure, GCP, Docker, and Kubernetes.",
+  location: "Bapatla, Andhra Pradesh",
   education: "B.Tech, AI & ML",
   focus: "Deployment Portal",
-  availability: "Open to platform / DevOps / SDET roles",
+  availability: "Open to DevOps / Cloud / Platform Engineer roles",
   email: "v.varshith.2004@gmail.com",
   github: "https://github.com/VarshithChand",
   linkedin: "https://linkedin.com/in/varshith-chand-vuyyuru",
@@ -295,10 +295,10 @@ export default function Portfolio() {
         <div className="about-grid">
           <div className="about-text">
             <p>
-              I'm a test automation and platform engineer working mostly in the .NET and
-              cloud world. Day to day that means Playwright suites that verify real behaviour,
-              Azure DevOps and GitHub Actions pipelines that deploy across clusters, and the
-              occasional internal tool when the existing consoles get in the way.
+              I'm an aspiring DevOps Engineer working mostly in the .NET and cloud world —
+              CI/CD pipelines in GitHub Actions and Azure DevOps, containerized deployments,
+              Playwright suites that verify real behaviour, and the occasional internal tool
+              when the existing consoles get in the way.
             </p>
             <p>
               I like problems where the answer is "make this boring and reliable" — repeatable
