@@ -68,6 +68,11 @@ function GitHubIcon() {
 
 const RESEND_COOLDOWN_SECONDS = 45;
 
+// The three no-login tools reachable from the bottom-right corner button
+// (see toolsMenu) - kept as one list so the URL-restore check and the
+// menu itself can't drift apart.
+const TOOL_MODES = ["external-apis", "template-tester", "portfolio"];
+
 // "v*****@gmail.com" - never shows enough of the local part to be useful
 // for anything but confirming "yes, that's roughly my address" (spec's
 // own example format).
@@ -153,17 +158,37 @@ export default function LoginSignupPage({ onMfaRequired }) {
     // anything in this component.
     const [checkEmailSent, setCheckEmailSent] = useState(false);
 
-    // The two no-login, nothing-saved tools reachable from the bottom-right
-    // corner button below (see toolsMenu) - External APIs and Template
-    // Tester are both genuinely usable without an account: Template Tester
-    // is 100% client-side already (see that page's own comment), and
-    // External APIs' anonymous mode hits a separate, tightly-capped
-    // endpoint that never touches the saved endpoint list (see
-    // ExternalHealthController.CheckPublic). null means "show the normal
-    // login/signup card" - this takes priority over every other state on
-    // this page while set, same as forgotStep does.
-    const [toolMode, setToolMode] = useState(null);
+    // The three no-login, nothing-saved tools reachable from the bottom-
+    // right corner button below (see toolsMenu) - External APIs, Template
+    // Tester, and Portfolio are all genuinely usable without an account.
+    // null means "show the normal login/signup card" - this takes priority
+    // over every other state on this page while set, same as forgotStep
+    // does. Mirrors forgotStep's own URL-restore trick (see
+    // handleForgotPassword's comment) via a ?tool= query param - without
+    // it, a refresh while looking at a tool had no way to know it should
+    // still be showing one, and landed back on the plain login form
+    // instead. openTool/closeTool below keep this in sync with the URL;
+    // nothing else should call setToolMode directly.
+    const [toolMode, setToolMode] = useState(() => {
+        const fromUrl = new URLSearchParams(window.location.search).get("tool");
+        return TOOL_MODES.includes(fromUrl) ? fromUrl : null;
+    });
     const [toolsMenuOpen, setToolsMenuOpen] = useState(false);
+
+    function openTool(nextMode) {
+        const params = new URLSearchParams(window.location.search);
+        params.set("tool", nextMode);
+        window.history.replaceState(null, "", `${window.location.pathname}?${params.toString()}`);
+        setToolMode(nextMode);
+    }
+
+    function closeTool() {
+        const params = new URLSearchParams(window.location.search);
+        params.delete("tool");
+        const query = params.toString();
+        window.history.replaceState(null, "", window.location.pathname + (query ? `?${query}` : ""));
+        setToolMode(null);
+    }
 
     const isReg = mode === "register";
 
@@ -235,6 +260,16 @@ export default function LoginSignupPage({ onMfaRequired }) {
 
     function handleForgotPassword(e) {
         e.preventDefault();
+        // Mirrors handleBackToLogin's own cleanup in reverse - without this,
+        // the URL never left "/" when this button (rather than a direct
+        // /forgot-password visit) started the flow, so a refresh mid-flow
+        // found no reason to restore forgotStep at all and landed back on
+        // the plain login form instead of this flow's own start ("email").
+        // Deliberately only ever restores to "email", never "otp"/
+        // "newPassword" - those hold a live OTP/reset-token window that
+        // shouldn't be assumed still valid after a hard refresh anyway;
+        // landing on "email" just means requesting a fresh code.
+        window.history.replaceState(null, "", "/forgot-password" + window.location.search);
         setError("");
         setForgotStep("email");
     }
@@ -510,7 +545,7 @@ export default function LoginSignupPage({ onMfaRequired }) {
                     <button
                         type="button"
                         role="menuitem"
-                        onClick={() => { setToolMode("external-apis"); setToolsMenuOpen(false); }}
+                        onClick={() => { openTool("external-apis"); setToolsMenuOpen(false); }}
                     >
                         External APIs
                     </button>
@@ -518,7 +553,7 @@ export default function LoginSignupPage({ onMfaRequired }) {
                     <button
                         type="button"
                         role="menuitem"
-                        onClick={() => { setToolMode("template-tester"); setToolsMenuOpen(false); }}
+                        onClick={() => { openTool("template-tester"); setToolsMenuOpen(false); }}
                     >
                         Template Tester
                     </button>
@@ -526,7 +561,7 @@ export default function LoginSignupPage({ onMfaRequired }) {
                     <button
                         type="button"
                         role="menuitem"
-                        onClick={() => { setToolMode("portfolio"); setToolsMenuOpen(false); }}
+                        onClick={() => { openTool("portfolio"); setToolsMenuOpen(false); }}
                     >
                         Portfolio
                     </button>
@@ -562,7 +597,7 @@ export default function LoginSignupPage({ onMfaRequired }) {
                         <button
                             type="button"
                             className="auth-chip-btn"
-                            onClick={() => setToolMode(null)}
+                            onClick={closeTool}
                             style={{ marginBottom: 16 }}
                         >
                             <ChevronLeft size={14} /> Back to Login
