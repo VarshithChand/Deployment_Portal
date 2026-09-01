@@ -105,29 +105,32 @@ export default function CredentialsLockModal({ onUnlock, onForgotPin }) {
 
     }
 
-    // Portalled to document.body - same reasoning as PinLockScreen/
-    // SwitchRepositoryModal's own createPortal use (position:fixed's
-    // containing block becomes the nearest transformed/filtered ancestor,
-    // not the viewport, if one exists between this and <body>).
+    // Same .auth-page/.auth-page-card shell PinLockScreen and
+    // MfaEnforcementGate's blocked state already use - see PinLockScreen's
+    // own comment for why (this used to be built on a separate .dialog/
+    // pin-lock-dialog modal system that rendered visibly differently under
+    // some [data-style] variants). Portalled to document.body for the same
+    // position:fixed-containing-block reason PinLockScreen/
+    // SwitchRepositoryModal already are.
     return createPortal(
 
-        <div className="dialog-backdrop pin-lock-backdrop" role="presentation">
+        <div className="auth-page" style={{ position: "fixed", inset: 0, zIndex: 1200 }}>
 
-            <div className="dialog pin-lock-dialog" role="alertdialog" aria-modal="true" aria-labelledby="credentials-lock-title">
+            <div className="auth-page-card" role="alertdialog" aria-modal="true" aria-labelledby="credentials-lock-title" style={{ maxWidth: 420 }}>
 
                 <div className="pin-lock-icon">
                     <LockIcon />
                 </div>
 
-                <h2 id="credentials-lock-title" style={{ textAlign: "center" }}>
+                <h1 id="credentials-lock-title" className="setup-gate-title">
                     Credentials Locked
-                </h2>
+                </h1>
 
-                <p className="field-hint" style={{ marginTop: 0, textAlign: "center" }}>
+                <p className="field-hint" style={{ textAlign: "center" }}>
                     Enter your screen-lock PIN to view or manage saved credentials.
                 </p>
 
-                <form onSubmit={handleSubmit}>
+                <form onSubmit={handleSubmit} className="setup-gate-form">
 
                     <div className="auth-page-field">
                         <LockIcon size={18} />
@@ -150,8 +153,8 @@ export default function CredentialsLockModal({ onUnlock, onForgotPin }) {
 
                     <button
                         type="submit"
-                        className="btn btn-success"
-                        style={{ width: "100%", marginTop: "12px" }}
+                        className="btn btn-primary"
+                        style={{ width: "100%" }}
                         disabled={checking || pin.length < 4}
                     >
                         {checking ? "Checking..." : "Unlock"}
@@ -159,14 +162,16 @@ export default function CredentialsLockModal({ onUnlock, onForgotPin }) {
 
                 </form>
 
-                <button
-                    type="button"
-                    className="btn btn-link"
-                    style={{ marginTop: "16px" }}
-                    onClick={onForgotPin}
-                >
-                    Forgot your PIN? Set a new one in Screen Lock settings
-                </button>
+                <p style={{ textAlign: "center", margin: "16px 0 0" }}>
+                    <button
+                        type="button"
+                        className="token-help-link"
+                        style={{ background: "none", border: "none", padding: 0, cursor: "pointer" }}
+                        onClick={onForgotPin}
+                    >
+                        Forgot your PIN? Set a new one in Screen Lock settings
+                    </button>
+                </p>
 
             </div>
 

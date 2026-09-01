@@ -109,26 +109,34 @@ export default function PinLockScreen({ onUnlock }) {
     // this renders underneath (this component can be triggered from any
     // page in the app, so there's no way to audit every possible ancestor
     // for a stray transform/backdrop-filter and trust that staying true).
+    // Same .auth-page/.auth-page-card shell MfaEnforcementGate's blocked
+    // state and MfaVerifyPage already use (the fixed/inset/zIndex inline
+    // style is what turns .auth-page, normally a full real page, into an
+    // overlay here - identical to MfaEnforcementGate's own approach) -
+    // this used to be built on a separate .dialog/pin-lock-dialog modal
+    // system instead, which rendered visibly differently under some
+    // [data-style] variants even though it shared the same PIN input/
+    // field styling. One shell now, not two.
     return createPortal(
 
-        <div className="dialog-backdrop pin-lock-backdrop" role="presentation">
+        <div className="auth-page" style={{ position: "fixed", inset: 0, zIndex: 1200 }}>
 
-            <div className="dialog pin-lock-dialog" role="alertdialog" aria-modal="true" aria-labelledby="pin-lock-title">
+            <div className="auth-page-card" role="alertdialog" aria-modal="true" aria-labelledby="pin-lock-title" style={{ maxWidth: 420 }}>
 
                 <div className="pin-lock-icon">
                     <LockIcon />
                 </div>
 
-                <h2 id="pin-lock-title" style={{ textAlign: "center" }}>
+                <h1 id="pin-lock-title" className="setup-gate-title">
                     Locked
-                </h2>
+                </h1>
 
-                <p className="field-hint" style={{ marginTop: 0, textAlign: "center" }}>
+                <p className="field-hint" style={{ textAlign: "center" }}>
                     Enter your PIN to keep going — your GitHub/AWS/Azure/GCP credentials are
                     untouched, still saved.
                 </p>
 
-                <form onSubmit={handleSubmit}>
+                <form onSubmit={handleSubmit} className="setup-gate-form">
 
                     <div className="auth-page-field">
                         <LockIcon size={18} />
@@ -151,8 +159,8 @@ export default function PinLockScreen({ onUnlock }) {
 
                     <button
                         type="submit"
-                        className="btn btn-success"
-                        style={{ width: "100%", marginTop: "12px" }}
+                        className="btn btn-primary"
+                        style={{ width: "100%" }}
                         disabled={checking || pin.length < 4}
                     >
                         {checking ? "Checking..." : "Unlock"}
@@ -160,14 +168,16 @@ export default function PinLockScreen({ onUnlock }) {
 
                 </form>
 
-                <button
-                    type="button"
-                    className="btn btn-link"
-                    style={{ marginTop: "16px" }}
-                    onClick={performSelfClear}
-                >
-                    Forgot your PIN? Clear all saved credentials instead
-                </button>
+                <p style={{ textAlign: "center", margin: "16px 0 0" }}>
+                    <button
+                        type="button"
+                        className="token-help-link"
+                        style={{ background: "none", border: "none", padding: 0, cursor: "pointer" }}
+                        onClick={performSelfClear}
+                    >
+                        Forgot your PIN? Clear all saved credentials instead
+                    </button>
+                </p>
 
             </div>
 
