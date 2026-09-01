@@ -1,71 +1,54 @@
 import { useState } from "react";
+import {
+    Rocket, ShieldCheck, KeyRound, Lock, Eye, EyeOff, User,
+    Server, Clock
+} from "lucide-react";
 
 import { signUp, logIn, requestPasswordReset, resetPassword } from "../services/authLoginService";
 import { API_BASE, getSessionId } from "../api/apiBase";
-import Logo from "../components/common/Logo";
 import useTheme from "../hooks/useTheme";
 import useToast from "../hooks/useToast";
 import { SunIcon, MoonIcon } from "../components/layout/SidebarIcons";
 
-// Same stroke-weight/line-cap style as PatLoginPage's old KeyIcon, so
-// these read as part of the same icon set.
-function EmailIcon() {
-    return (
-        <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true">
-            <rect x="2" y="4" width="14" height="10" rx="1.5" stroke="currentColor" strokeWidth="1.5" />
-            <path d="M2.5 5L9 10L15.5 5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-    );
+// Matches the Dashboard's own "ops console" layout (Round 7 - Dashboard.
+// jsx) for the one other page a visitor sees before any of the app's own
+// chrome exists (this renders before TopBar/Sidebar ever mount - see
+// App.jsx's top-level gate). Every color below is one of this app's own
+// theme tokens (var(--card-bg)/--text/--text-muted/--stroke/--heading-
+// accent/--viz-good/etc - the same ones .card/StatusBadge use everywhere
+// else), scoped under .aw-root - so this page matches every other page
+// and follows the light/dark toggle, rather than being a separate fixed-
+// dark identity (an earlier version of this page was exactly that; it
+// didn't match the rest of the app and was explicitly asked to be fixed).
+// GitHub's brand mark isn't in lucide-react (dropped in this app's
+// installed version, same gap Dashboard.jsx hit) - GitHubIcon below is
+// the same inline octocat path the previous version of this page used.
+const S = { ok: "var(--viz-good)", running: "var(--heading-accent)", warn: "var(--viz-warning)" };
+
+const PROVIDERS = [
+    { n: "GitHub", s: "ok" }, { n: "Azure DevOps", s: "ok" },
+    { n: "AWS", s: "ok" }, { n: "Azure", s: "ok" }, { n: "GCP", s: "warn" },
+    { n: "Render", s: "ok" }, { n: "Cloudflare", s: "ok" }, { n: "Harbor", s: "ok" },
+    { n: "ECR", s: "ok" }, { n: "SonarQube", s: "ok" }
+];
+
+// A static illustration of what's behind the login, not live data - unlike
+// every in-app page this session has been careful to only ever show real
+// numbers on, there's no session yet here to fetch anything real WITH.
+// Framed as a preview/mockup (aria-hidden, no claim of live status)
+// specifically so it doesn't read as a lie about current system state.
+const PREVIEW_RUNS = [
+    { wf: "deploy-api.yml", env: "acpt", sha: "a91f3c7", s: "running", time: "now" },
+    { wf: "deploy-ui.yml", env: "prod", sha: "b4a0f91", s: "ok", time: "6h ago" }
+];
+
+function GoogleMark() {
+    return <span className="oauth-g" aria-hidden>G</span>;
 }
 
-function PasswordIcon() {
-    return (
-        <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true">
-            <rect x="4" y="8" width="10" height="7" rx="1.5" stroke="currentColor" strokeWidth="1.5" />
-            <path d="M6 8V5.5a3 3 0 0 1 6 0V8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-        </svg>
-    );
-}
-
-// Open eye - shown while the password is masked, click to reveal.
-function EyeIcon() {
-    return (
-        <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true">
-            <path d="M1.5 9S4.5 3.5 9 3.5 16.5 9 16.5 9 13.5 14.5 9 14.5 1.5 9 1.5 9Z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-            <circle cx="9" cy="9" r="2.25" stroke="currentColor" strokeWidth="1.5" />
-        </svg>
-    );
-}
-
-// Slashed eye - shown while the password is revealed, click to mask again.
-function EyeOffIcon() {
-    return (
-        <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true">
-            <path d="M2.3 5.4C1.2 6.6 1.5 9 1.5 9s3 5.5 7.5 5.5c1.09 0 2.08-.32 2.95-.79M14.6 12c1.16-1.16 1.9-3 1.9-3s-3-5.5-7.5-5.5c-.62 0-1.2.1-1.76.28" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-            <path d="M7.1 7.1a2.25 2.25 0 0 0 3.18 3.18" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-            <path d="M2 2l14 14" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-        </svg>
-    );
-}
-
-// Google's real 4-color "G" mark - brand recognition matters for an OAuth
-// button, so this is the standard glyph, not an abstracted icon-set piece.
-function GoogleIcon() {
-    return (
-        <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
-            <path fill="#4285F4" d="M17.64 9.2c0-.64-.06-1.25-.16-1.84H9v3.48h4.84a4.14 4.14 0 0 1-1.8 2.72v2.26h2.92c1.7-1.57 2.68-3.88 2.68-6.62Z" />
-            <path fill="#34A853" d="M9 18c2.43 0 4.47-.8 5.96-2.18l-2.92-2.26c-.81.54-1.84.86-3.04.86-2.34 0-4.32-1.58-5.03-3.7H.95v2.33A9 9 0 0 0 9 18Z" />
-            <path fill="#FBBC05" d="M3.97 10.72A5.4 5.4 0 0 1 3.68 9c0-.6.1-1.18.29-1.72V4.95H.95A9 9 0 0 0 0 9c0 1.45.35 2.83.95 4.05l3.02-2.33Z" />
-            <path fill="#EA4335" d="M9 3.58c1.32 0 2.51.46 3.44 1.35l2.59-2.59C13.46.89 11.43 0 9 0A9 9 0 0 0 .95 4.95l3.02 2.33C4.68 5.16 6.66 3.58 9 3.58Z" />
-        </svg>
-    );
-}
-
-// GitHub's Octocat mark, single-path, currentColor - matches the theme
-// like every other icon on this page instead of a fixed brand color.
 function GitHubIcon() {
     return (
-        <svg width="18" height="18" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+        <svg width="17" height="17" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
             <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.5 7.5 0 0 1 4 0c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z" />
         </svg>
     );
@@ -82,25 +65,13 @@ export default function LoginSignupPage({ onMfaRequired }) {
     const { theme, toggleTheme } = useTheme();
     const toast = useToast();
 
-    const [mode, setMode] = useState("login");
+    const [mode, setMode] = useState("signin");
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
     const [displayName, setDisplayName] = useState("");
     const [submitting, setSubmitting] = useState(false);
     const [error, setError] = useState("");
     const [showPassword, setShowPassword] = useState(false);
-
-    // Set once a fresh signup's response comes back with
-    // emailVerificationRequired:true (see AccountAuthController.
-    // FinishPrimaryFactorAsync) - the account exists but nothing else about
-    // it (role, MFA, a session) is resolved yet, so there's nothing to do
-    // here but tell them to go click the link. The rest of "verify -> MFA
-    // setup -> dashboard" happens after they leave this tab entirely and
-    // click the emailed link (see AccountAuthController.VerifyEmail) -
-    // mandatory MFA enrollment itself is enforced server-side from there on
-    // (see MfaEnforcementGate/PortalUserAccount.MustSetUpMfa), not by
-    // anything in this component.
-    const [checkEmailSent, setCheckEmailSent] = useState(false);
 
     // Present only when this page was opened from the link in a password-
     // reset email (see AccountAuthController.ForgotPassword's resetUrl) -
@@ -116,14 +87,26 @@ export default function LoginSignupPage({ onMfaRequired }) {
     const [resetSubmitting, setResetSubmitting] = useState(false);
     const [resetError, setResetError] = useState("");
 
-    const isSignup = mode === "signup";
+    // Set once a fresh signup's response comes back with
+    // emailVerificationRequired:true (see AccountAuthController.
+    // FinishPrimaryFactorAsync) - the account exists but nothing else about
+    // it (role, MFA, a session) is resolved yet, so there's nothing to do
+    // here but tell them to go click the link. The rest of "verify -> MFA
+    // setup -> dashboard" happens after they leave this tab entirely and
+    // click the emailed link (see AccountAuthController.VerifyEmail) -
+    // mandatory MFA enrollment itself is enforced server-side from there on
+    // (see MfaEnforcementGate/PortalUserAccount.MustSetUpMfa), not by
+    // anything in this component.
+    const [checkEmailSent, setCheckEmailSent] = useState(false);
+
+    const isReg = mode === "register";
 
     async function handleSubmit(e) {
 
         e.preventDefault();
 
         if (!email.trim() || !password) {
-            setError(isSignup ? "Email and password are required." : "Email/username and password are required.");
+            setError(isReg ? "Email and password are required." : "Email/username and password are required.");
             return;
         }
 
@@ -132,7 +115,7 @@ export default function LoginSignupPage({ onMfaRequired }) {
 
         try {
 
-            const result = isSignup
+            const result = isReg
                 ? await signUp(email.trim(), password, displayName.trim() || undefined)
                 : await logIn(email.trim(), password);
 
@@ -243,10 +226,6 @@ export default function LoginSignupPage({ onMfaRequired }) {
             }
 
             toast.show("Password updated.", "success");
-            // Strips ?resetToken= before the reload picks up the new
-            // session, same reasoning as VerifyEmail's own URL cleanup -
-            // a refresh afterward shouldn't re-show this form with a
-            // token that's already been consumed.
             window.location.href = window.location.pathname;
 
         }
@@ -259,10 +238,13 @@ export default function LoginSignupPage({ onMfaRequired }) {
 
     }
 
+    // This page renders before any of the app's own chrome (TopBar/
+    // Sidebar) mounts, so it needs its own theme toggle - every other page
+    // reaches useTheme via TopBar instead.
     const themeToggle = (
         <button
             type="button"
-            className="auth-theme-toggle"
+            className="aw-theme-toggle"
             onClick={toggleTheme}
             title={theme === "dark" ? "Light mode" : "Dark mode"}
             aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
@@ -279,75 +261,77 @@ export default function LoginSignupPage({ onMfaRequired }) {
 
         return (
 
-            <div className="auth-page">
+            <div className="aw-root">
+                <style>{CSS}</style>
+                {themeToggle}
 
-                <div className="auth-page-card" role="main" aria-labelledby="reset-password-title">
+                <div className="aw-split aw-split-solo">
 
-                    {themeToggle}
+                    <main className="authcol">
 
-                    <div className="auth-page-logo">
-                        <Logo showEyebrow={false} compact size={34} />
-                    </div>
+                        <div className="card" role="main" aria-labelledby="reset-password-title">
 
-                    <h1 id="reset-password-title" className="setup-gate-title">
-                        Set a new password
-                    </h1>
+                            <div className="card-body">
 
-                    <p className="field-hint" style={{ textAlign: "center" }}>
-                        Choose a new password for your account.
-                    </p>
+                                <h2 id="reset-password-title">Set a new password</h2>
 
-                    <form onSubmit={handleResetSubmit} className="setup-gate-form">
+                                <p className="lede">Choose a new password for your account.</p>
 
-                        <div className="form-group">
-                            <label htmlFor="new-password">New password</label>
-                            <div className="auth-page-field">
-                                <PasswordIcon />
-                                <input
-                                    id="new-password"
-                                    type={showNewPassword ? "text" : "password"}
-                                    placeholder="At least 8 characters"
-                                    value={newPassword}
-                                    onChange={(e) => setNewPassword(e.target.value)}
-                                    autoComplete="new-password"
-                                    autoFocus
-                                />
-                                <button
-                                    type="button"
-                                    className="auth-page-field-toggle"
-                                    onClick={() => setShowNewPassword((v) => !v)}
-                                    aria-label={showNewPassword ? "Hide password" : "Show password"}
-                                    aria-pressed={showNewPassword}
-                                >
-                                    {showNewPassword ? <EyeOffIcon /> : <EyeIcon />}
-                                </button>
+                                <form className="form" onSubmit={handleResetSubmit}>
+
+                                    <label className="field">
+                                        <span>New password</span>
+                                        <div className="input">
+                                            <Lock size={15} />
+                                            <input
+                                                type={showNewPassword ? "text" : "password"}
+                                                placeholder="At least 8 characters"
+                                                autoComplete="new-password"
+                                                value={newPassword}
+                                                onChange={(e) => setNewPassword(e.target.value)}
+                                                autoFocus
+                                            />
+                                            <button
+                                                type="button"
+                                                className="peek"
+                                                aria-label={showNewPassword ? "Hide password" : "Show password"}
+                                                aria-pressed={showNewPassword}
+                                                onClick={() => setShowNewPassword((v) => !v)}
+                                            >
+                                                {showNewPassword ? <EyeOff size={15} /> : <Eye size={15} />}
+                                            </button>
+                                        </div>
+                                    </label>
+
+                                    <label className="field">
+                                        <span>Confirm new password</span>
+                                        <div className="input">
+                                            <Lock size={15} />
+                                            <input
+                                                type={showNewPassword ? "text" : "password"}
+                                                placeholder="Type it again"
+                                                autoComplete="new-password"
+                                                value={confirmPassword}
+                                                onChange={(e) => setConfirmPassword(e.target.value)}
+                                            />
+                                        </div>
+                                    </label>
+
+                                    {resetError && (
+                                        <p className="form-error" role="alert">{resetError}</p>
+                                    )}
+
+                                    <button type="submit" className="primary" disabled={resetSubmitting}>
+                                        {resetSubmitting ? "Please wait..." : "Set new password"}
+                                    </button>
+
+                                </form>
+
                             </div>
+
                         </div>
 
-                        <div className="form-group">
-                            <label htmlFor="confirm-new-password">Confirm new password</label>
-                            <div className="auth-page-field">
-                                <PasswordIcon />
-                                <input
-                                    id="confirm-new-password"
-                                    type={showNewPassword ? "text" : "password"}
-                                    placeholder="Type it again"
-                                    value={confirmPassword}
-                                    onChange={(e) => setConfirmPassword(e.target.value)}
-                                    autoComplete="new-password"
-                                />
-                            </div>
-                        </div>
-
-                        {resetError && (
-                            <p className="field-hint field-hint-bad" role="alert">{resetError}</p>
-                        )}
-
-                        <button type="submit" className="btn btn-primary" disabled={resetSubmitting}>
-                            {resetSubmitting ? "Please wait..." : "Set new password"}
-                        </button>
-
-                    </form>
+                    </main>
 
                 </div>
 
@@ -361,96 +345,96 @@ export default function LoginSignupPage({ onMfaRequired }) {
 
         return (
 
-            <div className="auth-page">
+            <div className="aw-root">
+                <style>{CSS}</style>
+                {themeToggle}
 
-                <div className="auth-page-card" role="main" aria-labelledby="forgot-password-title">
+                <div className="aw-split aw-split-solo">
 
-                    {themeToggle}
+                    <main className="authcol">
 
-                    <div className="auth-page-logo">
-                        <Logo showEyebrow={false} compact size={34} />
-                    </div>
+                        <div className="card" role="main" aria-labelledby="forgot-password-title">
 
-                    {forgotSent ? (
+                            {forgotSent ? (
 
-                        <>
+                                <div className="card-body card-body-center">
 
-                            <h1 id="forgot-password-title" className="setup-gate-title">
-                                Check your email
-                            </h1>
+                                    <span className="check-glyph"><ShieldCheck size={22} /></span>
 
-                            <p className="field-hint" style={{ textAlign: "center" }}>
-                                If <strong>{email.trim()}</strong> has an account, we've sent a link to reset
-                                its password. The link expires in 1 hour.
-                            </p>
+                                    <h2 id="forgot-password-title">Check your email</h2>
 
-                            <p className="field-hint" style={{ textAlign: "center" }}>
-                                <button
-                                    type="button"
-                                    className="token-help-link"
-                                    style={{ background: "none", border: "none", padding: 0, cursor: "pointer" }}
-                                    onClick={() => { setShowForgotForm(false); setForgotSent(false); setError(""); }}
-                                >
-                                    Back to sign in
-                                </button>
-                            </p>
+                                    <p className="lede" style={{ textAlign: "center" }}>
+                                        If <strong>{email.trim()}</strong> has an account, we've sent a link to
+                                        reset its password. The link expires in 1 hour.
+                                    </p>
 
-                        </>
+                                    <p className="allowlist">
+                                        <button
+                                            type="button"
+                                            className="linklike"
+                                            onClick={() => { setShowForgotForm(false); setForgotSent(false); setError(""); }}
+                                        >
+                                            Back to sign in
+                                        </button>
+                                    </p>
 
-                    ) : (
-
-                        <>
-
-                            <h1 id="forgot-password-title" className="setup-gate-title">
-                                Reset your password
-                            </h1>
-
-                            <p className="field-hint" style={{ textAlign: "center" }}>
-                                Enter the email on your account and we'll send you a link to set a new password.
-                            </p>
-
-                            <form onSubmit={handleRequestReset} className="setup-gate-form">
-
-                                <div className="form-group">
-                                    <label htmlFor="forgot-email">Email</label>
-                                    <div className="auth-page-field">
-                                        <EmailIcon />
-                                        <input
-                                            id="forgot-email"
-                                            type="email"
-                                            placeholder="you@example.com"
-                                            value={email}
-                                            onChange={(e) => setEmail(e.target.value)}
-                                            autoComplete="email"
-                                            autoFocus
-                                        />
-                                    </div>
                                 </div>
 
-                                {error && (
-                                    <p className="field-hint field-hint-bad" role="alert">{error}</p>
-                                )}
+                            ) : (
 
-                                <button type="submit" className="btn btn-primary" disabled={forgotSubmitting}>
-                                    {forgotSubmitting ? "Please wait..." : "Send reset link"}
-                                </button>
+                                <div className="card-body">
 
-                            </form>
+                                    <h2 id="forgot-password-title">Reset your password</h2>
 
-                            <p style={{ textAlign: "center", margin: "8px 0 0" }}>
-                                <button
-                                    type="button"
-                                    className="token-help-link"
-                                    style={{ background: "none", border: "none", padding: 0, cursor: "pointer" }}
-                                    onClick={() => { setShowForgotForm(false); setError(""); }}
-                                >
-                                    Back to sign in
-                                </button>
-                            </p>
+                                    <p className="lede">
+                                        Enter the email on your account and we'll send you a link to set a new
+                                        password.
+                                    </p>
 
-                        </>
+                                    <form className="form" onSubmit={handleRequestReset}>
 
-                    )}
+                                        <label className="field">
+                                            <span>Email</span>
+                                            <div className="input">
+                                                <span className="at">@</span>
+                                                <input
+                                                    type="email"
+                                                    placeholder="you@example.com"
+                                                    autoComplete="email"
+                                                    value={email}
+                                                    onChange={(e) => setEmail(e.target.value)}
+                                                    autoFocus
+                                                />
+                                            </div>
+                                        </label>
+
+                                        {error && (
+                                            <p className="form-error" role="alert">{error}</p>
+                                        )}
+
+                                        <button type="submit" className="primary" disabled={forgotSubmitting}>
+                                            {forgotSubmitting ? "Please wait..." : "Send reset link"}
+                                        </button>
+
+                                    </form>
+
+                                    <p className="allowlist">
+                                        <button
+                                            type="button"
+                                            className="linklike"
+                                            onClick={() => { setShowForgotForm(false); setError(""); }}
+                                        >
+                                            Back to sign in
+                                        </button>
+                                    </p>
+
+                                </div>
+
+                            )}
+
+                        </div>
+
+                    </main>
 
                 </div>
 
@@ -460,45 +444,48 @@ export default function LoginSignupPage({ onMfaRequired }) {
 
     }
 
-    // Terminal state for this tab - there is nothing left to submit here.
-    // The rest of the flow (verify -> mandatory MFA setup -> dashboard)
-    // continues only once they open the email and click the link, which
-    // lands them back on the app fresh (see AccountAuthController.
-    // VerifyEmail and MfaEnforcementGate).
     if (checkEmailSent) {
 
         return (
 
-            <div className="auth-page">
+            <div className="aw-root">
+                <style>{CSS}</style>
+                {themeToggle}
 
-                <div className="auth-page-card" role="main" aria-labelledby="check-email-title">
+                <div className="aw-split aw-split-solo">
 
-                    {themeToggle}
+                    <main className="authcol">
 
-                    <div className="auth-page-logo">
-                        <Logo showEyebrow={false} compact size={34} />
-                    </div>
+                        <div className="card" role="main" aria-labelledby="check-email-title">
 
-                    <h1 id="check-email-title" className="setup-gate-title">
-                        Check your email
-                    </h1>
+                            <div className="card-body card-body-center">
 
-                    <p className="field-hint" style={{ textAlign: "center" }}>
-                        We sent a verification link to <strong>{email.trim()}</strong>. Open it and click
-                        {" "}<strong>Verify Your Email</strong> to finish creating your account and set up MFA.
-                    </p>
+                                <span className="check-glyph"><ShieldCheck size={22} /></span>
 
-                    <p className="field-hint" style={{ textAlign: "center" }}>
-                        Didn&apos;t get it? Check spam, or{" "}
-                        <button
-                            type="button"
-                            className="token-help-link"
-                            style={{ background: "none", border: "none", padding: 0, cursor: "pointer" }}
-                            onClick={() => { setCheckEmailSent(false); setMode("login"); setError(""); }}
-                        >
-                            go back
-                        </button>.
-                    </p>
+                                <h2 id="check-email-title">Check your email</h2>
+
+                                <p className="lede" style={{ textAlign: "center" }}>
+                                    We sent a verification link to <strong>{email.trim()}</strong>. Open it and
+                                    click <strong>Verify Your Email</strong> to finish creating your account and
+                                    set up MFA.
+                                </p>
+
+                                <p className="allowlist">
+                                    Didn&apos;t get it? Check spam, or{" "}
+                                    <button
+                                        type="button"
+                                        className="linklike"
+                                        onClick={() => { setCheckEmailSent(false); setMode("signin"); setError(""); }}
+                                    >
+                                        go back
+                                    </button>.
+                                </p>
+
+                            </div>
+
+                        </div>
+
+                    </main>
 
                 </div>
 
@@ -510,139 +497,219 @@ export default function LoginSignupPage({ onMfaRequired }) {
 
     return (
 
-        <div className="auth-page">
+        <div className="aw-root">
+            <style>{CSS}</style>
+            {themeToggle}
 
-            <div className="auth-page-card" role="main" aria-labelledby="login-signup-title">
+            <div className="aw-split">
 
-                {themeToggle}
+                {/* ---------------- brand / showcase ---------------- */}
+                <aside className="showcase">
 
-                <div className="auth-page-logo">
-                    <Logo showEyebrow={false} compact size={34} />
-                </div>
-
-                <h1 id="login-signup-title" className="setup-gate-title">
-                    {isSignup ? "Create your account" : "Welcome back"}
-                </h1>
-
-                <p className="field-hint" style={{ textAlign: "center" }}>
-                    {isSignup
-                        ? "Sign up with your email to get started."
-                        : "Sign in to continue to the Deployment Portal."}
-                </p>
-
-                <form onSubmit={handleSubmit} className="setup-gate-form">
-
-                    {isSignup && (
-                        <div className="form-group">
-                            <label htmlFor="login-display-name">Name (optional)</label>
-                            <input
-                                id="login-display-name"
-                                type="text"
-                                className="form-control"
-                                placeholder="Jane Doe"
-                                value={displayName}
-                                onChange={(e) => setDisplayName(e.target.value)}
-                                autoComplete="name"
-                            />
-                        </div>
-                    )}
-
-                    <div className="form-group">
-                        <label htmlFor="login-email">{isSignup ? "Email" : "Email or Username"}</label>
-                        <div className="auth-page-field">
-                            <EmailIcon />
-                            <input
-                                id="login-email"
-                                // Signup always creates a real account by email - a
-                                // username is derived automatically server-side (see
-                                // AccountAuthService.DeriveUniqueUsernameAsync), not
-                                // typed here. Login accepts either, so it can't use
-                                // type="email" (a browser would block submitting a
-                                // plain username as invalid).
-                                type={isSignup ? "email" : "text"}
-                                placeholder={isSignup ? "you@example.com" : "you@example.com or username"}
-                                value={email}
-                                onChange={(e) => setEmail(e.target.value)}
-                                autoComplete={isSignup ? "email" : "username"}
-                                autoFocus
-                            />
-                        </div>
+                    <div className="brand">
+                        <span className="glyph"><Rocket size={17} strokeWidth={2.4} /></span>
+                        <span className="brand-name">Deployment Portal</span>
                     </div>
 
-                    <div className="form-group">
-                        <label htmlFor="login-password" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                            <span>Password</span>
-                            {!isSignup && (
-                                <button
-                                    type="button"
-                                    className="token-help-link"
-                                    style={{ background: "none", border: "none", padding: 0, cursor: "pointer", fontSize: "12.5px" }}
-                                    onClick={handleForgotPassword}
-                                >
-                                    Forgot?
-                                </button>
-                            )}
-                        </label>
-                        <div className="auth-page-field">
-                            <PasswordIcon />
-                            <input
-                                id="login-password"
-                                type={showPassword ? "text" : "password"}
-                                placeholder={isSignup ? "At least 8 characters" : "Your password"}
-                                value={password}
-                                onChange={(e) => setPassword(e.target.value)}
-                                autoComplete={isSignup ? "new-password" : "current-password"}
-                            />
-                            <button
-                                type="button"
-                                className="auth-page-field-toggle"
-                                onClick={() => setShowPassword((v) => !v)}
-                                aria-label={showPassword ? "Hide password" : "Show password"}
-                                aria-pressed={showPassword}
-                            >
-                                {showPassword ? <EyeOffIcon /> : <EyeIcon />}
+                    <div className="pitch">
+                        <h1>Every deployment, one console.</h1>
+                        <p>
+                            Trigger releases, watch runs, and approve promotions across GitHub Actions,
+                            AWS, Azure, GCP, and your registries — without hopping between ten dashboards.
+                        </p>
+                    </div>
+
+                    {/* console preview - illustrative, not live data (see PREVIEW_RUNS comment) */}
+                    <div className="preview" aria-hidden>
+
+                        <div className="preview-bar">
+                            <span className="live"><span className="live-dot" />What's behind the login</span>
+                        </div>
+
+                        <div className="preview-runs">
+                            {PREVIEW_RUNS.map((r, i) => (
+                                <div key={i} className="prun">
+                                    <span className="pdot" style={{ background: S[r.s] }}>
+                                        {r.s === "running" && <span className="pping" style={{ background: S[r.s] }} />}
+                                    </span>
+                                    <span className="mono pwf">{r.wf}</span>
+                                    <span className={"penv " + r.env}>{r.env}</span>
+                                    <span className="mono psha">{r.sha}</span>
+                                    <span className="ptime"><Clock size={10} />{r.time}</span>
+                                    {r.s === "running" && <span className="pprog"><i /></span>}
+                                </div>
+                            ))}
+                        </div>
+
+                        <div className="preview-chips">
+                            {PROVIDERS.map((p) => (
+                                <span key={p.n} className="chip">
+                                    <span className="cdot" style={{ background: S[p.s] }} />{p.n}
+                                </span>
+                            ))}
+                            <span className="chip more">+20 more</span>
+                        </div>
+
+                    </div>
+
+                    <ul className="trust">
+                        <li><ShieldCheck size={14} /> Multi-factor auth is required for every account</li>
+                        <li><KeyRound size={14} /> Cloud keys and tokens encrypted at rest</li>
+                        <li><Server size={14} /> Role-based access, enforced on every request</li>
+                    </ul>
+
+                </aside>
+
+                {/* ---------------- auth card ---------------- */}
+                <main className="authcol">
+
+                    <div className="card">
+
+                        <div className="tabs" role="tablist" aria-label="Sign in or create account">
+
+                            <button role="tab" aria-selected={!isReg}
+                                className={"tab" + (!isReg ? " on" : "")}
+                                onClick={() => { setMode("signin"); setError(""); }}>
+                                Sign in
                             </button>
+
+                            <button role="tab" aria-selected={isReg}
+                                className={"tab" + (isReg ? " on" : "")}
+                                onClick={() => { setMode("register"); setError(""); }}>
+                                Create account
+                            </button>
+
+                            <span className="tab-ink" style={{ transform: isReg ? "translateX(100%)" : "none" }} />
+
                         </div>
+
+                        <div className="card-body">
+
+                            <h2>{isReg ? "Request access" : "Welcome back"}</h2>
+
+                            <p className="lede">
+                                {isReg
+                                    ? "New accounts need an allowlisted email. You'll verify it, then set up MFA."
+                                    : "Sign in to reach your deployments, resources, and approvals."}
+                            </p>
+
+                            <div className="oauth">
+
+                                <a
+                                    className="oauth-btn"
+                                    href={`${API_BASE}/api/auth/google/login?sid=${encodeURIComponent(getSessionId())}`}
+                                >
+                                    <GoogleMark /> Continue with Google
+                                </a>
+
+                                <a
+                                    className="oauth-btn"
+                                    href={`${API_BASE}/api/auth/github/login?sid=${encodeURIComponent(getSessionId())}`}
+                                >
+                                    <GitHubIcon /> Continue with GitHub
+                                </a>
+
+                            </div>
+
+                            <div className="divider"><span>or use your email</span></div>
+
+                            <form className={"form" + (isReg ? " reg" : "")} onSubmit={handleSubmit}>
+
+                                {isReg && (
+                                    <label className="field">
+                                        <span>Name (optional)</span>
+                                        <div className="input">
+                                            <User size={15} />
+                                            <input
+                                                type="text"
+                                                placeholder="Jane Doe"
+                                                autoComplete="name"
+                                                value={displayName}
+                                                onChange={(e) => setDisplayName(e.target.value)}
+                                            />
+                                        </div>
+                                    </label>
+                                )}
+
+                                <label className="field">
+                                    <span>{isReg ? "Email" : "Email or Username"}</span>
+                                    <div className="input">
+                                        <span className="at">@</span>
+                                        <input
+                                            // Signup always creates a real account by email - a
+                                            // username is derived automatically server-side (see
+                                            // AccountAuthService.DeriveUniqueUsernameAsync), not
+                                            // typed here. Login accepts either, so it can't use
+                                            // type="email" (a browser would block submitting a
+                                            // plain username as invalid).
+                                            type={isReg ? "email" : "text"}
+                                            placeholder={isReg ? "you@example.com" : "you@example.com or username"}
+                                            autoComplete={isReg ? "email" : "username"}
+                                            value={email}
+                                            onChange={(e) => setEmail(e.target.value)}
+                                            autoFocus
+                                        />
+                                    </div>
+                                </label>
+
+                                <label className="field">
+                                    <span className="field-top">
+                                        Password
+                                        {!isReg && (
+                                            <button type="button" className="forgot" onClick={handleForgotPassword}>Forgot?</button>
+                                        )}
+                                    </span>
+                                    <div className="input">
+                                        <Lock size={15} />
+                                        <input
+                                            type={showPassword ? "text" : "password"}
+                                            placeholder={isReg ? "At least 8 characters" : "Your password"}
+                                            autoComplete={isReg ? "new-password" : "current-password"}
+                                            value={password}
+                                            onChange={(e) => setPassword(e.target.value)}
+                                        />
+                                        <button
+                                            type="button"
+                                            className="peek"
+                                            aria-label={showPassword ? "Hide password" : "Show password"}
+                                            aria-pressed={showPassword}
+                                            onClick={() => setShowPassword((v) => !v)}
+                                        >
+                                            {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
+                                        </button>
+                                    </div>
+                                </label>
+
+                                {error && (
+                                    <p className="form-error" role="alert">{error}</p>
+                                )}
+
+                                <button type="submit" className="primary" disabled={submitting}>
+                                    {submitting ? "Please wait..." : isReg ? "Create account" : "Sign in"}
+                                </button>
+
+                                {isReg && (
+                                    <div className="mfa-note">
+                                        <ShieldCheck size={14} />
+                                        <span>After email verification, you'll set up MFA before the dashboard opens.</span>
+                                    </div>
+                                )}
+
+                            </form>
+
+                            <p className="allowlist">
+                                {isReg
+                                    ? "Can't get in? Ask an admin to add your email to the allowlist."
+                                    : "Access is invite-only. Ask an admin if your email isn't allowlisted yet."}
+                            </p>
+
+                        </div>
+
                     </div>
 
-                    {error && (
-                        <p className="field-hint field-hint-bad" role="alert">{error}</p>
-                    )}
+                    <p className="foot">Internal tool for the platform team · Deployment Portal</p>
 
-                    <button type="submit" className="btn btn-primary" disabled={submitting}>
-                        {submitting ? "Please wait..." : isSignup ? "Sign Up" : "Log In"}
-                    </button>
-
-                </form>
-
-                <p style={{ textAlign: "center", margin: "8px 0 0" }}>
-                    <button
-                        type="button"
-                        className="token-help-link"
-                        style={{ background: "none", border: "none", padding: 0, cursor: "pointer" }}
-                        onClick={() => { setMode(isSignup ? "login" : "signup"); setError(""); }}
-                    >
-                        {isSignup ? "Already have an account? Log in" : "New here? Create an account"}
-                    </button>
-                </p>
-
-                <div className="auth-page-divider">
-                    <span>or continue with</span>
-                </div>
-
-                <div className="button-row" style={{ justifyContent: "center" }}>
-
-                    <a href={`${API_BASE}/api/auth/google/login?sid=${encodeURIComponent(getSessionId())}`} className="btn btn-secondary">
-                        <GoogleIcon />
-                        {" "}Google
-                    </a>
-
-                    <a href={`${API_BASE}/api/auth/github/login?sid=${encodeURIComponent(getSessionId())}`} className="btn btn-secondary">
-                        <GitHubIcon />
-                        {" "}GitHub
-                    </a>
-
-                </div>
+                </main>
 
             </div>
 
@@ -651,3 +718,155 @@ export default function LoginSignupPage({ onMfaRequired }) {
     );
 
 }
+
+const CSS = `
+.aw-root{
+  color:var(--text);
+  min-height:100vh; -webkit-font-smoothing:antialiased;
+}
+.aw-root *{box-sizing:border-box;}
+.aw-root .mono{font-family:'JetBrains Mono',ui-monospace,monospace; font-feature-settings:"tnum";}
+.aw-root button{font-family:inherit; cursor:pointer;}
+.aw-root a{color:inherit; text-decoration:none;}
+.aw-root :focus-visible{outline:2px solid var(--heading-accent); outline-offset:2px; border-radius:8px;}
+
+/* Fixed (not absolute, unlike .auth-theme-toggle) since this page's
+   layout has no single relatively-positioned card wrapper common to
+   every one of its 4 states (main/forgot/reset/check-email) to anchor to. */
+.aw-root .aw-theme-toggle{
+  position:fixed; top:18px; right:18px; width:34px; height:34px; border-radius:10px;
+  display:grid; place-items:center; background:var(--card-bg); border:1px solid var(--stroke);
+  color:var(--text-muted); cursor:pointer; z-index:10;
+  transition:color .15s ease, transform .15s ease, border-color .15s ease;
+}
+.aw-root .aw-theme-toggle:hover{color:var(--heading-accent); border-color:var(--heading-accent); transform:translateY(-1px);}
+
+.aw-root .aw-split{display:grid; grid-template-columns:1.15fr .85fr; min-height:100vh; max-width:1240px; margin:0 auto;}
+.aw-root .aw-split-solo{grid-template-columns:1fr; align-items:center; justify-items:center; max-width:520px;}
+
+/* ---------- showcase ---------- */
+.aw-root .showcase{padding:44px 54px; display:flex; flex-direction:column; gap:30px; border-right:1px solid var(--border);}
+.aw-root .brand{display:flex; align-items:center; gap:11px;}
+.aw-root .glyph{width:32px; height:32px; border-radius:9px; display:grid; place-items:center; color:#fff;
+  background:linear-gradient(135deg, var(--heading-accent), var(--accent-secondary));
+  box-shadow:0 8px 20px -8px color-mix(in srgb, var(--heading-accent) 60%, transparent);}
+.aw-root .brand-name{font-weight:600; font-size:16px; letter-spacing:-.01em; color:var(--heading-accent);}
+
+.aw-root .pitch{margin-top:8px;}
+.aw-root .pitch h1{margin:0; font-size:38px; line-height:1.08; font-weight:600; letter-spacing:-.03em; color:var(--text);}
+.aw-root .pitch p{margin:16px 0 0; font-size:15px; line-height:1.55; color:var(--text-muted); max-width:46ch;}
+
+/* console preview */
+.aw-root .preview{background:var(--card-bg); border:1px solid var(--stroke);
+  border-radius:16px; padding:14px; box-shadow:0 10px 30px -12px var(--card-shadow);
+  backdrop-filter:blur(22px) saturate(160%); -webkit-backdrop-filter:blur(22px) saturate(160%);}
+.aw-root .preview-bar{display:flex; align-items:center; justify-content:space-between; padding:2px 4px 12px; border-bottom:1px solid var(--border);}
+.aw-root .live{display:flex; align-items:center; gap:8px; font-size:12.5px; color:var(--text); font-weight:500;}
+.aw-root .live-dot{width:8px; height:8px; border-radius:50%; background:${S.ok}; box-shadow:0 0 0 3px color-mix(in srgb, ${S.ok} 22%, transparent); animation:aw-blink 2s infinite;}
+@keyframes aw-blink{50%{opacity:.4}}
+
+.aw-root .preview-runs{display:flex; flex-direction:column; padding:6px 0;}
+.aw-root .prun{position:relative; display:flex; align-items:center; gap:10px; padding:9px 4px;}
+.aw-root .prun + .prun{border-top:1px solid var(--border);}
+.aw-root .pdot{position:relative; width:8px; height:8px; border-radius:50%; flex:0 0 auto;}
+.aw-root .pping{position:absolute; inset:0; border-radius:50%; animation:aw-ping 1.8s cubic-bezier(0,0,.2,1) infinite;}
+@keyframes aw-ping{0%{transform:scale(1);opacity:.6}80%,100%{transform:scale(3);opacity:0}}
+.aw-root .pwf{font-size:12.5px; font-weight:500; color:var(--text);}
+.aw-root .penv{font-size:10px; padding:1px 6px; border-radius:5px; text-transform:uppercase; letter-spacing:.03em; font-weight:600;}
+.aw-root .penv.acpt{background:color-mix(in srgb, ${S.warn} 20%, transparent); color:${S.warn};}
+.aw-root .penv.prod{background:color-mix(in srgb, ${S.ok} 18%, transparent); color:${S.ok};}
+.aw-root .psha{font-size:11.5px; color:var(--text-muted); margin-left:2px;}
+.aw-root .ptime{display:flex; align-items:center; gap:4px; font-size:11.5px; color:var(--text-muted); margin-left:auto;}
+.aw-root .ptime svg{color:var(--text-muted);}
+.aw-root .pprog{position:absolute; left:0; right:0; bottom:0; height:2px; background:var(--card-bg-strong); border-radius:2px; overflow:hidden;}
+.aw-root .pprog i{position:absolute; left:0; top:0; bottom:0; width:62%; background:linear-gradient(90deg, ${S.running}, var(--accent-secondary));}
+.aw-root .pprog i::after{content:""; position:absolute; inset:0; background:linear-gradient(90deg,transparent,rgba(255,255,255,.35),transparent); animation:aw-shine 1.5s infinite;}
+@keyframes aw-shine{100%{transform:translateX(140%)}}
+
+.aw-root .preview-chips{display:flex; flex-wrap:wrap; gap:6px; padding:12px 4px 4px; border-top:1px solid var(--border); margin-top:4px;}
+.aw-root .chip{display:flex; align-items:center; gap:6px; font-size:11.5px; color:var(--text-muted);
+  background:var(--card-bg-strong); border:1px solid var(--stroke); border-radius:7px; padding:5px 9px;}
+.aw-root .chip.more{color:var(--text-muted);}
+.aw-root .cdot{width:6px; height:6px; border-radius:50%;}
+
+.aw-root .trust{list-style:none; margin:auto 0 0; padding:0; display:flex; flex-direction:column; gap:11px;}
+.aw-root .trust li{display:flex; align-items:center; gap:10px; font-size:12.5px; color:var(--text-muted);}
+.aw-root .trust svg{color:var(--heading-accent); flex:0 0 auto;}
+
+/* ---------- auth column ---------- */
+.aw-root .authcol{display:flex; flex-direction:column; justify-content:center; align-items:center; padding:44px 40px; gap:16px;}
+.aw-root .card{width:100%; max-width:400px; background:var(--card-bg); border:1px solid var(--stroke); border-radius:18px; overflow:hidden;
+  box-shadow:0 10px 30px -12px var(--card-shadow); backdrop-filter:blur(22px) saturate(160%); -webkit-backdrop-filter:blur(22px) saturate(160%);}
+
+.aw-root .tabs{position:relative; display:grid; grid-template-columns:1fr 1fr; background:var(--card-bg-strong); border-bottom:1px solid var(--border);}
+.aw-root .tab{border:0; background:transparent; color:var(--text-muted); font-size:13px; font-weight:600; padding:15px 0; transition:color .15s; z-index:1;}
+.aw-root .tab.on{color:var(--text);}
+.aw-root .tab:hover:not(.on){color:var(--text);}
+.aw-root .tab-ink{position:absolute; bottom:-1px; left:0; width:50%; height:2px; background:var(--heading-accent); transition:transform .28s cubic-bezier(.4,0,.2,1);}
+
+.aw-root .card-body{padding:26px 26px 24px;}
+.aw-root .card-body-center{display:flex; flex-direction:column; align-items:center; text-align:center; padding:38px 30px;}
+.aw-root .check-glyph{width:44px; height:44px; border-radius:50%; display:grid; place-items:center; margin-bottom:16px;
+  background:color-mix(in srgb, var(--heading-accent) 18%, transparent); color:var(--heading-accent);
+  border:1px solid color-mix(in srgb, var(--heading-accent) 40%, transparent);}
+.aw-root .card-body h2{margin:0; font-size:21px; font-weight:600; letter-spacing:-.02em; color:var(--heading-accent);}
+.aw-root .lede{margin:7px 0 20px; font-size:13px; line-height:1.5; color:var(--text-muted);}
+
+.aw-root .oauth{display:flex; flex-direction:column; gap:9px;}
+.aw-root .oauth-btn{display:flex; align-items:center; justify-content:center; gap:10px; width:100%; padding:11px;
+  background:var(--card-bg-strong); border:1px solid var(--stroke); color:var(--text); font-size:13.5px; font-weight:500;
+  border-radius:10px; transition:.15s;}
+.aw-root .oauth-btn:hover{border-color:var(--heading-accent); background:var(--table-row-hover);}
+.aw-root .oauth-g{display:grid; place-items:center; width:18px; height:18px; border-radius:50%; font-weight:700; font-size:12px;
+  color:var(--card-bg); background:var(--text);}
+
+.aw-root .divider{display:flex; align-items:center; gap:12px; margin:18px 0; color:var(--text-muted); font-size:11.5px;}
+.aw-root .divider::before,.aw-root .divider::after{content:""; height:1px; flex:1; background:var(--border);}
+
+.aw-root .form{display:flex; flex-direction:column; gap:14px;}
+.aw-root .field{display:flex; flex-direction:column; gap:7px;}
+.aw-root .field > span{font-size:12px; color:var(--text-muted); font-weight:500;}
+.aw-root .field-top{display:flex; align-items:center; justify-content:space-between;}
+.aw-root .forgot{background:none; border:0; padding:0; margin:0; font:inherit; font-size:11.5px; color:var(--heading-accent); cursor:pointer;}
+.aw-root .forgot:hover{text-decoration:underline;}
+.aw-root .input{display:flex; align-items:center; gap:9px; background:var(--card-bg-strong); border:1px solid var(--stroke); border-radius:10px; padding:0 12px; transition:.15s;}
+.aw-root .input:focus-within{border-color:var(--heading-accent); box-shadow:0 0 0 3px color-mix(in srgb, var(--heading-accent) 22%, transparent);}
+.aw-root .input svg{color:var(--text-muted); flex:0 0 auto;}
+.aw-root .input .at{color:var(--text-muted); font-size:15px; width:15px; text-align:center;}
+.aw-root .input input{flex:1; min-width:0; background:transparent; border:0; outline:0; color:var(--text); font-size:14px; padding:11px 0; font-family:inherit;}
+.aw-root .input input::placeholder{color:var(--text-muted);}
+.aw-root .peek{background:transparent; border:0; padding:4px; color:var(--text-muted); display:grid; place-items:center;}
+.aw-root .peek:hover{color:var(--text);}
+
+.aw-root .form-error{margin:0; font-size:12.5px; color:var(--viz-critical); line-height:1.4;}
+
+.aw-root .primary{margin-top:4px; width:100%; padding:12px; background:var(--heading-accent); color:#fff; border:0; border-radius:10px;
+  font-size:14px; font-weight:600; transition:.15s;}
+.aw-root .primary:hover:not(:disabled){filter:brightness(1.08);}
+.aw-root .primary:active:not(:disabled){transform:translateY(1px);}
+.aw-root .primary:disabled{opacity:.6; cursor:default;}
+
+.aw-root .mfa-note{display:flex; align-items:flex-start; gap:9px; background:color-mix(in srgb, var(--heading-accent) 12%, transparent);
+  border:1px solid color-mix(in srgb, var(--heading-accent) 30%, transparent);
+  border-radius:10px; padding:10px 12px; font-size:11.5px; line-height:1.45; color:var(--text-muted);}
+.aw-root .mfa-note svg{color:var(--heading-accent); flex:0 0 auto; margin-top:1px;}
+
+.aw-root .allowlist{margin:18px 0 0; font-size:11.5px; line-height:1.5; color:var(--text-muted); text-align:center;}
+.aw-root .linklike{background:none; border:0; padding:0; color:var(--heading-accent); font-size:inherit; font-family:inherit; cursor:pointer;}
+.aw-root .linklike:hover{text-decoration:underline;}
+.aw-root .foot{font-size:11.5px; color:var(--text-muted);}
+
+@media (max-width:900px){
+  .aw-root .aw-split{grid-template-columns:1fr;}
+  .aw-root .showcase{border-right:0; border-bottom:1px solid var(--border); padding:34px 28px; gap:24px;}
+  .aw-root .pitch h1{font-size:30px;}
+  .aw-root .trust{margin-top:6px;}
+  .aw-root .authcol{padding:32px 22px;}
+}
+@media (max-width:560px){
+  .aw-root .preview{display:none;}
+}
+@media (prefers-reduced-motion:reduce){
+  .aw-root .live-dot,.aw-root .pping,.aw-root .pprog i::after,.aw-root .tab-ink{animation:none !important; transition:none !important;}
+}
+`;
