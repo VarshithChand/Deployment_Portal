@@ -65,6 +65,22 @@ const PROJECTS = [
     desc: "A role-based, cloud-based document management system deployed on AWS EC2, containerized with Docker for a consistent runtime, with a Jenkins CI/CD pipeline handling automated testing and deployment on a hardened Linux environment.",
     stack: ["Flask", "AWS EC2", "Docker", "Jenkins", "Linux", "Git"],
   },
+  {
+    // Verified against the real repo (gh repo view / README) rather than
+    // taken on faith - its own README is explicit that this is a
+    // reference architecture with real, working docker-compose configs,
+    // not yet run/operated ("has not been run in this repo's own
+    // history, treat first boot as the first real test"), so the
+    // description below matches that framing instead of claiming a live
+    // operated platform.
+    title: "Forge Stack",
+    kind: "Self-hosted",
+    role: "Architecture & documentation",
+    desc: "A reference architecture for a fully self-hosted, open-source DevOps platform — Forgejo, Woodpecker CI, Harbor, Portainer, SonarQube, Prometheus/Grafana/Loki, MinIO, and Traefik wired together with real, working docker-compose configs (not illustrative snippets), covering git hosting, CI/CD, container registry, deployment management, and observability with zero SaaS dependency.",
+    stack: ["Forgejo", "Woodpecker CI", "Harbor", "Portainer", "Traefik", "Docker Compose"],
+    link: "https://github.com/VarshithChand/Open-Source-Infra-Managemanet",
+    linkLabel: "View Repository",
+  },
 ];
 
 const STACK = [
@@ -72,11 +88,12 @@ const STACK = [
   { group: "Development", items: ["ASP.NET Core", "Flask", "Django", "React", "REST APIs", "JWT & OAuth 2.0"] },
   { group: "Cloud", items: ["AWS", "Azure", "GCP"] },
   { group: "CI/CD & DevOps", items: ["Jenkins", "GitHub Actions", "Azure DevOps Pipelines", "Docker", "Kubernetes", "Ansible", "Terraform"] },
-  { group: "Monitoring", items: ["Prometheus", "Grafana"] },
+  { group: "Monitoring", items: ["Prometheus", "Grafana", "Loki"] },
+  { group: "Self-Hosted Platform", items: ["Forgejo", "Woodpecker CI", "Harbor", "Portainer", "Traefik", "MinIO", "SonarQube"] },
   { group: "Data & Tools", items: ["PostgreSQL", "Render", "Cloudflare Workers", "Git", "GitHub", "Maven", "Linux", "Windows"] },
 ];
 
-const KIND_COLOR = { Internal: "#37d5cf", Project: "#9b8cff" };
+const KIND_COLOR = { Internal: "#37d5cf", Project: "#9b8cff", "Self-hosted": "#f5b44e" };
 
 function PipelineGraph() {
   return (
