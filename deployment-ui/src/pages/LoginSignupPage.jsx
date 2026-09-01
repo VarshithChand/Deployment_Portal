@@ -1191,9 +1191,16 @@ export default function LoginSignupPage({ onMfaRequired }) {
 }
 
 const CSS = `
+/* #root itself (global.css) is height:100vh + overflow:hidden - built for
+   the authenticated app shell, where .app-content-column is the thing
+   that actually scrolls internally. This page renders straight into that
+   same #root with nothing else providing a scroll container, so anything
+   taller than one viewport (the tools view especially) would otherwise
+   just get clipped with no way to reach it - height:100vh + its own
+   overflow-y here is what makes .aw-root scroll on its own instead. */
 .aw-root{
   color:var(--text);
-  min-height:100vh; -webkit-font-smoothing:antialiased;
+  height:100vh; overflow-y:auto; -webkit-font-smoothing:antialiased;
 }
 .aw-root *{box-sizing:border-box;}
 .aw-root .mono{font-family:'JetBrains Mono',ui-monospace,monospace; font-feature-settings:"tnum";}
