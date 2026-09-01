@@ -16,6 +16,7 @@ public class AccountAuthService
 {
     private const int MinPasswordLength = 8;
     private static readonly TimeSpan EmailVerificationTtl = TimeSpan.FromHours(24);
+    private static readonly TimeSpan PasswordResetTtl = TimeSpan.FromHours(1);
 
     private readonly SettingsService _settings;
     private readonly IOptionsMonitor<AuthorizationSettings> _authzOptions;
@@ -94,6 +95,55 @@ public class AccountAuthService
         // AccountAuthController.IssueSessionAsync), not here - for an
         // account with MFA enabled, the password alone hasn't finished a
         // login yet.
+        return await ResolveRoleAsync(user);
+    }
+
+    // Always returns null-or-user with no distinction visible to the
+    // caller beyond that - an unknown email and a Google/GitHub-only
+    // account (nothing to reset) both come back null, the same "don't let
+    // this response reveal which emails have accounts" reasoning
+    // LoginWithPasswordAsync's shared failure message already follows.
+    // The controller sends an identical "check your email" response
+    // either way (see AccountAuthController.ForgotPassword).
+    public async Task<PortalUserAccount?> RequestPasswordResetAsync(string email)
+    {
+        var normalizedEmail = email.Trim().ToLowerInvariant();
+        var user = await _settings.FindUserByEmailAsync(normalizedEmail);
+
+        if (user == null || !user.HasPassword)
+            return null;
+
+        var token = Convert.ToHexString(RandomNumberGenerator.GetBytes(32)).ToLowerInvariant();
+        var expiresAt = DateTime.UtcNow.Add(PasswordResetTtl);
+
+        await _settings.SetPasswordResetTokenAsync(user.Id, token, expiresAt);
+
+        user.PasswordResetToken = token;
+
+        return user;
+    }
+
+    // Proving control of the reset link is comparable trust to proving
+    // control of the password itself, so this goes through the exact same
+    // role-resolution the normal password login does - and, critically,
+    // the SAME MFA gate. Auto-issuing a session straight from here for an
+    // MFA-enabled account would let anyone who only compromised the email
+    // inbox (a much lower bar than password+MFA together) fully take over
+    // the account without ever passing MFA - so this only ever resolves a
+    // role, it never itself decides whether a session is safe to hand out.
+    // AccountAuthController.FinishPrimaryFactorAsync (the same shared tail
+    // signup/login already use) is what makes that call, exactly as it
+    // would for a normal login.
+    public async Task<AccountAuthResult> ResetPasswordAsync(string token, string newPassword)
+    {
+        if (string.IsNullOrWhiteSpace(newPassword) || newPassword.Length < MinPasswordLength)
+            return AccountAuthResult.Fail($"Password must be at least {MinPasswordLength} characters.");
+
+        var user = await _settings.ConsumePasswordResetTokenAsync(token, newPassword);
+
+        if (user == null)
+            return AccountAuthResult.Fail("This reset link is invalid or has expired. Request a new one.");
+
         return await ResolveRoleAsync(user);
     }
 

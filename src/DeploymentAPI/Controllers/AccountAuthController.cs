@@ -63,6 +63,46 @@ public class AccountAuthController : ControllerBase
         return await FinishPrimaryFactorAsync(result);
     }
 
+    // Always returns the same shape whether or not the email actually
+    // matched an account with a password to reset - see AccountAuthService.
+    // RequestPasswordResetAsync's own comment for why. A Resend failure is
+    // swallowed the same way SendWelcomeVerificationEmailAsync's caller
+    // does below - this response was already going to say "check your
+    // email" regardless, so there's nothing for a caught exception here to
+    // change.
+    [HttpPost("forgot-password")]
+    public async Task<IActionResult> ForgotPassword(ForgotPasswordRequestDto request)
+    {
+        var user = await _accountAuth.RequestPasswordResetAsync(request.Email ?? string.Empty);
+
+        if (user?.PasswordResetToken != null)
+        {
+            try
+            {
+                var frontendUrl = _githubOAuthOptions.CurrentValue.FrontendUrl.TrimEnd('/');
+                var resetUrl = $"{frontendUrl}/?resetToken={Uri.EscapeDataString(user.PasswordResetToken)}";
+
+                await _email.SendPasswordResetEmailAsync(user.Email, user.Username ?? user.Email, resetUrl);
+            }
+            catch (Exception)
+            {
+            }
+        }
+
+        return Ok(new { success = true, message = "If that email has an account, we've sent a reset link." });
+    }
+
+    // Deliberately routes through the exact same FinishPrimaryFactorAsync
+    // tail signup/login use, rather than issuing a session directly here -
+    // see AccountAuthService.ResetPasswordAsync's own comment for why an
+    // MFA-enabled account still has to pass MFA after this, not skip it.
+    [HttpPost("reset-password")]
+    public async Task<IActionResult> ResetPassword(ResetPasswordRequestDto request)
+    {
+        var result = await _accountAuth.ResetPasswordAsync(request.Token ?? string.Empty, request.NewPassword ?? string.Empty);
+        return await FinishPrimaryFactorAsync(result);
+    }
+
     // Shared tail of both actions above - once identity+role is resolved
     // (or rejected), the rest of the flow is identical regardless of which
     // one got there.

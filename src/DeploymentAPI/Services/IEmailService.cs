@@ -32,4 +32,10 @@ public interface IEmailService
     // completely separate email (SendLoginNotificationAsync above) - this
     // one only ever fires for the one-time registration flow.
     Task<EmailSendResultDto> SendWelcomeVerificationEmailAsync(string toEmail, string username, string verifyUrl);
+
+    // Sent when RequestPasswordResetAsync issues a fresh reset token -
+    // resetUrl points at a FRONTEND page (unlike verifyUrl above, which
+    // points straight at a backend GET route with nothing left to submit),
+    // since setting a new password needs a form, not just a click.
+    Task<EmailSendResultDto> SendPasswordResetEmailAsync(string toEmail, string username, string resetUrl);
 }

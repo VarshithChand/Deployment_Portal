@@ -4,7 +4,7 @@ import {
     Server, Clock
 } from "lucide-react";
 
-import { signUp, logIn } from "../services/authLoginService";
+import { signUp, logIn, requestPasswordReset, resetPassword } from "../services/authLoginService";
 import { API_BASE, getSessionId } from "../api/apiBase";
 import useToast from "../hooks/useToast";
 
@@ -68,6 +68,20 @@ export default function LoginSignupPage({ onMfaRequired }) {
     const [submitting, setSubmitting] = useState(false);
     const [error, setError] = useState("");
     const [showPassword, setShowPassword] = useState(false);
+
+    // Present only when this page was opened from the link in a password-
+    // reset email (see AccountAuthController.ForgotPassword's resetUrl) -
+    // read once on mount, not re-checked, since nothing after this changes
+    // the URL until a full reload happens anyway.
+    const [resetToken] = useState(() => new URLSearchParams(window.location.search).get("resetToken"));
+    const [showForgotForm, setShowForgotForm] = useState(false);
+    const [forgotSent, setForgotSent] = useState(false);
+    const [forgotSubmitting, setForgotSubmitting] = useState(false);
+    const [newPassword, setNewPassword] = useState("");
+    const [confirmPassword, setConfirmPassword] = useState("");
+    const [showNewPassword, setShowNewPassword] = useState(false);
+    const [resetSubmitting, setResetSubmitting] = useState(false);
+    const [resetError, setResetError] = useState("");
 
     // Set once a fresh signup's response comes back with
     // emailVerificationRequired:true (see AccountAuthController.
@@ -135,13 +149,278 @@ export default function LoginSignupPage({ onMfaRequired }) {
 
     }
 
-    // No password-reset flow exists yet (a deliberate, deferred fast-
-    // follow, not something this page can pretend to do) - a dead "#"
-    // link that silently does nothing would be worse than not having the
-    // link at all, so this tells the visitor what to actually do instead.
     function handleForgotPassword(e) {
         e.preventDefault();
-        toast.show("Password reset isn't available yet — ask an admin to help you back in.", "info");
+        setError("");
+        setShowForgotForm(true);
+    }
+
+    // Always shows the same "check your email" confirmation regardless of
+    // what the server actually did - see AccountAuthController.
+    // ForgotPassword, which deliberately never reveals whether the email
+    // matched an account, so there's nothing more specific to show here
+    // even on request.success === true.
+    async function handleRequestReset(e) {
+
+        e.preventDefault();
+
+        if (!email.trim()) {
+            setError("Enter your email address.");
+            return;
+        }
+
+        setForgotSubmitting(true);
+        setError("");
+
+        try {
+            await requestPasswordReset(email.trim());
+            setForgotSent(true);
+        }
+        catch (err) {
+            setError(err.response?.data?.message || "Something went wrong. Try again.");
+        }
+        finally {
+            setForgotSubmitting(false);
+        }
+
+    }
+
+    // Same shape of response as handleSubmit's signup/login branch -
+    // ResetPassword routes through the identical FinishPrimaryFactorAsync
+    // tail server-side, so mfaRequired/token/success all mean the same
+    // thing here.
+    async function handleResetSubmit(e) {
+
+        e.preventDefault();
+
+        if (newPassword.length < 8) {
+            setResetError("Password must be at least 8 characters.");
+            return;
+        }
+
+        if (newPassword !== confirmPassword) {
+            setResetError("Passwords don't match.");
+            return;
+        }
+
+        setResetSubmitting(true);
+        setResetError("");
+
+        try {
+
+            const result = await resetPassword(resetToken, newPassword);
+
+            if (!result.success) {
+                setResetError(result.message || "Unable to reset password.");
+                setResetSubmitting(false);
+                return;
+            }
+
+            if (result.mfaRequired) {
+                onMfaRequired();
+                return;
+            }
+
+            toast.show("Password updated.", "success");
+            window.location.href = window.location.pathname;
+
+        }
+        catch (err) {
+
+            setResetError(err.response?.data?.message || "Unable to reset password.");
+            setResetSubmitting(false);
+
+        }
+
+    }
+
+    // Reached only via the link in a password-reset email - resetToken was
+    // read from the URL once on mount. Takes priority over every other
+    // state on this page since arriving here means exactly one thing:
+    // finish setting a new password.
+    if (resetToken) {
+
+        return (
+
+            <div className="aw-root">
+                <style>{CSS}</style>
+
+                <div className="aw-split aw-split-solo">
+
+                    <main className="authcol">
+
+                        <div className="card" role="main" aria-labelledby="reset-password-title">
+
+                            <div className="card-body">
+
+                                <h2 id="reset-password-title">Set a new password</h2>
+
+                                <p className="lede">Choose a new password for your account.</p>
+
+                                <form className="form" onSubmit={handleResetSubmit}>
+
+                                    <label className="field">
+                                        <span>New password</span>
+                                        <div className="input">
+                                            <Lock size={15} />
+                                            <input
+                                                type={showNewPassword ? "text" : "password"}
+                                                placeholder="At least 8 characters"
+                                                autoComplete="new-password"
+                                                value={newPassword}
+                                                onChange={(e) => setNewPassword(e.target.value)}
+                                                autoFocus
+                                            />
+                                            <button
+                                                type="button"
+                                                className="peek"
+                                                aria-label={showNewPassword ? "Hide password" : "Show password"}
+                                                aria-pressed={showNewPassword}
+                                                onClick={() => setShowNewPassword((v) => !v)}
+                                            >
+                                                {showNewPassword ? <EyeOff size={15} /> : <Eye size={15} />}
+                                            </button>
+                                        </div>
+                                    </label>
+
+                                    <label className="field">
+                                        <span>Confirm new password</span>
+                                        <div className="input">
+                                            <Lock size={15} />
+                                            <input
+                                                type={showNewPassword ? "text" : "password"}
+                                                placeholder="Type it again"
+                                                autoComplete="new-password"
+                                                value={confirmPassword}
+                                                onChange={(e) => setConfirmPassword(e.target.value)}
+                                            />
+                                        </div>
+                                    </label>
+
+                                    {resetError && (
+                                        <p className="form-error" role="alert">{resetError}</p>
+                                    )}
+
+                                    <button type="submit" className="primary" disabled={resetSubmitting}>
+                                        {resetSubmitting ? "Please wait..." : "Set new password"}
+                                    </button>
+
+                                </form>
+
+                            </div>
+
+                        </div>
+
+                    </main>
+
+                </div>
+
+            </div>
+
+        );
+
+    }
+
+    if (showForgotForm) {
+
+        return (
+
+            <div className="aw-root">
+                <style>{CSS}</style>
+
+                <div className="aw-split aw-split-solo">
+
+                    <main className="authcol">
+
+                        <div className="card" role="main" aria-labelledby="forgot-password-title">
+
+                            {forgotSent ? (
+
+                                <div className="card-body card-body-center">
+
+                                    <span className="check-glyph"><ShieldCheck size={22} /></span>
+
+                                    <h2 id="forgot-password-title">Check your email</h2>
+
+                                    <p className="lede" style={{ textAlign: "center" }}>
+                                        If <strong>{email.trim()}</strong> has an account, we've sent a link to
+                                        reset its password. The link expires in 1 hour.
+                                    </p>
+
+                                    <p className="allowlist">
+                                        <button
+                                            type="button"
+                                            className="linklike"
+                                            onClick={() => { setShowForgotForm(false); setForgotSent(false); setError(""); }}
+                                        >
+                                            Back to sign in
+                                        </button>
+                                    </p>
+
+                                </div>
+
+                            ) : (
+
+                                <div className="card-body">
+
+                                    <h2 id="forgot-password-title">Reset your password</h2>
+
+                                    <p className="lede">
+                                        Enter the email on your account and we'll send you a link to set a new
+                                        password.
+                                    </p>
+
+                                    <form className="form" onSubmit={handleRequestReset}>
+
+                                        <label className="field">
+                                            <span>Email</span>
+                                            <div className="input">
+                                                <span className="at">@</span>
+                                                <input
+                                                    type="email"
+                                                    placeholder="you@example.com"
+                                                    autoComplete="email"
+                                                    value={email}
+                                                    onChange={(e) => setEmail(e.target.value)}
+                                                    autoFocus
+                                                />
+                                            </div>
+                                        </label>
+
+                                        {error && (
+                                            <p className="form-error" role="alert">{error}</p>
+                                        )}
+
+                                        <button type="submit" className="primary" disabled={forgotSubmitting}>
+                                            {forgotSubmitting ? "Please wait..." : "Send reset link"}
+                                        </button>
+
+                                    </form>
+
+                                    <p className="allowlist">
+                                        <button
+                                            type="button"
+                                            className="linklike"
+                                            onClick={() => { setShowForgotForm(false); setError(""); }}
+                                        >
+                                            Back to sign in
+                                        </button>
+                                    </p>
+
+                                </div>
+
+                            )}
+
+                        </div>
+
+                    </main>
+
+                </div>
+
+            </div>
+
+        );
+
     }
 
     if (checkEmailSent) {

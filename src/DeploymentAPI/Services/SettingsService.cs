@@ -1616,6 +1616,61 @@ public class SettingsService
         return ParseUser(match.Name, entry);
     }
 
+    // Mirrors SetEmailVerificationTokenAsync exactly - see PortalUserAccount.
+    // PasswordResetToken's own comment for why the model doesn't carry this
+    // on every read.
+    public async Task SetPasswordResetTokenAsync(string userId, string token, DateTime expiresAtUtc)
+    {
+        var root = await ReadRootAsync();
+        var (users, _) = await GetOrCreateUsersSectionAsync(root);
+
+        if (users[userId] is not JObject entry)
+            return;
+
+        entry["PasswordResetToken"] = token;
+        entry["PasswordResetTokenExpiresAtUtc"] = expiresAtUtc;
+
+        await WriteRootAsync(root);
+    }
+
+    // Mirrors VerifyEmailAsync's token-lookup pattern (linear scan, unknown/
+    // expired/already-consumed tokens all just return null with no
+    // distinction - AccountAuthService.ResetPasswordAsync shows the same
+    // "invalid or expired" message for all three), but also does the actual
+    // password replacement in the same pass - there's no separate "token
+    // confirmed, now go set a password" step the way email verification
+    // has, since the new password IS the thing submitted alongside the token.
+    public async Task<PortalUserAccount?> ConsumePasswordResetTokenAsync(string token, string newPlaintextPassword)
+    {
+        if (string.IsNullOrWhiteSpace(token))
+            return null;
+
+        var root = await ReadRootAsync();
+        var (users, _) = await GetOrCreateUsersSectionAsync(root);
+
+        var match = users.Properties()
+            .FirstOrDefault(p => string.Equals(
+                (p.Value as JObject)?["PasswordResetToken"]?.ToString(), token, StringComparison.Ordinal));
+
+        if (match?.Value is not JObject entry)
+            return null;
+
+        var expiresAt = entry["PasswordResetTokenExpiresAtUtc"]?.Value<DateTime>();
+
+        if (expiresAt == null || expiresAt < DateTime.UtcNow)
+            return null;
+
+        entry["PasswordHash"] = Protect(_passwordHasher.HashPassword(new PortalUserAccount { Id = match.Name }, newPlaintextPassword));
+        entry.Remove("PasswordResetToken");
+        entry.Remove("PasswordResetTokenExpiresAtUtc");
+
+        await WriteRootAsync(root);
+
+        _log.LogInfo("Settings", $"Password reset completed for account '{MaskKey(match.Name)}'.");
+
+        return ParseUser(match.Name, entry);
+    }
+
     public async Task UpdateUserLastLoginAsync(string id)
     {
         var root = await ReadRootAsync();
@@ -1694,7 +1749,8 @@ public class SettingsService
         // true - only a fresh signup going forward is ever explicitly
         // created with this flag, nothing retroactively forces an existing
         // account through mandatory enrollment it was never promised.
-        MustSetUpMfa = entry["MustSetUpMfa"]?.Value<bool>() ?? false
+        MustSetUpMfa = entry["MustSetUpMfa"]?.Value<bool>() ?? false,
+        HasPassword = entry["PasswordHash"] != null && entry["PasswordHash"]!.Type != JTokenType.Null
     };
 
     // Same shape as SaveAdminUsernamesAsync, just the email-based lists -

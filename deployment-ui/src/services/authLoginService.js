@@ -40,3 +40,21 @@ export const cancelLoginMfa = async () => {
     const response = await authApi.post("/login-mfa/cancel");
     return response.data;
 };
+
+// Always resolves the same shape whether or not the email actually has an
+// account with a password to reset - see AccountAuthController.
+// ForgotPassword. There's no failure branch to handle here on purpose.
+export const requestPasswordReset = async (email) => {
+    const response = await authApi.post("/forgot-password", { email });
+    return response.data;
+};
+
+// token comes from the resetToken query param on the emailed link. Same
+// response shape as signup/login (routes through the same
+// FinishPrimaryFactorAsync tail server-side) - mfaRequired/token/success
+// all mean the same thing here as they do there.
+export const resetPassword = async (token, newPassword) => {
+    const response = await authApi.post("/reset-password", { token, newPassword });
+    if (response.data?.token) setAuthToken(response.data.token);
+    return response.data;
+};

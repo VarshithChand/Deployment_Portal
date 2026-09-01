@@ -84,4 +84,21 @@ public class PortalUserAccount
     // VerifyMfaEnrollmentAsync succeeds - never re-armed just because MFA
     // is later disabled.
     public bool MustSetUpMfa { get; set; }
+
+    // Whether a password hash actually exists in storage - the hash
+    // itself is never mapped onto this model at all (see SettingsService.
+    // ParseUser), so this is the only way a caller can tell "has a
+    // password" apart from "Google/GitHub-only account" without touching
+    // the hash. Used by AccountAuthService.RequestPasswordResetAsync to
+    // silently no-op a reset request for an account that has nothing to
+    // reset, rather than emailing a link that would otherwise just bolt a
+    // brand new password onto an account nobody asked to add one to.
+    public bool HasPassword { get; set; }
+
+    // Null once consumed/expired - mirrors EmailVerificationToken exactly
+    // (see that field's own comment): only AccountAuthService.
+    // RequestPasswordResetAsync's in-memory copy, set right after
+    // generating it, is ever populated - a general read (GetUserByIdAsync/
+    // FindUserByEmailAsync) never returns this.
+    public string? PasswordResetToken { get; set; }
 }

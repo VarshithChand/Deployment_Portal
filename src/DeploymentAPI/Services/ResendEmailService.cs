@@ -56,6 +56,14 @@ public class ResendEmailService : IEmailService
         return await SendAsync(toEmail, subject, html, logContext: $"welcome/verification email for '{username}'");
     }
 
+    public async Task<EmailSendResultDto> SendPasswordResetEmailAsync(string toEmail, string username, string resetUrl)
+    {
+        var subject = "Deployment Portal — Reset your password";
+        var html = BuildPasswordResetHtml(username, resetUrl);
+
+        return await SendAsync(toEmail, subject, html, logContext: $"password reset email for '{username}'");
+    }
+
     private async Task<EmailSendResultDto> SendAsync(string toEmail, string subject, string html, string logContext)
     {
         if (string.IsNullOrWhiteSpace(toEmail))
@@ -232,6 +240,53 @@ public class ResendEmailService : IEmailService
         </td></tr>
         <tr><td style="padding:20px 32px;background:#f9fafb;border-top:1px solid #e5e7eb;">
         <p style="margin:0;font-size:11px;color:#9ca3af;">This link expires in 24 hours. If you didn't create this account, you can safely ignore this email.</p>
+        </td></tr>
+        </table>
+        </td></tr>
+        </table>
+        </body>
+        </html>
+        """;
+    }
+
+    // Same table-based/inline-CSS constraint as BuildWelcomeVerificationHtml
+    // above. resetUrl points at a frontend page with a "set new password"
+    // form (see AccountAuthController.ForgotPassword) - unlike the
+    // verification link, clicking this alone doesn't finish anything.
+    private static string BuildPasswordResetHtml(string username, string resetUrl)
+    {
+        var encodedResetUrl = WebUtility.HtmlEncode(resetUrl);
+
+        return $$"""
+        <!DOCTYPE html>
+        <html>
+        <body style="margin:0;padding:0;background:#f3f4f6;font-family:Segoe UI,Helvetica,Arial,sans-serif;">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f3f4f6;padding:32px 0;">
+        <tr><td align="center">
+        <table role="presentation" width="480" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:8px;overflow:hidden;border:1px solid #e5e7eb;">
+        <tr><td style="background:#4f46e5;padding:24px 32px;">
+        <span style="color:#ffffff;font-size:18px;font-weight:700;">Deployment Portal</span>
+        </td></tr>
+        <tr><td style="padding:32px;">
+        <h1 style="margin:0 0 16px;font-size:20px;color:#111827;">Reset your password</h1>
+        <p style="margin:0 0 20px;font-size:14px;line-height:1.6;color:#374151;">
+        Hi {{WebUtility.HtmlEncode(username)}}, we received a request to reset the password on your Deployment Portal account. Click below to choose a new one.
+        </p>
+        <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 0 24px;">
+        <tr><td style="border-radius:6px;background:#4f46e5;">
+        <a href="{{encodedResetUrl}}" style="display:inline-block;padding:12px 28px;font-size:14px;font-weight:600;color:#ffffff;text-decoration:none;">Reset Password</a>
+        </td></tr>
+        </table>
+        <p style="margin:0 0 20px;font-size:12px;line-height:1.6;color:#9ca3af;">
+        If the button doesn't work, copy and paste this link into your browser:<br>
+        <a href="{{encodedResetUrl}}" style="color:#4f46e5;">{{encodedResetUrl}}</a>
+        </p>
+        <p style="margin:0;font-size:13px;line-height:1.6;color:#6b7280;">
+        Didn't request this? You can safely ignore this email — your password won't change unless you click the link above and choose a new one.
+        </p>
+        </td></tr>
+        <tr><td style="padding:20px 32px;background:#f9fafb;border-top:1px solid #e5e7eb;">
+        <p style="margin:0;font-size:11px;color:#9ca3af;">This link expires in 1 hour.</p>
         </td></tr>
         </table>
         </td></tr>
