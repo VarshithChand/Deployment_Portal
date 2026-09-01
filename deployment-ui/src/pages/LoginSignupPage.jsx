@@ -534,7 +534,10 @@ export default function LoginSignupPage({ onMfaRequired }) {
     // is a full detour from the login/signup flow, not a step within it.
     // Reuses the same .aw-root shell/theme toggle as everything else here
     // so it doesn't look like a different, disconnected page - just a
-    // "Back to Login" instead of the split showcase layout.
+    // "Back to Login" instead of the split showcase layout. Deliberately
+    // NOT wrapped in .aw-split/.aw-split-solo (those cap out at 520px/
+    // 1240px for the login card's own two-column grid) - this needs the
+    // full page width, same as every other in-app page's .main does.
     if (toolMode) {
 
         return (
@@ -543,7 +546,7 @@ export default function LoginSignupPage({ onMfaRequired }) {
                 <style>{CSS}</style>
                 {themeToggle}
 
-                <div className="aw-split aw-split-solo aw-tools-view">
+                <div className="aw-tools-view">
 
                     <div className="aw-tools-view-inner">
 
@@ -1214,9 +1217,12 @@ const CSS = `
   color:var(--text); font-size:13px; font-weight:500;
 }
 .aw-root .aw-tools-menu button:hover{background:var(--table-row-hover); color:var(--heading-accent);}
-.aw-root .aw-tools-view{padding:44px 22px; align-items:flex-start;}
-.aw-root .aw-tools-view-inner{width:100%; max-width:900px; margin:0 auto;}
+.aw-root .aw-tools-view{width:100%; min-height:100vh; padding:60px 40px;}
+.aw-root .aw-tools-view-inner{width:100%; max-width:1400px; margin:0 auto;}
 .aw-root .aw-tools-view-inner .main{padding:0; max-width:none;}
+@media (max-width:640px){
+  .aw-root .aw-tools-view{padding:56px 18px 30px;}
+}
 
 .aw-root .aw-split{display:grid; grid-template-columns:1.15fr .85fr; min-height:100vh; max-width:1240px; margin:0 auto;}
 .aw-root .aw-split-solo{grid-template-columns:1fr; align-items:center; justify-items:center; max-width:520px;}

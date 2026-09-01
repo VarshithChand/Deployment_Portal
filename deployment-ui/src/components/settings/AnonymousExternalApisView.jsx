@@ -2,7 +2,7 @@ import { useState } from "react";
 
 import { checkExternalHealthPublic } from "../../services/externalHealthService";
 
-const MAX_URLS = 5;
+const MAX_URLS = 100;
 
 // The login page's own "External APIs" tool — reachable before signing in,
 // on purpose (see LoginSignupPage's tools menu). Unlike Settings' full
@@ -73,7 +73,7 @@ export default function AnonymousExternalApisView() {
                     <textarea
                         id="anon-external-apis-urls"
                         className="form-control external-health-textarea"
-                        rows={5}
+                        rows={14}
                         value={urlsText}
                         onChange={(e) => setUrlsText(e.target.value)}
                         placeholder={"https://your-service.example.com/system/health"}
