@@ -2959,7 +2959,15 @@ public class SettingsService
     // overwrite (SetMfaRequiredAsync above may have set it on a bare,
     // not-yet-enrolled entry before this ever runs) - losing it here
     // would silently un-require someone the moment they started enrolling.
-    public async Task<(string Secret, string OtpAuthUri)> EnrollMfaAsync(string login)
+    // login is the storage key (an opaque id for a Google/password account
+    // - "google:108234..."/"usr_..." - see PortalUserAccount.Id's own
+    // comment) and stays that way in root["Mfa"] regardless. displayLabel
+    // is what actually gets baked into the QR code's otpauth:// URI -
+    // MfaController.Enroll resolves it via RequireAuth.
+    // ResolveDisplayLoginAsync first, so an authenticator app shows
+    // "Deployment Portal: jane@example.com" instead of "Deployment
+    // Portal: google:108234...".
+    public async Task<(string Secret, string OtpAuthUri)> EnrollMfaAsync(string login, string displayLabel)
     {
         var secret = GenerateTotpSecret();
         var now = DateTime.UtcNow;
@@ -2990,7 +2998,7 @@ public class SettingsService
 
         _log.LogInfo("Settings", $"MFA enrollment started for '{login}'.");
 
-        return (secret, BuildOtpAuthUri(login, secret));
+        return (secret, BuildOtpAuthUri(displayLabel, secret));
     }
 
     // Step 2 - the first real code from the authenticator app. Only this
@@ -3293,11 +3301,11 @@ public class SettingsService
 
     private static string GenerateTotpSecret() => Base32Encode(RandomNumberGenerator.GetBytes(20));
 
-    private static string BuildOtpAuthUri(string login, string secret)
+    private static string BuildOtpAuthUri(string displayLabel, string secret)
     {
         const string issuer = "Deployment Portal";
 
-        var label = Uri.EscapeDataString($"{issuer}:{login}");
+        var label = Uri.EscapeDataString($"{issuer}:{displayLabel}");
         var encodedIssuer = Uri.EscapeDataString(issuer);
 
         return $"otpauth://totp/{label}?secret={secret}&issuer={encodedIssuer}&algorithm=SHA1&digits={TotpDigits}&period={TotpStepSeconds}";

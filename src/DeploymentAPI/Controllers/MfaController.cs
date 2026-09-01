@@ -77,14 +77,23 @@ public class MfaController : ControllerBase
         if (await _settings.IsMfaEnabledAsync(login!))
             return BadRequest(new { message = "MFA is already enabled - disable it first to re-enroll." });
 
-        var (secret, otpauthUri) = await _settings.EnrollMfaAsync(login!);
+        // login itself is an opaque storage key for a Google/password
+        // account ("google:108234..."/"usr_...") - resolved here to
+        // whatever a human would actually recognize (display name, then
+        // email, falling back to login only for a GitHub-OAuth account,
+        // where login already IS the real username) before it's baked
+        // into the QR code, so an authenticator app shows "Deployment
+        // Portal: jane@example.com" rather than the raw id.
+        var displayLabel = await RequireAuth.ResolveDisplayLoginAsync(login!, User.FindFirst(ClaimTypes.Email)?.Value, _settings);
+
+        var (secret, otpauthUri) = await _settings.EnrollMfaAsync(login!, displayLabel);
 
         return Ok(new
         {
             secret,
             otpauthUri,
             issuer = "Deployment Portal",
-            accountLabel = login
+            accountLabel = displayLabel
         });
     }
 
