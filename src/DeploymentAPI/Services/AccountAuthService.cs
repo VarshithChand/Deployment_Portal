@@ -195,6 +195,38 @@ public class AccountAuthService
         return await ResolveRoleAsync(user);
     }
 
+    // Lets an existing Google/GitHub-only account (no PasswordHash at all)
+    // add password login for the first time, without creating a second
+    // account - see PortalUserAccount.HasPassword's own comment for why
+    // RequestPasswordResetAsync refuses to touch such an account; this is
+    // the deliberate, explicit "yes, add one" action a reset request isn't.
+    // Requires the caller to already be authenticated (see
+    // AccountAuthController.SetPassword) - there's no separate proof needed
+    // beyond that, since an account with no existing password has nothing
+    // to verify first. Deliberately refuses to touch an account that
+    // already has a password - this is "add a password," not "change your
+    // password," which would need the current one re-proven first and
+    // isn't what this endpoint is for.
+    public async Task<SetPasswordResult> SetPasswordAsync(string userId, string newPassword)
+    {
+        if (string.IsNullOrWhiteSpace(newPassword) || newPassword.Length < MinPasswordLength)
+            return SetPasswordResult.Fail($"Password must be at least {MinPasswordLength} characters.");
+
+        var user = await _settings.GetUserByIdAsync(userId);
+
+        if (user == null)
+            return SetPasswordResult.Fail("Unable to verify your identity right now.");
+
+        if (user.HasPassword)
+            return SetPasswordResult.Fail("This account already has a password.");
+
+        var username = await DeriveUniqueUsernameAsync(user.Email);
+
+        await _settings.SetUserPasswordAsync(userId, newPassword, username);
+
+        return SetPasswordResult.Ok();
+    }
+
     // Derived from the email's local part (e.g. "jane.doe" from
     // "jane.doe@example.com"), stripped down to what a username actually
     // allows and de-duplicated against existing accounts - lets every
@@ -290,4 +322,13 @@ public class OtpVerifyResult
 
     public static OtpVerifyResult Fail(string error) => new() { Success = false, Error = error };
     public static OtpVerifyResult Ok(string resetToken) => new() { Success = true, ResetToken = resetToken };
+}
+
+public class SetPasswordResult
+{
+    public bool Success { get; private init; }
+    public string? Error { get; private init; }
+
+    public static SetPasswordResult Fail(string error) => new() { Success = false, Error = error };
+    public static SetPasswordResult Ok() => new() { Success = true };
 }

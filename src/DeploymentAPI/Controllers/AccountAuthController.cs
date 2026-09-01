@@ -312,6 +312,61 @@ public class AccountAuthController : ControllerBase
         return Ok();
     }
 
+    // Backs Settings' own "Set Password" section - lets the frontend know
+    // whether the currently logged-in account already has one (a Google/
+    // GitHub-only account never does - see PortalUserAccount.HasPassword),
+    // so it can show either the set-password form or a plain "already set"
+    // state instead of guessing from Provider alone (a Google account that
+    // already added a password via SetPassword below is still Provider
+    // "google", just with HasPassword now true too).
+    [HttpGet("account")]
+    public async Task<IActionResult> GetAccount()
+    {
+        var (userId, denied) = RequireAuth.RequireUserId(this);
+        if (denied != null) return denied;
+
+        var user = await _settings.GetUserByIdAsync(userId!);
+
+        if (user == null)
+            return StatusCode(401, new { message = "Unable to verify your identity right now." });
+
+        return Ok(new { email = user.Email, provider = user.Provider, hasPassword = user.HasPassword });
+    }
+
+    // Lets an already-authenticated Google/GitHub-only account add password
+    // login for the first time (see AccountAuthService.SetPasswordAsync and
+    // PortalUserAccount.HasPassword's own comment on why plain Forgot
+    // Password can't do this - there's nothing yet to reset). Deliberately
+    // requires an active session rather than any kind of token - the
+    // session itself (already having passed MFA if it's enabled) IS the
+    // proof this endpoint needs, unlike ResetPassword's OTP-authorized one.
+    [HttpPost("set-password")]
+    public async Task<IActionResult> SetPassword(SetPasswordRequestDto request)
+    {
+        var (userId, denied) = RequireAuth.RequireUserId(this);
+        if (denied != null) return denied;
+
+        var result = await _accountAuth.SetPasswordAsync(userId!, request.NewPassword ?? string.Empty);
+
+        if (!result.Success)
+            return Ok(new { success = false, message = result.Error });
+
+        var user = await _settings.GetUserByIdAsync(userId!);
+
+        if (user != null)
+        {
+            try
+            {
+                await _email.SendPasswordResetConfirmationAsync(user.Email, user.Username ?? user.Email);
+            }
+            catch (Exception)
+            {
+            }
+        }
+
+        return Ok(new { success = true });
+    }
+
     // Where the link in the welcome email actually lands. Consumes the
     // token (SettingsService.VerifyEmailAsync clears it so it can't be
     // replayed), then - since this account has now genuinely proven both

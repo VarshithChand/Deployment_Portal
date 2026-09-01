@@ -1832,6 +1832,33 @@ public class SettingsService
         }
     }
 
+    // Called when an existing Google/GitHub-only account sets a password
+    // for the first time (see AccountAuthService.SetPasswordAsync) - unlike
+    // ConsumePasswordResetTokenAsync, there's no token to consume, since the
+    // caller already proved identity by being logged in when they reached
+    // this. Also backfills Username if the account has none yet (a Google/
+    // GitHub-only account is created without one - see CreateUserAsync),
+    // only if it isn't already set, so the new password can log in with
+    // either the account's email or a username, matching what a normal
+    // password signup gets from the start.
+    public async Task SetUserPasswordAsync(string id, string plaintextPassword, string? username)
+    {
+        var root = await ReadRootAsync();
+        var (users, _) = await GetOrCreateUsersSectionAsync(root);
+
+        if (users[id] is not JObject entry)
+            return;
+
+        entry["PasswordHash"] = Protect(_passwordHasher.HashPassword(new PortalUserAccount { Id = id }, plaintextPassword));
+
+        if (username != null && entry["Username"] == null)
+            entry["Username"] = username;
+
+        await WriteRootAsync(root);
+
+        _log.LogInfo("Settings", $"Password set for account '{MaskKey(id)}'.");
+    }
+
     // Called after a successful Google/GitHub OAuth exchange for an email
     // that already has a password (or other-provider) account - links
     // rather than creating a duplicate, so the same person reaches the same

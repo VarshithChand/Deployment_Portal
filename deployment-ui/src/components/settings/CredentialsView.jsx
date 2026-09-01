@@ -12,6 +12,7 @@ import DatabaseConnectionSection from "./credentials/DatabaseConnectionSection";
 import ApiKeySection from "./credentials/ApiKeySection";
 import SecurityPinSection from "./credentials/SecurityPinSection";
 import CredentialPinGate from "./credentials/CredentialPinGate";
+import AccountPasswordSection from "./credentials/AccountPasswordSection";
 import PortalRegistryLoginSection from "./credentials/PortalRegistryLoginSection";
 import GitLabRegistryLoginSection from "./credentials/GitLabRegistryLoginSection";
 import JfrogLoginSection from "./credentials/JfrogLoginSection";
@@ -37,6 +38,7 @@ import {
 } from "../../services/observabilityService";
 
 const MODES = [
+    { key: "account", label: "Account" },
     { key: "github", label: "GitHub" },
     { key: "azureDevOps", label: "Azure DevOps" },
     { key: "aws", label: "AWS" },
@@ -488,6 +490,8 @@ export default function CredentialsView({
                 </div>
 
             </div>
+
+            {mode === "account" && <AccountPasswordSection />}
 
             {mode === "github" && (
 

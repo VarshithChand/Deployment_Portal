@@ -79,3 +79,22 @@ export const resetPassword = async (token, newPassword) => {
     if (response.data?.token) setAuthToken(response.data.token);
     return response.data;
 };
+
+// Backs Settings > Credentials > Account's "Set Password" section - see
+// AccountAuthController.GetAccount/SetPassword. Both require an existing
+// authenticated session (unlike everything else in this file, which runs
+// BEFORE one exists), so authApi's own token/cookie handling covers them
+// the same way any other post-login settings call already works.
+export const getMyAccount = async () => {
+    const response = await authApi.get("/account");
+    return response.data;
+};
+
+// Only succeeds for an account with no password yet (Google/GitHub-only) -
+// see AccountAuthService.SetPasswordAsync. Doesn't touch the current
+// session/token at all - adding a password doesn't change who's logged in
+// or how, just adds a second way to log in as them next time.
+export const setPassword = async (newPassword) => {
+    const response = await authApi.post("/set-password", { newPassword });
+    return response.data;
+};
