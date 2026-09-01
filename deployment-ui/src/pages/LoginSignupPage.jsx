@@ -14,12 +14,13 @@ import { SunIcon, MoonIcon } from "../components/layout/SidebarIcons";
 
 // Lazy, not a normal import - this page is on the critical path for EVERY
 // visitor (it's the very first thing anyone sees), so a plain static
-// import here would pull both tools' code into the MAIN bundle for every
-// single visitor, even the vast majority who never open the bottom-right
-// tools menu at all. Same "keep the initial bundle lean" reasoning
-// MfaEnforcementGate already established for MfaSection.
+// import here would pull all three tools' code into the MAIN bundle for
+// every single visitor, even the vast majority who never open the
+// bottom-right tools menu at all. Same "keep the initial bundle lean"
+// reasoning MfaEnforcementGate already established for MfaSection.
 const AnonymousExternalApisView = lazy(() => import("../components/settings/AnonymousExternalApisView"));
 const TemplateTester = lazy(() => import("./TemplateTester"));
+const Portfolio = lazy(() => import("./Portfolio"));
 
 // Matches the Dashboard's own "ops console" layout (Round 7 - Dashboard.
 // jsx) for the one other page a visitor sees before any of the app's own
@@ -483,7 +484,7 @@ export default function LoginSignupPage({ onMfaRequired }) {
     );
 
     // Bottom-right corner, mirroring the theme toggle's own top-right
-    // corner placement - opens a tiny menu offering the two tools below
+    // corner placement - opens a tiny menu offering the three tools below
     // that don't need an account. Closes itself once a tool is picked
     // (toolMode set) or on a second click of the same button.
     const toolsMenu = (
@@ -520,6 +521,14 @@ export default function LoginSignupPage({ onMfaRequired }) {
                         onClick={() => { setToolMode("template-tester"); setToolsMenuOpen(false); }}
                     >
                         Template Tester
+                    </button>
+
+                    <button
+                        type="button"
+                        role="menuitem"
+                        onClick={() => { setToolMode("portfolio"); setToolsMenuOpen(false); }}
+                    >
+                        Portfolio
                     </button>
 
                 </div>
@@ -560,7 +569,13 @@ export default function LoginSignupPage({ onMfaRequired }) {
                         </button>
 
                         <Suspense fallback={<p className="field-hint">Loading...</p>}>
-                            {toolMode === "external-apis" ? <AnonymousExternalApisView /> : <TemplateTester />}
+                            {toolMode === "external-apis" ? (
+                                <AnonymousExternalApisView />
+                            ) : toolMode === "template-tester" ? (
+                                <TemplateTester />
+                            ) : (
+                                <Portfolio />
+                            )}
                         </Suspense>
 
                     </div>
