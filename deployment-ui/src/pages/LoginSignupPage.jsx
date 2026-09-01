@@ -835,6 +835,22 @@ const CSS = `
 .aw-root .input .at{color:var(--text-muted); font-size:15px; width:15px; text-align:center;}
 .aw-root .input input{flex:1; min-width:0; background:transparent; border:0; outline:0; color:var(--text); font-size:14px; padding:11px 0; font-family:inherit;}
 .aw-root .input input::placeholder{color:var(--text-muted);}
+/* Chrome/Edge force their own light autofill background (and black text)
+   on a filled username/password field, ignoring the input's own
+   background/color entirely - this is the standard override: fake the
+   background via an absurdly long inset box-shadow transition instead of
+   fighting the autofill background directly, and pin the text color via
+   -webkit-text-fill-color (color alone doesn't survive on an autofilled
+   field either). Without this, this dark input rendered as a jarring
+   white/light box the instant a saved credential filled it in. */
+.aw-root .input input:-webkit-autofill,
+.aw-root .input input:-webkit-autofill:hover,
+.aw-root .input input:-webkit-autofill:focus{
+  -webkit-text-fill-color:var(--text);
+  -webkit-box-shadow:0 0 0 1000px var(--card-bg-strong) inset;
+  box-shadow:0 0 0 1000px var(--card-bg-strong) inset;
+  transition:background-color 5000s ease-in-out 0s;
+}
 .aw-root .peek{background:transparent; border:0; padding:4px; color:var(--text-muted); display:grid; place-items:center;}
 .aw-root .peek:hover{color:var(--text);}
 
