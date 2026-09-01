@@ -3183,6 +3183,38 @@ textarea{
 
 }
 
+/* A real button chip (border/background/padding), not a bare text link -
+   for the auth flow's secondary actions (MfaVerifyPage's "Use recovery
+   code instead"/"Send OTP to Email", LoginSignupPage's "Resend OTP") that
+   read as unstyled/inconsistent sitting directly under a real .btn
+   primary action. Same visual weight as the Dashboard's own compact
+   chip buttons (.dp-seg-b/.dp-baction) - modest border-radius, a
+   token-driven border+background, not a full pill. */
+.auth-chip-btn{
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    gap:4px;
+    padding:7px 14px;
+    border-radius:9px;
+    border:1px solid var(--stroke);
+    background:var(--card-bg-strong);
+    color:var(--heading-accent);
+    font-size:12.5px;
+    font-weight:600;
+    font-family:inherit;
+    cursor:pointer;
+    transition:border-color .15s ease, background .15s ease, color .15s ease;
+}
+.auth-chip-btn:hover:not(:disabled){
+    border-color:var(--heading-accent);
+    background:var(--table-row-hover);
+}
+.auth-chip-btn:disabled{
+    opacity:.55;
+    cursor:default;
+}
+
 .token-help-link-alert{
 
     color:white;

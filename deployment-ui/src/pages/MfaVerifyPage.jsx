@@ -365,8 +365,7 @@ export default function MfaVerifyPage({ onBack }) {
                         ) : (
                             <button
                                 type="button"
-                                className="token-help-link"
-                                style={{ background: "none", border: "none", padding: 0, cursor: "pointer" }}
+                                className="auth-chip-btn"
                                 onClick={handleSendEmailOtp}
                                 disabled={emailOtpSending}
                             >
@@ -442,25 +441,25 @@ export default function MfaVerifyPage({ onBack }) {
                 <div className="button-row" style={{ flexWrap: "wrap", justifyContent: "center", gap: "6px 14px" }}>
 
                     {useRecovery && (
-                        <button type="button" className="token-help-link" style={{ background: "none", border: "none", padding: 0, cursor: "pointer" }} onClick={handleSwitchToTotp}>
+                        <button type="button" className="auth-chip-btn" onClick={handleSwitchToTotp}>
                             Use an authenticator code instead
                         </button>
                     )}
 
                     {!useRecovery && (
-                        <button type="button" className="token-help-link" style={{ background: "none", border: "none", padding: 0, cursor: "pointer" }} onClick={handleSwitchToRecovery}>
+                        <button type="button" className="auth-chip-btn" onClick={handleSwitchToRecovery}>
                             Use recovery code instead
                         </button>
                     )}
 
                     {!useEmailOtp && (
-                        <button type="button" className="token-help-link" style={{ background: "none", border: "none", padding: 0, cursor: "pointer" }} onClick={handleSwitchToEmailOtp}>
+                        <button type="button" className="auth-chip-btn" onClick={handleSwitchToEmailOtp}>
                             Send OTP to Email
                         </button>
                     )}
 
                     {useEmailOtp && (
-                        <button type="button" className="token-help-link" style={{ background: "none", border: "none", padding: 0, cursor: "pointer" }} onClick={handleSwitchToTotp}>
+                        <button type="button" className="auth-chip-btn" onClick={handleSwitchToTotp}>
                             Use an authenticator code instead
                         </button>
                     )}

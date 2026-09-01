@@ -499,7 +499,7 @@ export default function LoginSignupPage({ onMfaRequired }) {
                                 </form>
 
                                 <p className="allowlist">
-                                    <button type="button" className="linklike" onClick={handleBackToLogin}>
+                                    <button type="button" className="auth-chip-btn" onClick={handleBackToLogin}>
                                         Back to Login
                                     </button>
                                 </p>
@@ -582,14 +582,14 @@ export default function LoginSignupPage({ onMfaRequired }) {
                                     {resendCooldown > 0 ? (
                                         <span>Resend OTP in {resendCooldown}s</span>
                                     ) : (
-                                        <button type="button" className="linklike" onClick={handleResendOtp} disabled={forgotSubmitting}>
+                                        <button type="button" className="auth-chip-btn" onClick={handleResendOtp} disabled={forgotSubmitting}>
                                             Resend OTP
                                         </button>
                                     )}
                                 </p>
 
                                 <p className="allowlist">
-                                    <button type="button" className="linklike" onClick={handleBackToLogin}>
+                                    <button type="button" className="auth-chip-btn" onClick={handleBackToLogin}>
                                         Back to Login
                                     </button>
                                 </p>
@@ -719,7 +719,7 @@ export default function LoginSignupPage({ onMfaRequired }) {
                                 <h2 id="reset-done-title">Your password has been reset successfully.</h2>
 
                                 <p className="allowlist">
-                                    <button type="button" className="linklike" onClick={handleBackToLogin}>
+                                    <button type="button" className="auth-chip-btn" onClick={handleBackToLogin}>
                                         Back to Login
                                     </button>
                                 </p>
@@ -768,7 +768,7 @@ export default function LoginSignupPage({ onMfaRequired }) {
                                     Didn&apos;t get it? Check spam, or{" "}
                                     <button
                                         type="button"
-                                        className="linklike"
+                                        className="token-help-link"
                                         onClick={() => { setCheckEmailSent(false); setMode("signin"); setError(""); }}
                                     >
                                         go back
@@ -950,7 +950,7 @@ export default function LoginSignupPage({ onMfaRequired }) {
                                     <span className="field-top">
                                         Password
                                         {!isReg && (
-                                            <button type="button" className="forgot" onClick={handleForgotPassword}>Forgot Password?</button>
+                                            <button type="button" className="auth-chip-btn" style={{ padding: "4px 10px", fontSize: 11.5 }} onClick={handleForgotPassword}>Forgot Password?</button>
                                         )}
                                     </span>
                                     <div className="input">
@@ -1121,8 +1121,6 @@ const CSS = `
 .aw-root .field{display:flex; flex-direction:column; gap:7px;}
 .aw-root .field > span{font-size:12px; color:var(--text-muted); font-weight:500;}
 .aw-root .field-top{display:flex; align-items:center; justify-content:space-between;}
-.aw-root .forgot{background:none; border:0; padding:0; margin:0; font:inherit; font-size:11.5px; color:var(--heading-accent); cursor:pointer;}
-.aw-root .forgot:hover{text-decoration:underline;}
 .aw-root .input{display:flex; align-items:center; gap:9px; background:var(--card-bg-strong); border:1px solid var(--stroke); border-radius:10px; padding:0 12px; transition:.15s;}
 .aw-root .input:focus-within{border-color:var(--heading-accent); box-shadow:0 0 0 3px color-mix(in srgb, var(--heading-accent) 22%, transparent);}
 .aw-root .input svg{color:var(--text-muted); flex:0 0 auto;}
@@ -1162,8 +1160,6 @@ const CSS = `
 .aw-root .mfa-note svg{color:var(--heading-accent); flex:0 0 auto; margin-top:1px;}
 
 .aw-root .allowlist{margin:18px 0 0; font-size:11.5px; line-height:1.5; color:var(--text-muted); text-align:center;}
-.aw-root .linklike{background:none; border:0; padding:0; color:var(--heading-accent); font-size:inherit; font-family:inherit; cursor:pointer;}
-.aw-root .linklike:hover{text-decoration:underline;}
 .aw-root .foot{font-size:11.5px; color:var(--text-muted);}
 
 @media (max-width:900px){
