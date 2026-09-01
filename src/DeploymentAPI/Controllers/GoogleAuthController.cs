@@ -82,7 +82,7 @@ public class GoogleAuthController : ControllerBase
 
         try
         {
-            var user = await _google.ExchangeCodeForUserAsync(code);
+            var (user, isNewAccount) = await _google.ExchangeCodeForUserAsync(code);
             var roleResult = _accountAuth.ResolveRoleSync(user);
 
             if (!roleResult.Success || roleResult.Role == null)
@@ -93,8 +93,10 @@ public class GoogleAuthController : ControllerBase
             // issue a real session yet, or whether this account's MFA has
             // to be satisfied first - the same gate every other login
             // method goes through (see AccountAuthController/
-            // AuthController.Callback).
-            return await OAuthLoginFinisher.FinishAsync(this, _settings, _activity, _auth, _email, user.Id, roleResult.Role, user.Email, frontendUrl);
+            // AuthController.Callback). isNewAccount is what lets it send
+            // a welcome email only the first time this Google identity is
+            // ever seen, a login notification every time after.
+            return await OAuthLoginFinisher.FinishAsync(this, _settings, _activity, _auth, _email, user.Id, roleResult.Role, user.Email, frontendUrl, isNewAccount);
         }
         catch (UnauthorizedAccessException)
         {

@@ -56,12 +56,39 @@ public class ResendEmailService : IEmailService
         return await SendAsync(toEmail, subject, html, logContext: $"welcome/verification email for '{username}'");
     }
 
-    public async Task<EmailSendResultDto> SendPasswordResetEmailAsync(string toEmail, string username, string resetUrl)
+    public async Task<EmailSendResultDto> SendWelcomeEmailAsync(string toEmail, string username, string portalUrl)
     {
-        var subject = "Deployment Portal — Reset your password";
-        var html = BuildPasswordResetHtml(username, resetUrl);
+        var subject = "Welcome to Deployment Portal";
+        var html = BuildWelcomeHtml(username, portalUrl);
 
-        return await SendAsync(toEmail, subject, html, logContext: $"password reset email for '{username}'");
+        return await SendAsync(toEmail, subject, html, logContext: $"welcome email for '{username}'");
+    }
+
+    public async Task<EmailSendResultDto> SendMfaOtpEmailAsync(string toEmail, string username, string otp)
+    {
+        var subject = "Your Deployment Portal Verification Code";
+        var html = BuildOtpHtml(username, otp, "Your Deployment Portal verification code is:");
+
+        return await SendAsync(toEmail, subject, html, logContext: $"MFA OTP email for '{username}'");
+    }
+
+    public async Task<EmailSendResultDto> SendPasswordResetOtpEmailAsync(string toEmail, string username, string otp)
+    {
+        var subject = "Reset Your Deployment Portal Password";
+        var html = BuildOtpHtml(
+            username, otp,
+            "We received a request to reset your Deployment Portal password. Your verification code is:",
+            reasonNote: "If you did not request a password reset, please ignore this email.");
+
+        return await SendAsync(toEmail, subject, html, logContext: $"password reset OTP email for '{username}'");
+    }
+
+    public async Task<EmailSendResultDto> SendPasswordResetConfirmationAsync(string toEmail, string username)
+    {
+        var subject = "Your Deployment Portal Password Was Changed";
+        var html = BuildPasswordChangedHtml(username);
+
+        return await SendAsync(toEmail, subject, html, logContext: $"password-changed confirmation for '{username}'");
     }
 
     private async Task<EmailSendResultDto> SendAsync(string toEmail, string subject, string html, string logContext)
@@ -253,9 +280,11 @@ public class ResendEmailService : IEmailService
     // above. resetUrl points at a frontend page with a "set new password"
     // form (see AccountAuthController.ForgotPassword) - unlike the
     // verification link, clicking this alone doesn't finish anything.
-    private static string BuildPasswordResetHtml(string username, string resetUrl)
+    // No verify link (unlike BuildWelcomeVerificationHtml) - Google/GitHub
+    // already proved this email, there's nothing left to click.
+    private static string BuildWelcomeHtml(string username, string portalUrl)
     {
-        var encodedResetUrl = WebUtility.HtmlEncode(resetUrl);
+        var encodedPortalUrl = WebUtility.HtmlEncode(portalUrl);
 
         return $$"""
         <!DOCTYPE html>
@@ -268,25 +297,93 @@ public class ResendEmailService : IEmailService
         <span style="color:#ffffff;font-size:18px;font-weight:700;">Deployment Portal</span>
         </td></tr>
         <tr><td style="padding:32px;">
-        <h1 style="margin:0 0 16px;font-size:20px;color:#111827;">Reset your password</h1>
+        <h1 style="margin:0 0 16px;font-size:20px;color:#111827;">Welcome, {{WebUtility.HtmlEncode(username)}}</h1>
         <p style="margin:0 0 20px;font-size:14px;line-height:1.6;color:#374151;">
-        Hi {{WebUtility.HtmlEncode(username)}}, we received a request to reset the password on your Deployment Portal account. Click below to choose a new one.
+        Your Deployment Portal account has been created and is ready to use.
         </p>
         <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 0 24px;">
         <tr><td style="border-radius:6px;background:#4f46e5;">
-        <a href="{{encodedResetUrl}}" style="display:inline-block;padding:12px 28px;font-size:14px;font-weight:600;color:#ffffff;text-decoration:none;">Reset Password</a>
+        <a href="{{encodedPortalUrl}}" style="display:inline-block;padding:12px 28px;font-size:14px;font-weight:600;color:#ffffff;text-decoration:none;">Open Deployment Portal</a>
         </td></tr>
         </table>
-        <p style="margin:0 0 20px;font-size:12px;line-height:1.6;color:#9ca3af;">
-        If the button doesn't work, copy and paste this link into your browser:<br>
-        <a href="{{encodedResetUrl}}" style="color:#4f46e5;">{{encodedResetUrl}}</a>
-        </p>
         <p style="margin:0;font-size:13px;line-height:1.6;color:#6b7280;">
-        Didn't request this? You can safely ignore this email — your password won't change unless you click the link above and choose a new one.
+        If you didn't create this account, please contact support.
         </p>
         </td></tr>
-        <tr><td style="padding:20px 32px;background:#f9fafb;border-top:1px solid #e5e7eb;">
-        <p style="margin:0;font-size:11px;color:#9ca3af;">This link expires in 1 hour.</p>
+        </table>
+        </td></tr>
+        </table>
+        </body>
+        </html>
+        """;
+    }
+
+    // Shared by both OTP emails (MFA and password-reset) - a big,
+    // monospace-styled code block instead of a button/link, since there's
+    // nothing to click here, only a code to copy or type. reasonNote is
+    // the one line that differs by purpose (password-reset gets an
+    // explicit "didn't request this?" disclaimer; MFA's own equivalent
+    // line is folded into the intro sentence the caller passes instead).
+    private static string BuildOtpHtml(string username, string otp, string introSentence, string? reasonNote = null)
+    {
+        var footerNote = reasonNote ?? "If you did not request this code, you can safely ignore this email.";
+
+        return $$"""
+        <!DOCTYPE html>
+        <html>
+        <body style="margin:0;padding:0;background:#f3f4f6;font-family:Segoe UI,Helvetica,Arial,sans-serif;">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f3f4f6;padding:32px 0;">
+        <tr><td align="center">
+        <table role="presentation" width="480" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:8px;overflow:hidden;border:1px solid #e5e7eb;">
+        <tr><td style="background:#4f46e5;padding:24px 32px;">
+        <span style="color:#ffffff;font-size:18px;font-weight:700;">Deployment Portal</span>
+        </td></tr>
+        <tr><td style="padding:32px;">
+        <p style="margin:0 0 20px;font-size:14px;line-height:1.6;color:#374151;">
+        Hello {{WebUtility.HtmlEncode(username)}},<br><br>
+        {{WebUtility.HtmlEncode(introSentence)}}
+        </p>
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f9fafb;border-radius:6px;margin:0 0 24px;">
+        <tr><td style="padding:20px;text-align:center;">
+        <span style="font-family:'Courier New',monospace;font-size:32px;font-weight:700;letter-spacing:8px;color:#111827;">{{WebUtility.HtmlEncode(otp)}}</span>
+        </td></tr>
+        </table>
+        <p style="margin:0 0 20px;font-size:13px;line-height:1.6;color:#6b7280;">
+        This code expires in 5 minutes.
+        </p>
+        <p style="margin:0;font-size:13px;line-height:1.6;color:#6b7280;">
+        {{WebUtility.HtmlEncode(footerNote)}}
+        </p>
+        </td></tr>
+        </table>
+        </td></tr>
+        </table>
+        </body>
+        </html>
+        """;
+    }
+
+    private static string BuildPasswordChangedHtml(string username)
+    {
+        return $$"""
+        <!DOCTYPE html>
+        <html>
+        <body style="margin:0;padding:0;background:#f3f4f6;font-family:Segoe UI,Helvetica,Arial,sans-serif;">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f3f4f6;padding:32px 0;">
+        <tr><td align="center">
+        <table role="presentation" width="480" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:8px;overflow:hidden;border:1px solid #e5e7eb;">
+        <tr><td style="background:#4f46e5;padding:24px 32px;">
+        <span style="color:#ffffff;font-size:18px;font-weight:700;">Deployment Portal</span>
+        </td></tr>
+        <tr><td style="padding:32px;">
+        <h1 style="margin:0 0 16px;font-size:20px;color:#111827;">Password changed successfully</h1>
+        <p style="margin:0 0 20px;font-size:14px;line-height:1.6;color:#374151;">
+        Hello {{WebUtility.HtmlEncode(username)}},<br><br>
+        Your Deployment Portal password was successfully changed. If you made this change, no further action is required.
+        </p>
+        <p style="margin:0;font-size:13px;line-height:1.6;color:#6b7280;">
+        If you did not change your password, please contact support immediately.
+        </p>
         </td></tr>
         </table>
         </td></tr>

@@ -10,6 +10,13 @@ public class MfaCodeRequestDto
     public string? Code { get; set; }
 
     public string? RecoveryCode { get; set; }
+
+    // True when Code is an emailed OTP (see AccountAuthController's
+    // login-mfa/send-otp) rather than a TOTP code from the authenticator
+    // app - both are 6 digits, so the caller has to say which kind this
+    // is; verifying an email OTP against the TOTP algorithm (or vice
+    // versa) would just always fail.
+    public bool IsEmailOtp { get; set; }
 }
 
 public class MfaNotificationEmailRequestDto

@@ -64,42 +64,75 @@ public class AccountAuthController : ControllerBase
     }
 
     // Always returns the same shape whether or not the email actually
-    // matched an account with a password to reset - see AccountAuthService.
-    // RequestPasswordResetAsync's own comment for why. A Resend failure is
-    // swallowed the same way SendWelcomeVerificationEmailAsync's caller
-    // does below - this response was already going to say "check your
-    // email" regardless, so there's nothing for a caught exception here to
-    // change.
+    // matched an account with a password to reset (or is on cooldown/
+    // rate-limited) - see AccountAuthService.RequestPasswordResetAsync's
+    // own comment for why. A Resend failure is swallowed the same way
+    // SendWelcomeVerificationEmailAsync's caller does below - this
+    // response was already going to say "if it exists..." regardless, so
+    // there's nothing for a caught exception here to change (a genuinely
+    // missing email would look identical to the legitimate owner as a
+    // failed send anyway - they just don't get a code either way).
     [HttpPost("forgot-password")]
     public async Task<IActionResult> ForgotPassword(ForgotPasswordRequestDto request)
     {
-        var user = await _accountAuth.RequestPasswordResetAsync(request.Email ?? string.Empty);
+        var result = await _accountAuth.RequestPasswordResetAsync(request.Email ?? string.Empty);
 
-        if (user?.PasswordResetToken != null)
+        if (result.User != null && result.Otp != null)
         {
             try
             {
-                var frontendUrl = _githubOAuthOptions.CurrentValue.FrontendUrl.TrimEnd('/');
-                var resetUrl = $"{frontendUrl}/?resetToken={Uri.EscapeDataString(user.PasswordResetToken)}";
-
-                await _email.SendPasswordResetEmailAsync(user.Email, user.Username ?? user.Email, resetUrl);
+                await _email.SendPasswordResetOtpEmailAsync(result.User.Email, result.User.Username ?? result.User.Email, result.Otp);
             }
             catch (Exception)
             {
             }
         }
 
-        return Ok(new { success = true, message = "If that email has an account, we've sent a reset link." });
+        return Ok(new { success = true, message = "If an account exists for this email, a verification code has been sent." });
+    }
+
+    // The forgot-password flow's second step - proves control of the
+    // emailed code, then hands back a short-lived token authorizing the
+    // ACTUAL password change (see AccountAuthService.VerifyPasswordResetOtpAsync).
+    // Unlike ForgotPassword above, this DOES distinguish success from
+    // failure in its response - by this point the caller already
+    // (supposedly) received an email, so there's no fresh enumeration
+    // surface being opened by saying "wrong code" plainly.
+    [HttpPost("forgot-password/verify")]
+    public async Task<IActionResult> VerifyForgotPasswordOtp(VerifyResetOtpRequestDto request)
+    {
+        var result = await _accountAuth.VerifyPasswordResetOtpAsync(request.Email ?? string.Empty, request.Otp ?? string.Empty);
+
+        if (!result.Success)
+            return Ok(new { success = false, message = result.Error });
+
+        return Ok(new { success = true, resetToken = result.ResetToken });
     }
 
     // Deliberately routes through the exact same FinishPrimaryFactorAsync
     // tail signup/login use, rather than issuing a session directly here -
     // see AccountAuthService.ResetPasswordAsync's own comment for why an
     // MFA-enabled account still has to pass MFA after this, not skip it.
+    // The confirmation email fires BEFORE that MFA branch, not after -
+    // the password is already changed by this point regardless of
+    // whether a session is issued immediately or held for an MFA code
+    // first, so there's nothing to gate it on.
     [HttpPost("reset-password")]
     public async Task<IActionResult> ResetPassword(ResetPasswordRequestDto request)
     {
         var result = await _accountAuth.ResetPasswordAsync(request.Token ?? string.Empty, request.NewPassword ?? string.Empty);
+
+        if (result.Success && result.User != null)
+        {
+            try
+            {
+                await _email.SendPasswordResetConfirmationAsync(result.User.Email, result.User.Username ?? result.User.Email);
+            }
+            catch (Exception)
+            {
+            }
+        }
+
         return await FinishPrimaryFactorAsync(result);
     }
 
@@ -142,6 +175,72 @@ public class AccountAuthController : ControllerBase
         return Ok(new { pending = _activity.GetPendingAccountLogin(key) != null });
     }
 
+    // Alternate MFA verification path alongside the authenticator-app code
+    // and recovery code - useful when someone doesn't have their
+    // authenticator device handy. Enrollment/TOTP itself is completely
+    // untouched by this; it's just one more way to clear the SAME pending
+    // challenge VerifyMfa below already gates. Security-critical (spec:
+    // "For MFA... Failure -> Return email delivery error") - unlike the
+    // welcome/login-notification/reset-confirmation sends elsewhere in
+    // this controller, a Resend failure here becomes a real error
+    // response instead of a generically-successful one, since silently
+    // saying "code sent" when it wasn't would strand the user with no way
+    // to finish signing in.
+    [HttpPost("login-mfa/send-otp")]
+    public async Task<IActionResult> SendMfaOtp()
+    {
+        var key = PortalIdentity.GetOrCreateKey(HttpContext);
+        var pending = _activity.GetPendingAccountLogin(key);
+
+        if (pending == null)
+        {
+            return Ok(new
+            {
+                success = false,
+                code = "MFA_SESSION_EXPIRED",
+                message = "Your verification session has expired. Please sign in again."
+            });
+        }
+
+        var (userId, _, email) = pending.Value;
+
+        if (string.IsNullOrWhiteSpace(email))
+            return Ok(new { success = false, message = "No email address is on file for this account." });
+
+        var otpResult = await _settings.IssueOtpAsync(userId, OtpPurpose.Mfa);
+
+        if (otpResult.Outcome == SettingsService.OtpRequestOutcome.Cooldown)
+        {
+            return Ok(new
+            {
+                success = false,
+                code = "OTP_COOLDOWN",
+                message = $"Please wait {otpResult.CooldownSecondsRemaining}s before requesting another code.",
+                cooldownSeconds = otpResult.CooldownSecondsRemaining
+            });
+        }
+
+        if (otpResult.Outcome == SettingsService.OtpRequestOutcome.RateLimited)
+        {
+            return Ok(new { success = false, code = "OTP_RATE_LIMITED", message = "Too many code requests. Try again later." });
+        }
+
+        try
+        {
+            var displayLogin = await RequireAuth.ResolveDisplayLoginAsync(userId, email, _settings);
+            var sendResult = await _email.SendMfaOtpEmailAsync(email, displayLogin, otpResult.Code!);
+
+            if (!sendResult.Success)
+                return Ok(new { success = false, message = "Couldn't send the verification email. Try again in a moment." });
+        }
+        catch (Exception)
+        {
+            return Ok(new { success = false, message = "Couldn't send the verification email. Try again in a moment." });
+        }
+
+        return Ok(new { success = true, message = "A verification code has been sent to your email address." });
+    }
+
     [HttpPost("login-mfa/verify")]
     public async Task<IActionResult> VerifyMfa(MfaCodeRequestDto request)
     {
@@ -175,7 +274,9 @@ public class AccountAuthController : ControllerBase
 
         var valid = !string.IsNullOrWhiteSpace(request.RecoveryCode)
             ? await _settings.VerifyMfaRecoveryCodeAsync(userId, request.RecoveryCode)
-            : await _settings.VerifyMfaCodeAsync(userId, request.Code ?? string.Empty);
+            : request.IsEmailOtp
+                ? await _settings.VerifyOtpAsync(userId, OtpPurpose.Mfa, request.Code ?? string.Empty) == SettingsService.OtpVerifyOutcome.Success
+                : await _settings.VerifyMfaCodeAsync(userId, request.Code ?? string.Empty);
 
         if (!valid)
         {

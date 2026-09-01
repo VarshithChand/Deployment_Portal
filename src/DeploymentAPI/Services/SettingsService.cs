@@ -1616,6 +1616,155 @@ public class SettingsService
         return ParseUser(match.Name, entry);
     }
 
+    //===========================================================
+    // Email OTP (shared by MFA's "send code to email" alternate
+    // verification path and the OTP-based forgot-password flow) - one
+    // slot per user, tagged by purpose, so requesting a new OTP for
+    // either purpose always invalidates whatever was there before. Never
+    // stores the raw code - hashed with the same IPasswordHasher every
+    // account password already goes through, same reasoning as
+    // VerifyUserPasswordAsync below.
+    //===========================================================
+
+    private const int OtpMaxAttempts = 5;
+    private static readonly TimeSpan OtpTtl = TimeSpan.FromMinutes(5);
+    private static readonly TimeSpan OtpResendCooldown = TimeSpan.FromSeconds(45);
+    private static readonly TimeSpan OtpRateLimitWindow = TimeSpan.FromMinutes(10);
+    private const int OtpRateLimitMax = 3;
+
+    public enum OtpRequestOutcome { Issued, Cooldown, RateLimited }
+
+    public class OtpRequestResult
+    {
+        public OtpRequestOutcome Outcome { get; init; }
+
+        // Only ever populated for the caller (AccountAuthController) to
+        // hand straight to IEmailService in the same request - never
+        // stored, logged, or returned from any controller action.
+        public string? Code { get; init; }
+
+        public int CooldownSecondsRemaining { get; init; }
+    }
+
+    // Enforces the resend cooldown and the rolling rate-limit window
+    // BEFORE minting a new code - "purpose" keeps an MFA request and a
+    // password-reset request from sharing one rate-limit bucket, since
+    // they're unrelated flows that could otherwise starve each other.
+    public async Task<OtpRequestResult> IssueOtpAsync(string userId, string purpose)
+    {
+        var root = await ReadRootAsync();
+        var (users, _) = await GetOrCreateUsersSectionAsync(root);
+
+        if (users[userId] is not JObject entry)
+            return new OtpRequestResult { Outcome = OtpRequestOutcome.RateLimited };
+
+        var now = DateTime.UtcNow;
+        var requestsKey = $"OtpRequests_{purpose}";
+
+        var requests = (entry[requestsKey] as JArray ?? new JArray())
+            .Select(t => DateTime.TryParse(t.ToString(), out var d) ? d : (DateTime?)null)
+            .Where(d => d.HasValue && now - d.Value < OtpRateLimitWindow)
+            .Select(d => d!.Value)
+            .OrderBy(d => d)
+            .ToList();
+
+        if (requests.Count > 0)
+        {
+            var sinceLast = now - requests[^1];
+
+            if (sinceLast < OtpResendCooldown)
+            {
+                return new OtpRequestResult
+                {
+                    Outcome = OtpRequestOutcome.Cooldown,
+                    CooldownSecondsRemaining = (int)Math.Ceiling((OtpResendCooldown - sinceLast).TotalSeconds)
+                };
+            }
+        }
+
+        if (requests.Count >= OtpRateLimitMax)
+            return new OtpRequestResult { Outcome = OtpRequestOutcome.RateLimited };
+
+        var code = RandomNumberGenerator.GetInt32(0, 1_000_000).ToString("D6");
+
+        entry["Otp"] = new JObject
+        {
+            ["Hash"] = _passwordHasher.HashPassword(new PortalUserAccount { Id = userId }, code),
+            ["Purpose"] = purpose,
+            ["ExpiresAtUtc"] = now.Add(OtpTtl),
+            ["Attempts"] = 0
+        };
+
+        requests.Add(now);
+        entry[requestsKey] = new JArray(requests.Cast<object>());
+
+        users[userId] = entry;
+        await WriteRootAsync(root);
+
+        _log.LogInfo("Settings", $"OTP issued for '{MaskKey(userId)}' ({purpose}).");
+
+        return new OtpRequestResult { Outcome = OtpRequestOutcome.Issued, Code = code };
+    }
+
+    public enum OtpVerifyOutcome { Success, Invalid, Expired, TooManyAttempts, NotRequested }
+
+    // Single-use - cleared from storage on success, on expiry, and once
+    // OtpMaxAttempts is hit (a fresh OTP is required after that, per
+    // IssueOtpAsync's own "requesting one always invalidates the last"
+    // behavior). A purpose mismatch (a PASSWORD_RESET code submitted
+    // where an MFA one is expected, or vice versa) is treated identically
+    // to "nothing on file" - accepting a cross-purpose code would let one
+    // flow double as a bypass for the other.
+    public async Task<OtpVerifyOutcome> VerifyOtpAsync(string userId, string purpose, string submittedCode)
+    {
+        var root = await ReadRootAsync();
+        var (users, _) = await GetOrCreateUsersSectionAsync(root);
+
+        if (users[userId] is not JObject entry || entry["Otp"] is not JObject otp)
+            return OtpVerifyOutcome.NotRequested;
+
+        if (!string.Equals(otp["Purpose"]?.ToString(), purpose, StringComparison.Ordinal))
+            return OtpVerifyOutcome.NotRequested;
+
+        var expiresAt = otp["ExpiresAtUtc"]?.Value<DateTime>();
+
+        if (expiresAt == null || expiresAt < DateTime.UtcNow)
+        {
+            entry.Remove("Otp");
+            await WriteRootAsync(root);
+            return OtpVerifyOutcome.Expired;
+        }
+
+        var attempts = otp["Attempts"]?.Value<int>() ?? 0;
+
+        if (attempts >= OtpMaxAttempts)
+        {
+            entry.Remove("Otp");
+            await WriteRootAsync(root);
+            return OtpVerifyOutcome.TooManyAttempts;
+        }
+
+        var storedHash = otp["Hash"]?.ToString();
+
+        var result = string.IsNullOrEmpty(storedHash)
+            ? PasswordVerificationResult.Failed
+            : _passwordHasher.VerifyHashedPassword(new PortalUserAccount { Id = userId }, storedHash, submittedCode.Trim());
+
+        if (result is PasswordVerificationResult.Success or PasswordVerificationResult.SuccessRehashNeeded)
+        {
+            entry.Remove("Otp");
+            await WriteRootAsync(root);
+            _log.LogInfo("Settings", $"OTP verified for '{MaskKey(userId)}' ({purpose}).");
+            return OtpVerifyOutcome.Success;
+        }
+
+        attempts += 1;
+        otp["Attempts"] = attempts;
+        await WriteRootAsync(root);
+
+        return attempts >= OtpMaxAttempts ? OtpVerifyOutcome.TooManyAttempts : OtpVerifyOutcome.Invalid;
+    }
+
     // Mirrors SetEmailVerificationTokenAsync exactly - see PortalUserAccount.
     // PasswordResetToken's own comment for why the model doesn't carry this
     // on every read.

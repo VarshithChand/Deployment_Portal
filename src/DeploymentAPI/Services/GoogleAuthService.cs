@@ -48,7 +48,14 @@ public class GoogleAuthService
     // start, so resolving the actual account record here (instead of in
     // AccountAuthController) keeps that logic in one place alongside the
     // OAuth exchange that produces the email in the first place.
-    public async Task<PortalUserAccount> ExchangeCodeForUserAsync(string code)
+    //
+    // IsNewAccount is what lets GoogleAuthController/OAuthLoginFinisher
+    // send a welcome email only the very first time this Google identity
+    // is ever seen, never again on a later login - see CreateUserAsync
+    // below vs. the LinkProviderAsync branch, the same new-vs-existing
+    // distinction the DTOs/comments elsewhere already describe but that
+    // wasn't previously surfaced past this method's return type.
+    public async Task<(PortalUserAccount User, bool IsNewAccount)> ExchangeCodeForUserAsync(string code)
     {
         var settings = _oauthOptions.CurrentValue;
 
@@ -104,9 +111,10 @@ public class GoogleAuthService
         if (existing != null)
         {
             await _settings.LinkProviderAsync(existing.Id, gitHubLogin: null, googleSub: sub);
-            return existing;
+            return (existing, false);
         }
 
-        return await _settings.CreateUserAsync(googleId, normalizedEmail, plaintextPassword: null, provider: "google", displayName: name, mustSetUpMfa: true);
+        var created = await _settings.CreateUserAsync(googleId, normalizedEmail, plaintextPassword: null, provider: "google", displayName: name, mustSetUpMfa: true);
+        return (created, true);
     }
 }

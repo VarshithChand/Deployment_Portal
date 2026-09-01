@@ -29,7 +29,8 @@ export const getMfaPendingStatus = async () => {
     return response.data;
 };
 
-// payload is { code } or { recoveryCode }.
+// payload is { code, recoveryCode, isEmailOtp } - isEmailOtp true when code
+// came from sendMfaEmailOtp below rather than an authenticator app.
 export const verifyLoginMfa = async (payload) => {
     const response = await authApi.post("/login-mfa/verify", payload);
     if (response.data?.token) setAuthToken(response.data.token);
@@ -41,6 +42,17 @@ export const cancelLoginMfa = async () => {
     return response.data;
 };
 
+// The MFA challenge screen's alternate "Send OTP to Email" option -
+// requires an already-pending login (see AccountAuthController.
+// SendMfaOtp), so there's no email argument here; the backend already
+// knows who this is for. Unlike requestPasswordReset below, failure here
+// IS distinguishable (cooldown/rate-limit/send failure) since there's no
+// enumeration concern - this session already proved a password.
+export const sendMfaEmailOtp = async () => {
+    const response = await authApi.post("/login-mfa/send-otp");
+    return response.data;
+};
+
 // Always resolves the same shape whether or not the email actually has an
 // account with a password to reset - see AccountAuthController.
 // ForgotPassword. There's no failure branch to handle here on purpose.
@@ -49,10 +61,19 @@ export const requestPasswordReset = async (email) => {
     return response.data;
 };
 
-// token comes from the resetToken query param on the emailed link. Same
-// response shape as signup/login (routes through the same
-// FinishPrimaryFactorAsync tail server-side) - mfaRequired/token/success
-// all mean the same thing here as they do there.
+// Step 2 of the OTP-based reset flow - on success returns a short-lived
+// resetToken (NOT the OTP itself, which is already fully consumed) for
+// the frontend to hold and submit with resetPassword below.
+export const verifyPasswordResetOtp = async (email, otp) => {
+    const response = await authApi.post("/forgot-password/verify", { email, otp });
+    return response.data;
+};
+
+// token comes from verifyPasswordResetOtp's response, held in the
+// component's own state (not a URL param anymore - see
+// LoginSignupPage.jsx). Same response shape as signup/login (routes
+// through the same FinishPrimaryFactorAsync tail server-side) -
+// mfaRequired/token/success all mean the same thing here as they do there.
 export const resetPassword = async (token, newPassword) => {
     const response = await authApi.post("/reset-password", { token, newPassword });
     if (response.data?.token) setAuthToken(response.data.token);

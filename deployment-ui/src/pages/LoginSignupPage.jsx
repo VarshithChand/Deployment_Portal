@@ -1,10 +1,12 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
     Rocket, ShieldCheck, KeyRound, Lock, Eye, EyeOff, User,
     Server, Clock
 } from "lucide-react";
 
-import { signUp, logIn, requestPasswordReset, resetPassword } from "../services/authLoginService";
+import {
+    signUp, logIn, requestPasswordReset, verifyPasswordResetOtp, resetPassword
+} from "../services/authLoginService";
 import { API_BASE, getSessionId } from "../api/apiBase";
 import useTheme from "../hooks/useTheme";
 import useToast from "../hooks/useToast";
@@ -54,6 +56,24 @@ function GitHubIcon() {
     );
 }
 
+const RESEND_COOLDOWN_SECONDS = 45;
+
+// "v*****@gmail.com" - never shows enough of the local part to be useful
+// for anything but confirming "yes, that's roughly my address" (spec's
+// own example format).
+function maskEmail(address) {
+
+    const at = address.indexOf("@");
+    if (at <= 0) return address;
+
+    const local = address.slice(0, at);
+    const domain = address.slice(at);
+    const visible = local[0];
+
+    return `${visible}${"*".repeat(Math.max(local.length - 1, 3))}${domain}`;
+
+}
+
 // Replaces PatLoginPage - the ONLY thing a not-yet-authenticated visitor
 // sees (see App.jsx's top-level gate; TopBar/Sidebar never mount
 // alongside this). Three ways in, all funneling into the same server-side
@@ -73,14 +93,33 @@ export default function LoginSignupPage({ onMfaRequired }) {
     const [error, setError] = useState("");
     const [showPassword, setShowPassword] = useState(false);
 
-    // Present only when this page was opened from the link in a password-
-    // reset email (see AccountAuthController.ForgotPassword's resetUrl) -
-    // read once on mount, not re-checked, since nothing after this changes
-    // the URL until a full reload happens anyway.
-    const [resetToken] = useState(() => new URLSearchParams(window.location.search).get("resetToken"));
-    const [showForgotForm, setShowForgotForm] = useState(false);
-    const [forgotSent, setForgotSent] = useState(false);
+    // The forgot-password flow's own 4-step state machine, entirely
+    // separate from `mode`/checkEmailSent above - "email" (enter address),
+    // "otp" (enter the emailed code), "newPassword" (set one, once the
+    // code's verified), "done" (confirmation + a real "back to login" that
+    // resets to the normal sign-in form rather than reloading - see
+    // handleBackToLogin's own comment for why not reloading matters here).
+    // This app has no client-side router (every other page is a `tab`
+    // state, not a URL path - see NavigationContext) - a real,
+    // bookmarkable /forgot-password URL doesn't need one though, just a
+    // one-time pathname check on mount, the same shallow trick resetToken
+    // already used as a query param before it became internal-only state.
+    const [forgotStep, setForgotStep] = useState(() =>
+        window.location.pathname.replace(/\/+$/, "") === "/forgot-password" ? "email" : null);
+    const [forgotEmail, setForgotEmail] = useState("");
     const [forgotSubmitting, setForgotSubmitting] = useState(false);
+    const [resendCooldown, setResendCooldown] = useState(0);
+
+    const [otp, setOtp] = useState("");
+    const [otpVerifying, setOtpVerifying] = useState(false);
+    const [otpError, setOtpError] = useState("");
+    const otpRefs = useRef([]);
+
+    // Set once forgot-password/verify succeeds - authorizes the ACTUAL
+    // password change in the next step. Not the OTP itself (already fully
+    // consumed server-side the moment it verified) and not a URL param
+    // anymore - see AccountAuthController.VerifyForgotPasswordOtp.
+    const [resetToken, setResetToken] = useState(null);
     const [newPassword, setNewPassword] = useState("");
     const [confirmPassword, setConfirmPassword] = useState("");
     const [showNewPassword, setShowNewPassword] = useState(false);
@@ -156,8 +195,24 @@ export default function LoginSignupPage({ onMfaRequired }) {
     function handleForgotPassword(e) {
         e.preventDefault();
         setError("");
-        setShowForgotForm(true);
+        setForgotStep("email");
     }
+
+    // Ticks the resend cooldown down to 0 once a code (initial or resend)
+    // goes out - mirrors the backend's own OtpResendCooldown (45s) purely
+    // for display; the backend enforces the real limit regardless of
+    // whether this countdown is showing the same number. One setTimeout
+    // per second (re-scheduled by the dependency on resendCooldown itself
+    // firing this effect again), rather than a single setInterval, so
+    // there's no drift-prone interval left running once the count hits 0.
+    useEffect(() => {
+
+        if (resendCooldown <= 0) return;
+
+        const timer = setTimeout(() => setResendCooldown((s) => Math.max(0, s - 1)), 1000);
+        return () => clearTimeout(timer);
+
+    }, [resendCooldown]);
 
     // Always shows the same "check your email" confirmation regardless of
     // what the server actually did - see AccountAuthController.
@@ -178,7 +233,11 @@ export default function LoginSignupPage({ onMfaRequired }) {
 
         try {
             await requestPasswordReset(email.trim());
-            setForgotSent(true);
+            setForgotEmail(email.trim());
+            setOtp("");
+            setOtpError("");
+            setResendCooldown(RESEND_COOLDOWN_SECONDS);
+            setForgotStep("otp");
         }
         catch (err) {
             setError(err.response?.data?.message || "Something went wrong. Try again.");
@@ -189,10 +248,121 @@ export default function LoginSignupPage({ onMfaRequired }) {
 
     }
 
+    async function handleResendOtp() {
+
+        if (resendCooldown > 0 || forgotSubmitting) return;
+
+        setForgotSubmitting(true);
+        setOtpError("");
+
+        try {
+            await requestPasswordReset(forgotEmail);
+            setOtp("");
+            setResendCooldown(RESEND_COOLDOWN_SECONDS);
+            toast.show("A new code has been sent.", "success");
+        }
+        catch (err) {
+            setOtpError(err.response?.data?.message || "Something went wrong. Try again.");
+        }
+        finally {
+            setForgotSubmitting(false);
+        }
+
+    }
+
+    // Same 6-box pattern MfaVerifyPage's own TOTP entry uses - see that
+    // component for the fuller reasoning (paste support, auto-advance).
+    function handleOtpChange(index, rawValue) {
+
+        const digit = rawValue.replace(/\D/g, "").slice(-1);
+        const next = otp.padEnd(6, " ").split("");
+
+        next[index] = digit || " ";
+
+        const joined = next.join("").trimEnd();
+        setOtp(joined);
+
+        if (digit && index < 5) {
+            otpRefs.current[index + 1]?.focus();
+        }
+
+    }
+
+    function handleOtpKeyDown(index, e) {
+
+        if (e.key === "Backspace" && !(otp[index]?.trim()) && index > 0) {
+            otpRefs.current[index - 1]?.focus();
+        }
+
+    }
+
+    function handleOtpPaste(index, e) {
+
+        e.preventDefault();
+
+        const digits = e.clipboardData.getData("text").replace(/\D/g, "").slice(0, 6 - index);
+
+        if (!digits) return;
+
+        const next = otp.padEnd(6, " ").split("");
+
+        for (let i = 0; i < digits.length; i++) {
+            next[index + i] = digits[i];
+        }
+
+        const joined = next.join("").trimEnd();
+        setOtp(joined);
+
+        otpRefs.current[Math.min(index + digits.length, 5)]?.focus();
+
+    }
+
+    const isOtpComplete = otp.replace(/\s/g, "").length === 6;
+
+    async function handleVerifyOtp(e) {
+
+        e.preventDefault();
+
+        if (!isOtpComplete) return;
+
+        setOtpVerifying(true);
+        setOtpError("");
+
+        try {
+
+            const result = await verifyPasswordResetOtp(forgotEmail, otp.replace(/\s/g, ""));
+
+            if (!result.success) {
+                setOtp("");
+                setOtpError(result.message || "Invalid or expired verification code.");
+                setOtpVerifying(false);
+                otpRefs.current[0]?.focus();
+                return;
+            }
+
+            setResetToken(result.resetToken);
+            setForgotStep("newPassword");
+
+        }
+        catch (err) {
+
+            setOtp("");
+            setOtpError(err.response?.data?.message || "Invalid or expired verification code.");
+            setOtpVerifying(false);
+            otpRefs.current[0]?.focus();
+
+        }
+
+    }
+
     // Same shape of response as handleSubmit's signup/login branch -
     // ResetPassword routes through the identical FinishPrimaryFactorAsync
-    // tail server-side, so mfaRequired/token/success all mean the same
-    // thing here.
+    // tail server-side - but this deliberately does NOT act on
+    // mfaRequired/token here the way handleSubmit does. The password is
+    // already changed at this point regardless; sending them to a plain
+    // "back to login" step (rather than auto-signing them in) means a
+    // fresh login always re-evaluates MFA correctly on its own, and
+    // matches the explicit confirmation screen this flow is meant to end on.
     async function handleResetSubmit(e) {
 
         e.preventDefault();
@@ -220,13 +390,7 @@ export default function LoginSignupPage({ onMfaRequired }) {
                 return;
             }
 
-            if (result.mfaRequired) {
-                onMfaRequired();
-                return;
-            }
-
-            toast.show("Password updated.", "success");
-            window.location.href = window.location.pathname;
+            setForgotStep("done");
 
         }
         catch (err) {
@@ -236,6 +400,31 @@ export default function LoginSignupPage({ onMfaRequired }) {
 
         }
 
+    }
+
+    // A plain state reset, not a page reload/navigation - deliberately, so
+    // any auth token resetPassword's success might have stored (see
+    // authLoginService.resetPassword) never gets picked up by a bootstrap
+    // check, which only ever runs once at initial page load. This is what
+    // makes "Back to Login" actually mean "log in fresh", not "you're
+    // silently already in".
+    function handleBackToLogin() {
+        // Only touches the path if it's actually /forgot-password - a
+        // plain toggle via the "Forgot?" link never changed the URL in
+        // the first place, so there's nothing to clean up there.
+        if (window.location.pathname.replace(/\/+$/, "") === "/forgot-password") {
+            window.history.replaceState(null, "", "/" + window.location.search);
+        }
+        setForgotStep(null);
+        setForgotEmail("");
+        setOtp("");
+        setOtpError("");
+        setResetToken(null);
+        setNewPassword("");
+        setConfirmPassword("");
+        setResetError("");
+        setMode("signin");
+        setError("");
     }
 
     // This page renders before any of the app's own chrome (TopBar/
@@ -257,7 +446,172 @@ export default function LoginSignupPage({ onMfaRequired }) {
     // read from the URL once on mount. Takes priority over every other
     // state on this page since arriving here means exactly one thing:
     // finish setting a new password.
-    if (resetToken) {
+    // Step 1 of 4 - enter the account email. "Forgot Password?" on the
+    // sign-in form and a direct visit to /forgot-password (see the
+    // pathname check right after this component's props) both land here.
+    if (forgotStep === "email") {
+
+        return (
+
+            <div className="aw-root">
+                <style>{CSS}</style>
+                {themeToggle}
+
+                <div className="aw-split aw-split-solo">
+
+                    <main className="authcol">
+
+                        <div className="card" role="main" aria-labelledby="forgot-password-title">
+
+                            <div className="card-body">
+
+                                <h2 id="forgot-password-title">Forgot your password?</h2>
+
+                                <p className="lede">
+                                    Enter your registered email address and we&apos;ll send you a verification code.
+                                </p>
+
+                                <form className="form" onSubmit={handleRequestReset}>
+
+                                    <label className="field">
+                                        <span>Email Address</span>
+                                        <div className="input">
+                                            <span className="at">@</span>
+                                            <input
+                                                type="email"
+                                                placeholder="you@example.com"
+                                                autoComplete="email"
+                                                value={email}
+                                                onChange={(e) => setEmail(e.target.value)}
+                                                autoFocus
+                                            />
+                                        </div>
+                                    </label>
+
+                                    {error && (
+                                        <p className="form-error" role="alert">{error}</p>
+                                    )}
+
+                                    <button type="submit" className="primary" disabled={forgotSubmitting}>
+                                        {forgotSubmitting ? "Sending..." : "Send OTP"}
+                                    </button>
+
+                                </form>
+
+                                <p className="allowlist">
+                                    <button type="button" className="linklike" onClick={handleBackToLogin}>
+                                        Back to Login
+                                    </button>
+                                </p>
+
+                            </div>
+
+                        </div>
+
+                    </main>
+
+                </div>
+
+            </div>
+
+        );
+
+    }
+
+    // Step 2 of 4 - the emailed code. "Verify Your Email" per spec, though
+    // it's really "verify you received this specific code" - Google/
+    // GitHub accounts already verified the address itself.
+    if (forgotStep === "otp") {
+
+        return (
+
+            <div className="aw-root">
+                <style>{CSS}</style>
+                {themeToggle}
+
+                <div className="aw-split aw-split-solo">
+
+                    <main className="authcol">
+
+                        <div className="card" role="main" aria-labelledby="verify-otp-title">
+
+                            <div className="card-body">
+
+                                <h2 id="verify-otp-title">Verify Your Email</h2>
+
+                                <p className="lede">
+                                    We sent a verification code to <strong>{maskEmail(forgotEmail)}</strong>.
+                                </p>
+
+                                <form className="form" onSubmit={handleVerifyOtp}>
+
+                                    <label className="field">
+                                        <span>Enter OTP</span>
+                                        <div className="auth-otp">
+                                            {Array.from({ length: 6 }).map((_, i) => (
+                                                <input
+                                                    key={i}
+                                                    ref={(el) => { otpRefs.current[i] = el; }}
+                                                    type="text"
+                                                    inputMode="numeric"
+                                                    maxLength={1}
+                                                    className={otp[i]?.trim() ? "filled" : ""}
+                                                    value={otp[i]?.trim() || ""}
+                                                    onChange={(e) => handleOtpChange(i, e.target.value)}
+                                                    onKeyDown={(e) => handleOtpKeyDown(i, e)}
+                                                    onPaste={(e) => handleOtpPaste(i, e)}
+                                                    autoComplete="off"
+                                                    autoFocus={i === 0}
+                                                />
+                                            ))}
+                                        </div>
+                                    </label>
+
+                                    {otpError && (
+                                        <p className="form-error" role="alert">{otpError}</p>
+                                    )}
+
+                                    <button type="submit" className="primary" disabled={otpVerifying || !isOtpComplete}>
+                                        {otpVerifying ? "Verifying..." : "Verify OTP"}
+                                    </button>
+
+                                </form>
+
+                                <p className="allowlist">
+                                    Didn&apos;t receive it?{" "}
+                                    {resendCooldown > 0 ? (
+                                        <span>Resend OTP in {resendCooldown}s</span>
+                                    ) : (
+                                        <button type="button" className="linklike" onClick={handleResendOtp} disabled={forgotSubmitting}>
+                                            Resend OTP
+                                        </button>
+                                    )}
+                                </p>
+
+                                <p className="allowlist">
+                                    <button type="button" className="linklike" onClick={handleBackToLogin}>
+                                        Back to Login
+                                    </button>
+                                </p>
+
+                            </div>
+
+                        </div>
+
+                    </main>
+
+                </div>
+
+            </div>
+
+        );
+
+    }
+
+    // Step 3 of 4 - reached only once forgot-password/verify actually
+    // succeeded (resetToken is set then, never from a URL - see that
+    // state's own comment).
+    if (forgotStep === "newPassword") {
 
         return (
 
@@ -273,14 +627,14 @@ export default function LoginSignupPage({ onMfaRequired }) {
 
                             <div className="card-body">
 
-                                <h2 id="reset-password-title">Set a new password</h2>
+                                <h2 id="reset-password-title">Create New Password</h2>
 
                                 <p className="lede">Choose a new password for your account.</p>
 
                                 <form className="form" onSubmit={handleResetSubmit}>
 
                                     <label className="field">
-                                        <span>New password</span>
+                                        <span>New Password</span>
                                         <div className="input">
                                             <Lock size={15} />
                                             <input
@@ -304,7 +658,7 @@ export default function LoginSignupPage({ onMfaRequired }) {
                                     </label>
 
                                     <label className="field">
-                                        <span>Confirm new password</span>
+                                        <span>Confirm New Password</span>
                                         <div className="input">
                                             <Lock size={15} />
                                             <input
@@ -322,7 +676,7 @@ export default function LoginSignupPage({ onMfaRequired }) {
                                     )}
 
                                     <button type="submit" className="primary" disabled={resetSubmitting}>
-                                        {resetSubmitting ? "Please wait..." : "Set new password"}
+                                        {resetSubmitting ? "Please wait..." : "Reset Password"}
                                     </button>
 
                                 </form>
@@ -341,7 +695,10 @@ export default function LoginSignupPage({ onMfaRequired }) {
 
     }
 
-    if (showForgotForm) {
+    // Step 4 of 4 - confirmation. Deliberately not auto-signed-in here
+    // (see handleBackToLogin's own comment) - a fresh login is what
+    // correctly re-evaluates MFA for this account either way.
+    if (forgotStep === "done") {
 
         return (
 
@@ -353,84 +710,21 @@ export default function LoginSignupPage({ onMfaRequired }) {
 
                     <main className="authcol">
 
-                        <div className="card" role="main" aria-labelledby="forgot-password-title">
+                        <div className="card" role="main" aria-labelledby="reset-done-title">
 
-                            {forgotSent ? (
+                            <div className="card-body card-body-center">
 
-                                <div className="card-body card-body-center">
+                                <span className="check-glyph"><ShieldCheck size={22} /></span>
 
-                                    <span className="check-glyph"><ShieldCheck size={22} /></span>
+                                <h2 id="reset-done-title">Your password has been reset successfully.</h2>
 
-                                    <h2 id="forgot-password-title">Check your email</h2>
+                                <p className="allowlist">
+                                    <button type="button" className="linklike" onClick={handleBackToLogin}>
+                                        Back to Login
+                                    </button>
+                                </p>
 
-                                    <p className="lede" style={{ textAlign: "center" }}>
-                                        If <strong>{email.trim()}</strong> has an account, we've sent a link to
-                                        reset its password. The link expires in 1 hour.
-                                    </p>
-
-                                    <p className="allowlist">
-                                        <button
-                                            type="button"
-                                            className="linklike"
-                                            onClick={() => { setShowForgotForm(false); setForgotSent(false); setError(""); }}
-                                        >
-                                            Back to sign in
-                                        </button>
-                                    </p>
-
-                                </div>
-
-                            ) : (
-
-                                <div className="card-body">
-
-                                    <h2 id="forgot-password-title">Reset your password</h2>
-
-                                    <p className="lede">
-                                        Enter the email on your account and we'll send you a link to set a new
-                                        password.
-                                    </p>
-
-                                    <form className="form" onSubmit={handleRequestReset}>
-
-                                        <label className="field">
-                                            <span>Email</span>
-                                            <div className="input">
-                                                <span className="at">@</span>
-                                                <input
-                                                    type="email"
-                                                    placeholder="you@example.com"
-                                                    autoComplete="email"
-                                                    value={email}
-                                                    onChange={(e) => setEmail(e.target.value)}
-                                                    autoFocus
-                                                />
-                                            </div>
-                                        </label>
-
-                                        {error && (
-                                            <p className="form-error" role="alert">{error}</p>
-                                        )}
-
-                                        <button type="submit" className="primary" disabled={forgotSubmitting}>
-                                            {forgotSubmitting ? "Please wait..." : "Send reset link"}
-                                        </button>
-
-                                    </form>
-
-                                    <p className="allowlist">
-                                        <button
-                                            type="button"
-                                            className="linklike"
-                                            onClick={() => { setShowForgotForm(false); setError(""); }}
-                                        >
-                                            Back to sign in
-                                        </button>
-                                    </p>
-
-                                </div>
-
-                            )}
+                            </div>
 
                         </div>
 
@@ -656,7 +950,7 @@ export default function LoginSignupPage({ onMfaRequired }) {
                                     <span className="field-top">
                                         Password
                                         {!isReg && (
-                                            <button type="button" className="forgot" onClick={handleForgotPassword}>Forgot?</button>
+                                            <button type="button" className="forgot" onClick={handleForgotPassword}>Forgot Password?</button>
                                         )}
                                     </span>
                                     <div className="input">

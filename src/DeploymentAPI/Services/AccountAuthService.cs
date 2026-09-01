@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text.RegularExpressions;
 using DeploymentAPI.Configuration;
+using DeploymentAPI.Helpers;
 using DeploymentAPI.Models;
 using Microsoft.Extensions.Options;
 
@@ -16,7 +17,12 @@ public class AccountAuthService
 {
     private const int MinPasswordLength = 8;
     private static readonly TimeSpan EmailVerificationTtl = TimeSpan.FromHours(24);
-    private static readonly TimeSpan PasswordResetTtl = TimeSpan.FromHours(1);
+
+    // Short - this now only covers the gap between "OTP verified" and
+    // "new password actually submitted" (a form on the same page load),
+    // not "time to notice and click an email link" the way it did before
+    // the reset flow switched to OTP entry.
+    private static readonly TimeSpan PasswordResetTtl = TimeSpan.FromMinutes(15);
 
     private readonly SettingsService _settings;
     private readonly IOptionsMonitor<AuthorizationSettings> _authzOptions;
@@ -98,29 +104,71 @@ public class AccountAuthService
         return await ResolveRoleAsync(user);
     }
 
-    // Always returns null-or-user with no distinction visible to the
-    // caller beyond that - an unknown email and a Google/GitHub-only
-    // account (nothing to reset) both come back null, the same "don't let
-    // this response reveal which emails have accounts" reasoning
-    // LoginWithPasswordAsync's shared failure message already follows.
-    // The controller sends an identical "check your email" response
-    // either way (see AccountAuthController.ForgotPassword).
-    public async Task<PortalUserAccount?> RequestPasswordResetAsync(string email)
+    // Always returns User=null with no distinction visible to the caller
+    // beyond that - an unknown email, a Google/GitHub-only account
+    // (nothing to reset), and a rate-limited/cooldown request all look
+    // the same from here on, the same "don't let this response reveal
+    // which emails have accounts" reasoning LoginWithPasswordAsync's
+    // shared failure message already follows. The controller sends an
+    // identical "if this account exists..." response in every case (see
+    // AccountAuthController.ForgotPassword) - Outcome is exposed only for
+    // that controller's own logging, never surfaced to the caller.
+    public async Task<ForgotPasswordResult> RequestPasswordResetAsync(string email)
     {
         var normalizedEmail = email.Trim().ToLowerInvariant();
         var user = await _settings.FindUserByEmailAsync(normalizedEmail);
 
         if (user == null || !user.HasPassword)
-            return null;
+            return new ForgotPasswordResult();
+
+        var otpResult = await _settings.IssueOtpAsync(user.Id, OtpPurpose.PasswordReset);
+
+        return new ForgotPasswordResult
+        {
+            User = otpResult.Outcome == SettingsService.OtpRequestOutcome.Issued ? user : null,
+            Otp = otpResult.Code
+        };
+    }
+
+    // Proving control of the emailed code is comparable trust to proving
+    // control of the password itself - once verified, this issues a
+    // short-lived, single-use token (the exact same SetPasswordResetTokenAsync/
+    // ConsumePasswordResetTokenAsync mechanism this reset flow already
+    // had) authorizing the ACTUAL password change in a separate follow-up
+    // call, rather than changing the password directly from here. That
+    // keeps the OTP itself single-use and fully consumed the moment it's
+    // verified, regardless of whether the user goes on to actually submit
+    // a new password.
+    public async Task<OtpVerifyResult> VerifyPasswordResetOtpAsync(string email, string otp)
+    {
+        var normalizedEmail = email.Trim().ToLowerInvariant();
+        var user = await _settings.FindUserByEmailAsync(normalizedEmail);
+
+        // Same generic message an unknown email gets as a genuinely wrong/
+        // expired code - this step is already past the point where the
+        // forgot-password request revealed nothing, but there's no reason
+        // to start revealing it now either.
+        if (user == null)
+            return OtpVerifyResult.Fail("Invalid or expired verification code.");
+
+        var outcome = await _settings.VerifyOtpAsync(user.Id, OtpPurpose.PasswordReset, otp);
+
+        if (outcome != SettingsService.OtpVerifyOutcome.Success)
+        {
+            return OtpVerifyResult.Fail(outcome switch
+            {
+                SettingsService.OtpVerifyOutcome.Expired => "This code has expired. Request a new one.",
+                SettingsService.OtpVerifyOutcome.TooManyAttempts => "Too many incorrect attempts. Request a new code.",
+                _ => "Invalid or expired verification code."
+            });
+        }
 
         var token = Convert.ToHexString(RandomNumberGenerator.GetBytes(32)).ToLowerInvariant();
         var expiresAt = DateTime.UtcNow.Add(PasswordResetTtl);
 
         await _settings.SetPasswordResetTokenAsync(user.Id, token, expiresAt);
 
-        user.PasswordResetToken = token;
-
-        return user;
+        return OtpVerifyResult.Ok(token);
     }
 
     // Proving control of the reset link is comparable trust to proving
@@ -222,4 +270,24 @@ public class AccountAuthResult
 
     public static AccountAuthResult RequireVerification(PortalUserAccount user) =>
         new() { Success = true, User = user, EmailVerificationRequired = true };
+}
+
+// User/Otp are both null when nothing should be emailed (unknown email, no
+// password on the account, or rate-limited/cooldown) - the controller
+// always sends the same generic response regardless, this just tells it
+// whether there's actually anything to send.
+public class ForgotPasswordResult
+{
+    public PortalUserAccount? User { get; init; }
+    public string? Otp { get; init; }
+}
+
+public class OtpVerifyResult
+{
+    public bool Success { get; private init; }
+    public string? Error { get; private init; }
+    public string? ResetToken { get; private init; }
+
+    public static OtpVerifyResult Fail(string error) => new() { Success = false, Error = error };
+    public static OtpVerifyResult Ok(string resetToken) => new() { Success = true, ResetToken = resetToken };
 }

@@ -23,7 +23,13 @@ public static class OAuthLoginFinisher
         string userId,
         string role,
         string? userEmail,
-        string frontendUrl)
+        string frontendUrl,
+        // Only ever true from GoogleAuthController's own call site today
+        // (see GoogleAuthService.ExchangeCodeForUserAsync) - defaults false
+        // so AuthController's GitHub OAuth call site, which doesn't
+        // distinguish new-vs-existing, keeps its exact existing behavior
+        // (a login notification every time, no welcome email) unchanged.
+        bool isNewAccount = false)
     {
         if (await settings.IsMfaEnabledAsync(userId))
         {
@@ -47,7 +53,15 @@ public static class OAuthLoginFinisher
             try
             {
                 var displayLogin = await RequireAuth.ResolveDisplayLoginAsync(userId, userEmail, settings);
-                await email.SendLoginNotificationAsync(userEmail, displayLogin, DateTime.UtcNow);
+
+                // Welcome, not a login notification, exactly once - the
+                // very first time this identity is ever seen. Every login
+                // after that (including this same account's next one) is
+                // the ordinary notification below.
+                if (isNewAccount)
+                    await email.SendWelcomeEmailAsync(userEmail, displayLogin, frontendUrl);
+                else
+                    await email.SendLoginNotificationAsync(userEmail, displayLogin, DateTime.UtcNow);
             }
             catch (Exception)
             {

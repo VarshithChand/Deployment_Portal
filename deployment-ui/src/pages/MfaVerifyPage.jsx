@@ -1,10 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 
-import { getMfaPendingStatus, verifyLoginMfa, cancelLoginMfa } from "../services/authLoginService";
+import { getMfaPendingStatus, verifyLoginMfa, cancelLoginMfa, sendMfaEmailOtp } from "../services/authLoginService";
 import Logo from "../components/common/Logo";
 import useTheme from "../hooks/useTheme";
+import useToast from "../hooks/useToast";
 import useLockoutCountdown from "../hooks/useLockoutCountdown";
 import { SunIcon, MoonIcon } from "../components/layout/SidebarIcons";
+
+const RESEND_COOLDOWN_SECONDS = 45;
 
 // Page 2 of the two-page login flow. No QR code here — enrollment (and
 // its QR) lives exclusively in Settings > Credentials > MFA; this page
@@ -21,6 +24,7 @@ import { SunIcon, MoonIcon } from "../components/layout/SidebarIcons";
 export default function MfaVerifyPage({ onBack }) {
 
     const { theme, toggleTheme } = useTheme();
+    const toast = useToast();
 
     const [checking, setChecking] = useState(true);
     const [code, setCode] = useState("");
@@ -29,9 +33,96 @@ export default function MfaVerifyPage({ onBack }) {
     const [error, setError] = useState("");
     const [lockedUntilUtc, setLockedUntilUtc] = useState(null);
 
+    // The alternate "Send OTP to Email" verification path, alongside the
+    // default authenticator-code entry and the recovery-code fallback
+    // below - useEmailOtp/useRecovery are mutually exclusive (see the two
+    // toggle buttons near the bottom of this form). emailOtpSent tracks
+    // whether a code has actually gone out yet in THIS mode, separately
+    // from the resend cooldown, since the box row/button copy differ
+    // before vs. after the first send.
+    const [useEmailOtp, setUseEmailOtp] = useState(false);
+    const [emailOtpSent, setEmailOtpSent] = useState(false);
+    const [emailOtpSending, setEmailOtpSending] = useState(false);
+    const [emailOtpCooldown, setEmailOtpCooldown] = useState(0);
+
     const { isLocked, formatted: lockoutFormatted } = useLockoutCountdown(lockedUntilUtc);
 
     const otpRefs = useRef([]);
+
+    useEffect(() => {
+
+        if (emailOtpCooldown <= 0) return;
+
+        const timer = setTimeout(() => setEmailOtpCooldown((s) => Math.max(0, s - 1)), 1000);
+        return () => clearTimeout(timer);
+
+    }, [emailOtpCooldown]);
+
+    async function handleSwitchToEmailOtp() {
+        setUseRecovery(false);
+        setUseEmailOtp(true);
+        setCode("");
+        setError("");
+        setEmailOtpSent(false);
+        await handleSendEmailOtp();
+    }
+
+    function handleSwitchToTotp() {
+        setUseEmailOtp(false);
+        setUseRecovery(false);
+        setCode("");
+        setError("");
+    }
+
+    function handleSwitchToRecovery() {
+        setUseEmailOtp(false);
+        setUseRecovery(true);
+        setCode("");
+        setError("");
+    }
+
+    async function handleSendEmailOtp() {
+
+        if (emailOtpCooldown > 0 || emailOtpSending) return;
+
+        setEmailOtpSending(true);
+        setError("");
+
+        try {
+
+            const result = await sendMfaEmailOtp();
+
+            if (!result.success) {
+
+                if (result.code === "MFA_SESSION_EXPIRED") {
+                    onBack("Your verification session has expired. Please sign in again.");
+                    return;
+                }
+
+                setError(result.message || "Couldn't send the verification email.");
+
+                if (typeof result.cooldownSeconds === "number") {
+                    setEmailOtpCooldown(result.cooldownSeconds);
+                }
+
+                return;
+
+            }
+
+            setCode("");
+            setEmailOtpSent(true);
+            setEmailOtpCooldown(RESEND_COOLDOWN_SECONDS);
+            toast.show("OTP sent to your registered email address.", "success");
+
+        }
+        catch {
+            setError("Couldn't send the verification email. Try again in a moment.");
+        }
+        finally {
+            setEmailOtpSending(false);
+        }
+
+    }
 
     async function checkPending() {
 
@@ -154,7 +245,9 @@ export default function MfaVerifyPage({ onBack }) {
 
         try {
 
-            const payload = useRecovery ? { recoveryCode: code.trim() } : { code: code.replace(/\s/g, "") };
+            const payload = useRecovery
+                ? { recoveryCode: code.trim() }
+                : { code: code.replace(/\s/g, ""), isEmailOtp: useEmailOtp };
             const result = await verifyLoginMfa(payload);
 
             if (!result.success) {
@@ -257,13 +350,39 @@ export default function MfaVerifyPage({ onBack }) {
                 </h1>
 
                 <p className="field-hint" style={{ textAlign: "center" }}>
-                    Verify your identity. Enter the {useRecovery ? "recovery code" : "6-digit code from your authenticator app"}.
+                    {useRecovery
+                        ? "Verify your identity. Enter the recovery code."
+                        : useEmailOtp
+                            ? "Enter the verification code sent to your email address."
+                            : "Verify your identity. Enter the 6-digit code from your authenticator app."}
                 </p>
+
+                {useEmailOtp && (
+
+                    <p className="field-hint" style={{ textAlign: "center" }}>
+                        {emailOtpCooldown > 0 ? (
+                            <span>Resend OTP in {emailOtpCooldown}s</span>
+                        ) : (
+                            <button
+                                type="button"
+                                className="token-help-link"
+                                style={{ background: "none", border: "none", padding: 0, cursor: "pointer" }}
+                                onClick={handleSendEmailOtp}
+                                disabled={emailOtpSending}
+                            >
+                                {emailOtpSending ? "Sending..." : emailOtpSent ? "Resend OTP" : "Send OTP"}
+                            </button>
+                        )}
+                    </p>
+
+                )}
 
                 <form onSubmit={handleSubmit} className="setup-gate-form">
 
                     <div className="form-group">
-                        <label htmlFor="mfa-verify-code-0">{useRecovery ? "Recovery code" : "6-digit code"}</label>
+                        <label htmlFor="mfa-verify-code-0">
+                            {useRecovery ? "Recovery code" : useEmailOtp ? "Email verification code" : "6-digit code"}
+                        </label>
 
                         {useRecovery ? (
 
@@ -320,15 +439,32 @@ export default function MfaVerifyPage({ onBack }) {
 
                 </form>
 
-                <div>
-                    <button
-                        type="button"
-                        className="token-help-link"
-                        style={{ background: "none", border: "none", padding: 0, cursor: "pointer" }}
-                        onClick={() => { setUseRecovery((v) => !v); setCode(""); setError(""); }}
-                    >
-                        {useRecovery ? "Use an authenticator code instead" : "Use recovery code instead"}
-                    </button>
+                <div className="button-row" style={{ flexWrap: "wrap", justifyContent: "center", gap: "6px 14px" }}>
+
+                    {useRecovery && (
+                        <button type="button" className="token-help-link" style={{ background: "none", border: "none", padding: 0, cursor: "pointer" }} onClick={handleSwitchToTotp}>
+                            Use an authenticator code instead
+                        </button>
+                    )}
+
+                    {!useRecovery && (
+                        <button type="button" className="token-help-link" style={{ background: "none", border: "none", padding: 0, cursor: "pointer" }} onClick={handleSwitchToRecovery}>
+                            Use recovery code instead
+                        </button>
+                    )}
+
+                    {!useEmailOtp && (
+                        <button type="button" className="token-help-link" style={{ background: "none", border: "none", padding: 0, cursor: "pointer" }} onClick={handleSwitchToEmailOtp}>
+                            Send OTP to Email
+                        </button>
+                    )}
+
+                    {useEmailOtp && (
+                        <button type="button" className="token-help-link" style={{ background: "none", border: "none", padding: 0, cursor: "pointer" }} onClick={handleSwitchToTotp}>
+                            Use an authenticator code instead
+                        </button>
+                    )}
+
                 </div>
 
                 <div>
