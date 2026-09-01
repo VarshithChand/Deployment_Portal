@@ -64,4 +64,33 @@ public class ExternalHealthController : ControllerBase
 
         return Ok(await _checker.CheckAllAsync(urls));
     }
+
+    // Deliberately tiny compared to MaxUrlsPerCheck above - anyone who can
+    // reach the login page can call this with no account at all, so it's
+    // capped far lower than the admin-gated version's 200-URL limit. Still
+    // routes through the exact same ExternalHealthCheckService (SSRF-guarded
+    // via SsrfGuard.IsDisallowedTargetAsync, redirects disabled, 30s
+    // timeout, 4000-char body cap - see that service's own comments), so a
+    // caller here gets no more reach than the admin one does, just a much
+    // smaller batch per request. Nothing is read from or written to the
+    // saved endpoint list (GetEndpoints/SaveEndpoints stay admin-only) -
+    // this is scratch-only, matching the login page's "just checking,
+    // nothing stored" framing.
+    private const int MaxUrlsPerPublicCheck = 5;
+
+    [HttpPost("check-public")]
+    public async Task<IActionResult> CheckPublic(ExternalHealthCheckRequestDto request)
+    {
+        var urls = (request.Urls ?? new List<string>())
+            .Where(u => !string.IsNullOrWhiteSpace(u))
+            .ToList();
+
+        if (urls.Count == 0)
+            return BadRequest(new { message = "No URLs to check." });
+
+        if (urls.Count > MaxUrlsPerPublicCheck)
+            return BadRequest(new { message = $"Too many URLs at once (max {MaxUrlsPerPublicCheck})." });
+
+        return Ok(await _checker.CheckAllAsync(urls));
+    }
 }

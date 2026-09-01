@@ -1,7 +1,7 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, lazy, Suspense } from "react";
 import {
     Rocket, ShieldCheck, KeyRound, Lock, Eye, EyeOff, User,
-    Server, Clock
+    Server, Clock, Wrench, ChevronLeft
 } from "lucide-react";
 
 import {
@@ -11,6 +11,15 @@ import { API_BASE, getSessionId } from "../api/apiBase";
 import useTheme from "../hooks/useTheme";
 import useToast from "../hooks/useToast";
 import { SunIcon, MoonIcon } from "../components/layout/SidebarIcons";
+
+// Lazy, not a normal import - this page is on the critical path for EVERY
+// visitor (it's the very first thing anyone sees), so a plain static
+// import here would pull both tools' code into the MAIN bundle for every
+// single visitor, even the vast majority who never open the bottom-right
+// tools menu at all. Same "keep the initial bundle lean" reasoning
+// MfaEnforcementGate already established for MfaSection.
+const AnonymousExternalApisView = lazy(() => import("../components/settings/AnonymousExternalApisView"));
+const TemplateTester = lazy(() => import("./TemplateTester"));
 
 // Matches the Dashboard's own "ops console" layout (Round 7 - Dashboard.
 // jsx) for the one other page a visitor sees before any of the app's own
@@ -142,6 +151,18 @@ export default function LoginSignupPage({ onMfaRequired }) {
     // (see MfaEnforcementGate/PortalUserAccount.MustSetUpMfa), not by
     // anything in this component.
     const [checkEmailSent, setCheckEmailSent] = useState(false);
+
+    // The two no-login, nothing-saved tools reachable from the bottom-right
+    // corner button below (see toolsMenu) - External APIs and Template
+    // Tester are both genuinely usable without an account: Template Tester
+    // is 100% client-side already (see that page's own comment), and
+    // External APIs' anonymous mode hits a separate, tightly-capped
+    // endpoint that never touches the saved endpoint list (see
+    // ExternalHealthController.CheckPublic). null means "show the normal
+    // login/signup card" - this takes priority over every other state on
+    // this page while set, same as forgotStep does.
+    const [toolMode, setToolMode] = useState(null);
+    const [toolsMenuOpen, setToolsMenuOpen] = useState(false);
 
     const isReg = mode === "register";
 
@@ -461,6 +482,94 @@ export default function LoginSignupPage({ onMfaRequired }) {
         </button>
     );
 
+    // Bottom-right corner, mirroring the theme toggle's own top-right
+    // corner placement - opens a tiny menu offering the two tools below
+    // that don't need an account. Closes itself once a tool is picked
+    // (toolMode set) or on a second click of the same button.
+    const toolsMenu = (
+        <div className="aw-tools">
+
+            <button
+                type="button"
+                className="aw-tools-fab"
+                onClick={() => setToolsMenuOpen((v) => !v)}
+                title="Tools (no login required)"
+                aria-label="Tools - no login required"
+                aria-expanded={toolsMenuOpen}
+            >
+                <Wrench size={18} />
+            </button>
+
+            {toolsMenuOpen && (
+
+                <div className="aw-tools-menu" role="menu">
+
+                    <p className="aw-tools-menu-label">No login required</p>
+
+                    <button
+                        type="button"
+                        role="menuitem"
+                        onClick={() => { setToolMode("external-apis"); setToolsMenuOpen(false); }}
+                    >
+                        External APIs
+                    </button>
+
+                    <button
+                        type="button"
+                        role="menuitem"
+                        onClick={() => { setToolMode("template-tester"); setToolsMenuOpen(false); }}
+                    >
+                        Template Tester
+                    </button>
+
+                </div>
+
+            )}
+
+        </div>
+    );
+
+    // Takes priority over every other state on this page (forgotStep,
+    // checkEmailSent, mode) while set - picking a tool from toolsMenu above
+    // is a full detour from the login/signup flow, not a step within it.
+    // Reuses the same .aw-root shell/theme toggle as everything else here
+    // so it doesn't look like a different, disconnected page - just a
+    // "Back to Login" instead of the split showcase layout.
+    if (toolMode) {
+
+        return (
+
+            <div className="aw-root">
+                <style>{CSS}</style>
+                {themeToggle}
+
+                <div className="aw-split aw-split-solo aw-tools-view">
+
+                    <div className="aw-tools-view-inner">
+
+                        <button
+                            type="button"
+                            className="auth-chip-btn"
+                            onClick={() => setToolMode(null)}
+                            style={{ marginBottom: 16 }}
+                        >
+                            <ChevronLeft size={14} /> Back to Login
+                        </button>
+
+                        <Suspense fallback={<p className="field-hint">Loading...</p>}>
+                            {toolMode === "external-apis" ? <AnonymousExternalApisView /> : <TemplateTester />}
+                        </Suspense>
+
+                    </div>
+
+                </div>
+
+            </div>
+
+        );
+
+    }
+
     // Reached only via the link in a password-reset email - resetToken was
     // read from the URL once on mount. Takes priority over every other
     // state on this page since arriving here means exactly one thing:
@@ -475,6 +584,7 @@ export default function LoginSignupPage({ onMfaRequired }) {
             <div className="aw-root">
                 <style>{CSS}</style>
                 {themeToggle}
+                {toolsMenu}
 
                 <div className="aw-split aw-split-solo">
 
@@ -547,6 +657,7 @@ export default function LoginSignupPage({ onMfaRequired }) {
             <div className="aw-root">
                 <style>{CSS}</style>
                 {themeToggle}
+                {toolsMenu}
 
                 <div className="aw-split aw-split-solo">
 
@@ -637,6 +748,7 @@ export default function LoginSignupPage({ onMfaRequired }) {
             <div className="aw-root">
                 <style>{CSS}</style>
                 {themeToggle}
+                {toolsMenu}
 
                 <div className="aw-split aw-split-solo">
 
@@ -724,6 +836,7 @@ export default function LoginSignupPage({ onMfaRequired }) {
             <div className="aw-root">
                 <style>{CSS}</style>
                 {themeToggle}
+                {toolsMenu}
 
                 <div className="aw-split aw-split-solo">
 
@@ -764,6 +877,7 @@ export default function LoginSignupPage({ onMfaRequired }) {
             <div className="aw-root">
                 <style>{CSS}</style>
                 {themeToggle}
+                {toolsMenu}
 
                 <div className="aw-split aw-split-solo">
 
@@ -813,6 +927,7 @@ export default function LoginSignupPage({ onMfaRequired }) {
         <div className="aw-root">
             <style>{CSS}</style>
             {themeToggle}
+            {toolsMenu}
 
             <div className="aw-split">
 
@@ -1078,6 +1193,30 @@ const CSS = `
   transition:color .15s ease, transform .15s ease, border-color .15s ease;
 }
 .aw-root .aw-theme-toggle:hover{color:var(--heading-accent); border-color:var(--heading-accent); transform:translateY(-1px);}
+
+/* ---------- no-login tools (bottom-right) ---------- */
+.aw-root .aw-tools{position:fixed; bottom:18px; right:18px; z-index:10;}
+.aw-root .aw-tools-fab{
+  width:34px; height:34px; border-radius:10px;
+  display:grid; place-items:center; background:var(--card-bg); border:1px solid var(--stroke);
+  color:var(--text-muted); cursor:pointer;
+  transition:color .15s ease, transform .15s ease, border-color .15s ease;
+}
+.aw-root .aw-tools-fab:hover{color:var(--heading-accent); border-color:var(--heading-accent); transform:translateY(-1px);}
+.aw-root .aw-tools-menu{
+  position:absolute; bottom:calc(100% + 8px); right:0; width:190px;
+  background:var(--card-bg); border:1px solid var(--stroke); border-radius:12px;
+  box-shadow:0 10px 30px rgba(0,0,0,.25); padding:8px; display:flex; flex-direction:column; gap:2px;
+}
+.aw-root .aw-tools-menu-label{margin:2px 6px 6px; font-size:10.5px; text-transform:uppercase; letter-spacing:.04em; color:var(--text-muted);}
+.aw-root .aw-tools-menu button{
+  text-align:left; padding:9px 10px; border-radius:8px; border:0; background:transparent;
+  color:var(--text); font-size:13px; font-weight:500;
+}
+.aw-root .aw-tools-menu button:hover{background:var(--table-row-hover); color:var(--heading-accent);}
+.aw-root .aw-tools-view{padding:44px 22px; align-items:flex-start;}
+.aw-root .aw-tools-view-inner{width:100%; max-width:900px; margin:0 auto;}
+.aw-root .aw-tools-view-inner .main{padding:0; max-width:none;}
 
 .aw-root .aw-split{display:grid; grid-template-columns:1.15fr .85fr; min-height:100vh; max-width:1240px; margin:0 auto;}
 .aw-root .aw-split-solo{grid-template-columns:1fr; align-items:center; justify-items:center; max-width:520px;}
