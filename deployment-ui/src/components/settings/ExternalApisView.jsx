@@ -1,8 +1,15 @@
 import { useEffect, useState } from "react";
 
-import { getExternalHealthEndpoints, saveExternalHealthEndpoints, checkExternalHealth } from "../../services/externalHealthService";
+import {
+    getExternalHealthEndpoints, saveExternalHealthEndpoints, checkExternalHealth, checkExternalHealthPublic
+} from "../../services/externalHealthService";
 import { parseHealthEndpointList, groupHealthEndpoints } from "../../utils/parseHealthEndpoint";
 import ExternalHealthClusterTable from "./ExternalHealthClusterTable";
+
+// Server-enforced cap for the anonymous path (see ExternalHealthController.
+// CheckPublic) - checked here too so a visitor gets an immediate message
+// instead of a round trip just to be told the same thing.
+const MAX_URLS_ANONYMOUS = 100;
 
 const VERSION_ORDER = ["A", "B", "Shared"];
 
@@ -40,10 +47,19 @@ function matchesStatusFilter(endpoint, results, statusFilter) {
 
 }
 
-export default function ExternalApisView() {
+// anonymous is set only by AnonymousExternalApisView (the login page's
+// no-login tools menu - see LoginSignupPage) - same grouping/filtering/
+// retry UI as the full Settings version below it, minus the two things
+// that don't apply to a visitor with no account: nothing is loaded on
+// mount (there's no saved list to load) and there's no Save List button
+// (nothing here is ever persisted). Checks route through
+// checkExternalHealthPublic instead of checkExternalHealth (the admin-
+// gated one would just 403 for an anonymous caller) and are capped at
+// MAX_URLS_ANONYMOUS, matching ExternalHealthController.CheckPublic.
+export default function ExternalApisView({ anonymous = false }) {
 
     const [endpointsText, setEndpointsText] = useState("");
-    const [loading, setLoading] = useState(true);
+    const [loading, setLoading] = useState(!anonymous);
     const [saving, setSaving] = useState(false);
     const [checking, setChecking] = useState(false);
     const [results, setResults] = useState(null);
@@ -54,6 +70,8 @@ export default function ExternalApisView() {
     const [retryingUrls, setRetryingUrls] = useState(() => new Set());
 
     useEffect(() => {
+
+        if (anonymous) return;
 
         let cancelled = false;
 
@@ -70,7 +88,7 @@ export default function ExternalApisView() {
             cancelled = true;
         };
 
-    }, []);
+    }, [anonymous]);
 
     const parsed = parseHealthEndpointList(endpointsText);
     const grouped = groupHealthEndpoints(parsed);
@@ -119,12 +137,18 @@ export default function ExternalApisView() {
             return;
         }
 
+        if (anonymous && parsed.length > MAX_URLS_ANONYMOUS) {
+            setError(`Too many URLs at once (max ${MAX_URLS_ANONYMOUS}).`);
+            return;
+        }
+
         try {
 
             setChecking(true);
             setError("");
 
-            const data = await checkExternalHealth(parsed.map((endpoint) => endpoint.url));
+            const checkFn = anonymous ? checkExternalHealthPublic : checkExternalHealth;
+            const data = await checkFn(parsed.map((endpoint) => endpoint.url));
             setResults(new Map(data.map((result) => [result.url, result])));
 
         }
@@ -151,7 +175,8 @@ export default function ExternalApisView() {
 
         try {
 
-            const data = await checkExternalHealth([url]);
+            const checkFn = anonymous ? checkExternalHealthPublic : checkExternalHealth;
+            const data = await checkFn([url]);
             const fresh = data[0];
 
             if (fresh) {
@@ -185,10 +210,21 @@ export default function ExternalApisView() {
             <h2 className="card-title">External APIs</h2>
 
             <p className="empty-state" style={{ padding: "0 0 15px", textAlign: "left" }}>
-                Paste health-check URLs below (one per line). Each one is grouped automatically by
-                version — A or B, detected from the hostname — and by cluster; anything the URL
-                itself doesn't disambiguate (a shared job scheduler, for example) shows under
-                "Shared" rather than being guessed into the wrong version.
+                {anonymous ? (
+                    <>
+                        Paste up to {MAX_URLS_ANONYMOUS} health-check URLs below (one per line) to see
+                        whether they're up right now — grouped automatically by version (A or B,
+                        detected from the hostname) and by cluster, same as the full version. Nothing
+                        here is saved; sign in to keep a list.
+                    </>
+                ) : (
+                    <>
+                        Paste health-check URLs below (one per line). Each one is grouped automatically by
+                        version — A or B, detected from the hostname — and by cluster; anything the URL
+                        itself doesn't disambiguate (a shared job scheduler, for example) shows under
+                        "Shared" rather than being guessed into the wrong version.
+                    </>
+                )}
             </p>
 
             {error && <div className="error-message">{error}</div>}
@@ -211,13 +247,15 @@ export default function ExternalApisView() {
 
             <div className="button-row" style={{ marginBottom: 20 }}>
 
-                <button type="button" className="btn btn-primary" onClick={handleSave} disabled={saving || loading}>
-                    {saving ? "Saving..." : "Save List"}
-                </button>
+                {!anonymous && (
+                    <button type="button" className="btn btn-primary" onClick={handleSave} disabled={saving || loading}>
+                        {saving ? "Saving..." : "Save List"}
+                    </button>
+                )}
 
                 <button
                     type="button"
-                    className="btn btn-secondary"
+                    className={`btn ${anonymous ? "btn-primary" : "btn-secondary"}`}
                     onClick={handleCheckAll}
                     disabled={checking || loading || parsed.length === 0}
                 >
@@ -257,7 +295,9 @@ export default function ExternalApisView() {
             ) : parsed.length === 0 ? (
 
                 <p className="empty-state">
-                    No endpoints yet — paste a list above and click &quot;Save List&quot;.
+                    {anonymous
+                        ? "No endpoints yet — paste a list above and click \"Check All\"."
+                        : "No endpoints yet — paste a list above and click \"Save List\"."}
                 </p>
 
             ) : (
