@@ -26,12 +26,20 @@ function LinkedInIcon() {
 // landing on top of each other on screen no matter how much either
 // title's height was adjusted, since the two stations themselves were
 // almost touching. Moved the whole station rather than continuing to
+//
+// x=-4.8, not -5.5: the back wall's vertical seam decorations sit at
+// x = -6, -3.6, -1.2, 1.2, 3.6, 6 (see Room.jsx) - the camera looks
+// straight down the Z axis at whatever X the marker sits at, so -5.5
+// put the console almost directly in front of the x=-6 seam from the
+// camera's exact line of sight, making that seam appear to run right
+// through the console/title. -4.8 sits roughly midway between the -6
+// and -3.6 seams instead.
 // nudge label heights against a room-layout problem.
 export function ContactMarker({ onSelect, reducedMotion, dimmed }) {
 
     return (
 
-        <Hotspot position={[-5.5, 0.9, -0.6]} onSelect={onSelect} reducedMotion={reducedMotion}>
+        <Hotspot position={[-4.8, 0.9, -0.6]} onSelect={onSelect} reducedMotion={reducedMotion}>
             {(hovered) => (
                 <>
                     {/* meshBasicMaterial, not meshStandardMaterial - a lit

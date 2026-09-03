@@ -25,9 +25,10 @@ const CAMERA_TARGETS = {
     projects: { position: [2.95, 2.15, 4.3], lookAt: [2.95, 0.95, -1] },
     experience: { position: [-3.2, 2.15, 3.5], lookAt: [-3.2, 1.3, -1.5] },
     dashboard: { position: [0, 2.4, -2.9], lookAt: [0, 2.6, -5.7] },
-    // x shifted to -5.5 to match ContactMarker's new position (moved off
-    // Timeline's cluster - see ContactConsole.jsx)
-    contact: { position: [-5.5, 1.5, 3.4], lookAt: [-5.5, 0.9, -0.6] }
+    // x matches ContactMarker's position (see ContactConsole.jsx) -
+    // -4.8, not -5.5, so the camera's straight-down-Z sightline doesn't
+    // line up with one of the back wall's seam decorations
+    contact: { position: [-4.8, 1.5, 3.4], lookAt: [-4.8, 0.9, -0.6] }
 };
 
 // Drives all camera movement with GSAP tweens (never React state driving
