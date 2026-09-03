@@ -12,38 +12,46 @@ import AzureDevOpsProjectProvider from "./context/AzureDevOpsProjectContext";
 
 import "./styles/global.css";
 
-ReactDOM.createRoot(
-    document.getElementById("root")
-).render(
+// StrictMode is a development-time bug-detector (it double-invokes
+// effects/renders on purpose, to surface missing cleanup) - it's
+// documented to no-op that double-invoke behavior in a production
+// build, but confirmed via the live site's own Network tab that every
+// startup call (bootstrap, mfa/pending, settings/sidebar, the frontend
+// heartbeat) was firing twice there regardless, which is exactly what
+// a real double-render would produce. Rather than trust the "should be
+// a no-op in prod" assumption against direct evidence it wasn't one
+// here, StrictMode now only wraps the tree in dev at all - App itself
+// still runs completely unwrapped in production either way.
+const tree = (
 
-    <React.StrictMode>
+    <ThemeProvider>
 
-        <ThemeProvider>
+        <StyleProvider>
 
-            <StyleProvider>
+            <ToastProvider>
 
-                <ToastProvider>
+                <NavigationProvider>
 
-                    <NavigationProvider>
+                    <AuthProvider>
 
-                        <AuthProvider>
+                        <AzureDevOpsProjectProvider>
 
-                            <AzureDevOpsProjectProvider>
+                            <App/>
 
-                                <App/>
+                        </AzureDevOpsProjectProvider>
 
-                            </AzureDevOpsProjectProvider>
+                    </AuthProvider>
 
-                        </AuthProvider>
+                </NavigationProvider>
 
-                    </NavigationProvider>
+            </ToastProvider>
 
-                </ToastProvider>
+        </StyleProvider>
 
-            </StyleProvider>
-
-        </ThemeProvider>
-
-    </React.StrictMode>
+    </ThemeProvider>
 
 );
+
+ReactDOM.createRoot(
+    document.getElementById("root")
+).render(import.meta.env.DEV ? <React.StrictMode>{tree}</React.StrictMode> : tree);
