@@ -608,7 +608,16 @@ export default function LoginSignupPage({ onMfaRequired }) {
 
             <div className="aw-root">
                 <style>{CSS}</style>
-                {themeToggle}
+                {/* Portfolio (CommandCenter, the 3D room) is a deliberately
+                    single-themed dark scene - every material color, the
+                    glow effects, the grain/vignette overlay, are tuned
+                    specifically against a dark void, and none of it
+                    reads useTheme's global light/dark state at all. The
+                    toggle was still rendering here, doing nothing visible
+                    when clicked - not a broken toggle, just a control
+                    that doesn't apply to this tool, so it's hidden here
+                    instead of showing a dead affordance. */}
+                {toolMode !== "portfolio" && themeToggle}
 
                 <div className="aw-tools-view">
 
