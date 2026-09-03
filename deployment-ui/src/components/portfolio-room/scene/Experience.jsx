@@ -95,7 +95,7 @@ export default function Experience({ reducedMotion, theme, onExit }) {
                     of the side wall near the timeline station, which put
                     it nowhere near the desk at all */}
                 <Window position={[3, 2.2, -4.85]} rotation={[0, -Math.PI / 2, 0]} theme={theme} />
-                <Clock position={[-3, 2.6, -4.83]} theme={theme} />
+                <Clock position={[-3, 2.6, -4.83]} />
                 {/* The exit door - flush-mounted on the back wall (far
                     right, clear of the dashboard/window cluster), not
                     standing free-floating in the middle of the floor with
