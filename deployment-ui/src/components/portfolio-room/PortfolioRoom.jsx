@@ -328,9 +328,13 @@ const CSS = `
 .proom-panel-close:hover{color:var(--pr-text); border-color:var(--pr-cyan);}
 .proom-panel-body{padding:22px;}
 
-.proom-terminal-block{margin-bottom:10px;}
+.proom-terminal-block{margin-bottom:10px; padding:6px 8px; border-radius:8px; border:1px solid transparent;}
+.proom-terminal-block.on-screen{border-color:var(--pr-cyan); background:color-mix(in srgb, var(--pr-cyan) 8%, transparent);}
 .proom-terminal-prompt{color:var(--pr-cyan); font-size:13px;}
 .proom-terminal-line{font-size:13px; color:var(--pr-text); padding-left:2px;}
+.proom-monitor-control{display:flex; align-items:center; justify-content:space-between; gap:12px;
+  margin-top:14px; padding-top:14px; border-top:1px solid var(--pr-line); font-size:12px; color:var(--pr-muted);}
+.proom-monitor-control .proom-btn{padding:6px 12px; font-size:12px;}
 
 .proom-skills-group{margin-bottom:16px;}
 .proom-skills-group h3{margin:0 0 8px; font-size:12.5px; color:var(--pr-purple); text-transform:uppercase; letter-spacing:.04em;}

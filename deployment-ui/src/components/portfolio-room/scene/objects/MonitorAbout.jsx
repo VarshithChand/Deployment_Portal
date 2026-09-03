@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { Text } from "@react-three/drei";
 import Hotspot from "../Hotspot";
 import { MONO_FONT } from "../../fonts";
@@ -6,17 +5,19 @@ import { useStore } from "../../state/store";
 import { ABOUT } from "../../data/profile";
 
 // Monitor on the desk, screen facing the visitor -> ABOUT. The screen
-// itself pages through ABOUT.whoami's blocks (identity, tagline,
-// education) one "container" at a time via a clickable "> Next" prompt,
-// rather than showing all of them stacked at once - the same real
-// content the About panel shows, just paginated in-world on the screen
-// itself. Next only advances the slide (stopPropagation keeps it from
-// also re-triggering the Hotspot's own onSelect); clicking anywhere else
-// on the screen still opens the About panel as before.
+// pages through ABOUT.whoami's blocks (identity, tagline, education) one
+// "container" at a time - real content shown inside the monitor, not all
+// stacked at once. The page indicator here is NOT clickable, unlike an
+// earlier version of this - clicking the monitor is what opens the About
+// panel over top of it in the first place, so a click target living on
+// the monitor's own face is covered the instant you're close enough to
+// reach it. The panel's own "Next" button (About.jsx) is what actually
+// advances `aboutSlide`; this just displays whichever slide that state
+// currently points to.
 export default function MonitorAbout({ reducedMotion }) {
 
     const setActive = useStore((s) => s.setActive);
-    const [slideIndex, setSlideIndex] = useState(0);
+    const slideIndex = useStore((s) => s.aboutSlide);
 
     const slide = ABOUT.whoami[slideIndex];
     const displayLines = [
@@ -73,24 +74,8 @@ export default function MonitorAbout({ reducedMotion }) {
                                 </Text>
                             ))}
 
-                            {/* Next - a real click target, always visible
-                                (not just on hover, unlike the old one-shot
-                                "> Explore my work" prompt it replaces) */}
-                            <Text
-                                font={MONO_FONT}
-                                fontSize={0.045}
-                                color="#5eead4"
-                                anchorX="center"
-                                anchorY="middle"
-                                position={[0, -0.21, 0]}
-                                onClick={(e) => {
-                                    e.stopPropagation();
-                                    setSlideIndex((i) => (i + 1) % ABOUT.whoami.length);
-                                }}
-                                onPointerOver={(e) => { e.stopPropagation(); document.body.style.cursor = "pointer"; }}
-                                onPointerOut={(e) => { e.stopPropagation(); document.body.style.cursor = "auto"; }}
-                            >
-                                {`> Next (${slideIndex + 1}/${ABOUT.whoami.length})`}
+                            <Text font={MONO_FONT} fontSize={0.04} color="#5eead4" anchorX="center" anchorY="middle" position={[0, -0.21, 0]}>
+                                {`${slideIndex + 1} / ${ABOUT.whoami.length}`}
                             </Text>
 
                         </group>
