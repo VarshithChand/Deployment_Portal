@@ -19,12 +19,20 @@ const PALETTE = {
         gridMajor: "#0e3540", gridMinor: "#0a1a24",
         ceiling: "#070a10"
     },
+    // First pass had walls sitting only a few % off pure white with the
+    // floor barely darker - against the light ambient/directional light
+    // (see Experience.jsx) that read as one flat pale haze with no real
+    // floor/wall/ceiling distinction, instead of an enclosed room. Walls
+    // are now a visibly cooler, darker gray-blue than the floor's own
+    // gray-blue (a real floor/wall split, matching how the dark palette
+    // already works), and the ceiling darker still - the surface you'd
+    // expect to get the least direct light.
     light: {
         cyan: "#0891b2",
-        floor: "#c7d1de", backWall: "#f4f6f9", sideWall: "#eef1f5",
+        floor: "#b7c3d3", backWall: "#dbe2ea", sideWall: "#d2dae4",
         wallEmissive: "#000000", wallEmissiveIntensity: 0, sideWallEmissiveIntensity: 0,
-        gridMajor: "#7c8ba3", gridMinor: "#a7b3c4",
-        ceiling: "#e4e9f0"
+        gridMajor: "#5b6b83", gridMinor: "#8b98ab",
+        ceiling: "#c7d1de"
     }
 };
 
@@ -68,12 +76,23 @@ export default function Room({ theme }) {
                 <meshStandardMaterial color={p.ceiling} roughness={1} />
             </mesh>
 
-            {/* thin cyan rim strip along the top of the back wall - keeps
-                the wall legibly *there* against the fog instead of it
-                blending flat into the background at a glance */}
+            {/* thin cyan rim strips along the top of every wall - the back
+                wall's own rim was the only one before, which read fine
+                head-on but left the side walls fading into the fog with
+                no defined edge once the camera turned toward them. All
+                three together give the room a consistent, legible
+                boundary regardless of which way you're looking. */}
             <mesh position={[0, 5.97, -4.98]}>
                 <boxGeometry args={[16, 0.04, 0.04]} />
                 <meshStandardMaterial color={p.cyan} emissive={p.cyan} emissiveIntensity={0.8} toneMapped={false} />
+            </mesh>
+            <mesh position={[-7.98, 5.97, 0]}>
+                <boxGeometry args={[0.04, 0.04, 10]} />
+                <meshStandardMaterial color={p.cyan} emissive={p.cyan} emissiveIntensity={0.5} toneMapped={false} />
+            </mesh>
+            <mesh position={[7.98, 5.97, 0]}>
+                <boxGeometry args={[0.04, 0.04, 10]} />
+                <meshStandardMaterial color={p.cyan} emissive={p.cyan} emissiveIntensity={0.5} toneMapped={false} />
             </mesh>
 
         </group>

@@ -17,11 +17,18 @@ import Greeter from "./objects/Greeter";
 // environment (background/fog/floor/walls/grid) and its floating open-air
 // labels to match the rest of the application - see PortfolioRoom.jsx,
 // which reads the same shared ThemeContext every other page uses rather
-// than a room-local preference. Left unchanged between themes on purpose:
-// the accent point lights (cyan/purple - the room's deliberate "glow"
-// identity, reads fine against either backdrop) and the monitor/wall-
-// screen "screen" materials (a real screen doesn't turn white just
-// because the room around it is bright).
+// than a room-local preference. The monitor/wall-screen "screen"
+// materials are left unchanged between themes on purpose - a real screen
+// doesn't turn white just because the room around it is bright.
+//
+// The cyan/purple accent point lights ARE toned down for light mode,
+// unlike everything else here that stays fixed - at their original dark-
+// mode intensity, sitting close to a wall, they blew the wall's diffuse
+// lighting out into an ugly soft blob once that wall was pale instead of
+// near-black (an almost-black surface has much more room to brighten
+// before clipping to white than a pale one does). Moved back from the
+// wall too, so the same "glow accent" effect reads as a highlight rather
+// than a localized hot spot either way.
 export default function Experience({ reducedMotion, theme }) {
 
     const light = theme === "light";
@@ -38,10 +45,10 @@ export default function Experience({ reducedMotion, theme }) {
             <color attach="background" args={[bg]} />
             <fog attach="fog" args={[bg, 9, 26]} />
 
-            <ambientLight intensity={light ? 0.45 : 0.3} />
-            <directionalLight position={[3, 6, 4]} intensity={light ? 0.9 : 0.7} />
-            <pointLight color="#22d3ee" position={[-6, 4, -2]} intensity={1.4} />
-            <pointLight color="#a78bfa" position={[3, 3, -4]} intensity={0.6} />
+            <ambientLight intensity={light ? 0.35 : 0.3} />
+            <directionalLight position={[3, 6, 4]} intensity={light ? 0.55 : 0.7} />
+            <pointLight color="#22d3ee" position={[-6, 4, -1]} intensity={light ? 0.7 : 1.4} distance={12} decay={2} />
+            <pointLight color="#a78bfa" position={[3, 3, -2]} intensity={light ? 0.3 : 0.6} distance={10} decay={2} />
 
             <Suspense fallback={null}>
 
