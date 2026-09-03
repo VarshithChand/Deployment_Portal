@@ -29,6 +29,7 @@ import useAuth from "./hooks/useAuth";
 import useToast from "./hooks/useToast";
 import useCardTilt from "./hooks/useCardTilt";
 import { reportFrontendHeartbeat } from "./services/appVersionService";
+import { runAfterPrerender } from "./utils/prerender";
 import { getMfaPendingStatus } from "./services/authLoginService";
 import { APP_COMMIT, APP_VERSION, APP_ENVIRONMENT } from "./utils/buildInfo";
 
@@ -131,9 +132,16 @@ function App(){
 
     useEffect(() => {
 
-        getMfaPendingStatus()
-            .then((result) => setMfaPending(!!result.pending))
-            .catch(() => setMfaPending(false));
+        // Deferred until any Chrome speculative prerender of this page has
+        // actually resolved into a real visit (see runAfterPrerender) -
+        // this call was showing up twice with no duplicate call site
+        // anywhere in the code, and a real network call here during a
+        // prerender the user may never land on is exactly why.
+        runAfterPrerender(() => {
+            getMfaPendingStatus()
+                .then((result) => setMfaPending(!!result.pending))
+                .catch(() => setMfaPending(false));
+        });
 
     }, []);
 
@@ -189,7 +197,12 @@ function App(){
     // that should block or disrupt normal use of the portal.
     useEffect(() => {
 
-        reportFrontendHeartbeat(APP_COMMIT, APP_VERSION, APP_ENVIRONMENT).catch((err) => console.error(err));
+        // Same reasoning as the mfa/pending effect above - deferred past
+        // any Chrome speculative prerender so a browser mount that never
+        // becomes a real visit doesn't report a heartbeat for it.
+        runAfterPrerender(() => {
+            reportFrontendHeartbeat(APP_COMMIT, APP_VERSION, APP_ENVIRONMENT).catch((err) => console.error(err));
+        });
 
     }, []);
 

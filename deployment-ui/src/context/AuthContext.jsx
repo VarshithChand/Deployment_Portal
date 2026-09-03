@@ -3,6 +3,7 @@ import { createContext, useCallback, useEffect, useState } from "react";
 import { getBootstrap } from "../services/bootstrapService";
 import { logout as logoutRequest } from "../services/authService";
 import { setAuthToken } from "../api/apiBase";
+import { runAfterPrerender } from "../utils/prerender";
 import useToast from "../hooks/useToast";
 
 export const AuthContext = createContext();
@@ -280,7 +281,12 @@ export default function AuthProvider({ children }) {
             clearQueryParam(params, "token");
         }
 
-        loadBootstrap();
+        // Deferred until any Chrome speculative prerender of this page has
+        // actually resolved into a real visit (see runAfterPrerender) - a
+        // real network call here during a prerender the user may never
+        // land on is exactly what was producing "bootstrap fires twice"
+        // with no duplicate call site anywhere in this file.
+        runAfterPrerender(loadBootstrap);
 
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
