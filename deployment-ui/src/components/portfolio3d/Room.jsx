@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { useScene } from "./sceneStore";
 import Operator from "./Operator";
 import { TerminalMarker } from "./stations/TerminalAbout";
@@ -174,7 +175,14 @@ export default function Room({ reducedMotion }) {
 
             {RACKS.map((pos) => <RackProp key={pos.join(",")} position={pos} />)}
 
-            <Operator reducedMotion={reducedMotion} />
+            {/* own Suspense boundary - CesiumMan.glb is a real network
+                fetch (useGLTF suspends until it resolves); isolating it
+                here means a slow/failed load only ever hides the operator
+                figure, never the rest of the room (which has no async
+                dependencies of its own) */}
+            <Suspense fallback={null}>
+                <Operator reducedMotion={reducedMotion} />
+            </Suspense>
 
         </group>
 

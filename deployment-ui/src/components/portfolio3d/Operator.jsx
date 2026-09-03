@@ -1,14 +1,32 @@
-import { useRef } from "react";
+import { useEffect, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
+import { useGLTF, useAnimations } from "@react-three/drei";
+import * as THREE from "three";
 
-// Floor waypoints near (not on top of) each station, so the figure
-// reads as doing rounds of the room - checking the terminal, glancing
-// at the skills board, walking the project row, checking the wall
-// dashboard, then the timeline - rather than pacing one empty patch of
-// floor. Deliberately not the exact hotspot positions, so it never
-// blocks a click target. Index 0 doubles as "home" - the spot near the
-// desk it starts at and returns to each loop, where it waves instead
-// of just idling.
+// Real rigged/animated character (Khronos glTF-Sample-Assets "CesiumMan",
+// CC-BY 4.0 - https://github.com/KhronosGroup/glTF-Sample-Assets, credit
+// Cesium 2017), replacing the earlier hand-built primitive figure at the
+// user's request for something that actually reads as human rather than
+// a stylized capsule/sphere build. Self-hosted under /public/models
+// (same reasoning as the self-hosted font: same-origin, works within the
+// existing CSP with no policy changes). The file ships exactly one
+// animation clip - a full-body walk cycle, no separate idle/wave clip -
+// so "paused" freezes the mixer mid-pose (action.paused = true) and the
+// greeting wave at home is done by hand, rotating the
+// "Skeleton_arm_joint_R" shoulder joint directly while the mixer is
+// frozen (safe: a paused mixer doesn't re-drive that bone each frame, so
+// the manual rotation isn't fought/overwritten - it's cleared again
+// automatically the moment the mixer unpauses and resumes evaluating the
+// clip). The exact wave rotation axis/sign is a best-effort guess from
+// the joint's name alone (no visual tool available to verify the rig's
+// rest pose against) - flag it if it looks off and it's a one-line fix.
+const MODEL_URL = "/models/CesiumMan.glb";
+
+useGLTF.preload(MODEL_URL);
+
+// Floor waypoints near (not on top of) each station - see the previous
+// version's own note: index 0 is "home", near the desk, where it starts
+// and returns to each loop, and where it waves instead of idling.
 const WAYPOINTS = [
     [0.9, 0, 1.6],
     [0.9, 0, -0.9],
@@ -19,42 +37,52 @@ const WAYPOINTS = [
 
 const WALK_SPEED = 0.7;
 const PAUSE_SECONDS = 2.4;
+// Roughly matches the room's other human-scale primitives (the desk,
+// the terminal screen) - the model's native units aren't assumed, its
+// real bounding-box height is measured at runtime and scaled to this.
+const TARGET_HEIGHT = 0.7;
 
-// Color-blocked (skin/hair vs. shirt vs. pants) instead of one uniform
-// material for the whole body - a single flat color reading as one
-// blob is exactly what made the earlier version look like a toy rather
-// than a person; real clothing/skin contrast is what a silhouette
-// actually needs to read as human even at this low a poly count.
-const SKIN = { color: "#e0b48c", roughness: 0.6 };
-const HAIR = { color: "#1c140f", roughness: 0.7 };
-const SHIRT = { color: "#124452", emissive: "#22d3ee", emissiveIntensity: 0.22, roughness: 0.55 };
-const PANTS = { color: "#12181f", roughness: 0.6 };
-
-// A small ambient figure built from primitives (capsules/spheres, no
-// GLB model - see this file group's own "primitives first" build
-// order) that walks a loop between stations and pauses at each one:
-// legs/arms swing while walking, and it waves whenever it's back at
-// its "home" spot near the desk (targetIndex 0) rather than just
-// idling everywhere identically. Purely ambient - no click target,
-// carries no information. Skipped entirely under
-// prefers-reduced-motion, same as every other purely-decorative motion
-// already in the room.
 export default function Operator({ reducedMotion }) {
 
     const rootRef = useRef();
-    const legLRef = useRef();
-    const legRRef = useRef();
-    const armLRef = useRef();
-    const armRRef = useRef();
+    const armRRef = useRef(null);
     const targetIndex = useRef(0);
     const pauseTimer = useRef(0);
-    const walkPhase = useRef(0);
     const waveTime = useRef(0);
+    const setUpDone = useRef(false);
+
+    const { scene, animations } = useGLTF(MODEL_URL);
+    const { actions } = useAnimations(animations, rootRef);
+
+    useEffect(() => {
+
+        if (!setUpDone.current) {
+
+            const box = new THREE.Box3().setFromObject(scene);
+            const height = box.max.y - box.min.y;
+            if (height > 0) scene.scale.setScalar(TARGET_HEIGHT / height);
+
+            // re-measure after scaling and sit the feet exactly at y=0,
+            // regardless of where the model's own origin/pivot was
+            const box2 = new THREE.Box3().setFromObject(scene);
+            scene.position.y -= box2.min.y;
+
+            armRRef.current = scene.getObjectByName("Skeleton_arm_joint_R") || null;
+            setUpDone.current = true;
+
+        }
+
+        const action = Object.values(actions)[0];
+        if (action) action.play();
+
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [actions]);
 
     useFrame((_, delta) => {
 
         if (!rootRef.current) return;
 
+        const action = Object.values(actions)[0];
         const target = WAYPOINTS[targetIndex.current];
         const pos = rootRef.current.position;
         const dx = target[0] - pos.x;
@@ -70,47 +98,23 @@ export default function Operator({ reducedMotion }) {
             pos.z += (dz / dist) * step;
             rootRef.current.rotation.y = Math.atan2(dx, dz);
 
-            walkPhase.current += delta * 9;
-            const swing = Math.sin(walkPhase.current) * 0.55;
-            if (legLRef.current) legLRef.current.rotation.x = swing;
-            if (legRRef.current) legRRef.current.rotation.x = -swing;
-            // .rotation.set (not just .rotation.x) - clears any leftover
-            // z-rotation from the wave gesture so an arm doesn't stay
-            // twisted mid-wave once it starts walking away from home
-            if (armLRef.current) armLRef.current.rotation.set(-swing * 0.6, 0, 0);
-            if (armRRef.current) armRRef.current.rotation.set(swing * 0.6, 0, 0);
+            if (action) action.paused = false;
 
         } else {
 
             pauseTimer.current += delta;
+            if (action) action.paused = true;
 
-            if (legLRef.current) legLRef.current.rotation.x *= 0.85;
-            if (legRRef.current) legRRef.current.rotation.x *= 0.85;
+            if (atHome && armRRef.current) {
 
-            if (atHome) {
-
-                // greeting wave - right arm lifts out and up (z), then
-                // wiggles side to side (x) like an actual hand wave
                 waveTime.current += delta * 7;
-                if (armRRef.current) {
-                    armRRef.current.rotation.z = -1.9;
-                    armRRef.current.rotation.x = Math.sin(waveTime.current) * 0.35;
-                }
-                if (armLRef.current) {
-                    armLRef.current.rotation.x *= 0.85;
-                    armLRef.current.rotation.z *= 0.85;
-                }
-
-            } else {
-
-                waveTime.current = 0;
-                if (armLRef.current) { armLRef.current.rotation.x *= 0.85; armLRef.current.rotation.z *= 0.85; }
-                if (armRRef.current) { armRRef.current.rotation.x *= 0.85; armRRef.current.rotation.z *= 0.85; }
+                armRRef.current.rotation.z = -1.3 + Math.sin(waveTime.current) * 0.3;
 
             }
 
             if (pauseTimer.current > PAUSE_SECONDS) {
                 pauseTimer.current = 0;
+                waveTime.current = 0;
                 targetIndex.current = (targetIndex.current + 1) % WAYPOINTS.length;
             }
 
@@ -123,59 +127,7 @@ export default function Operator({ reducedMotion }) {
     return (
 
         <group ref={rootRef} position={WAYPOINTS[0]}>
-
-            {/* legs - grouped so rotation pivots at the hip, not the leg's own center */}
-            <group ref={legLRef} position={[-0.06, 0.22, 0]}>
-                <mesh position={[0, -0.1, 0]}>
-                    <capsuleGeometry args={[0.035, 0.16, 4, 6]} />
-                    <meshStandardMaterial {...PANTS} />
-                </mesh>
-            </group>
-            <group ref={legRRef} position={[0.06, 0.22, 0]}>
-                <mesh position={[0, -0.1, 0]}>
-                    <capsuleGeometry args={[0.035, 0.16, 4, 6]} />
-                    <meshStandardMaterial {...PANTS} />
-                </mesh>
-            </group>
-
-            {/* torso */}
-            <mesh position={[0, 0.4, 0]}>
-                <capsuleGeometry args={[0.095, 0.2, 4, 8]} />
-                <meshStandardMaterial {...SHIRT} />
-            </mesh>
-
-            {/* arms - grouped so rotation pivots at the shoulder, hand at the end */}
-            <group ref={armLRef} position={[-0.13, 0.48, 0]}>
-                <mesh position={[0, -0.08, 0]}>
-                    <capsuleGeometry args={[0.028, 0.15, 4, 6]} />
-                    <meshStandardMaterial {...SHIRT} />
-                </mesh>
-                <mesh position={[0, -0.18, 0]}>
-                    <sphereGeometry args={[0.032, 10, 10]} />
-                    <meshStandardMaterial {...SKIN} />
-                </mesh>
-            </group>
-            <group ref={armRRef} position={[0.13, 0.48, 0]}>
-                <mesh position={[0, -0.08, 0]}>
-                    <capsuleGeometry args={[0.028, 0.15, 4, 6]} />
-                    <meshStandardMaterial {...SHIRT} />
-                </mesh>
-                <mesh position={[0, -0.18, 0]}>
-                    <sphereGeometry args={[0.032, 10, 10]} />
-                    <meshStandardMaterial {...SKIN} />
-                </mesh>
-            </group>
-
-            {/* head + a simple hair cap (partial sphere) */}
-            <mesh position={[0, 0.6, 0]}>
-                <sphereGeometry args={[0.078, 14, 14]} />
-                <meshStandardMaterial {...SKIN} />
-            </mesh>
-            <mesh position={[0, 0.635, -0.005]}>
-                <sphereGeometry args={[0.082, 14, 14, 0, Math.PI * 2, 0, Math.PI * 0.55]} />
-                <meshStandardMaterial {...HAIR} />
-            </mesh>
-
+            <primitive object={scene} />
         </group>
 
     );
