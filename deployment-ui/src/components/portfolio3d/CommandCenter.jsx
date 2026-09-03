@@ -59,10 +59,12 @@ function DesktopCommandCenter({ reducedMotion }) {
             if (wheelLockRef.current) return;
             if (Math.abs(e.deltaY) < 12) return;
 
+            // Wraps in both directions - scrolling forward past Contact
+            // (the last stop) loops back to the room overview and then
+            // on to About again, rather than dead-ending at either end.
             const currentIndex = SCROLL_ORDER.indexOf(activeSection);
-            const nextIndex = currentIndex + (e.deltaY > 0 ? 1 : -1);
-
-            if (nextIndex < 0 || nextIndex >= SCROLL_ORDER.length) return;
+            const direction = e.deltaY > 0 ? 1 : -1;
+            const nextIndex = (currentIndex + direction + SCROLL_ORDER.length) % SCROLL_ORDER.length;
 
             setActiveSection(SCROLL_ORDER[nextIndex]);
             setOpenPanel(null);

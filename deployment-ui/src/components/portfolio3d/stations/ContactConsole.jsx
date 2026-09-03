@@ -37,28 +37,62 @@ export function ContactMarker({ onSelect, reducedMotion, dimmed }) {
                     <mesh>
                         <cylinderGeometry args={[0.38, 0.44, 0.6, 6]} />
                         <meshStandardMaterial
-                            color={hovered ? "#67e8f9" : "#0e3540"}
+                            color={hovered ? "#0d3844" : "#081b22"}
                             emissive="#22d3ee"
-                            emissiveIntensity={hovered ? 1.1 : dimmed ? 0.15 : 0.75}
+                            emissiveIntensity={hovered ? 0.6 : dimmed ? 0.1 : 0.35}
                             transparent
                             opacity={dimmed ? 0.2 : 1}
                             toneMapped={false}
                         />
                     </mesh>
                     {!dimmed && (
-                        <Billboard position={[0, 0.5, 0]}>
-                            <Text
-                                font={MONO_FONT}
-                                fontSize={0.1}
-                                color="#67e8f9"
-                                outlineWidth={0.006}
-                                outlineColor="#031014"
-                                anchorX="center"
-                                anchorY="bottom"
-                            >
-                                CONTACT
-                            </Text>
-                        </Billboard>
+                        <>
+                            <Billboard position={[0, 0.5, 0]}>
+                                <Text
+                                    font={MONO_FONT}
+                                    fontSize={0.1}
+                                    color="#67e8f9"
+                                    outlineWidth={0.006}
+                                    outlineColor="#031014"
+                                    anchorX="center"
+                                    anchorY="bottom"
+                                >
+                                    CONTACT
+                                </Text>
+                            </Billboard>
+
+                            {/* real contact info on the console's face -
+                                pushed toward the camera side (z=0.48,
+                                past the cylinder's ~0.44 radius) so it
+                                renders in front of the solid mesh instead
+                                of being hidden inside it */}
+                            <Billboard position={[0, 0.08, 0.48]}>
+                                <Text
+                                    font={MONO_FONT}
+                                    fontSize={0.042}
+                                    color="#eafaff"
+                                    outlineWidth={0.003}
+                                    outlineColor="#031014"
+                                    anchorX="center"
+                                    anchorY="middle"
+                                >
+                                    {CONTACT.email}
+                                </Text>
+                            </Billboard>
+                            <Billboard position={[0, -0.05, 0.48]}>
+                                <Text
+                                    font={MONO_FONT}
+                                    fontSize={0.038}
+                                    color="#9fd8e0"
+                                    outlineWidth={0.003}
+                                    outlineColor="#031014"
+                                    anchorX="center"
+                                    anchorY="middle"
+                                >
+                                    GitHub · LinkedIn
+                                </Text>
+                            </Billboard>
+                        </>
                     )}
                 </>
             )}
