@@ -7,6 +7,9 @@ import Desk from "./objects/Desk";
 import Chair from "./objects/Chair";
 import Bed from "./objects/Bed";
 import Plant from "./objects/Plant";
+import SwitchBoard from "./objects/SwitchBoard";
+import Window from "./objects/Window";
+import Clock from "./objects/Clock";
 import MonitorAbout from "./objects/MonitorAbout";
 import PhoneContact from "./objects/PhoneContact";
 import CeilingLightSkills from "./objects/CeilingLightSkills";
@@ -73,6 +76,9 @@ export default function Experience({ reducedMotion, theme }) {
                 <Plant position={[7, 0, 4]} />
                 <Plant position={[-7, 0, 4]} scale={0.85} />
                 <Plant position={[7, 0, -4.3]} scale={1.1} />
+                <SwitchBoard position={[7.95, 1.4, 3.5]} rotation={[0, -Math.PI / 2, 0]} />
+                <Window position={[-7.95, 2.6, 1.5]} rotation={[0, Math.PI / 2, 0]} theme={theme} />
+                <Clock position={[-3, 2.6, -4.83]} theme={theme} />
 
                 <GreeterErrorBoundary>
                     <Greeter reducedMotion={reducedMotion} />

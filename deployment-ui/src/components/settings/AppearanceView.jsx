@@ -9,7 +9,7 @@ import { APP_STYLES } from "../../context/StyleContext";
 export default function AppearanceView() {
 
     const { style, setStyle } = useStyle();
-    const { theme, toggleTheme } = useTheme();
+    const { theme, toggleTheme, themeMode } = useTheme();
 
     return (
 
@@ -59,12 +59,18 @@ export default function AppearanceView() {
 
             <p className="empty-state" style={{ padding: "0 0 15px", textAlign: "left" }}>
                 Each style above has its own light and dark pair — this switches within
-                whichever one you picked.
+                whichever one you picked. Until you switch it yourself, it follows your
+                device's own clock — light during the day, dark at night — same as the
+                Portfolio room's clock/window/sun-moon icon.
             </p>
 
             <button type="button" className="btn btn-secondary" onClick={toggleTheme}>
                 {theme === "dark" ? "Switch to Light" : "Switch to Dark"}
             </button>
+
+            <p className="empty-state" style={{ padding: "10px 0 0", textAlign: "left", fontSize: "12px" }}>
+                Currently: {themeMode === "auto" ? "Auto (following your local time)" : "Manually set"}
+            </p>
 
         </div>
 

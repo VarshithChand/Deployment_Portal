@@ -150,8 +150,12 @@ export default function PortfolioRoom({ onExit }) {
     // Same shared ThemeContext every other page reads (see main.jsx's
     // ThemeProvider) - not a room-local preference. Toggling here changes
     // the theme for the whole application, and arriving here already
-    // reflects whatever was last chosen elsewhere.
-    const { theme, toggleTheme } = useTheme();
+    // reflects whatever was last chosen elsewhere. `themeMode` is "auto"
+    // until this toggle (or the one anywhere else in the app) is ever
+    // clicked - in auto mode the theme follows the visitor's own local
+    // clock (see ThemeContext.jsx, and the room's own Clock prop showing
+    // that same time), which is what the tooltip below is explaining.
+    const { theme, toggleTheme, themeMode } = useTheme();
 
     useEffect(() => {
         setReducedMotion(reducedMotion);
@@ -173,7 +177,11 @@ export default function PortfolioRoom({ onExit }) {
                 className="proom-theme-toggle"
                 onClick={toggleTheme}
                 aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
-                title={theme === "dark" ? "Light mode" : "Dark mode"}
+                title={
+                    themeMode === "auto"
+                        ? `Auto - following your local time (currently ${theme}). Click to set it yourself.`
+                        : (theme === "dark" ? "Light mode" : "Dark mode")
+                }
             >
                 {theme === "dark" ? <Sun size={15} /> : <Moon size={15} />}
             </button>
