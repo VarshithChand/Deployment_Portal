@@ -18,10 +18,20 @@ const MODEL_URL = "/models/CesiumMan.glb";
 
 useGLTF.preload(MODEL_URL);
 
-// Fixed spot near the room's front-right corner - no longer walks a
+// Fixed spot toward the room's front-right - no longer walks a
 // waypoint loop, just stands here facing back toward the room and
 // waves periodically.
-const POSITION = [4.4, 0, 2.8];
+//
+// x=4.4/z=2.8 (the first version of this) put the figure entirely
+// outside the room-overview camera's frustum: an object close to the
+// camera needs a much smaller x-offset to stay in frame than a far
+// one does, for the same field of view, and z=2.8 is close (camera
+// sits at z=6.2) while x=4.4 is the kind of offset that only works
+// far away (e.g. the project row, out at z=-1). Verified this time by
+// computing the camera's actual half-FOV rather than eyeballing it -
+// x=2.0/z=1.0 keeps a real margin inside the frustum at the room's
+// default aspect ratio.
+const POSITION = [2, 0, 1];
 const FACING = Math.atan2(-POSITION[0], -POSITION[2]);
 
 // Roughly matches the room's other human-scale primitives (the desk,
