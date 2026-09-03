@@ -24,9 +24,17 @@ function writeSecurityHeadersPlugin() {
     closeBundle() {
       const apiOrigin = process.env.VITE_API_BASE_URL || ''
 
+      // Cloudflare auto-injects its own Web Analytics/RUM beacon script
+      // into every response on this zone - not something this app added,
+      // and not something turning off here (that's a Cloudflare dashboard
+      // setting, not a CSP concern) - but the strict CSP was blocking it
+      // outright, showing as a real console/network error on every load.
+      // Allowlisted rather than left failing: the script host in
+      // script-src, and the host it actually reports RUM data to in
+      // connect-src.
       const connectSrc = apiOrigin
-        ? `'self' ${apiOrigin}`
-        : `'self'`
+        ? `'self' ${apiOrigin} https://cloudflareinsights.com`
+        : `'self' https://cloudflareinsights.com`
 
       const csp = [
         `default-src 'self'`,
@@ -38,7 +46,7 @@ function writeSecurityHeadersPlugin() {
         // script-src (inherited into the worker's global scope), not
         // worker-src. Without this, the worker is created successfully
         // but immediately fails to initialize ("failed to rehydrate").
-        `script-src 'self' blob:`,
+        `script-src 'self' blob: https://static.cloudflareinsights.com`,
         `style-src 'self' 'unsafe-inline' https://fonts.googleapis.com`,
         `font-src 'self' https://fonts.gstatic.com`,
         // img-src blob: was added for CesiumMan.glb's embedded texture
