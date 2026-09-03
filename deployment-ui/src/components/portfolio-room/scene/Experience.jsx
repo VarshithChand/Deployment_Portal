@@ -4,12 +4,16 @@ import { EffectComposer, Bloom } from "@react-three/postprocessing";
 import Room from "./Room";
 import CameraRig from "./CameraRig";
 import Desk from "./objects/Desk";
+import Chair from "./objects/Chair";
+import Bed from "./objects/Bed";
+import Plant from "./objects/Plant";
 import MonitorAbout from "./objects/MonitorAbout";
 import PhoneContact from "./objects/PhoneContact";
 import CeilingLightSkills from "./objects/CeilingLightSkills";
 import WallDashboard from "./objects/WallDashboard";
 import ServerRackProjects from "./objects/ServerRackProjects";
 import WallTimelineExperience from "./objects/WallTimelineExperience";
+import WelcomeSign from "./objects/WelcomeSign";
 import GreeterErrorBoundary from "./objects/GreeterErrorBoundary";
 import Greeter from "./objects/Greeter";
 
@@ -54,12 +58,21 @@ export default function Experience({ reducedMotion, theme }) {
 
                 <Room theme={theme} />
                 <Desk />
+                <Chair position={[0, 0, -0.3]} />
                 <MonitorAbout reducedMotion={reducedMotion} />
                 <PhoneContact reducedMotion={reducedMotion} />
                 <CeilingLightSkills reducedMotion={reducedMotion} theme={theme} />
                 <WallDashboard reducedMotion={reducedMotion} />
                 <ServerRackProjects reducedMotion={reducedMotion} theme={theme} />
                 <WallTimelineExperience reducedMotion={reducedMotion} theme={theme} />
+                <WelcomeSign theme={theme} />
+
+                {/* furnishing - purely decorative, makes the space read
+                    as an actual room rather than a bare demo showroom */}
+                <Bed position={[-6, 0, -4]} />
+                <Plant position={[7, 0, 4]} />
+                <Plant position={[-7, 0, 4]} scale={0.85} />
+                <Plant position={[7, 0, -4.3]} scale={1.1} />
 
                 <GreeterErrorBoundary>
                     <Greeter reducedMotion={reducedMotion} />

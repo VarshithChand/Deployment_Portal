@@ -1,7 +1,7 @@
-import { Suspense, lazy, useEffect } from "react";
+import { Suspense, lazy, useEffect, useRef } from "react";
 import { AnimatePresence } from "framer-motion";
 import { X, Sun, Moon } from "lucide-react";
-import { useStore } from "./state/store";
+import { useStore, SECTIONS } from "./state/store";
 import Loader from "./scene/Loader";
 import Nav from "./ui/Nav";
 import Panel from "./ui/Panel";
@@ -31,6 +31,72 @@ const SECTION_CONTENT = {
     dashboard: Dashboard, projects: Projects, experience: Experience
 };
 
+// WASD/arrow keys and mouse-scroll both step through SECTIONS as one
+// closed loop (about -> skills -> projects -> experience -> dashboard ->
+// contact -> about...), independent of the room overview - stepping from
+// the overview always lands on "about" first, and there's no wraparound
+// back to the overview itself (Escape/Exit/a panel's own close button
+// already cover "go back to looking at the whole room"). W/D/Up/Right
+// step forward, S/A/Down/Left step back, matching how a slideshow or
+// carousel would read those keys even though they're not literal
+// movement here. Scroll direction mirrors that: scrolling down (like
+// scrolling down a page) advances, scrolling up goes back.
+function useSectionLoop(enabled) {
+
+    const active = useStore((s) => s.active);
+    const setActive = useStore((s) => s.setActive);
+    const wheelLockRef = useRef(false);
+
+    useEffect(() => {
+
+        if (!enabled) return;
+
+        function step(direction) {
+            const currentIndex = active ? SECTIONS.indexOf(active) : -1;
+            const nextIndex = (currentIndex + direction + SECTIONS.length) % SECTIONS.length;
+            setActive(SECTIONS[nextIndex]);
+        }
+
+        function onKeyDown(e) {
+
+            if (e.repeat) return;
+            if (e.target && ["INPUT", "TEXTAREA"].includes(e.target.tagName)) return;
+
+            const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+            const forward = key === "w" || key === "d" || key === "ArrowUp" || key === "ArrowRight";
+            const back = key === "s" || key === "a" || key === "ArrowDown" || key === "ArrowLeft";
+
+            if (!forward && !back) return;
+
+            e.preventDefault();
+            step(forward ? 1 : -1);
+
+        }
+
+        function onWheel(e) {
+
+            if (e.target.closest && e.target.closest(".proom-panel")) return;
+            if (wheelLockRef.current) return;
+            if (Math.abs(e.deltaY) < 12) return;
+
+            step(e.deltaY > 0 ? 1 : -1);
+            wheelLockRef.current = true;
+            setTimeout(() => { wheelLockRef.current = false; }, 700);
+
+        }
+
+        window.addEventListener("keydown", onKeyDown);
+        window.addEventListener("wheel", onWheel, { passive: true });
+
+        return () => {
+            window.removeEventListener("keydown", onKeyDown);
+            window.removeEventListener("wheel", onWheel);
+        };
+
+    }, [active, enabled, setActive]);
+
+}
+
 function DesktopRoom({ reducedMotion, theme }) {
 
     const active = useStore((s) => s.active);
@@ -38,6 +104,8 @@ function DesktopRoom({ reducedMotion, theme }) {
     const loaded = useStore((s) => s.loaded);
     const setLoaded = useStore((s) => s.setLoaded);
     const ActiveContent = active && SECTION_CONTENT[active];
+
+    useSectionLoop(loaded);
 
     return (
 

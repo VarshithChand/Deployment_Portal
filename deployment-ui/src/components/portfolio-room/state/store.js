@@ -1,9 +1,10 @@
 import { create } from "zustand";
 
-// SECTIONS order is the sequence Tab/scroll walk through, matching the
-// order objects are introduced in the room: desk items first (about,
-// contact), then the three wall/ceiling stations, then the rack.
-export const SECTIONS = ["about", "contact", "skills", "dashboard", "projects", "experience"];
+// SECTIONS order is the sequence Nav and the WASD/arrow-key/scroll loop
+// (see PortfolioRoom.jsx's useSectionLoop) all walk through, in the
+// order explicitly requested: about -> skills -> projects -> experience
+// -> dashboard -> contact, wrapping back to about.
+export const SECTIONS = ["about", "skills", "projects", "experience", "dashboard", "contact"];
 
 // A single `active` field drives BOTH the camera fly-to and the 2D panel
 // - unlike the previous build (which kept "where the camera is looking"
