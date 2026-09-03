@@ -25,7 +25,9 @@ const CAMERA_TARGETS = {
     projects: { position: [2.95, 2.15, 4.3], lookAt: [2.95, 0.95, -1] },
     experience: { position: [-3.2, 2.15, 3.5], lookAt: [-3.2, 1.3, -1.5] },
     dashboard: { position: [0, 2.4, -2.9], lookAt: [0, 2.6, -5.7] },
-    contact: { position: [-2.6, 1.5, 3.4], lookAt: [-2.6, 0.9, -0.6] }
+    // x shifted to -5.5 to match ContactMarker's new position (moved off
+    // Timeline's cluster - see ContactConsole.jsx)
+    contact: { position: [-5.5, 1.5, 3.4], lookAt: [-5.5, 0.9, -0.6] }
 };
 
 // Drives all camera movement with GSAP tweens (never React state driving

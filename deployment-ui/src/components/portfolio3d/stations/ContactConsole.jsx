@@ -21,11 +21,17 @@ function LinkedInIcon() {
     );
 }
 
+// Was at x=-2.6, only 0.25 units from Timeline's nearest circle (x=-2.85)
+// - close enough that Contact's and Experience's floating titles kept
+// landing on top of each other on screen no matter how much either
+// title's height was adjusted, since the two stations themselves were
+// almost touching. Moved the whole station rather than continuing to
+// nudge label heights against a room-layout problem.
 export function ContactMarker({ onSelect, reducedMotion, dimmed }) {
 
     return (
 
-        <Hotspot position={[-2.6, 0.9, -0.6]} onSelect={onSelect} reducedMotion={reducedMotion}>
+        <Hotspot position={[-5.5, 0.9, -0.6]} onSelect={onSelect} reducedMotion={reducedMotion}>
             {(hovered) => (
                 <>
                     <mesh>
