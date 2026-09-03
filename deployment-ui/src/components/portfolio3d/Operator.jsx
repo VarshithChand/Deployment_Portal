@@ -21,7 +21,12 @@ import { MONO_FONT } from "./fonts";
 // ~0.7 units).
 const SCALE = 0.28;
 const POSITION = [2, 0, 1];
-const FACING = Math.atan2(-POSITION[0], -POSITION[2]);
+// The avatar's own face (eyes/smile) is built facing its local +Z - no
+// rotation needed to have it face the front/camera, since the room's
+// default view sits at a higher Z than this position. The previous
+// atan2-toward-room-center calculation pointed it ~117 degrees off
+// that, facing back toward the room instead of toward the viewer.
+const FACING = 0;
 
 const COLOR = {
     skin: "#f1c8a0", hair: "#252a31", shirt: "#1c2733", pants: "#141a22",
