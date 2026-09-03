@@ -66,6 +66,21 @@ export default function Room({ reducedMotion }) {
                 <meshStandardMaterial color="#0d131c" emissive="#0a1a24" emissiveIntensity={0.4} roughness={0.9} />
             </mesh>
 
+            {/* same vertical seam treatment as the back wall, on both side
+                walls too - floor-to-roof panel lines, not just one wall */}
+            {[-6, -3.6, -1.2, 1.2, 3.6, 6].map((z) => (
+                <mesh key={`left-${z}`} position={[-7.97, 3, z]}>
+                    <boxGeometry args={[0.02, 8, 0.04]} />
+                    <meshStandardMaterial color="#1c2b3a" emissive="#164e63" emissiveIntensity={0.4} toneMapped={false} />
+                </mesh>
+            ))}
+            {[-6, -3.6, -1.2, 1.2, 3.6, 6].map((z) => (
+                <mesh key={`right-${z}`} position={[7.97, 3, z]}>
+                    <boxGeometry args={[0.02, 8, 0.04]} />
+                    <meshStandardMaterial color="#1c2b3a" emissive="#164e63" emissiveIntensity={0.4} toneMapped={false} />
+                </mesh>
+            ))}
+
             {/* thin emissive rim strips along the top of each wall - cheap
                 way to make the walls legibly *there* instead of blending
                 into the fog/background at a glance */}
