@@ -75,12 +75,6 @@ const RESEND_COOLDOWN_SECONDS = 45;
 // menu itself can't drift apart.
 const TOOL_MODES = ["external-apis", "template-tester", "portfolio", "about", "faq"];
 
-// A Cloudflare Custom Domain pointed at the same Worker as
-// deploymentportal.in - see the toolMode/closeTool comments below for
-// what this actually changes (nothing server-side; this is the one
-// place the app tells the two hostnames apart).
-const PORTFOLIO_SUBDOMAIN = "varshithchand.deploymentportal.in";
-
 // "v*****@gmail.com" - never shows enough of the local part to be useful
 // for anything but confirming "yes, that's roughly my address" (spec's
 // own example format).
@@ -177,18 +171,9 @@ export default function LoginSignupPage({ onMfaRequired }) {
     // still be showing one, and landed back on the plain login form
     // instead. openTool/closeTool below keep this in sync with the URL;
     // nothing else should call setToolMode directly.
-    //
-    // PORTFOLIO_SUBDOMAIN: varshithchand.deploymentportal.in is the SAME
-    // static build as deploymentportal.in (a Cloudflare Custom Domain
-    // pointed at the identical Worker - no separate deploy, no separate
-    // index.html), so this is the only place that vanity URL is actually
-    // distinguished from the main one: defaulting toolMode to "portfolio"
-    // when no ?tool= is already present, so the subdomain opens straight
-    // into the portfolio with a clean URL instead of the login form.
     const [toolMode, setToolMode] = useState(() => {
         const fromUrl = new URLSearchParams(window.location.search).get("tool");
-        if (TOOL_MODES.includes(fromUrl)) return fromUrl;
-        return window.location.hostname === PORTFOLIO_SUBDOMAIN ? "portfolio" : null;
+        return TOOL_MODES.includes(fromUrl) ? fromUrl : null;
     });
     const [toolsMenuOpen, setToolsMenuOpen] = useState(false);
 
@@ -199,16 +184,7 @@ export default function LoginSignupPage({ onMfaRequired }) {
         setToolMode(nextMode);
     }
 
-    // On the portfolio vanity subdomain, "Back to Login" makes no sense as
-    // a local state change - there's no login form worth landing on under
-    // varshithchand.deploymentportal.in, so this sends that one case to
-    // the real app entry point instead of just clearing toolMode.
     function closeTool() {
-
-        if (window.location.hostname === PORTFOLIO_SUBDOMAIN) {
-            window.location.href = "https://deploymentportal.in/";
-            return;
-        }
 
         const params = new URLSearchParams(window.location.search);
         params.delete("tool");
