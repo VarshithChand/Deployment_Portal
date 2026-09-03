@@ -1,8 +1,17 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, lazy, Suspense } from "react";
 import {
   Mail, ArrowUpRight, MapPin, GraduationCap,
   Terminal, FileText, Copy, Check
 } from "lucide-react";
+
+// Lazy - three.js + @react-three/fiber are real weight (this is the one
+// purely decorative accent on the page; see that component's own header
+// comment for why it exists and what it deliberately doesn't touch),
+// kept out of Portfolio's own chunk so opening this page never blocks on
+// downloading a 3D engine before any real text renders. Suspense fallback
+// is null, not a spinner - the hero reads fine with just its own
+// background for the brief moment before this loads in behind it.
+const NetworkBackground = lazy(() => import("../components/portfolio/NetworkBackground"));
 
 // GitHub/LinkedIn brand marks aren't in this app's installed lucide-react
 // version (dropped upstream) - same gap Dashboard.jsx/LoginSignupPage.jsx
@@ -206,6 +215,9 @@ export default function Portfolio() {
 
       {/* ---------------- hero ---------------- */}
       <header id="top" className="hero">
+        <Suspense fallback={null}>
+          <NetworkBackground />
+        </Suspense>
         <div className="hero-text">
           <span className="role">{PROFILE.role}</span>
           <h1>{PROFILE.headline}</h1>
@@ -397,8 +409,11 @@ const CSS = `
 .resume:hover{border-color:var(--teal); color:var(--teal);}
 
 /* hero */
-.hero{display:grid; grid-template-columns:1.15fr .85fr; gap:40px; align-items:center;
+.hero{position:relative; overflow:hidden; display:grid; grid-template-columns:1.15fr .85fr; gap:40px; align-items:center;
   padding-top:64px; padding-bottom:80px;}
+.hero-text, .hero-art{position:relative; z-index:1;}
+.pf-network-bg{position:absolute; inset:0; z-index:0; pointer-events:none; opacity:.55;}
+.pf-network-bg canvas{display:block; width:100% !important; height:100% !important;}
 .role{font-size:13px; color:var(--teal); font-family:'JetBrains Mono',monospace;}
 .hero h1{margin:18px 0 0; font-size:44px; line-height:1.06; font-weight:600; letter-spacing:-.035em; max-width:15ch;}
 .blurb{margin:20px 0 0; font-size:15.5px; line-height:1.6; color:var(--muted); max-width:52ch;}
