@@ -30,7 +30,15 @@ function writeSecurityHeadersPlugin() {
 
       const csp = [
         `default-src 'self'`,
-        `script-src 'self'`,
+        // blob: needed alongside worker-src's own blob: allowance below -
+        // worker-src only covers CREATING the worker; the worker's own
+        // bootstrap code then calls importScripts() on a second blob: URL
+        // to pull in its actual logic (how troika-three-text's bundled
+        // worker loads itself), and that nested load is governed by
+        // script-src (inherited into the worker's global scope), not
+        // worker-src. Without this, the worker is created successfully
+        // but immediately fails to initialize ("failed to rehydrate").
+        `script-src 'self' blob:`,
         `style-src 'self' 'unsafe-inline' https://fonts.googleapis.com`,
         `font-src 'self' https://fonts.gstatic.com`,
         // img-src blob: was added for CesiumMan.glb's embedded texture
