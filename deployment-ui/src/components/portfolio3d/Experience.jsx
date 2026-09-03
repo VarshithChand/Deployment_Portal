@@ -19,7 +19,7 @@ export default function Experience({ reducedMotion }) {
 
         <Canvas
             gl={{ antialias: true, toneMapping: 3 /* THREE.ACESFilmicToneMapping */, toneMappingExposure: 1.1 }}
-            camera={{ position: [0, 2.2, 9], fov: 55, near: 0.1, far: 60 }}
+            camera={{ position: [0, 1.9, 6.2], fov: 50, near: 0.1, far: 60 }}
             dpr={[1, 1.5]}
         >
 

@@ -28,22 +28,38 @@ export default function Room({ reducedMotion }) {
                 <meshStandardMaterial color="#0e141d" roughness={0.85} metalness={0.1} />
             </mesh>
 
-            {/* back wall (dashboard sits on this) */}
+            {/* back wall (dashboard sits on this). Walls carry their own
+                small emissive base now - relying on point lights alone
+                left them reading as pure black against the void whenever
+                the light falloff didn't quite reach a given patch of
+                surface, which is most of a wall this large. A constant
+                low backlit tone guarantees the wall is always legibly
+                *there*, independent of light placement. */}
             <mesh position={[0, 3, -6]}>
                 <planeGeometry args={[16, 8]} />
-                <meshStandardMaterial color="#101722" roughness={0.9} />
+                <meshStandardMaterial color="#101722" emissive="#0a1a24" emissiveIntensity={0.5} roughness={0.9} />
             </mesh>
+
+            {/* vertical seam panels on the back wall - breaks up the flat
+                plane into something that reads as a built server-room
+                wall rather than a flat rectangle */}
+            {[-6, -3.6, -1.2, 1.2, 3.6, 6].map((x) => (
+                <mesh key={x} position={[x, 3, -5.97]}>
+                    <boxGeometry args={[0.04, 8, 0.02]} />
+                    <meshStandardMaterial color="#1c2b3a" emissive="#164e63" emissiveIntensity={0.4} toneMapped={false} />
+                </mesh>
+            ))}
 
             {/* side walls - the room previously had a back wall but no
                 sides, so it read as a floor floating in a void rather than
                 an enclosed space */}
             <mesh position={[-8, 3, 0]} rotation={[0, Math.PI / 2, 0]}>
                 <planeGeometry args={[16, 8]} />
-                <meshStandardMaterial color="#0d131c" roughness={0.9} />
+                <meshStandardMaterial color="#0d131c" emissive="#0a1a24" emissiveIntensity={0.4} roughness={0.9} />
             </mesh>
             <mesh position={[8, 3, 0]} rotation={[0, -Math.PI / 2, 0]}>
                 <planeGeometry args={[16, 8]} />
-                <meshStandardMaterial color="#0d131c" roughness={0.9} />
+                <meshStandardMaterial color="#0d131c" emissive="#0a1a24" emissiveIntensity={0.4} roughness={0.9} />
             </mesh>
 
             {/* thin emissive rim strips along the top of each wall - cheap

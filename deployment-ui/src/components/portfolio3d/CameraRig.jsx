@@ -8,7 +8,11 @@ import gsap from "gsap";
 // viewed from an angle, not head-on, so it doesn't feel like staring flat
 // at a texture.
 const CAMERA_TARGETS = {
-    room: { position: [0, 2.2, 9], lookAt: [0, 1.4, 0] },
+    // Pulled in from the original [0, 2.2, 9]/[0, 1.4, 0] - at that
+    // distance every station read as a small, distant shape surrounded by
+    // a lot of empty black frame. Closer + lower fov (see Experience.jsx)
+    // makes the desk/hotspot cluster fill the view instead.
+    room: { position: [0, 1.9, 6.2], lookAt: [0, 1.4, -0.8] },
     about: { position: [0, 1.5, 2.6], lookAt: [0, 1.3, 0.4] },
     skills: { position: [0.5, 3.6, 3.8], lookAt: [0, 3, -0.5] },
     projects: { position: [3.8, 2, 4], lookAt: [1.5, 1.1, -1] },
