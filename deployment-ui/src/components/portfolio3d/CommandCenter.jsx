@@ -38,8 +38,8 @@ const SCROLL_ORDER = [null, ...SECTIONS];
 
 function DesktopCommandCenter({ reducedMotion }) {
 
-    const { activeSection, setActiveSection, loaded, setLoaded } = useScene();
-    const ActiveContent = activeSection && SECTION_CONTENT[activeSection];
+    const { activeSection, setActiveSection, openPanel, setOpenPanel, loaded, setLoaded } = useScene();
+    const ActiveContent = openPanel && SECTION_CONTENT[openPanel];
     const wheelLockRef = useRef(false);
 
     // Mouse-wheel/trackpad scroll steps through stations one at a time,
@@ -65,6 +65,7 @@ function DesktopCommandCenter({ reducedMotion }) {
             if (nextIndex < 0 || nextIndex >= SCROLL_ORDER.length) return;
 
             setActiveSection(SCROLL_ORDER[nextIndex]);
+            setOpenPanel(null);
             wheelLockRef.current = true;
             setTimeout(() => { wheelLockRef.current = false; }, reducedMotion ? 500 : 1000);
 
@@ -73,7 +74,7 @@ function DesktopCommandCenter({ reducedMotion }) {
         window.addEventListener("wheel", handleWheel, { passive: true });
         return () => window.removeEventListener("wheel", handleWheel);
 
-    }, [activeSection, loaded, reducedMotion, setActiveSection]);
+    }, [activeSection, loaded, reducedMotion, setActiveSection, setOpenPanel]);
 
     return (
 
@@ -95,7 +96,7 @@ function DesktopCommandCenter({ reducedMotion }) {
 
             <AnimatePresence>
                 {ActiveContent && (
-                    <Panel key={activeSection} title={SECTION_TITLES[activeSection]} onClose={() => setActiveSection(null)}>
+                    <Panel key={openPanel} title={SECTION_TITLES[openPanel]} onClose={() => setOpenPanel(null)}>
                         <ActiveContent reducedMotion={reducedMotion} />
                     </Panel>
                 )}
@@ -213,8 +214,10 @@ const CSS = `
 .p3d-project-link:hover{text-decoration:underline;}
 
 /* experience */
-.p3d-timeline-entry{display:flex; gap:16px; padding:12px 0; border-top:1px solid var(--p3d-line);}
+.p3d-timeline-entry{display:flex; gap:16px; padding:12px 10px; border-top:1px solid var(--p3d-line); border-radius:8px; transition:background .15s ease;}
 .p3d-timeline-entry:first-child{border-top:0;}
+.p3d-timeline-entry.active{background:color-mix(in srgb, var(--p3d-cyan) 10%, transparent);}
+.p3d-timeline-entry.active .p3d-timeline-year{color:var(--p3d-text);}
 .p3d-timeline-year{color:var(--p3d-cyan); font-weight:700; flex:0 0 50px;}
 .p3d-timeline-entry strong{font-size:13.5px;}
 .p3d-timeline-entry p{margin:4px 0 0; font-size:12.5px; color:var(--p3d-muted); line-height:1.55;}

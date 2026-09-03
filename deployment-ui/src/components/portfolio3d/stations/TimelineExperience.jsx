@@ -1,29 +1,71 @@
+import { Billboard, Text } from "@react-three/drei";
 import Hotspot from "../Hotspot";
+import { useScene } from "../sceneStore";
+import { MONO_FONT } from "../fonts";
 import { EXPERIENCE_TIMELINE } from "../../../data/portfolio3dData";
 
+// Each year gets its own clickable circle - previously all of them were
+// wrapped in a single shared Hotspot, so there was no way to click a
+// specific year: every click opened the same full list regardless of
+// which circle you clicked. Clicking one now selects that year via
+// setSelectedExperienceYear, which ExperienceContent reads to highlight
+// the matching entry in the panel. A floating year label sits above
+// each circle at all times so you know which one it is before clicking.
 export function TimelineMarker({ onSelect, reducedMotion, dimmed }) {
+
+    const { selectedExperienceYear, setSelectedExperienceYear } = useScene();
 
     return (
 
-        <Hotspot position={[-3.2, 1.3, -1.5]} onSelect={onSelect} reducedMotion={reducedMotion}>
-            {(hovered) => (
-                <group>
-                    {EXPERIENCE_TIMELINE.map((_, i) => (
-                        <mesh key={i} position={[i * 0.35 - 0.35, 0, 0]}>
-                            <sphereGeometry args={[0.12, 12, 12]} />
-                            <meshStandardMaterial
-                                color={hovered ? "#67e8f9" : "#0e3540"}
-                                emissive="#22d3ee"
-                                emissiveIntensity={hovered ? 1.1 : dimmed ? 0.15 : 0.75}
-                                transparent
-                                opacity={dimmed ? 0.2 : 1}
-                                toneMapped={false}
-                            />
-                        </mesh>
-                    ))}
-                </group>
-            )}
-        </Hotspot>
+        <>
+            {EXPERIENCE_TIMELINE.map((entry, i) => {
+
+                const x = -3.55 + i * 0.35;
+                const selected = selectedExperienceYear === entry.year;
+
+                return (
+                    <Hotspot
+                        key={entry.year}
+                        position={[x, 1.3, -1.5]}
+                        onSelect={() => { onSelect(); setSelectedExperienceYear(entry.year); }}
+                        reducedMotion={reducedMotion}
+                        floatOffset={i * 0.6}
+                    >
+                        {(hovered) => (
+                            <>
+                                <mesh>
+                                    <sphereGeometry args={[selected ? 0.15 : 0.12, 12, 12]} />
+                                    <meshStandardMaterial
+                                        color={hovered || selected ? "#67e8f9" : "#0e3540"}
+                                        emissive="#22d3ee"
+                                        emissiveIntensity={hovered || selected ? 1.1 : dimmed ? 0.15 : 0.75}
+                                        transparent
+                                        opacity={dimmed ? 0.2 : 1}
+                                        toneMapped={false}
+                                    />
+                                </mesh>
+                                {!dimmed && (
+                                    <Billboard position={[0, 0.22, 0]}>
+                                        <Text
+                                            font={MONO_FONT}
+                                            fontSize={0.06}
+                                            color={selected ? "#eafaff" : "#9fd8e0"}
+                                            outlineWidth={0.005}
+                                            outlineColor="#05141a"
+                                            anchorX="center"
+                                            anchorY="bottom"
+                                        >
+                                            {entry.year}
+                                        </Text>
+                                    </Billboard>
+                                )}
+                            </>
+                        )}
+                    </Hotspot>
+                );
+
+            })}
+        </>
 
     );
 
@@ -31,11 +73,16 @@ export function TimelineMarker({ onSelect, reducedMotion, dimmed }) {
 
 export function ExperienceContent() {
 
+    const { selectedExperienceYear } = useScene();
+
     return (
 
         <div className="p3d-timeline">
             {EXPERIENCE_TIMELINE.map((entry) => (
-                <div key={entry.year} className="p3d-timeline-entry">
+                <div
+                    key={entry.year}
+                    className={`p3d-timeline-entry${selectedExperienceYear === entry.year ? " active" : ""}`}
+                >
                     <span className="p3d-timeline-year mono">{entry.year}</span>
                     <div>
                         <strong>{entry.theme}</strong>

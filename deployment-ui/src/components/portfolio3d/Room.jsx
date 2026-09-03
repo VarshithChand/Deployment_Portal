@@ -11,10 +11,14 @@ import { ContactMarker } from "./stations/ContactConsole";
 // No GLB assets loaded here at all yet.
 export default function Room({ reducedMotion }) {
 
-    const { activeSection, setActiveSection } = useScene();
+    const { activeSection, setActiveSection, setOpenPanel } = useScene();
 
+    // Clicking an actual object in the room (a hotspot's own click, not
+    // Nav/scroll arriving at the station) is the one thing that opens
+    // that station's content panel - see sceneStore.jsx's header comment.
     function select(section) {
         setActiveSection(section);
+        setOpenPanel(section);
     }
 
     return (
@@ -94,8 +98,8 @@ export default function Room({ reducedMotion }) {
             {/* floor accent strips tying each cluster of hotspots together
                 visually, so the pipeline/timeline read as built structures
                 rather than a scatter of identical unrelated boxes */}
-            <mesh position={[3.26, 0.02, -1]} rotation={[-Math.PI / 2, 0, 0]}>
-                <planeGeometry args={[4.2, 0.1]} />
+            <mesh position={[2.95, 0.02, -1]} rotation={[-Math.PI / 2, 0, 0]}>
+                <planeGeometry args={[3.5, 0.1]} />
                 <meshStandardMaterial color="#0e7490" emissive="#22d3ee" emissiveIntensity={0.6} toneMapped={false} />
             </mesh>
             <mesh position={[-3.2, 0.02, -1.5]} rotation={[-Math.PI / 2, 0, 0]}>

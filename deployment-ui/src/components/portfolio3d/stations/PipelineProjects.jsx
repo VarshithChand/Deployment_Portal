@@ -1,47 +1,75 @@
-import { useState } from "react";
 import { ExternalLink } from "lucide-react";
+import { Billboard, Text } from "@react-three/drei";
 import Hotspot from "../Hotspot";
+import { useScene } from "../sceneStore";
+import { MONO_FONT } from "../fonts";
 import { PIPELINE_STAGES, PROJECTS } from "../../../data/portfolio3dData";
 
-// A physical pipeline running across the room floor - each stage is its
-// own clickable hotspot, but every one opens the same Projects panel
-// (per the spec: "clicking any stage opens the projects view"), just at
-// slightly staggered heights so the row reads as a real pipeline rather
-// than a flat shelf of identical boxes.
+function shortLabel(title) {
+    return title.length > 16 ? `${title.slice(0, 15)}…` : title;
+}
+
+// One box per PROJECT (not per pipeline stage - the CI/CD stage names
+// are still shown, but only as a decorative strip inside the panel,
+// see .p3d-pipeline-strip below). Each box is independently clickable
+// and opens THAT project specifically via setSelectedProjectId, rather
+// than every box opening the same full list regardless of which one
+// was clicked. A floating name label sits above each box at all times
+// so you can tell which project it is before clicking.
 export function PipelineMarkers({ onSelect, reducedMotion, dimmed }) {
+
+    const { selectedProjectId, setSelectedProjectId } = useScene();
 
     return (
 
         <>
-            {PIPELINE_STAGES.map((stage, i) => {
+            {PROJECTS.map((project, i) => {
 
                 // Box width is 0.34 - the previous 0.55 step nearly touched
                 // adjacent boxes (0.5-wide boxes on a 0.55 step), which at
                 // most viewing angles visually fused into one jagged merged
-                // shape instead of 7 distinct stages. 0.62 gives real gaps.
+                // shape instead of distinct stages. 0.62 gives real gaps.
                 const x = 1.4 + i * 0.62;
                 const y = 0.9 + (i % 2 === 0 ? 0.05 : 0);
+                const selected = selectedProjectId === project.id;
 
                 return (
                     <Hotspot
-                        key={stage}
+                        key={project.id}
                         position={[x, y, -1]}
-                        onSelect={onSelect}
+                        onSelect={() => { onSelect(); setSelectedProjectId(project.id); }}
                         reducedMotion={reducedMotion}
                         floatOffset={i * 0.5}
                     >
                         {(hovered) => (
-                            <mesh>
-                                <boxGeometry args={[0.34, 0.3, 0.3]} />
-                                <meshStandardMaterial
-                                    color={hovered ? "#67e8f9" : "#0e3540"}
-                                    emissive="#22d3ee"
-                                    emissiveIntensity={hovered ? 1.1 : dimmed ? 0.15 : 0.75}
-                                    transparent
-                                    opacity={dimmed ? 0.2 : 1}
-                                    toneMapped={false}
-                                />
-                            </mesh>
+                            <>
+                                <mesh>
+                                    <boxGeometry args={[0.34, 0.3, 0.3]} />
+                                    <meshStandardMaterial
+                                        color={hovered || selected ? "#67e8f9" : "#0e3540"}
+                                        emissive="#22d3ee"
+                                        emissiveIntensity={hovered || selected ? 1.1 : dimmed ? 0.15 : 0.75}
+                                        transparent
+                                        opacity={dimmed ? 0.2 : 1}
+                                        toneMapped={false}
+                                    />
+                                </mesh>
+                                {!dimmed && (
+                                    <Billboard position={[0, 0.26, 0]}>
+                                        <Text
+                                            font={MONO_FONT}
+                                            fontSize={0.05}
+                                            color={selected ? "#eafaff" : "#9fd8e0"}
+                                            outlineWidth={0.004}
+                                            outlineColor="#05141a"
+                                            anchorX="center"
+                                            anchorY="bottom"
+                                        >
+                                            {shortLabel(project.title)}
+                                        </Text>
+                                    </Billboard>
+                                )}
+                            </>
                         )}
                     </Hotspot>
                 );
@@ -72,7 +100,13 @@ function ArchitectureDiagram({ steps }) {
 
 export function ProjectsContent() {
 
-    const [expanded, setExpanded] = useState(PROJECTS[0].id);
+    // Driven by the shared selectedProjectId (set by clicking a specific
+    // box in 3D) instead of always defaulting to the first project, so
+    // whichever box you clicked is the one the panel opens already
+    // showing. Falls back to nothing expanded (all collapsed) when
+    // nothing's been picked yet - e.g. on mobile, where this renders
+    // without any box ever having been clicked.
+    const { selectedProjectId, setSelectedProjectId } = useScene();
 
     return (
 
@@ -90,7 +124,7 @@ export function ProjectsContent() {
             <div className="p3d-project-list">
                 {PROJECTS.map((project) => {
 
-                    const isOpen = expanded === project.id;
+                    const isOpen = selectedProjectId === project.id;
 
                     return (
 
@@ -99,7 +133,7 @@ export function ProjectsContent() {
                             <button
                                 type="button"
                                 className="p3d-project-head"
-                                onClick={() => setExpanded(isOpen ? null : project.id)}
+                                onClick={() => setSelectedProjectId(isOpen ? null : project.id)}
                                 aria-expanded={isOpen}
                             >
                                 <span>{project.title}</span>
