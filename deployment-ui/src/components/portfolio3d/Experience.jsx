@@ -38,8 +38,15 @@ export default function Experience({ reducedMotion, theme }) {
             <fog attach="fog" args={[bg, 12, 34]} />
             <color attach="background" args={[bg]} />
 
-            <hemisphereLight args={light ? ["#ffffff", "#c7d2e0", 0.85] : ["#1c3a4a", "#05070b", 0.55]} />
-            <ambientLight intensity={light ? 0.65 : 0.5} />
+            {/* Light mode's first pass (0.85/0.65) was too bright - it
+                blew out the contrast between floor/walls/grid instead of
+                just lighting the scene, leaving everything reading as one
+                flat pale haze. Pulled both down closer to dark mode's own
+                levels; light mode's real distinctiveness now comes from
+                the palette (Room.jsx) actually having contrast, not from
+                pumping more light at it. */}
+            <hemisphereLight args={light ? ["#f8fafc", "#c7d2e0", 0.45] : ["#1c3a4a", "#05070b", 0.55]} />
+            <ambientLight intensity={light ? 0.4 : 0.5} />
             <pointLight position={[0, 4, 2]} intensity={1.4} color="#22d3ee" distance={16} />
             <pointLight position={[-3, 3, -2]} intensity={0.9} color="#a78bfa" distance={14} />
             <pointLight position={[3, 3, -3]} intensity={0.8} color="#22d3ee" distance={14} />

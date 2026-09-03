@@ -4,9 +4,12 @@ import { Billboard, Text } from "@react-three/drei";
 import Hotspot from "../Hotspot";
 import { useScene } from "../sceneStore";
 import { MONO_FONT } from "../fonts";
+import { labelTextColors, purpleTitleColors } from "../textTheme";
 import { ALL_SKILLS, SKILL_GROUPS } from "../../../data/portfolio3dData";
 
-export function CloudMarker({ onSelect, reducedMotion, dimmed }) {
+export function CloudMarker({ onSelect, reducedMotion, dimmed, theme }) {
+
+    const titleColors = purpleTitleColors(theme);
 
     return (
 
@@ -42,9 +45,9 @@ export function CloudMarker({ onSelect, reducedMotion, dimmed }) {
                             <Text
                                 font={MONO_FONT}
                                 fontSize={0.11}
-                                color="#c4b5fd"
+                                color={titleColors.title}
                                 outlineWidth={0.007}
-                                outlineColor="#0a0518"
+                                outlineColor={titleColors.outline}
                                 anchorX="center"
                                 anchorY="bottom"
                             >
@@ -77,9 +80,10 @@ export function CloudMarker({ onSelect, reducedMotion, dimmed }) {
 // around to face the camera - as the cluster spins, atoms "announce"
 // themselves coming around and go quiet again on the far side, instead
 // of showing 20+ overlapping names at once.
-export function SkillsGraph({ reducedMotion }) {
+export function SkillsGraph({ reducedMotion, theme }) {
 
     const { highlightedSkillGroup, setHighlightedSkillGroup } = useScene();
+    const labelColors = labelTextColors(theme);
     const groupRef = useRef();
     const labelRefs = useRef([]);
     const [hoveredGroup, setHoveredGroup] = useState(null);
@@ -222,9 +226,9 @@ export function SkillsGraph({ reducedMotion }) {
                         <Text
                             font={MONO_FONT}
                             fontSize={selected ? 0.065 : 0.05}
-                            color={selected ? "#eafaff" : "#9fd8e0"}
+                            color={selected ? labelColors.selected : labelColors.idle}
                             outlineWidth={0.004}
-                            outlineColor="#05141a"
+                            outlineColor={labelColors.outline}
                             anchorX="center"
                             anchorY="bottom"
                         >

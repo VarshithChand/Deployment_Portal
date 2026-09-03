@@ -59,13 +59,20 @@ const PALETTE = {
         deskTop: "#12181f", deskLeg: "#0a0e14",
         rack: "#0e161f"
     },
+    // First pass had almost no separation between floor/walls/grid (all
+    // within a few % of the same pale value) plus overly bright ambient
+    // light (see Experience.jsx) - together they read as one flat hazy
+    // wash instead of a room with actual depth. Floor is now visibly
+    // darker than the walls (a real floor/wall distinction, matching how
+    // the dark palette already works), and the grid lines are a real
+    // mid-grey instead of nearly matching the floor they sit on.
     light: {
         cyan: "#0891b2",
-        floor: "#e4e9f0", backWall: "#f2f4f8", sideWall: "#eceff4",
+        floor: "#c7d1de", backWall: "#f4f6f9", sideWall: "#eef1f5",
         wallEmissive: "#000000", wallEmissiveIntensity: 0, sideWallEmissiveIntensity: 0,
-        seam: "#c3ccd9", seamEmissive: "#c3ccd9",
-        gridMajor: "#aab6c8", gridMinor: "#cdd5e0",
-        deskTop: "#cbd5e1", deskLeg: "#94a3b8",
+        seam: "#aab6c8", seamEmissive: "#aab6c8",
+        gridMajor: "#7c8ba3", gridMinor: "#a7b3c4",
+        deskTop: "#b7c2d0", deskLeg: "#7c8ba3",
         rack: "#d7dfe9"
     }
 };
@@ -196,13 +203,13 @@ export default function Room({ reducedMotion, theme }) {
                 Dim every marker that isn't the one currently open so a
                 close-up view only has its own station in it. */}
             <TerminalMarker onSelect={() => select("about")} reducedMotion={reducedMotion} dimmed={activeSection && activeSection !== "about"} />
-            <CloudMarker onSelect={() => select("skills")} reducedMotion={reducedMotion} dimmed={activeSection && activeSection !== "skills"} />
-            <PipelineMarkers onSelect={() => select("projects")} reducedMotion={reducedMotion} dimmed={activeSection && activeSection !== "projects"} />
-            <TimelineMarker onSelect={() => select("experience")} reducedMotion={reducedMotion} dimmed={activeSection && activeSection !== "experience"} />
+            <CloudMarker onSelect={() => select("skills")} reducedMotion={reducedMotion} dimmed={activeSection && activeSection !== "skills"} theme={theme} />
+            <PipelineMarkers onSelect={() => select("projects")} reducedMotion={reducedMotion} dimmed={activeSection && activeSection !== "projects"} theme={theme} />
+            <TimelineMarker onSelect={() => select("experience")} reducedMotion={reducedMotion} dimmed={activeSection && activeSection !== "experience"} theme={theme} />
             <DashboardMarker onSelect={() => select("dashboard")} reducedMotion={reducedMotion} dimmed={activeSection && activeSection !== "dashboard"} />
-            <ContactMarker onSelect={() => select("contact")} reducedMotion={reducedMotion} dimmed={activeSection && activeSection !== "contact"} />
+            <ContactMarker onSelect={() => select("contact")} reducedMotion={reducedMotion} dimmed={activeSection && activeSection !== "contact"} theme={theme} />
 
-            {activeSection === "skills" && <SkillsGraph reducedMotion={reducedMotion} />}
+            {activeSection === "skills" && <SkillsGraph reducedMotion={reducedMotion} theme={theme} />}
 
             {RACKS.map((pos) => <RackProp key={pos.join(",")} position={pos} cyan={p.cyan} rackColor={p.rack} />)}
 

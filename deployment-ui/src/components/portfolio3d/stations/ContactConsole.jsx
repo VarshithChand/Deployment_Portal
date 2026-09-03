@@ -3,6 +3,7 @@ import { Mail, Copy, Check } from "lucide-react";
 import { Billboard, Text } from "@react-three/drei";
 import Hotspot from "../Hotspot";
 import { MONO_FONT } from "../fonts";
+import { labelTextColors } from "../textTheme";
 import { CONTACT } from "../../../data/portfolio3dData";
 
 function GitHubIcon() {
@@ -35,7 +36,9 @@ function LinkedInIcon() {
 // through the console/title. -4.8 sits roughly midway between the -6
 // and -3.6 seams instead.
 // nudge label heights against a room-layout problem.
-export function ContactMarker({ onSelect, reducedMotion, dimmed }) {
+export function ContactMarker({ onSelect, reducedMotion, dimmed, theme }) {
+
+    const labelColors = labelTextColors(theme);
 
     return (
 
@@ -64,9 +67,9 @@ export function ContactMarker({ onSelect, reducedMotion, dimmed }) {
                                 <Text
                                     font={MONO_FONT}
                                     fontSize={0.1}
-                                    color="#67e8f9"
+                                    color={labelColors.title}
                                     outlineWidth={0.006}
-                                    outlineColor="#031014"
+                                    outlineColor={labelColors.outline}
                                     anchorX="center"
                                     anchorY="bottom"
                                 >

@@ -2,6 +2,7 @@ import { Billboard, Text } from "@react-three/drei";
 import Hotspot from "../Hotspot";
 import { useScene } from "../sceneStore";
 import { MONO_FONT } from "../fonts";
+import { labelTextColors } from "../textTheme";
 import { EXPERIENCE_TIMELINE } from "../../../data/portfolio3dData";
 
 // Each year gets its own clickable circle - previously all of them were
@@ -21,9 +22,10 @@ import { EXPERIENCE_TIMELINE } from "../../../data/portfolio3dData";
 const CENTER_X = -3.2;
 const STEP = 0.44;
 
-export function TimelineMarker({ onSelect, reducedMotion, dimmed }) {
+export function TimelineMarker({ onSelect, reducedMotion, dimmed, theme }) {
 
     const { selectedExperienceYear, setSelectedExperienceYear } = useScene();
+    const labelColors = labelTextColors(theme);
 
     return (
 
@@ -59,9 +61,9 @@ export function TimelineMarker({ onSelect, reducedMotion, dimmed }) {
                                         <Text
                                             font={MONO_FONT}
                                             fontSize={0.06}
-                                            color={selected ? "#eafaff" : "#9fd8e0"}
+                                            color={selected ? labelColors.selected : labelColors.idle}
                                             outlineWidth={0.005}
-                                            outlineColor="#05141a"
+                                            outlineColor={labelColors.outline}
                                             anchorX="center"
                                             anchorY="bottom"
                                         >
@@ -89,9 +91,9 @@ export function TimelineMarker({ onSelect, reducedMotion, dimmed }) {
                     <Text
                         font={MONO_FONT}
                         fontSize={0.11}
-                        color="#67e8f9"
+                        color={labelColors.title}
                         outlineWidth={0.007}
-                        outlineColor="#031014"
+                        outlineColor={labelColors.outline}
                         anchorX="center"
                         anchorY="bottom"
                     >

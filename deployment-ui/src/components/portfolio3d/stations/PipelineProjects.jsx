@@ -3,6 +3,7 @@ import { Billboard, Text } from "@react-three/drei";
 import Hotspot from "../Hotspot";
 import { useScene } from "../sceneStore";
 import { MONO_FONT } from "../fonts";
+import { labelTextColors } from "../textTheme";
 import { PIPELINE_STAGES, PROJECTS } from "../../../data/portfolio3dData";
 
 function shortLabel(title) {
@@ -16,9 +17,10 @@ function shortLabel(title) {
 // than every box opening the same full list regardless of which one
 // was clicked. A floating name label sits above each box at all times
 // so you can tell which project it is before clicking.
-export function PipelineMarkers({ onSelect, reducedMotion, dimmed }) {
+export function PipelineMarkers({ onSelect, reducedMotion, dimmed, theme }) {
 
     const { selectedProjectId, setSelectedProjectId } = useScene();
+    const labelColors = labelTextColors(theme);
 
     return (
 
@@ -59,9 +61,9 @@ export function PipelineMarkers({ onSelect, reducedMotion, dimmed }) {
                                         <Text
                                             font={MONO_FONT}
                                             fontSize={0.05}
-                                            color={selected ? "#eafaff" : "#9fd8e0"}
+                                            color={selected ? labelColors.selected : labelColors.idle}
                                             outlineWidth={0.004}
-                                            outlineColor="#05141a"
+                                            outlineColor={labelColors.outline}
                                             anchorX="center"
                                             anchorY="bottom"
                                         >
@@ -81,9 +83,9 @@ export function PipelineMarkers({ onSelect, reducedMotion, dimmed }) {
                     <Text
                         font={MONO_FONT}
                         fontSize={0.12}
-                        color="#67e8f9"
+                        color={labelColors.title}
                         outlineWidth={0.007}
-                        outlineColor="#031014"
+                        outlineColor={labelColors.outline}
                         anchorX="center"
                         anchorY="bottom"
                     >
