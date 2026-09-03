@@ -75,6 +75,29 @@ const RESEND_COOLDOWN_SECONDS = 45;
 // menu itself can't drift apart.
 const TOOL_MODES = ["external-apis", "template-tester", "portfolio", "about", "faq"];
 
+// Shown only for the brief gap while Portfolio's own JS chunk downloads
+// (before CommandCenter has even mounted, so its p3d-* stylesheet isn't
+// in the document yet - inline styles here, not a className, since
+// there's nothing to attach one to). Dark/cyan to match the room it's
+// about to hand off to, so a refresh or a fresh open goes light page ->
+// this -> the room's own boot sequence with no jarring color swap in
+// between, instead of either a mismatched plain-text fallback or (worse)
+// nothing at all leaving a blank flash of the page's own light
+// background with only the "Back to Login" chip visible on it.
+const PORTFOLIO_LOADING_FALLBACK = (
+    <div
+        style={{
+            position: "fixed", inset: 0, zIndex: 0,
+            display: "flex", alignItems: "center", justifyContent: "center",
+            background: "#05070b", color: "#5eead4",
+            fontFamily: "'JetBrains Mono', ui-monospace, monospace",
+            fontSize: 13, letterSpacing: "0.04em"
+        }}
+    >
+        Loading Portfolio…
+    </div>
+);
+
 // "v*****@gmail.com" - never shows enough of the local part to be useful
 // for anything but confirming "yes, that's roughly my address" (spec's
 // own example format).
@@ -634,16 +657,22 @@ export default function LoginSignupPage({ onMfaRequired }) {
 
                         {/* Portfolio's own CommandCenter shows its own boot
                             sequence (the "INITIALIZING PORTFOLIO..." reveal
-                            in portfolio3d/Loader.jsx) the instant it mounts -
-                            this generic text fallback would only ever be
-                            visible for the brief moment before that, then
-                            immediately get replaced by a completely
-                            different-looking loading UI, reading as two
-                            stacked loaders for one navigation instead of
-                            one continuous one. null here for Portfolio
-                            specifically; every other tool still has no
-                            loading UI of its own, so they keep this. */}
-                        <Suspense fallback={toolMode === "portfolio" ? null : <p className="field-hint">Loading...</p>}>
+                            in portfolio3d/Loader.jsx) the instant it mounts,
+                            so this Suspense fallback is only ever visible
+                            for the brief gap before that - while Portfolio's
+                            JS chunk is still downloading. Plain text here
+                            (the fallback every other tool uses) looked
+                            visually mismatched right before the dark room
+                            takes over; making it null entirely (an earlier
+                            version of this fix) was worse - a blank flash
+                            of the page's own light background with nothing
+                            on it but the "Back to Login" chip, until the
+                            chunk finished. PORTFOLIO_LOADING_FALLBACK is a
+                            small dark/cyan placeholder matching the room's
+                            own palette instead, so nothing here reads as
+                            two stacked loaders OR an empty flash - one
+                            continuous dark hand-off from click to room. */}
+                        <Suspense fallback={toolMode === "portfolio" ? PORTFOLIO_LOADING_FALLBACK : <p className="field-hint">Loading...</p>}>
                             {toolMode === "external-apis" ? (
                                 <AnonymousExternalApisView />
                             ) : toolMode === "template-tester" ? (
