@@ -94,6 +94,16 @@ function DesktopCommandCenter({ reducedMotion }) {
                 </Suspense>
             </div>
 
+            {/* film-grain + vignette over the WebGL scene - the room
+                already has its own floor grid, so this isn't re-doing a
+                grid effect, just the texture/depth layer: a faint noise
+                texture (mix-blend-mode overlay, ~4% opacity - genuinely
+                subtle, not a visible pattern) and a soft radial darkening
+                toward the edges. Pure CSS, no extra draw calls in the
+                WebGL scene itself. */}
+            <div className="p3d-grain" aria-hidden="true" />
+            <div className="p3d-vignette" aria-hidden="true" />
+
             <Nav />
 
             <AnimatePresence>
@@ -147,8 +157,19 @@ const CSS = `
 .p3d-root a{color:inherit;}
 .p3d-root :focus-visible{outline:2px solid var(--p3d-cyan); outline-offset:2px; border-radius:6px;}
 
-.p3d-canvas-wrap{position:absolute; inset:0;}
+.p3d-canvas-wrap{position:absolute; inset:0; z-index:0;}
 .p3d-canvas-wrap canvas{display:block; width:100% !important; height:100% !important;}
+
+/* film-grain + vignette, layered over the canvas, under the nav/panel */
+.p3d-grain{
+  position:absolute; inset:0; z-index:1; pointer-events:none;
+  opacity:.045; mix-blend-mode:overlay;
+  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 320 320'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+}
+.p3d-vignette{
+  position:absolute; inset:0; z-index:1; pointer-events:none;
+  background:radial-gradient(ellipse 75% 70% at 50% 55%, transparent 45%, rgba(2,4,8,.55) 100%);
+}
 
 /* loader */
 .p3d-loader{
