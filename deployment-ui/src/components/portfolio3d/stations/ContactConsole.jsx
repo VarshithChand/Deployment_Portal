@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { Mail, Copy, Check } from "lucide-react";
+import { Billboard, Text } from "@react-three/drei";
 import Hotspot from "../Hotspot";
+import { MONO_FONT } from "../fonts";
 import { CONTACT } from "../../../data/portfolio3dData";
 
 function GitHubIcon() {
@@ -25,17 +27,34 @@ export function ContactMarker({ onSelect, reducedMotion, dimmed }) {
 
         <Hotspot position={[-2.6, 0.9, -0.6]} onSelect={onSelect} reducedMotion={reducedMotion}>
             {(hovered) => (
-                <mesh>
-                    <cylinderGeometry args={[0.38, 0.44, 0.6, 6]} />
-                    <meshStandardMaterial
-                        color={hovered ? "#67e8f9" : "#0e3540"}
-                        emissive="#22d3ee"
-                        emissiveIntensity={hovered ? 1.1 : dimmed ? 0.15 : 0.75}
-                        transparent
-                        opacity={dimmed ? 0.2 : 1}
-                        toneMapped={false}
-                    />
-                </mesh>
+                <>
+                    <mesh>
+                        <cylinderGeometry args={[0.38, 0.44, 0.6, 6]} />
+                        <meshStandardMaterial
+                            color={hovered ? "#67e8f9" : "#0e3540"}
+                            emissive="#22d3ee"
+                            emissiveIntensity={hovered ? 1.1 : dimmed ? 0.15 : 0.75}
+                            transparent
+                            opacity={dimmed ? 0.2 : 1}
+                            toneMapped={false}
+                        />
+                    </mesh>
+                    {!dimmed && (
+                        <Billboard position={[0, 0.5, 0]}>
+                            <Text
+                                font={MONO_FONT}
+                                fontSize={0.1}
+                                color="#67e8f9"
+                                outlineWidth={0.006}
+                                outlineColor="#031014"
+                                anchorX="center"
+                                anchorY="bottom"
+                            >
+                                CONTACT
+                            </Text>
+                        </Billboard>
+                    )}
+                </>
             )}
         </Hotspot>
 

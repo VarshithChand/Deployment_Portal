@@ -65,6 +65,22 @@ export function TimelineMarker({ onSelect, reducedMotion, dimmed }) {
                 );
 
             })}
+
+            {!dimmed && (
+                <Billboard position={[-3.2, 1.75, -1.5]}>
+                    <Text
+                        font={MONO_FONT}
+                        fontSize={0.11}
+                        color="#67e8f9"
+                        outlineWidth={0.007}
+                        outlineColor="#031014"
+                        anchorX="center"
+                        anchorY="bottom"
+                    >
+                        EXPERIENCE
+                    </Text>
+                </Billboard>
+            )}
         </>
 
     );

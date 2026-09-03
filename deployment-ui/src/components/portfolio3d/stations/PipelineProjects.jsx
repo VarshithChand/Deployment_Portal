@@ -75,6 +75,22 @@ export function PipelineMarkers({ onSelect, reducedMotion, dimmed }) {
                 );
 
             })}
+
+            {!dimmed && (
+                <Billboard position={[2.95, 1.55, -1]}>
+                    <Text
+                        font={MONO_FONT}
+                        fontSize={0.12}
+                        color="#67e8f9"
+                        outlineWidth={0.007}
+                        outlineColor="#031014"
+                        anchorX="center"
+                        anchorY="bottom"
+                    >
+                        PROJECTS
+                    </Text>
+                </Billboard>
+            )}
         </>
 
     );
