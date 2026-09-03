@@ -19,7 +19,7 @@ function LinkedInIcon() {
     );
 }
 
-export function ContactMarker({ onSelect, reducedMotion }) {
+export function ContactMarker({ onSelect, reducedMotion, dimmed }) {
 
     return (
 
@@ -30,7 +30,9 @@ export function ContactMarker({ onSelect, reducedMotion }) {
                     <meshStandardMaterial
                         color={hovered ? "#67e8f9" : "#0e3540"}
                         emissive="#22d3ee"
-                        emissiveIntensity={hovered ? 1.1 : 0.75}
+                        emissiveIntensity={hovered ? 1.1 : dimmed ? 0.15 : 0.75}
+                        transparent
+                        opacity={dimmed ? 0.2 : 1}
                         toneMapped={false}
                     />
                 </mesh>

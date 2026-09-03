@@ -3,7 +3,7 @@ import { useFrame } from "@react-three/fiber";
 import Hotspot from "../Hotspot";
 import { ALL_SKILLS, SKILL_GROUPS } from "../../../data/portfolio3dData";
 
-export function CloudMarker({ onSelect, reducedMotion }) {
+export function CloudMarker({ onSelect, reducedMotion, dimmed }) {
 
     return (
 
@@ -15,14 +15,23 @@ export function CloudMarker({ onSelect, reducedMotion }) {
                         <meshStandardMaterial
                             color={hovered ? "#c4b5fd" : "#3b2a6b"}
                             emissive="#a78bfa"
-                            emissiveIntensity={hovered ? 1 : 0.7}
+                            emissiveIntensity={hovered ? 1 : dimmed ? 0.15 : 0.7}
                             wireframe
+                            transparent
+                            opacity={dimmed ? 0.2 : 1}
                             toneMapped={false}
                         />
                     </mesh>
                     <mesh>
                         <icosahedronGeometry args={[0.26, 0]} />
-                        <meshStandardMaterial color="#a78bfa" emissive="#a78bfa" emissiveIntensity={0.9} toneMapped={false} />
+                        <meshStandardMaterial
+                            color="#a78bfa"
+                            emissive="#a78bfa"
+                            emissiveIntensity={dimmed ? 0.15 : 0.9}
+                            transparent
+                            opacity={dimmed ? 0.2 : 1}
+                            toneMapped={false}
+                        />
                     </mesh>
                 </>
             )}

@@ -8,14 +8,18 @@ import { PIPELINE_STAGES, PROJECTS } from "../../../data/portfolio3dData";
 // (per the spec: "clicking any stage opens the projects view"), just at
 // slightly staggered heights so the row reads as a real pipeline rather
 // than a flat shelf of identical boxes.
-export function PipelineMarkers({ onSelect, reducedMotion }) {
+export function PipelineMarkers({ onSelect, reducedMotion, dimmed }) {
 
     return (
 
         <>
             {PIPELINE_STAGES.map((stage, i) => {
 
-                const x = 1.4 + i * 0.55;
+                // Box width is 0.34 - the previous 0.55 step nearly touched
+                // adjacent boxes (0.5-wide boxes on a 0.55 step), which at
+                // most viewing angles visually fused into one jagged merged
+                // shape instead of 7 distinct stages. 0.62 gives real gaps.
+                const x = 1.4 + i * 0.62;
                 const y = 0.9 + (i % 2 === 0 ? 0.05 : 0);
 
                 return (
@@ -28,11 +32,13 @@ export function PipelineMarkers({ onSelect, reducedMotion }) {
                     >
                         {(hovered) => (
                             <mesh>
-                                <boxGeometry args={[0.5, 0.34, 0.34]} />
+                                <boxGeometry args={[0.34, 0.3, 0.3]} />
                                 <meshStandardMaterial
                                     color={hovered ? "#67e8f9" : "#0e3540"}
                                     emissive="#22d3ee"
-                                    emissiveIntensity={hovered ? 1.1 : 0.75}
+                                    emissiveIntensity={hovered ? 1.1 : dimmed ? 0.15 : 0.75}
+                                    transparent
+                                    opacity={dimmed ? 0.2 : 1}
                                     toneMapped={false}
                                 />
                             </mesh>

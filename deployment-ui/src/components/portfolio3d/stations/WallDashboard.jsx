@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import Hotspot from "../Hotspot";
 import { DASHBOARD, PROJECTS, ALL_SKILLS } from "../../../data/portfolio3dData";
 
-export function DashboardMarker({ onSelect, reducedMotion }) {
+export function DashboardMarker({ onSelect, reducedMotion, dimmed }) {
 
     return (
 
@@ -13,8 +13,10 @@ export function DashboardMarker({ onSelect, reducedMotion }) {
                     <meshStandardMaterial
                         color={hovered ? "#164e63" : "#0b2530"}
                         emissive="#22d3ee"
-                        emissiveIntensity={hovered ? 0.9 : 0.6}
+                        emissiveIntensity={hovered ? 0.9 : dimmed ? 0.1 : 0.6}
                         side={2}
+                        transparent
+                        opacity={dimmed ? 0.2 : 1}
                         toneMapped={false}
                     />
                 </mesh>

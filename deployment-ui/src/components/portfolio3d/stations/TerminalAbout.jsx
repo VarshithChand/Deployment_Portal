@@ -1,7 +1,7 @@
 import Hotspot from "../Hotspot";
 import { ABOUT, PROFILE } from "../../../data/portfolio3dData";
 
-export function TerminalMarker({ onSelect, reducedMotion }) {
+export function TerminalMarker({ onSelect, reducedMotion, dimmed }) {
 
     return (
 
@@ -13,13 +13,15 @@ export function TerminalMarker({ onSelect, reducedMotion }) {
                         <meshStandardMaterial
                             color={hovered ? "#67e8f9" : "#0d3b42"}
                             emissive="#22d3ee"
-                            emissiveIntensity={hovered ? 1.1 : 0.75}
+                            emissiveIntensity={hovered ? 1.1 : dimmed ? 0.15 : 0.75}
+                            transparent
+                            opacity={dimmed ? 0.2 : 1}
                             toneMapped={false}
                         />
                     </mesh>
                     <mesh position={[0, -0.35, 0]}>
                         <boxGeometry args={[0.15, 0.15, 0.15]} />
-                        <meshStandardMaterial color="#111827" />
+                        <meshStandardMaterial color="#111827" transparent opacity={dimmed ? 0.2 : 1} />
                     </mesh>
                 </>
             )}

@@ -94,8 +94,8 @@ export default function Room({ reducedMotion }) {
             {/* floor accent strips tying each cluster of hotspots together
                 visually, so the pipeline/timeline read as built structures
                 rather than a scatter of identical unrelated boxes */}
-            <mesh position={[3.05, 0.02, -1]} rotation={[-Math.PI / 2, 0, 0]}>
-                <planeGeometry args={[4, 0.1]} />
+            <mesh position={[3.26, 0.02, -1]} rotation={[-Math.PI / 2, 0, 0]}>
+                <planeGeometry args={[4.2, 0.1]} />
                 <meshStandardMaterial color="#0e7490" emissive="#22d3ee" emissiveIntensity={0.6} toneMapped={false} />
             </mesh>
             <mesh position={[-3.2, 0.02, -1.5]} rotation={[-Math.PI / 2, 0, 0]}>
@@ -103,12 +103,20 @@ export default function Room({ reducedMotion }) {
                 <meshStandardMaterial color="#0e7490" emissive="#22d3ee" emissiveIntensity={0.6} toneMapped={false} />
             </mesh>
 
-            <TerminalMarker onSelect={() => select("about")} reducedMotion={reducedMotion} />
-            <CloudMarker onSelect={() => select("skills")} reducedMotion={reducedMotion} />
-            <PipelineMarkers onSelect={() => select("projects")} reducedMotion={reducedMotion} />
-            <TimelineMarker onSelect={() => select("experience")} reducedMotion={reducedMotion} />
-            <DashboardMarker onSelect={() => select("dashboard")} reducedMotion={reducedMotion} />
-            <ContactMarker onSelect={() => select("contact")} reducedMotion={reducedMotion} />
+            {/* All six markers render all the time (the room is one scene,
+                not six), so once the camera flies close into one station,
+                every OTHER station's marker is still sitting somewhere in
+                that new view - a flat plate or plane a couple of units away
+                reads as a huge, unexplained rectangle looming into frame
+                from a close-up angle it was never designed to be seen from.
+                Dim every marker that isn't the one currently open so a
+                close-up view only has its own station in it. */}
+            <TerminalMarker onSelect={() => select("about")} reducedMotion={reducedMotion} dimmed={activeSection && activeSection !== "about"} />
+            <CloudMarker onSelect={() => select("skills")} reducedMotion={reducedMotion} dimmed={activeSection && activeSection !== "skills"} />
+            <PipelineMarkers onSelect={() => select("projects")} reducedMotion={reducedMotion} dimmed={activeSection && activeSection !== "projects"} />
+            <TimelineMarker onSelect={() => select("experience")} reducedMotion={reducedMotion} dimmed={activeSection && activeSection !== "experience"} />
+            <DashboardMarker onSelect={() => select("dashboard")} reducedMotion={reducedMotion} dimmed={activeSection && activeSection !== "dashboard"} />
+            <ContactMarker onSelect={() => select("contact")} reducedMotion={reducedMotion} dimmed={activeSection && activeSection !== "contact"} />
 
             {activeSection === "skills" && <SkillsGraph reducedMotion={reducedMotion} />}
 
