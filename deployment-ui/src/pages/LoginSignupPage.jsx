@@ -632,7 +632,18 @@ export default function LoginSignupPage({ onMfaRequired }) {
                             <ChevronLeft size={14} /> Back to Login
                         </button>
 
-                        <Suspense fallback={<p className="field-hint">Loading...</p>}>
+                        {/* Portfolio's own CommandCenter shows its own boot
+                            sequence (the "INITIALIZING PORTFOLIO..." reveal
+                            in portfolio3d/Loader.jsx) the instant it mounts -
+                            this generic text fallback would only ever be
+                            visible for the brief moment before that, then
+                            immediately get replaced by a completely
+                            different-looking loading UI, reading as two
+                            stacked loaders for one navigation instead of
+                            one continuous one. null here for Portfolio
+                            specifically; every other tool still has no
+                            loading UI of its own, so they keep this. */}
+                        <Suspense fallback={toolMode === "portfolio" ? null : <p className="field-hint">Loading...</p>}>
                             {toolMode === "external-apis" ? (
                                 <AnonymousExternalApisView />
                             ) : toolMode === "template-tester" ? (
