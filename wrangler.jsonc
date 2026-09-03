@@ -1,6 +1,6 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "deployment-portal",
+  "name": "yaml",
   "compatibility_date": "2026-07-27",
   "observability": {
     "enabled": true
