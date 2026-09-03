@@ -1,0 +1,93 @@
+import { useEffect, useRef } from "react";
+import { useFrame, useThree } from "@react-three/fiber";
+import gsap from "gsap";
+import { useStore } from "../state/store";
+
+// One camera position + lookAt target per station, tuned to frame each
+// object from a natural standing distance. "overview" is the doorway view
+// from the brief: camera at (0, 1.6, 6) looking toward the desk.
+export const CAMERA_TARGETS = {
+    overview: { pos: [0, 1.6, 6], look: [0, 1.3, -1] },
+    about: { pos: [0, 1.4, -0.1], look: [0, 1.3, -1.2] },
+    contact: { pos: [0.75, 1.25, 0.15], look: [0.7, 1.05, -0.8] },
+    skills: { pos: [0, 3.3, 1.7], look: [0, 3.9, -1] },
+    dashboard: { pos: [0, 2.3, -1.6], look: [0, 2.4, -4.7] },
+    projects: { pos: [3.6, 1.5, -1.6], look: [6.3, 1.4, -2] },
+    experience: { pos: [-4, 2, -0.6], look: [-6.3, 2, -2] }
+};
+
+// GSAP-driven camera fly-to. A plain object (not the camera itself) is
+// tweened, then applied to the real camera in onUpdate - tweening
+// camera.position directly works for position but there's no single
+// tweenable "lookAt" property, so a proxy with both position and look
+// components keeps one smooth, synchronized motion instead of two
+// separate tweens drifting out of step with each other.
+export default function CameraRig() {
+
+    const { camera } = useThree();
+    const active = useStore((s) => s.active);
+    const reducedMotion = useStore((s) => s.reducedMotion);
+    const back = useStore((s) => s.back);
+
+    const mounted = useRef(false);
+    const proxy = useRef({
+        x: CAMERA_TARGETS.overview.pos[0], y: CAMERA_TARGETS.overview.pos[1], z: CAMERA_TARGETS.overview.pos[2],
+        lx: CAMERA_TARGETS.overview.look[0], ly: CAMERA_TARGETS.overview.look[1], lz: CAMERA_TARGETS.overview.look[2]
+    });
+
+    useEffect(() => {
+
+        const target = CAMERA_TARGETS[active] || CAMERA_TARGETS.overview;
+
+        // First render: snap straight to the doorway view, no fly-in -
+        // the brief describes this as the starting state, not an
+        // entrance animation.
+        if (!mounted.current) {
+            mounted.current = true;
+            camera.position.set(...target.pos);
+            camera.lookAt(...target.look);
+            return;
+        }
+
+        gsap.killTweensOf(proxy.current);
+        gsap.to(proxy.current, {
+            x: target.pos[0], y: target.pos[1], z: target.pos[2],
+            lx: target.look[0], ly: target.look[1], lz: target.look[2],
+            duration: reducedMotion ? 0.01 : 1.3,
+            ease: "power2.inOut",
+            onUpdate: () => {
+                camera.position.set(proxy.current.x, proxy.current.y, proxy.current.z);
+                camera.lookAt(proxy.current.lx, proxy.current.ly, proxy.current.lz);
+            }
+        });
+
+    }, [active, camera, reducedMotion]);
+
+    // Escape returns to the room overview from anywhere.
+    useEffect(() => {
+
+        function onKeyDown(e) {
+            if (e.key === "Escape") back();
+        }
+
+        window.addEventListener("keydown", onKeyDown);
+        return () => window.removeEventListener("keydown", onKeyDown);
+
+    }, [back]);
+
+    // Gentle idle drift when nothing is selected, so the room feels alive
+    // without being distracting - skipped entirely under reduced motion.
+    useFrame((state) => {
+
+        if (active || reducedMotion) return;
+
+        const t = state.clock.elapsedTime;
+        camera.position.x = proxy.current.x + Math.sin(t * 0.15) * 0.12;
+        camera.position.y = proxy.current.y + Math.sin(t * 0.11) * 0.04;
+        camera.lookAt(proxy.current.lx, proxy.current.ly, proxy.current.lz);
+
+    });
+
+    return null;
+
+}

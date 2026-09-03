@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 
 // Live-updating, not a one-time read - someone can toggle this OS setting
-// while the 3D command center is open (see components/portfolio3d/), and
+// while the 3D portfolio room is open (see components/portfolio-room/), and
 // idle drift/heavy transitions should react immediately rather than only
 // on next page load.
 export default function useReducedMotion() {

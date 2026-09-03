@@ -1,13 +1,12 @@
 import { useEffect } from "react";
-import CommandCenter from "../components/portfolio3d/CommandCenter";
-import { PROFILE } from "../data/portfolio3dData";
+import PortfolioRoom from "../components/portfolio-room/PortfolioRoom";
+import { PROFILE } from "../components/portfolio-room/data/profile";
 
 // The login page's Portfolio tool (see LoginSignupPage's toolsMenu) - a
-// 3D "Command Center" experience (see components/portfolio3d/), replacing
-// the earlier flat 2D "build log" version per the user's own explicit
-// decision (2026-09-03) to go all-in on full 3D despite the tradeoffs
-// (crawlability, bundle weight, accessibility) that were raised and
-// accepted going in. Still no login, still nothing saved.
+// walk-in-able 3D room (see components/portfolio-room/): every section is
+// a real object (monitor, phone, pendant light, wall screen, rack, wall
+// timeline) rather than a scrollable page. Still no login, still nothing
+// saved.
 export default function Portfolio({ onExit }) {
 
     useEffect(() => {
@@ -19,6 +18,6 @@ export default function Portfolio({ onExit }) {
 
     }, []);
 
-    return <CommandCenter onExit={onExit} />;
+    return <PortfolioRoom onExit={onExit} />;
 
 }

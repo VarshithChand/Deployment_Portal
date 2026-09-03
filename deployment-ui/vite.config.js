@@ -49,11 +49,9 @@ function writeSecurityHeadersPlugin() {
         `script-src 'self' blob: https://static.cloudflareinsights.com`,
         `style-src 'self' 'unsafe-inline' https://fonts.googleapis.com`,
         `font-src 'self' https://fonts.gstatic.com`,
-        // img-src blob: was added for CesiumMan.glb's embedded texture
-        // (since removed - Portfolio's operator figure is plain
-        // primitives now) and left in place; harmless to keep, avoids
-        // re-litigating this if any future feature loads an image via a
-        // Blob again.
+        // img-src blob: - needed for the Greeter avatar's GLB embedded
+        // texture (portfolio-room/scene/objects/Greeter.jsx), same as any
+        // future feature that loads an image via a Blob.
         `img-src 'self' data: blob: https://avatars.githubusercontent.com`,
         // worker-src blob: - drei's <Text> (troika-three-text, used for
         // every station title/label throughout the Portfolio 3D room)

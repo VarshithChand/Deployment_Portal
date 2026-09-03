@@ -1,12 +1,8 @@
 import { useRef, useState } from "react";
 import { useFrame } from "@react-three/fiber";
 
-// Shared "clickable 3D object with a hover state" wrapper every station
-// marker uses - glow/scale up on hover (so it's obvious what's clickable,
-// per the interaction requirement) and a gentle floating bob so the room
-// reads as alive without being busy. Cursor swaps to a pointer on hover
-// via onPointerOver/Out, matching normal web affordance expectations even
-// inside a canvas.
+// Shared "clickable 3D object with a hover state" wrapper - glow/scale up
+// on hover so it's obvious what's clickable, cursor swaps to a pointer.
 export default function Hotspot({ position, onSelect, floatOffset = 0, reducedMotion, children }) {
 
     const groupRef = useRef();
@@ -19,10 +15,10 @@ export default function Hotspot({ position, onSelect, floatOffset = 0, reducedMo
 
         if (!reducedMotion) {
             time.current += delta;
-            groupRef.current.position.y = position[1] + Math.sin(time.current * 0.8) * 0.06;
+            groupRef.current.position.y = position[1] + Math.sin(time.current * 0.8) * 0.05;
         }
 
-        const targetScale = hovered ? 1.12 : 1;
+        const targetScale = hovered ? 1.08 : 1;
         groupRef.current.scale.lerp({ x: targetScale, y: targetScale, z: targetScale }, 0.15);
 
     });

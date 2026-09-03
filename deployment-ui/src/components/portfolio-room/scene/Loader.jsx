@@ -2,16 +2,13 @@ import { useEffect, useState } from "react";
 import { useProgress } from "@react-three/drei";
 import { motion, AnimatePresence } from "framer-motion";
 
-// Boot sequence overlay - a 2D HTML layer (not inside the Canvas), shown
-// before the room becomes interactive. The room is built entirely from
-// primitives (no textures/GLB models), so nothing ever runs through
-// three's LoadingManager - useProgress's `progress` never leaves 0 in
-// that case, it does NOT jump to 100 just because there was nothing to
-// load. So readiness is paced purely by the line-by-line text reveal;
-// `progress` is only used to drive the bar's fill for the (currently
-// unused, future-proofing) case where a station does load an asset.
-// Skips straight to done under prefers-reduced-motion instead of running
-// the full timed reveal.
+// Boot overlay shown before the room becomes interactive. Unlike an
+// all-primitives room, this one has a real asset to wait on (the Greeter
+// avatar's GLB), so useProgress's `progress` genuinely moves and reaches
+// 100 through drei's own LoadingManager tracking - the bar isn't purely
+// decorative. `total === 0` is kept as a fallback for the (unlikely) case
+// the GLB fails to register with the manager at all, so the loader can't
+// get stuck waiting on a load that will never report progress.
 const LINES = [
     "INITIALIZING PORTFOLIO...",
     "Infrastructure: ONLINE",
@@ -19,7 +16,7 @@ const LINES = [
     "Systems: OPERATIONAL"
 ];
 
-const LINE_INTERVAL_MS = 420;
+const LINE_INTERVAL_MS = 380;
 
 export default function Loader({ reducedMotion, onDone }) {
 
@@ -30,7 +27,6 @@ export default function Loader({ reducedMotion, onDone }) {
     useEffect(() => {
 
         if (reducedMotion) return;
-
         if (visibleLines >= LINES.length) return;
 
         const timer = setTimeout(() => setVisibleLines((n) => n + 1), LINE_INTERVAL_MS);
@@ -38,17 +34,13 @@ export default function Loader({ reducedMotion, onDone }) {
 
     }, [visibleLines, reducedMotion]);
 
-    // total === 0 means nothing was ever handed to the LoadingManager -
-    // there's nothing to wait on, so only the text reveal gates readiness.
     const ready = (total === 0 || progress >= 100) && visibleLines >= LINES.length;
-    const barProgress = total === 0 ? (visibleLines / LINES.length) * 100 : progress;
 
     useEffect(() => {
 
         if (!ready) return;
 
-        const holdMs = reducedMotion ? 0 : 400;
-        const timer = setTimeout(() => setDismissed(true), holdMs);
+        const timer = setTimeout(() => setDismissed(true), reducedMotion ? 0 : 350);
         return () => clearTimeout(timer);
 
     }, [ready, reducedMotion]);
@@ -65,22 +57,22 @@ export default function Loader({ reducedMotion, onDone }) {
             {!dismissed && (
 
                 <motion.div
-                    className="p3d-loader"
+                    className="proom-loader"
                     role="status"
                     aria-live="polite"
                     initial={{ opacity: 1 }}
                     exit={{ opacity: 0 }}
-                    transition={{ duration: 0.5 }}
+                    transition={{ duration: 0.4 }}
                 >
 
-                    <div className="p3d-loader-lines mono">
+                    <div className="proom-loader-lines mono">
                         {LINES.slice(0, visibleLines).map((line) => (
-                            <div key={line} className="p3d-loader-line">{line}</div>
+                            <div key={line} className="proom-loader-line">{line}</div>
                         ))}
                     </div>
 
-                    <div className="p3d-loader-bar">
-                        <div className="p3d-loader-bar-fill" style={{ width: `${Math.min(barProgress, 100)}%` }} />
+                    <div className="proom-loader-bar">
+                        <div className="proom-loader-bar-fill" style={{ width: `${Math.min(total === 0 ? (visibleLines / LINES.length) * 100 : progress, 100)}%` }} />
                     </div>
 
                 </motion.div>
