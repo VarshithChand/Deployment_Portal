@@ -20,7 +20,13 @@ import { MONO_FONT } from "./fonts";
 // room's other human-scale elements (the desk, the terminal screen,
 // ~0.7 units).
 const SCALE = 0.28;
-const POSITION = [2, 0, 1];
+// Moved further right, past the project row (x up to 4.5 at z=-1),
+// into the open floor space there - z=-1 matches the project row's own
+// depth so it reads as sitting in that same area rather than randomly
+// placed; x=6 still keeps real margin inside the room-overview
+// camera's frustum at that depth (forward distance 7.2, safe |x| up to
+// ~7.4 - see the earlier frustum-position fix's own math).
+const POSITION = [6, 0, -1];
 // The avatar's own face (eyes/smile) is built facing its local +Z - no
 // rotation needed to have it face the front/camera, since the room's
 // default view sits at a higher Z than this position. The previous
