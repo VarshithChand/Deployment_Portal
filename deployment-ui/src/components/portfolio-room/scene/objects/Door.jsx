@@ -3,12 +3,16 @@ import { Billboard, Text } from "@react-three/drei";
 import { MONO_FONT } from "../../fonts";
 import { labelTextColors } from "../../textTheme";
 
-// A real door at the entrance opening (the room's own +z side has no
-// wall, matching the "you enter from here" doorway) - clicking it exits
-// the portfolio, the same action as the Exit button in the corner. Not
-// wired through the camera-fly/panel system every station uses (there is
-// no "door" section to fly to or content to show) - it just calls onExit
-// directly, like a real door would.
+// A real door, flush-mounted on the back wall (not standing free in the
+// middle of the floor - the room's own open +z side has no wall to
+// attach it to, and a door floating in open space with nothing behind it
+// doesn't read as a door). Clicking it exits the portfolio, the same
+// action as the Exit button in the corner. Not wired through the
+// camera-fly/panel system every station uses (there is no "door" section
+// to fly to or content to show) - it just calls onExit directly, like a
+// real door would. Its handle protrudes toward local +z, which is
+// already the correct "into the room" direction for an unrotated back-
+// wall mount - no rotation prop needed for this placement.
 export default function Door({ position = [0, 0, 0], onExit, theme }) {
 
     const [hovered, setHovered] = useState(false);

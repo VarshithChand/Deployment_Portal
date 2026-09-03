@@ -96,16 +96,18 @@ export default function Experience({ reducedMotion, theme, onExit }) {
                     it nowhere near the desk at all */}
                 <Window position={[3, 2.2, -4.85]} rotation={[0, -Math.PI / 2, 0]} theme={theme} />
                 <Clock position={[-3, 2.6, -4.83]} theme={theme} />
-                {/* An interior exit door - not placed right at the room's
-                    actual open +z boundary (z=5), which sits only ~1.7
-                    units from the overview camera at z=6: at that
-                    distance a 2.5-unit-tall door would either fill/block
-                    the entire view of the desk beyond it or get clipped
-                    by the camera's own vertical FOV. This distance keeps
-                    it a normal, fully-framed size, off to one side so it
-                    doesn't sit in the desk's own direct sightline.
-                    Clicking it exits, same as the corner Exit button. */}
-                <Door position={[-2, 0, 2]} onExit={onExit} theme={theme} />
+                {/* The exit door - flush-mounted on the back wall (far
+                    right, clear of the dashboard/window cluster), not
+                    standing free-floating in the middle of the floor with
+                    nothing behind it. Not placed at the room's own literal
+                    open +z boundary either (z=5, only ~1.7 units from the
+                    overview camera at z=6) - there being no actual wall
+                    there to mount it on is exactly the problem, and at
+                    that distance a 2.5-unit-tall door would either fill
+                    the entire view or get clipped by the camera's own
+                    vertical FOV. Clicking it exits, same as the corner
+                    Exit button. */}
+                <Door position={[5.8, 0, -4.9]} onExit={onExit} theme={theme} />
 
                 <GreeterErrorBoundary>
                     <Greeter reducedMotion={reducedMotion} />
