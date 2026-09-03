@@ -31,25 +31,33 @@ export default function Clock({ position = [0, 0, 0], theme }) {
 
         <group position={position}>
 
-            {/* clock face plate */}
+            {/* clock face plate - roughly doubled from the first pass,
+                which read as a small dim dial easy to miss on a big wall */}
             <mesh rotation={[Math.PI / 2, 0, 0]}>
-                <cylinderGeometry args={[0.16, 0.16, 0.025, 24]} />
+                <cylinderGeometry args={[0.34, 0.34, 0.04, 32]} />
                 <meshStandardMaterial color="#0e131a" roughness={0.6} />
             </mesh>
+            {/* RingGeometry already faces +z by default (unlike
+                CylinderGeometry, which needs the 90-degree tip above to
+                turn its circular face from +y to +z) - no rotation here */}
+            <mesh position={[0, 0, 0.001]}>
+                <ringGeometry args={[0.315, 0.34, 32]} />
+                <meshStandardMaterial color="#22d3ee" emissive="#22d3ee" emissiveIntensity={0.6} toneMapped={false} />
+            </mesh>
 
-            <group position={[0, 0, 0.014]}>
+            <group position={[0, 0, 0.024]}>
 
-                <Text font={MONO_FONT} fontSize={0.07} color={labelColors.selected} anchorX="center" anchorY="middle" position={[0, 0.02, 0]}>
+                <Text font={MONO_FONT} fontSize={0.15} color={labelColors.selected} anchorX="center" anchorY="middle" position={[0, 0.04, 0]}>
                     {timeString}
                 </Text>
 
-                <Text font={MONO_FONT} fontSize={0.028} color={labelColors.idle} anchorX="center" anchorY="middle" position={[0, -0.06, 0]}>
+                <Text font={MONO_FONT} fontSize={0.058} color={labelColors.idle} anchorX="center" anchorY="middle" position={[0, -0.13, 0]}>
                     LOCAL TIME
                 </Text>
 
                 {/* sun (yellow) or moon (pale) indicator dot */}
-                <mesh position={[0.1, 0.08, 0.001]}>
-                    <circleGeometry args={[0.018, 12]} />
+                <mesh position={[0.2, 0.17, 0.001]}>
+                    <circleGeometry args={[0.035, 16]} />
                     <meshBasicMaterial color={day ? "#fbbf24" : "#cbd5e1"} toneMapped={false} />
                 </mesh>
 

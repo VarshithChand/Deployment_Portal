@@ -97,7 +97,7 @@ function useSectionLoop(enabled) {
 
 }
 
-function DesktopRoom({ reducedMotion, theme }) {
+function DesktopRoom({ reducedMotion, theme, onExit }) {
 
     const active = useStore((s) => s.active);
     const back = useStore((s) => s.back);
@@ -119,7 +119,7 @@ function DesktopRoom({ reducedMotion, theme }) {
 
             <div className="proom-canvas-wrap">
                 <Suspense fallback={null}>
-                    <SceneExperience reducedMotion={reducedMotion} theme={theme} />
+                    <SceneExperience reducedMotion={reducedMotion} theme={theme} onExit={onExit} />
                 </Suspense>
             </div>
 
@@ -186,7 +186,7 @@ export default function PortfolioRoom({ onExit }) {
                 {theme === "dark" ? <Sun size={15} /> : <Moon size={15} />}
             </button>
 
-            {isMobile ? <MobileFallback /> : <DesktopRoom reducedMotion={reducedMotion} theme={theme} />}
+            {isMobile ? <MobileFallback /> : <DesktopRoom reducedMotion={reducedMotion} theme={theme} onExit={onExit} />}
 
         </div>
 

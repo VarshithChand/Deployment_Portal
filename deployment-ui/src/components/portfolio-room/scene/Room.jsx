@@ -17,7 +17,8 @@ const PALETTE = {
         floor: "#0b0f16", backWall: "#0d1119", sideWall: "#0b0e15",
         wallEmissive: "#08131a", wallEmissiveIntensity: 0.35, sideWallEmissiveIntensity: 0.25,
         gridMajor: "#0e3540", gridMinor: "#0a1a24",
-        ceiling: "#070a10"
+        ceiling: "#070a10",
+        wainscot: "#101f27"
     },
     // First pass had walls sitting only a few % off pure white with the
     // floor barely darker - against the light ambient/directional light
@@ -32,7 +33,8 @@ const PALETTE = {
         floor: "#b7c3d3", backWall: "#dbe2ea", sideWall: "#d2dae4",
         wallEmissive: "#000000", wallEmissiveIntensity: 0, sideWallEmissiveIntensity: 0,
         gridMajor: "#5b6b83", gridMinor: "#8b98ab",
-        ceiling: "#c7d1de"
+        ceiling: "#c7d1de",
+        wainscot: "#aebfd0"
     }
 };
 
@@ -67,6 +69,35 @@ export default function Room({ theme }) {
             <mesh position={[8, 3, 0]} rotation={[0, -Math.PI / 2, 0]}>
                 <planeGeometry args={[10, 6]} />
                 <meshStandardMaterial color={p.sideWall} emissive={p.wallEmissive} emissiveIntensity={p.sideWallEmissiveIntensity} roughness={0.95} />
+            </mesh>
+
+            {/* a painted lower band on every wall, plus a thin cyan trim
+                line at its top edge - the previous walls were a single
+                flat color floor-to-ceiling, which read as bare drywall
+                rather than an actually finished, painted room */}
+            <mesh position={[0, 0.7, -4.99]}>
+                <planeGeometry args={[16, 1.4]} />
+                <meshStandardMaterial color={p.wainscot} roughness={0.85} />
+            </mesh>
+            <mesh position={[-7.99, 0.7, 0]} rotation={[0, Math.PI / 2, 0]}>
+                <planeGeometry args={[10, 1.4]} />
+                <meshStandardMaterial color={p.wainscot} roughness={0.85} />
+            </mesh>
+            <mesh position={[7.99, 0.7, 0]} rotation={[0, -Math.PI / 2, 0]}>
+                <planeGeometry args={[10, 1.4]} />
+                <meshStandardMaterial color={p.wainscot} roughness={0.85} />
+            </mesh>
+            <mesh position={[0, 1.41, -4.98]}>
+                <boxGeometry args={[16, 0.02, 0.02]} />
+                <meshStandardMaterial color={p.cyan} emissive={p.cyan} emissiveIntensity={0.5} toneMapped={false} />
+            </mesh>
+            <mesh position={[-7.98, 1.41, 0]}>
+                <boxGeometry args={[0.02, 0.02, 10]} />
+                <meshStandardMaterial color={p.cyan} emissive={p.cyan} emissiveIntensity={0.3} toneMapped={false} />
+            </mesh>
+            <mesh position={[7.98, 1.41, 0]}>
+                <boxGeometry args={[0.02, 0.02, 10]} />
+                <meshStandardMaterial color={p.cyan} emissive={p.cyan} emissiveIntensity={0.3} toneMapped={false} />
             </mesh>
 
             {/* ceiling - mostly there so the pendant light's cord/mount

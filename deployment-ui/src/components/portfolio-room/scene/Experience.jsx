@@ -10,6 +10,8 @@ import Plant from "./objects/Plant";
 import SwitchBoard from "./objects/SwitchBoard";
 import Window from "./objects/Window";
 import Clock from "./objects/Clock";
+import Rug from "./objects/Rug";
+import Door from "./objects/Door";
 import MonitorAbout from "./objects/MonitorAbout";
 import PhoneContact from "./objects/PhoneContact";
 import CeilingLightSkills from "./objects/CeilingLightSkills";
@@ -36,7 +38,7 @@ import Greeter from "./objects/Greeter";
 // before clipping to white than a pale one does). Moved back from the
 // wall too, so the same "glow accent" effect reads as a highlight rather
 // than a localized hot spot either way.
-export default function Experience({ reducedMotion, theme }) {
+export default function Experience({ reducedMotion, theme, onExit }) {
 
     const light = theme === "light";
     const bg = light ? "#eef2f7" : "#0a0e14";
@@ -76,22 +78,34 @@ export default function Experience({ reducedMotion, theme }) {
                     room actually uses (CameraRig.jsx's CAMERA_TARGETS,
                     plus the overview) - the room has no free-look, only
                     those fixed views plus a little idle drift, so
-                    anything placed well outside all of them (the first
-                    pass had the window, switchboard, and 2 of 3 plants
-                    ~60-75 degrees off every camera's forward direction)
-                    is permanently invisible no matter what, regardless of
-                    its own color/lighting. */}
+                    anything placed well outside all of them is
+                    permanently invisible no matter what, regardless of
+                    its own color/lighting. Just one plant now (was 3 -
+                    "no need to place trees everywhere"), next to the
+                    desk. */}
+                <Rug position={[0, 0, -0.6]} size={[2.6, 1.9]} />
                 <Bed position={[-6, 0, -4]} />
-                <Plant position={[2.3, 0, -1.6]} />
-                <Plant position={[-2.2, 0, -1.5]} scale={0.85} />
-                <Plant position={[7, 0, -4.3]} scale={1.1} />
+                <Plant position={[-2.2, 0, -1.5]} />
                 {/* sits almost dead-center in the "projects" camera's own
                     view (rack station) */}
                 <SwitchBoard position={[7.95, 1.4, -2.5]} rotation={[0, -Math.PI / 2, 0]} />
-                {/* sits a few degrees off-center in the "experience"
-                    camera's view (wall timeline station) */}
-                <Window position={[-7.95, 2.6, -3.5]} rotation={[0, Math.PI / 2, 0]} theme={theme} />
+                {/* moved onto the back wall, right of the dashboard
+                    screen and directly in the desk/monitor's own sightline
+                    - "the desk should be in front of the window" - instead
+                    of the side wall near the timeline station, which put
+                    it nowhere near the desk at all */}
+                <Window position={[3, 2.2, -4.85]} rotation={[0, -Math.PI / 2, 0]} theme={theme} />
                 <Clock position={[-3, 2.6, -4.83]} theme={theme} />
+                {/* An interior exit door - not placed right at the room's
+                    actual open +z boundary (z=5), which sits only ~1.7
+                    units from the overview camera at z=6: at that
+                    distance a 2.5-unit-tall door would either fill/block
+                    the entire view of the desk beyond it or get clipped
+                    by the camera's own vertical FOV. This distance keeps
+                    it a normal, fully-framed size, off to one side so it
+                    doesn't sit in the desk's own direct sightline.
+                    Clicking it exits, same as the corner Exit button. */}
+                <Door position={[-2, 0, 2]} onExit={onExit} theme={theme} />
 
                 <GreeterErrorBoundary>
                     <Greeter reducedMotion={reducedMotion} />
