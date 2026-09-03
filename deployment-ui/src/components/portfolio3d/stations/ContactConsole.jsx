@@ -34,12 +34,17 @@ export function ContactMarker({ onSelect, reducedMotion, dimmed }) {
         <Hotspot position={[-5.5, 0.9, -0.6]} onSelect={onSelect} reducedMotion={reducedMotion}>
             {(hovered) => (
                 <>
+                    {/* meshBasicMaterial, not meshStandardMaterial - a lit
+                        material here was still being brightened by the
+                        room's own point lights regardless of how dark the
+                        base color was set, which is why this kept coming
+                        out as a bright solid slab instead of a dark
+                        screen. Unlit renders exactly this color regardless
+                        of scene lighting. */}
                     <mesh>
                         <cylinderGeometry args={[0.38, 0.44, 0.6, 6]} />
-                        <meshStandardMaterial
-                            color={hovered ? "#0d3844" : "#081b22"}
-                            emissive="#22d3ee"
-                            emissiveIntensity={hovered ? 0.6 : dimmed ? 0.1 : 0.35}
+                        <meshBasicMaterial
+                            color={hovered ? "#0d3844" : "#04141a"}
                             transparent
                             opacity={dimmed ? 0.2 : 1}
                             toneMapped={false}

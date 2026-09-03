@@ -11,12 +11,15 @@ export function DashboardMarker({ onSelect, reducedMotion, dimmed }) {
         <Hotspot position={[0, 2.6, -5.7]} onSelect={onSelect} reducedMotion={reducedMotion}>
             {(hovered) => (
                 <>
+                    {/* meshBasicMaterial, not meshStandardMaterial - a lit
+                        material was still being brightened by the room's
+                        point lights regardless of how dark the base color
+                        was set, which is why this kept rendering as a
+                        bright solid slab instead of a dark screen. */}
                     <mesh>
                         <planeGeometry args={[2, 1.1]} />
-                        <meshStandardMaterial
-                            color={hovered ? "#0d3844" : "#081b22"}
-                            emissive="#22d3ee"
-                            emissiveIntensity={hovered ? 0.5 : dimmed ? 0.08 : 0.3}
+                        <meshBasicMaterial
+                            color={hovered ? "#0d3844" : "#04141a"}
                             side={2}
                             transparent
                             opacity={dimmed ? 0.2 : 1}

@@ -10,12 +10,15 @@ export function TerminalMarker({ onSelect, reducedMotion, dimmed }) {
         <Hotspot position={[0, 1.1, 0.6]} onSelect={onSelect} reducedMotion={reducedMotion}>
             {(hovered) => (
                 <>
+                    {/* meshBasicMaterial, not meshStandardMaterial - a lit
+                        material was still being brightened by the room's
+                        point lights regardless of how dark the base color
+                        was set, which is why this kept rendering as a
+                        bright solid slab instead of a dark screen. */}
                     <mesh>
                         <boxGeometry args={[0.9, 0.55, 0.05]} />
-                        <meshStandardMaterial
-                            color={hovered ? "#0e5a63" : "#0d3b42"}
-                            emissive="#22d3ee"
-                            emissiveIntensity={hovered ? 0.5 : dimmed ? 0.1 : 0.35}
+                        <meshBasicMaterial
+                            color={hovered ? "#0e5a63" : "#04141a"}
                             transparent
                             opacity={dimmed ? 0.2 : 1}
                             toneMapped={false}
