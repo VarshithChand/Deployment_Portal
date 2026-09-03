@@ -3,11 +3,13 @@ import { useProgress } from "@react-three/drei";
 import { motion, AnimatePresence } from "framer-motion";
 
 // Boot sequence overlay - a 2D HTML layer (not inside the Canvas), shown
-// before the room becomes interactive. useProgress reports REAL loading
-// progress (there's nothing heavy to load here - the room is built from
-// primitives, not GLB models, per the "primitives first" build order -
-// so this resolves to 100% almost immediately; the line-by-line reveal
-// below is what actually paces the boot sequence, not asset loading).
+// before the room becomes interactive. The room is built entirely from
+// primitives (no textures/GLB models), so nothing ever runs through
+// three's LoadingManager - useProgress's `progress` never leaves 0 in
+// that case, it does NOT jump to 100 just because there was nothing to
+// load. So readiness is paced purely by the line-by-line text reveal;
+// `progress` is only used to drive the bar's fill for the (currently
+// unused, future-proofing) case where a station does load an asset.
 // Skips straight to done under prefers-reduced-motion instead of running
 // the full timed reveal.
 const LINES = [
@@ -21,7 +23,7 @@ const LINE_INTERVAL_MS = 420;
 
 export default function Loader({ reducedMotion, onDone }) {
 
-    const { progress } = useProgress();
+    const { progress, total } = useProgress();
     const [visibleLines, setVisibleLines] = useState(reducedMotion ? LINES.length : 0);
     const [dismissed, setDismissed] = useState(false);
 
@@ -36,7 +38,10 @@ export default function Loader({ reducedMotion, onDone }) {
 
     }, [visibleLines, reducedMotion]);
 
-    const ready = progress >= 100 && visibleLines >= LINES.length;
+    // total === 0 means nothing was ever handed to the LoadingManager -
+    // there's nothing to wait on, so only the text reveal gates readiness.
+    const ready = (total === 0 || progress >= 100) && visibleLines >= LINES.length;
+    const barProgress = total === 0 ? (visibleLines / LINES.length) * 100 : progress;
 
     useEffect(() => {
 
@@ -75,7 +80,7 @@ export default function Loader({ reducedMotion, onDone }) {
                     </div>
 
                     <div className="p3d-loader-bar">
-                        <div className="p3d-loader-bar-fill" style={{ width: `${Math.min(progress, 100)}%` }} />
+                        <div className="p3d-loader-bar-fill" style={{ width: `${Math.min(barProgress, 100)}%` }} />
                     </div>
 
                 </motion.div>
