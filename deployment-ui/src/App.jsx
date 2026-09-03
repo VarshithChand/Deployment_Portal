@@ -1,6 +1,17 @@
 import { lazy, Suspense, useEffect, useState } from "react";
 
-import Dashboard from "./pages/Dashboard";
+// Lazy, not the eager import this used to be - that traded a real cost
+// (every visitor, including 100% of anonymous ones who only ever see
+// LoginSignupPage, downloaded Dashboard's full JS as part of the same
+// critical bundle, since a static import gets bundled by import graph
+// regardless of which JSX branch actually renders) for a benefit
+// (no second network round trip before an already-authenticated user's
+// first tab renders) that only ever mattered for the authenticated
+// branch. The preload effect below (see `dashboardPreloaded`) gets that
+// same benefit back WITHOUT the anonymous-visitor cost - it starts
+// fetching this chunk in parallel the moment a real session is known to
+// exist, well before Dashboard's own render is reached.
+const Dashboard = lazy(() => import("./pages/Dashboard"));
 import TopBar from "./components/layout/TopBar";
 import Sidebar from "./components/layout/Sidebar";
 import Footer from "./components/layout/Footer";
@@ -21,14 +32,11 @@ import { reportFrontendHeartbeat } from "./services/appVersionService";
 import { getMfaPendingStatus } from "./services/authLoginService";
 import { APP_COMMIT, APP_VERSION, APP_ENVIRONMENT } from "./utils/buildInfo";
 
-// Dashboard (imported above) is the default landing tab (see
-// NavigationContext's readTabFromUrl) - kept as a real, eager import so it
-// ships in the same chunk as the app shell instead of costing a second
-// network round trip before the very first thing a visitor sees can even
-// start loading. Every other page is lazy - none of them are needed until
-// the user actually clicks their way there, so there's no reason for their
-// code to sit in the initial JS bundle competing with Dashboard for
-// parse/execute time.
+// Every page (Dashboard included, see its own import above) is lazy -
+// none of them are needed until the user actually reaches that tab, so
+// there's no reason for any of their code to sit in the initial JS
+// bundle a first-time (possibly still-anonymous) visitor has to
+// download before anything renders.
 const Deploy = lazy(() => import("./pages/Deploy"));
 const Approvals = lazy(() => import("./pages/Approvals"));
 const PullRequests = lazy(() => import("./pages/PullRequests"));
@@ -136,6 +144,24 @@ function App(){
     // (see AuthContext), true for all 3 login methods alike since they all
     // issue the same JWT shape.
     const configured = bootstrapError || !!user;
+
+    // Starts fetching Dashboard's chunk the moment a real session is known
+    // to exist - well before its own render is reached (tab still has to
+    // switch away from whatever the app boots into) - so an authenticated
+    // visitor landing on their default tab gets the same "no extra round
+    // trip" feel the old eager import gave them, without that cost being
+    // paid by every anonymous visitor too (see Dashboard's own import
+    // comment above). Guarded so this only ever fires once.
+    const [dashboardPreloaded, setDashboardPreloaded] = useState(false);
+
+    useEffect(() => {
+
+        if (configured && user && !dashboardPreloaded) {
+            setDashboardPreloaded(true);
+            import("./pages/Dashboard");
+        }
+
+    }, [configured, user, dashboardPreloaded]);
 
     // Fired once per real app load (not polled) - reports this browser's
     // own build-time commit so Services -> Application Support can show
