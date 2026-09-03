@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, lazy, Suspense } from "react";
 import {
     Rocket, ShieldCheck, KeyRound, Lock, Eye, EyeOff, User,
-    Server, Clock, Wrench, ChevronLeft
+    Server, Clock, Wrench, ChevronLeft, FileText
 } from "lucide-react";
 
 import {
@@ -21,6 +21,8 @@ import { SunIcon, MoonIcon } from "../components/layout/SidebarIcons";
 const AnonymousExternalApisView = lazy(() => import("../components/settings/AnonymousExternalApisView"));
 const TemplateTester = lazy(() => import("./TemplateTester"));
 const Portfolio = lazy(() => import("./Portfolio"));
+const About = lazy(() => import("./About"));
+const Faq = lazy(() => import("./Faq"));
 
 // Matches the Dashboard's own "ops console" layout (Round 7 - Dashboard.
 // jsx) for the one other page a visitor sees before any of the app's own
@@ -71,7 +73,7 @@ const RESEND_COOLDOWN_SECONDS = 45;
 // The three no-login tools reachable from the bottom-right corner button
 // (see toolsMenu) - kept as one list so the URL-restore check and the
 // menu itself can't drift apart.
-const TOOL_MODES = ["external-apis", "template-tester", "portfolio"];
+const TOOL_MODES = ["external-apis", "template-tester", "portfolio", "about", "faq"];
 
 // "v*****@gmail.com" - never shows enough of the local part to be useful
 // for anything but confirming "yes, that's roughly my address" (spec's
@@ -566,6 +568,22 @@ export default function LoginSignupPage({ onMfaRequired }) {
                         Portfolio
                     </button>
 
+                    <button
+                        type="button"
+                        role="menuitem"
+                        onClick={() => { openTool("about"); setToolsMenuOpen(false); }}
+                    >
+                        About
+                    </button>
+
+                    <button
+                        type="button"
+                        role="menuitem"
+                        onClick={() => { openTool("faq"); setToolsMenuOpen(false); }}
+                    >
+                        FAQ
+                    </button>
+
                 </div>
 
             )}
@@ -608,8 +626,12 @@ export default function LoginSignupPage({ onMfaRequired }) {
                                 <AnonymousExternalApisView />
                             ) : toolMode === "template-tester" ? (
                                 <TemplateTester />
-                            ) : (
+                            ) : toolMode === "portfolio" ? (
                                 <Portfolio />
+                            ) : toolMode === "about" ? (
+                                <About onOpenTool={openTool} />
+                            ) : (
+                                <Faq />
                             )}
                         </Suspense>
 
@@ -1037,7 +1059,16 @@ export default function LoginSignupPage({ onMfaRequired }) {
                         <li><ShieldCheck size={14} /> Multi-factor auth is required for every account</li>
                         <li><KeyRound size={14} /> Cloud keys and tokens encrypted at rest</li>
                         <li><Server size={14} /> Role-based access, enforced on every request</li>
+                        <li><FileText size={14} /> Settings changes and admin actions are audit-logged</li>
                     </ul>
+
+                    <div className="pitch-links">
+                        <button type="button" onClick={() => openTool("about")}>About</button>
+                        <span aria-hidden="true">·</span>
+                        <button type="button" onClick={() => openTool("faq")}>FAQ</button>
+                        <span aria-hidden="true">·</span>
+                        <button type="button" onClick={() => openTool("portfolio")}>Portfolio</button>
+                    </div>
 
                 </aside>
 
@@ -1339,6 +1370,9 @@ const CSS = `
 .aw-root .trust{list-style:none; margin:auto 0 0; padding:0; display:flex; flex-direction:column; gap:11px;}
 .aw-root .trust li{display:flex; align-items:center; gap:10px; font-size:12.5px; color:var(--text-muted);}
 .aw-root .trust svg{color:var(--heading-accent); flex:0 0 auto;}
+.aw-root .pitch-links{display:flex; align-items:center; gap:9px; margin-top:16px; font-size:12px; color:var(--text-muted);}
+.aw-root .pitch-links button{background:none; border:0; padding:0; color:var(--text-muted); font-size:inherit; font-family:inherit; cursor:pointer;}
+.aw-root .pitch-links button:hover{color:var(--heading-accent); text-decoration:underline;}
 
 /* ---------- auth column ---------- */
 .aw-root .authcol{display:flex; flex-direction:column; justify-content:center; align-items:center; padding:44px 40px; gap:16px;}

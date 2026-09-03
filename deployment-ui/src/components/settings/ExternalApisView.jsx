@@ -207,7 +207,14 @@ export default function ExternalApisView({ anonymous = false }) {
 
         <div className="card">
 
-            <h2 className="card-title">External APIs</h2>
+            {/* h1 in anonymous mode - it's the only heading on that "page"
+                (reached via the login page's tools menu); h2 in Settings,
+                where a real page-level h1 already exists above it. */}
+            {anonymous ? (
+                <h1 className="card-title">External APIs</h1>
+            ) : (
+                <h2 className="card-title">External APIs</h2>
+            )}
 
             <p className="empty-state" style={{ padding: "0 0 15px", textAlign: "left" }}>
                 {anonymous ? (
