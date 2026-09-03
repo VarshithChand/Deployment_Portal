@@ -36,6 +36,22 @@ export function CloudMarker({ onSelect, reducedMotion, dimmed }) {
                             toneMapped={false}
                         />
                     </mesh>
+
+                    {!dimmed && (
+                        <Billboard position={[0, 0.65, 0]}>
+                            <Text
+                                font={MONO_FONT}
+                                fontSize={0.11}
+                                color="#c4b5fd"
+                                outlineWidth={0.007}
+                                outlineColor="#0a0518"
+                                anchorX="center"
+                                anchorY="bottom"
+                            >
+                                SKILLS
+                            </Text>
+                        </Billboard>
+                    )}
                 </>
             )}
         </Hotspot>
@@ -55,15 +71,17 @@ export function CloudMarker({ onSelect, reducedMotion, dimmed }) {
 // graph read as noise instead of six recognizable categories. Hovering
 // a node, or clicking its skill's tag in the 2D panel (see
 // SkillsContent's setHighlightedSkillGroup below), highlights every
-// node in that same group. Clicking a single node also selects just
-// that skill and shows a floating name label over it - clicking a
-// cluster's node highlights/expands its whole group in the panel
-// (shared setHighlightedSkillGroup), while clicking the individual
-// atom is the one that names that specific skill.
+// node in that same group. Clicking a single node selects just that
+// skill (brighter, larger sphere). Every atom carries its own name
+// label, but a label is only ever visible while its atom has rotated
+// around to face the camera - as the cluster spins, atoms "announce"
+// themselves coming around and go quiet again on the far side, instead
+// of showing 20+ overlapping names at once.
 export function SkillsGraph({ reducedMotion }) {
 
     const { highlightedSkillGroup, setHighlightedSkillGroup } = useScene();
     const groupRef = useRef();
+    const labelRefs = useRef([]);
     const [hoveredGroup, setHoveredGroup] = useState(null);
     const [selectedLabel, setSelectedLabel] = useState(null);
     const activeGroup = hoveredGroup || highlightedSkillGroup;
@@ -104,10 +122,29 @@ export function SkillsGraph({ reducedMotion }) {
     }, []);
 
     useFrame((_, delta) => {
-        if (groupRef.current && !reducedMotion) groupRef.current.rotation.y += delta * 0.06;
-    });
 
-    const selectedNode = selectedLabel && nodes.find((n) => n.label === selectedLabel);
+        if (groupRef.current && !reducedMotion) groupRef.current.rotation.y += delta * 0.06;
+
+        // Toggled imperatively via refs (not React state) - a state update
+        // per atom per frame would mean a re-render 60 times a second for
+        // every atom in the graph, which is exactly the kind of per-frame
+        // work useFrame exists to let you sidestep.
+        const rotY = groupRef.current ? groupRef.current.rotation.y : 0;
+        const cos = Math.cos(rotY);
+        const sin = Math.sin(rotY);
+
+        nodes.forEach((node, i) => {
+
+            const label = labelRefs.current[i];
+            if (!label) return;
+
+            const [x, , z] = node.position;
+            const worldZ = -x * sin + z * cos;
+            label.visible = worldZ > 0.3;
+
+        });
+
+    });
 
     return (
 
@@ -166,24 +203,37 @@ export function SkillsGraph({ reducedMotion }) {
 
             }))}
 
-            {/* the one-skill label - only for whichever atom was clicked.
-                Billboard keeps it facing the camera regardless of the
-                graph's own idle rotation, so it stays legible. */}
-            {selectedNode && (
-                <Billboard position={[selectedNode.position[0], selectedNode.position[1] + 0.16, selectedNode.position[2]]}>
-                    <Text
-                        font={MONO_FONT}
-                        fontSize={0.075}
-                        color="#eafaff"
-                        outlineWidth={0.006}
-                        outlineColor="#05141a"
-                        anchorX="center"
-                        anchorY="bottom"
+            {/* one label per atom, visibility toggled per-frame above -
+                Billboard keeps each one facing the camera regardless of
+                the graph's own idle rotation, so whichever ones are
+                currently showing stay legible. */}
+            {nodes.map((node, i) => {
+
+                if (activeGroup && node.group !== activeGroup) return null;
+
+                const selected = selectedLabel === node.label;
+
+                return (
+                    <Billboard
+                        key={node.label}
+                        ref={(el) => { labelRefs.current[i] = el; }}
+                        position={[node.position[0], node.position[1] + 0.13, node.position[2]]}
                     >
-                        {selectedNode.label}
-                    </Text>
-                </Billboard>
-            )}
+                        <Text
+                            font={MONO_FONT}
+                            fontSize={selected ? 0.065 : 0.05}
+                            color={selected ? "#eafaff" : "#9fd8e0"}
+                            outlineWidth={0.004}
+                            outlineColor="#05141a"
+                            anchorX="center"
+                            anchorY="bottom"
+                        >
+                            {node.label}
+                        </Text>
+                    </Billboard>
+                );
+
+            })}
 
         </group>
 
