@@ -11,6 +11,16 @@ import { EXPERIENCE_TIMELINE } from "../../../data/portfolio3dData";
 // setSelectedExperienceYear, which ExperienceContent reads to highlight
 // the matching entry in the panel. A floating year label sits above
 // each circle at all times so you know which one it is before clicking.
+// Centered on x=-3.2 (matches the EXPERIENCE title and the "experience"
+// camera target's own lookAt in CameraRig.jsx - keep all three in sync
+// if this ever moves) and spread relative to however many entries
+// exist, rather than a fixed per-item offset from a hardcoded start -
+// that fixed version was tuned for exactly 3 entries and never
+// adjusted when a 4th (2022) was added, cramming labels that used to
+// have real spacing into the same footprint.
+const CENTER_X = -3.2;
+const STEP = 0.44;
+
 export function TimelineMarker({ onSelect, reducedMotion, dimmed }) {
 
     const { selectedExperienceYear, setSelectedExperienceYear } = useScene();
@@ -20,7 +30,7 @@ export function TimelineMarker({ onSelect, reducedMotion, dimmed }) {
         <>
             {EXPERIENCE_TIMELINE.map((entry, i) => {
 
-                const x = -3.55 + i * 0.35;
+                const x = CENTER_X + (i - (EXPERIENCE_TIMELINE.length - 1) / 2) * STEP;
                 const selected = selectedExperienceYear === entry.year;
 
                 return (
