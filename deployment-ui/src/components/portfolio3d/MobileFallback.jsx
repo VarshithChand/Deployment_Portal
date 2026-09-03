@@ -15,14 +15,14 @@ const Experience = lazy(() => import("./Experience"));
 // content, not a separately-maintained mobile copy), with an explicit
 // opt-in button to still load the full 3D experience for anyone who
 // wants it on a phone anyway.
-export default function MobileFallback({ reducedMotion }) {
+export default function MobileFallback({ reducedMotion, theme }) {
 
     const [enteredCommandCenter, setEnteredCommandCenter] = useState(false);
 
     if (enteredCommandCenter) {
         return (
             <Suspense fallback={<div className="p3d-mobile-loading mono">Loading 3D scene…</div>}>
-                <Experience reducedMotion={reducedMotion} />
+                <Experience reducedMotion={reducedMotion} theme={theme} />
             </Suspense>
         );
     }

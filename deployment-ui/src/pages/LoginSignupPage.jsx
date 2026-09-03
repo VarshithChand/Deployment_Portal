@@ -631,15 +631,15 @@ export default function LoginSignupPage({ onMfaRequired }) {
 
             <div className="aw-root">
                 <style>{CSS}</style>
-                {/* Portfolio (CommandCenter, the 3D room) is a deliberately
-                    single-themed dark scene - every material color, the
-                    glow effects, the grain/vignette overlay, are tuned
-                    specifically against a dark void, and none of it
-                    reads useTheme's global light/dark state at all. The
-                    toggle was still rendering here, doing nothing visible
-                    when clicked - not a broken toggle, just a control
-                    that doesn't apply to this tool, so it's hidden here
-                    instead of showing a dead affordance. */}
+                {/* This app-wide toggle is still hidden for Portfolio - the
+                    3D room (CommandCenter) is position:fixed/inset:0, so
+                    this button would be permanently covered by the canvas
+                    either way. It now has its own working theme toggle
+                    instead (see CommandCenter.jsx's p3d-theme-toggle),
+                    which actually re-themes the room's own materials -
+                    this one previously rendered here doing nothing
+                    visible when clicked, before the room supported
+                    theming at all. */}
                 {toolMode !== "portfolio" && themeToggle}
 
                 <div className="aw-tools-view">

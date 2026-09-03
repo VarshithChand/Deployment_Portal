@@ -1,6 +1,6 @@
 import { Suspense, lazy, useEffect, useRef } from "react";
 import { AnimatePresence } from "framer-motion";
-import { X } from "lucide-react";
+import { X, Sun, Moon } from "lucide-react";
 import { SceneProvider, useScene, SECTIONS } from "./sceneStore";
 import Loader from "./Loader";
 import Nav from "./Nav";
@@ -8,6 +8,7 @@ import Panel from "./Panel";
 import MobileFallback from "./MobileFallback";
 import useReducedMotion from "../../hooks/useReducedMotion";
 import useIsMobile from "../../hooks/useIsMobile";
+import useTheme from "../../hooks/useTheme";
 import { AboutContent } from "./stations/TerminalAbout";
 import { SkillsContent } from "./stations/CloudSkills";
 import { ProjectsContent } from "./stations/PipelineProjects";
@@ -37,7 +38,7 @@ const SECTION_CONTENT = {
 // straight to "contact".
 const SCROLL_ORDER = [null, ...SECTIONS];
 
-function DesktopCommandCenter({ reducedMotion }) {
+function DesktopCommandCenter({ reducedMotion, theme }) {
 
     const { activeSection, setActiveSection, openPanel, setOpenPanel, loaded, setLoaded } = useScene();
     const ActiveContent = openPanel && SECTION_CONTENT[openPanel];
@@ -91,7 +92,7 @@ function DesktopCommandCenter({ reducedMotion }) {
 
             <div className="p3d-canvas-wrap">
                 <Suspense fallback={null}>
-                    <Experience reducedMotion={reducedMotion} />
+                    <Experience reducedMotion={reducedMotion} theme={theme} />
                 </Suspense>
             </div>
 
@@ -125,10 +126,11 @@ export default function CommandCenter({ onExit }) {
 
     const reducedMotion = useReducedMotion();
     const isMobile = useIsMobile();
+    const { theme, toggleTheme } = useTheme();
 
     return (
 
-        <div className="p3d-root">
+        <div className={`p3d-root${theme === "light" ? " p3d-light" : ""}`}>
             <style>{CSS}</style>
 
             {/* CommandCenter is position:fixed/inset:0 (see .p3d-root), so
@@ -143,11 +145,28 @@ export default function CommandCenter({ onExit }) {
                 </button>
             )}
 
+            {/* Room-native theme toggle - the app-wide one (LoginSignupPage's
+                aw-theme-toggle) is hidden here since it sits behind this
+                full-screen canvas either way; this one actually does
+                something now (see the p3d-light class above + Room.jsx/
+                Experience.jsx's own theme-aware material colors), instead
+                of the earlier version that toggled global theme state with
+                zero visible effect on a room that was hardcoded dark only. */}
+            <button
+                type="button"
+                className="p3d-theme-toggle"
+                onClick={toggleTheme}
+                aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+                title={theme === "dark" ? "Light mode" : "Dark mode"}
+            >
+                {theme === "dark" ? <Sun size={15} /> : <Moon size={15} />}
+            </button>
+
             <SceneProvider>
                 {isMobile ? (
-                    <MobileFallback reducedMotion={reducedMotion} />
+                    <MobileFallback reducedMotion={reducedMotion} theme={theme} />
                 ) : (
-                    <DesktopCommandCenter reducedMotion={reducedMotion} />
+                    <DesktopCommandCenter reducedMotion={reducedMotion} theme={theme} />
                 )}
             </SceneProvider>
 
@@ -160,9 +179,23 @@ export default function CommandCenter({ onExit }) {
 const CSS = `
 .p3d-root{
   --p3d-bg:#05070b; --p3d-panel:#0b0f16ee; --p3d-line:#1b2431; --p3d-text:#e7edf5;
-  --p3d-muted:#8b98ab; --p3d-cyan:#22d3ee; --p3d-purple:#a78bfa;
+  --p3d-muted:#8b98ab; --p3d-cyan:#22d3ee; --p3d-purple:#a78bfa; --p3d-track:#0f1a26;
+  --p3d-vignette:rgba(2,4,8,.55);
   position:fixed; inset:0; background:var(--p3d-bg); color:var(--p3d-text);
   font-family:'Space Grotesk','Inter',system-ui,sans-serif; overflow:hidden;
+}
+/* Light theme - every 2D piece (nav/panel/loader/text) already reads
+   these tokens rather than hardcoded colors, so this block alone
+   re-themes all of it. The 3D room itself (floor/walls/fog - real
+   Three.js material colors, not CSS) is re-themed separately via the
+   theme prop threaded into Room.jsx/Experience.jsx; the "screens"
+   (Terminal/Dashboard/Contact) stay dark-screened in both themes on
+   purpose, the way a real monitor's screen doesn't turn white just
+   because the room around it is bright. */
+.p3d-root.p3d-light{
+  --p3d-bg:#eef2f7; --p3d-panel:#ffffffee; --p3d-line:#d7dee8; --p3d-text:#0f172a;
+  --p3d-muted:#5b6b83; --p3d-cyan:#0891b2; --p3d-purple:#7c3aed; --p3d-track:#dde5ef;
+  --p3d-vignette:rgba(148,163,184,.35);
 }
 .p3d-root *{box-sizing:border-box;}
 .p3d-root .mono{font-family:'JetBrains Mono',ui-monospace,monospace;}
@@ -181,7 +214,7 @@ const CSS = `
 }
 .p3d-vignette{
   position:absolute; inset:0; z-index:1; pointer-events:none;
-  background:radial-gradient(ellipse 75% 70% at 50% 55%, transparent 45%, rgba(2,4,8,.55) 100%);
+  background:radial-gradient(ellipse 75% 70% at 50% 55%, transparent 45%, var(--p3d-vignette) 100%);
 }
 
 /* loader */
@@ -191,7 +224,7 @@ const CSS = `
 }
 .p3d-loader-lines{display:flex; flex-direction:column; gap:8px; text-align:center; min-height:100px;}
 .p3d-loader-line{font-size:13px; color:var(--p3d-cyan); letter-spacing:.03em;}
-.p3d-loader-bar{width:220px; height:3px; background:#132; border-radius:2px; overflow:hidden;}
+.p3d-loader-bar{width:220px; height:3px; background:var(--p3d-track); border-radius:2px; overflow:hidden;}
 .p3d-loader-bar-fill{height:100%; background:var(--p3d-cyan); transition:width .2s ease;}
 
 /* nav */
@@ -207,6 +240,11 @@ const CSS = `
   background:var(--p3d-panel); border:1px solid var(--p3d-line); border-radius:12px; padding:9px 14px 9px 12px;
   font-size:12.5px; font-weight:600; color:var(--p3d-muted); backdrop-filter:blur(10px);}
 .p3d-exit:hover{color:var(--p3d-cyan); border-color:var(--p3d-cyan);}
+
+.p3d-theme-toggle{position:absolute; top:20px; right:20px; z-index:10; display:flex; align-items:center;
+  justify-content:center; width:36px; height:36px; background:var(--p3d-panel); border:1px solid var(--p3d-line);
+  border-radius:12px; color:var(--p3d-muted); backdrop-filter:blur(10px);}
+.p3d-theme-toggle:hover{color:var(--p3d-cyan); border-color:var(--p3d-cyan);}
 
 /* panel */
 .p3d-panel{position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); z-index:15;
