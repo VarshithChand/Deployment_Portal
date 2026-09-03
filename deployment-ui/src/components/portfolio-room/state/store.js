@@ -42,16 +42,5 @@ export const useStore = create((set) => ({
     // clicking the physical switch itself).
     switches: { fan: true, bedLight: false, cluster: false },
     setSwitch: (name, value) => set((s) => ({ switches: { ...s.switches, [name]: value } })),
-    toggleSwitch: (name) => set((s) => ({ switches: { ...s.switches, [name]: !s.switches[name] } })),
-
-    // Which ABOUT.whoami block the monitor screen is currently showing
-    // (MonitorAbout.jsx) - shared with the About panel's own "Next"
-    // button (About.jsx) rather than living as the monitor's own local
-    // state, because the panel is what's actually reachable: navigating
-    // to "about" opens the panel over the same part of the screen the
-    // monitor's content sits in, on every visit, for as long as you're
-    // close enough to read either one - a click target ON the monitor's
-    // face is permanently covered the moment you're there to use it.
-    aboutSlide: 0,
-    setAboutSlide: (i) => set({ aboutSlide: i })
+    toggleSwitch: (name) => set((s) => ({ switches: { ...s.switches, [name]: !s.switches[name] } }))
 }));
