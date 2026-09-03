@@ -1,6 +1,6 @@
-import { Suspense, lazy } from "react";
+import { Suspense, lazy, useEffect, useRef } from "react";
 import { AnimatePresence } from "framer-motion";
-import { SceneProvider, useScene } from "./sceneStore";
+import { SceneProvider, useScene, SECTIONS } from "./sceneStore";
 import Loader from "./Loader";
 import Nav from "./Nav";
 import Panel from "./Panel";
@@ -30,10 +30,50 @@ const SECTION_CONTENT = {
     experience: ExperienceContent, dashboard: DashboardContent, contact: ContactContent
 };
 
+// [null (room overview), about, skills, ...] - null is a real stop in the
+// sequence so scrolling forward from the room lands on the first station,
+// and scrolling back from "about" returns to the room instead of jumping
+// straight to "contact".
+const SCROLL_ORDER = [null, ...SECTIONS];
+
 function DesktopCommandCenter({ reducedMotion }) {
 
     const { activeSection, setActiveSection, loaded, setLoaded } = useScene();
     const ActiveContent = activeSection && SECTION_CONTENT[activeSection];
+    const wheelLockRef = useRef(false);
+
+    // Mouse-wheel/trackpad scroll steps through stations one at a time,
+    // matching the camera's own fly-to pacing, rather than free-scrolling
+    // through 3D space (which has no natural "scroll distance" in a room
+    // you fly around, not one you scroll down). A short lock after each
+    // step absorbs the rest of a single scroll gesture so one flick moves
+    // exactly one station, not three. Scrolling while the pointer is over
+    // an open panel is left alone so it scrolls the panel's own content
+    // instead of changing station.
+    useEffect(() => {
+
+        function handleWheel(e) {
+
+            if (!loaded) return;
+            if (e.target.closest && e.target.closest(".p3d-panel")) return;
+            if (wheelLockRef.current) return;
+            if (Math.abs(e.deltaY) < 12) return;
+
+            const currentIndex = SCROLL_ORDER.indexOf(activeSection);
+            const nextIndex = currentIndex + (e.deltaY > 0 ? 1 : -1);
+
+            if (nextIndex < 0 || nextIndex >= SCROLL_ORDER.length) return;
+
+            setActiveSection(SCROLL_ORDER[nextIndex]);
+            wheelLockRef.current = true;
+            setTimeout(() => { wheelLockRef.current = false; }, reducedMotion ? 500 : 1000);
+
+        }
+
+        window.addEventListener("wheel", handleWheel, { passive: true });
+        return () => window.removeEventListener("wheel", handleWheel);
+
+    }, [activeSection, loaded, reducedMotion, setActiveSection]);
 
     return (
 
