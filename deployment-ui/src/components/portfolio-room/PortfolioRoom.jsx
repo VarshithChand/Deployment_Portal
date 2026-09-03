@@ -275,7 +275,6 @@ const CSS = `
 .proom-terminal-block{margin-bottom:10px;}
 .proom-terminal-prompt{color:var(--pr-cyan); font-size:13px;}
 .proom-terminal-line{font-size:13px; color:var(--pr-text); padding-left:2px;}
-.proom-terminal-note{margin-top:16px; font-size:12.5px; color:var(--pr-muted);}
 
 .proom-skills-group{margin-bottom:16px;}
 .proom-skills-group h3{margin:0 0 8px; font-size:12.5px; color:var(--pr-purple); text-transform:uppercase; letter-spacing:.04em;}

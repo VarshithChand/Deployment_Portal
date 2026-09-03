@@ -1,5 +1,9 @@
-import { ABOUT, PROFILE } from "../../data/profile";
+import { ABOUT } from "../../data/profile";
 
+// The trailing role line this used to end with duplicated text already
+// shown two lines up in the "$ whoami" block itself (ABOUT.whoami
+// already includes the role) - same content, twice, once inside the
+// terminal-styled block and once floating below it as an afterthought.
 export default function About() {
 
     return (
@@ -14,7 +18,6 @@ export default function About() {
             <div className="proom-terminal-block">
                 <div className="proom-terminal-prompt">&gt; Explore my work</div>
             </div>
-            <p className="proom-terminal-note">{PROFILE.role}</p>
         </div>
 
     );

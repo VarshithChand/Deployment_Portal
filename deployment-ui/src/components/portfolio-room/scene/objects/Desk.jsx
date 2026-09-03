@@ -7,9 +7,14 @@ export default function Desk() {
 
         <group position={[0, 0, -1]}>
 
+            {/* a warm wood tone rather than another dark graphite slab -
+                everything else on/around the desk (legs, monitor, phone,
+                CPU tower) is already some shade of near-black, so the
+                desktop itself is the one surface that reads as a
+                distinct material instead of blending into that set */}
             <mesh position={[0, 0.75, 0]}>
                 <boxGeometry args={[1.6, 0.06, 0.75]} />
-                <meshStandardMaterial color="#151a22" roughness={0.5} metalness={0.3} />
+                <meshStandardMaterial color="#5c3f2a" roughness={0.65} metalness={0.05} />
             </mesh>
 
             {[[-0.7, -0.3], [0.7, -0.3], [-0.7, 0.3], [0.7, 0.3]].map(([x, z]) => (
