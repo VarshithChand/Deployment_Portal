@@ -147,8 +147,8 @@ export default function Room({ reducedMotion }) {
             {/* floor accent strips tying each cluster of hotspots together
                 visually, so the pipeline/timeline read as built structures
                 rather than a scatter of identical unrelated boxes */}
-            <mesh position={[2.95, 0.02, -1]} rotation={[-Math.PI / 2, 0, 0]}>
-                <planeGeometry args={[3.5, 0.1]} />
+            <mesh position={[2.02, 0.02, -1]} rotation={[-Math.PI / 2, 0, 0]}>
+                <planeGeometry args={[1.7, 0.1]} />
                 <meshStandardMaterial color="#0e7490" emissive="#22d3ee" emissiveIntensity={0.6} toneMapped={false} />
             </mesh>
             <mesh position={[-3.2, 0.02, -1.5]} rotation={[-Math.PI / 2, 0, 0]}>

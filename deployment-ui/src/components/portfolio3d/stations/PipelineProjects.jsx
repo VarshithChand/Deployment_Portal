@@ -77,7 +77,7 @@ export function PipelineMarkers({ onSelect, reducedMotion, dimmed }) {
             })}
 
             {!dimmed && (
-                <Billboard position={[2.95, 1.55, -1]}>
+                <Billboard position={[2.02, 1.55, -1]}>
                     <Text
                         font={MONO_FONT}
                         fontSize={0.12}

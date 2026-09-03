@@ -22,7 +22,9 @@ const CAMERA_TARGETS = {
     // the marker at [0, 1.1, 0.6] vs. the old lookAt of [0, 1.3, 0.4]).
     about: { position: [0, 1.75, 4.1], lookAt: [0, 1.1, 0.6] },
     skills: { position: [0, 3.6, 3.9], lookAt: [0, 3, -0.5] },
-    projects: { position: [2.95, 2.15, 4.3], lookAt: [2.95, 0.95, -1] },
+    // x recentered from 2.95 to 2.02 - the project row shrank from 6 to
+    // 3 boxes (see portfolio3dData.js), moving its midpoint.
+    projects: { position: [2.02, 2.15, 4.3], lookAt: [2.02, 0.95, -1] },
     experience: { position: [-3.2, 2.15, 3.5], lookAt: [-3.2, 1.3, -1.5] },
     dashboard: { position: [0, 2.4, -2.9], lookAt: [0, 2.6, -5.7] },
     // x matches ContactMarker's position (see ContactConsole.jsx) -

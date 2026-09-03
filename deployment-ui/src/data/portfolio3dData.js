@@ -17,7 +17,7 @@ export const ABOUT = {
     whoami: [
         { prompt: "$ whoami", lines: ["Varshith Chand", "DevOps Engineer"] },
         { prompt: "", lines: ["Cloud & Infrastructure · CI/CD Automation · Containerization · Test Automation"] },
-        { prompt: "", lines: ["Currently: B.Tech in AI & ML"] }
+        { prompt: "", lines: ["B.Tech in AI & ML (2022–2026)"] }
     ]
 };
 
@@ -49,43 +49,15 @@ export const PROJECTS = [
         caseStudy: null
     },
     {
-        id: "rxapps360-cicd",
-        title: "RxApps360 CI/CD",
-        summary: "Build + approval-gated multi-cluster release pipelines for a healthcare platform's APIs (AdminAPI, PMSCoreAPI, SecurityAPI), across Azure DevOps YAML pipelines and GitHub Actions.",
-        architecture: ["Build", "Artifact", "Approval Gate", "Multi-cluster Deploy"],
-        stack: ["Azure DevOps Pipelines", "GitHub Actions", "YAML", "Multi-cluster"],
+        id: "eduvault",
+        title: "EduVault",
+        // Verified against the real repo (github.com/VarshithChand/ECHODOCS) -
+        // read app.py directly rather than assuming from the name.
+        summary: "A Flask + MongoDB file vault with role-based access: regular users log in to upload and browse their own files, while a superuser dashboard manages every user and every uploaded file across the system.",
+        architecture: ["Flask (Python)", "MongoDB Atlas", "Role-based Auth"],
+        stack: ["Python", "Flask", "MongoDB", "Werkzeug"],
         live: null,
-        github: null,
-        caseStudy: null
-    },
-    {
-        id: "rxapps360-e2e",
-        title: "RxApps360 E2E Test Automation",
-        summary: "Playwright + TypeScript end-to-end tests for the RxAsset and RxPlan modules.",
-        architecture: ["Test Suite", "Playwright Runner", "RxAsset / RxPlan Modules"],
-        stack: ["Playwright", "TypeScript"],
-        live: null,
-        github: null,
-        caseStudy: null
-    },
-    {
-        id: "vips-cloud-pms",
-        title: "VIPS Cloud PMS / Piccotello API CI/CD",
-        summary: "Azure DevOps multi-cluster pipelines for the Piccotello API (VCPMS).",
-        architecture: ["Build", "Multi-cluster Deploy", "Piccotello API (VCPMS)"],
-        stack: ["Azure DevOps Pipelines", "Multi-cluster"],
-        live: null,
-        github: null,
-        caseStudy: null
-    },
-    {
-        id: "aws-scheduler",
-        title: "AWS Schedule Orchestrator",
-        summary: "GitHub Actions + bash scheduler that starts/stops AWS ECS services and RDS instances for dev and acceptance environments (cost saving on off-hours).",
-        architecture: ["GitHub Actions (schedule)", "Bash Scheduler", "AWS ECS / RDS"],
-        stack: ["GitHub Actions", "Bash", "AWS ECS", "AWS RDS"],
-        live: null,
-        github: null,
+        github: "https://github.com/VarshithChand/ECHODOCS",
         caseStudy: null
     },
     {
@@ -105,9 +77,10 @@ export const PROJECTS = [
 ];
 
 export const EXPERIENCE_TIMELINE = [
+    { year: "2022", theme: "B.Tech Begins", detail: "Started a B.Tech in AI & ML - the starting point for everything else on this timeline." },
     { year: "2024", theme: "Development", detail: "Building software foundations - languages, frameworks, and the habits that carry into everything after." },
     { year: "2025", theme: "Cloud → DevOps", detail: "Moved into cloud infrastructure and DevOps practice - AWS, Azure, CI/CD pipelines, and the DevOps with AWS internship at IntelliQ IT Trainings." },
-    { year: "2026", theme: "Infrastructure → Deployment Automation", detail: "Building Deployment Portal and the automation/infrastructure work above, while finishing a B.Tech in AI & ML." }
+    { year: "2026", theme: "Infrastructure → Deployment Automation", detail: "Building Deployment Portal and the automation/infrastructure work above, and completing a B.Tech in AI & ML (2022-2026)." }
 ];
 
 // PROJECTS.length and ALL_SKILLS.length are real, derived counts - not
