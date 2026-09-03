@@ -25,6 +25,23 @@
       name="twitter:description"
       content="Trigger releases, watch runs, and approve promotions across GitHub Actions, AWS, Azure, GCP, and your registries — from one console, with mandatory MFA and role-based access."
     />
+    <!-- application/ld+json is inert data, not executable script - CSP's
+         script-src 'self' (no 'unsafe-inline'; see vite.config.js's
+         writeSecurityHeadersPlugin) doesn't apply to it. Every field below
+         is a real, already-shipped fact (no invented pricing/rating/
+         version), matching this whole codebase's "don't fabricate"
+         discipline. -->
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "WebApplication",
+        "name": "Deployment Portal",
+        "url": "https://deploymentportal.in/",
+        "description": "Trigger releases, watch runs, and approve promotions across GitHub Actions, AWS, Azure, GCP, and your registries — from one console, with mandatory MFA and role-based access.",
+        "applicationCategory": "DeveloperApplication",
+        "operatingSystem": "Web"
+      }
+    </script>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -139,12 +156,13 @@
       }
 
       .boot-loader-caption { text-align: center; }
-      .boot-loader-caption .boot-loader-title { font-size: 16px; font-weight: 600; letter-spacing: -.01em; color: #0f172a; }
+      .boot-loader-caption .boot-loader-title { margin: 0; font-size: 16px; font-weight: 600; letter-spacing: -.01em; color: #0f172a; }
       html[data-theme="dark"] .boot-loader-caption .boot-loader-title { color: #e7ecf6; }
       .boot-loader-caption .boot-loader-sub {
-        margin-top: 5px; font-size: 12.5px; color: #64748b;
+        margin: 5px 0 0; font-size: 12.5px; color: #64748b; max-width: 30ch;
         font-family: 'JetBrains Mono', ui-monospace, monospace;
       }
+      .boot-loader-caption .boot-loader-status { margin-top: 8px; max-width: none; }
       html[data-theme="dark"] .boot-loader-caption .boot-loader-sub { color: #a3b0cc; }
 
       .boot-loader-dots span { animation: boot-blink 1.4s infinite; }
@@ -235,9 +253,21 @@
             </div>
           </div>
         </div>
+        <!-- Real, semantic content in the static HTML itself - not just a
+             spinner - so a crawler/bot that never executes the JS bundle
+             (most social-preview unfurlers, and Googlebot's own first,
+             non-rendering crawl pass) still sees an actual h1 + description
+             instead of only "Loading...". React replaces this whole #root
+             subtree on mount, so a JS-enabled visitor only ever sees it for
+             the same brief instant the old loading-only version was
+             visible for - nothing about the real loading UX changes. -->
         <div class="boot-loader-caption">
-          <div class="boot-loader-title">Loading<span class="boot-loader-dots"><span>.</span><span>.</span><span>.</span></span></div>
-          <div class="boot-loader-sub">Deployment Portal</div>
+          <h1 class="boot-loader-title">Deployment Portal</h1>
+          <p class="boot-loader-sub">
+            DevOps deployment platform — trigger releases, track GitHub Actions
+            runs, and approve promotions across AWS, Azure, and GCP.
+          </p>
+          <p class="boot-loader-sub boot-loader-status">Loading<span class="boot-loader-dots"><span>.</span><span>.</span><span>.</span></span></p>
         </div>
         <div class="boot-loader-track"></div>
       </div>
