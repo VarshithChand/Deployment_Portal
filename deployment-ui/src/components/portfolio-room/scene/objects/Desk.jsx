@@ -25,6 +25,28 @@ export default function Desk() {
                 <meshStandardMaterial color="#10141b" roughness={0.6} />
             </mesh>
 
+            {/* mouse, beside the keyboard */}
+            <mesh position={[0.34, 0.795, 0.18]}>
+                <boxGeometry args={[0.06, 0.03, 0.09]} />
+                <meshStandardMaterial color="#10141b" roughness={0.5} />
+            </mesh>
+
+            {/* CPU tower - floor-standing beside the desk, a color of its
+                own (a cool blue-graphite) rather than matching the
+                monitor/desk exactly, with a small cyan power LED */}
+            <mesh position={[-1.02, 0.35, -0.15]}>
+                <boxGeometry args={[0.28, 0.7, 0.5]} />
+                <meshStandardMaterial color="#1a2230" roughness={0.5} metalness={0.4} />
+            </mesh>
+            <mesh position={[-1.02, 0.6, 0.11]}>
+                <boxGeometry args={[0.29, 0.015, 0.015]} />
+                <meshStandardMaterial color="#22d3ee" emissive="#22d3ee" emissiveIntensity={0.6} toneMapped={false} />
+            </mesh>
+            <mesh position={[-0.86, 0.15, 0.26]}>
+                <sphereGeometry args={[0.012, 8, 8]} />
+                <meshStandardMaterial color="#22d3ee" emissive="#22d3ee" emissiveIntensity={0.8} toneMapped={false} />
+            </mesh>
+
         </group>
 
     );

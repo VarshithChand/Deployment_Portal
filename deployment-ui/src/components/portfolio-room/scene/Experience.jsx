@@ -2,7 +2,7 @@ import { Suspense } from "react";
 import { Canvas } from "@react-three/fiber";
 import { EffectComposer, Bloom } from "@react-three/postprocessing";
 import Room from "./Room";
-import CameraRig from "./CameraRig";
+import CameraRig, { DESK_SHIFT_Z, SKILLS_SHIFT_Z } from "./CameraRig";
 import Desk from "./objects/Desk";
 import Chair from "./objects/Chair";
 import Bed from "./objects/Bed";
@@ -62,30 +62,51 @@ export default function Experience({ reducedMotion, theme, onExit }) {
             <Suspense fallback={null}>
 
                 <Room theme={theme} />
-                <Desk />
-                <Chair position={[0, 0, -0.3]} />
-                <MonitorAbout reducedMotion={reducedMotion} />
-                <PhoneContact reducedMotion={reducedMotion} />
-                <CeilingLightSkills reducedMotion={reducedMotion} theme={theme} />
+
+                {/* The desk cluster (desk/chair/monitor/phone/rug/plant),
+                    shifted back toward the back wall as one rigid group -
+                    "the table needs to be placed near the wall," instead
+                    of floating in the open middle of the room where it
+                    was before. Every object inside still uses the exact
+                    same relative coordinates that were already tuned
+                    against each other; only the group's own position
+                    moves. about/contact camera targets (CameraRig.jsx)
+                    are shifted by the identical DESK_SHIFT_Z so they keep
+                    the same framing, just following the desk back. */}
+                <group position={[0, 0, DESK_SHIFT_Z]}>
+                    <Desk />
+                    <Chair position={[0, 0, -0.3]} />
+                    <MonitorAbout reducedMotion={reducedMotion} />
+                    <PhoneContact reducedMotion={reducedMotion} />
+                    <Rug position={[0, 0, -0.6]} size={[2.6, 1.9]} />
+                    <Plant position={[-2.2, 0, -1.5]} />
+                </group>
+
+                {/* Skills pendant light - a smaller shift than the desk
+                    cluster (SKILLS_SHIFT_Z, see CameraRig.jsx) rather than
+                    following it the full way back: its node graph spreads
+                    out to roughly a 1.9-unit radius when open, and the
+                    full desk shift would push some nodes past the back
+                    wall at the far side of their rotation. */}
+                <group position={[0, 0, SKILLS_SHIFT_Z]}>
+                    <CeilingLightSkills reducedMotion={reducedMotion} theme={theme} />
+                </group>
+
                 <WallDashboard reducedMotion={reducedMotion} />
                 <ServerRackProjects reducedMotion={reducedMotion} theme={theme} />
                 <WallTimelineExperience reducedMotion={reducedMotion} theme={theme} />
                 <WelcomeSign theme={theme} />
 
-                {/* furnishing - purely decorative, makes the space read
-                    as an actual room rather than a bare demo showroom.
-                    Positions are checked against every camera angle the
-                    room actually uses (CameraRig.jsx's CAMERA_TARGETS,
-                    plus the overview) - the room has no free-look, only
-                    those fixed views plus a little idle drift, so
-                    anything placed well outside all of them is
+                {/* remaining furnishing - purely decorative, makes the
+                    space read as an actual room rather than a bare demo
+                    showroom. Positions are checked against every camera
+                    angle the room actually uses (CameraRig.jsx's
+                    CAMERA_TARGETS, plus the overview) - the room has no
+                    free-look, only those fixed views plus a little idle
+                    drift, so anything placed well outside all of them is
                     permanently invisible no matter what, regardless of
-                    its own color/lighting. Just one plant now (was 3 -
-                    "no need to place trees everywhere"), next to the
-                    desk. */}
-                <Rug position={[0, 0, -0.6]} size={[2.6, 1.9]} />
+                    its own color/lighting. */}
                 <Bed position={[-6, 0, -4]} />
-                <Plant position={[-2.2, 0, -1.5]} />
                 {/* sits almost dead-center in the "projects" camera's own
                     view (rack station) */}
                 <SwitchBoard position={[7.95, 1.4, -2.5]} rotation={[0, -Math.PI / 2, 0]} />

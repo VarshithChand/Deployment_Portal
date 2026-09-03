@@ -13,10 +13,13 @@ export default function MonitorAbout({ reducedMotion }) {
 
         <group position={[0, 0, 0]}>
 
-            {/* stand */}
+            {/* stand - matches the bezel's own color, both a distinct
+                warm-graphite tone from the CPU tower's cool blue and the
+                phone's dark green, so the three desk devices read as
+                separate objects rather than identical black boxes */}
             <mesh position={[0, 0.9, -1.2]}>
                 <boxGeometry args={[0.05, 0.2, 0.05]} />
-                <meshStandardMaterial color="#0a0d13" />
+                <meshStandardMaterial color="#1e1a24" />
             </mesh>
 
             <Hotspot position={[0, 1.3, -1.2]} onSelect={() => setActive("about")} reducedMotion={reducedMotion}>
@@ -25,7 +28,7 @@ export default function MonitorAbout({ reducedMotion }) {
                         {/* bezel */}
                         <mesh>
                             <boxGeometry args={[1, 0.62, 0.06]} />
-                            <meshStandardMaterial color="#0a0d13" roughness={0.7} />
+                            <meshStandardMaterial color="#221f2c" roughness={0.7} />
                         </mesh>
 
                         {/* screen - meshBasicMaterial so it reads as an
