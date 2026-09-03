@@ -80,14 +80,25 @@ export default function MonitorAbout({ reducedMotion }) {
 
                             {/* the real click target - stopPropagation
                                 keeps it from also re-triggering the
-                                Hotspot's own onSelect */}
+                                Hotspot's own onSelect.
+                                A fixed y, not one computed from
+                                displayLines.length - the tagline slide is
+                                one long string that wraps into ~4 visual
+                                lines under maxWidth, but it's still just
+                                1 entry in displayLines, so a length-based
+                                offset only ever reserved room for 1 line
+                                and Next rendered on top of the wrapped
+                                text's 3rd/4th line instead of below it.
+                                This fixed position sits below the worst
+                                case (the tagline's own wrap) regardless
+                                of which slide is showing. */}
                             <Text
                                 font={MONO_FONT}
                                 fontSize={0.045}
                                 color="#5eead4"
                                 anchorX="left"
                                 anchorY="middle"
-                                position={[0, 0.19 - displayLines.length * 0.09 - 0.03, 0]}
+                                position={[0, -0.18, 0]}
                                 onClick={(e) => {
                                     e.stopPropagation();
                                     setSlideIndex((i) => (i + 1) % ABOUT.whoami.length);
