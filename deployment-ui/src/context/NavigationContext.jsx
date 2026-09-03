@@ -1,4 +1,4 @@
-import { createContext, useCallback, useEffect, useState } from "react";
+import { createContext, useCallback, useState } from "react";
 
 import { getSidebarAccess } from "../services/settingsService";
 
@@ -76,9 +76,14 @@ export default function NavigationProvider({ children }) {
 
     }, []);
 
-    useEffect(() => {
-        refreshSidebarAccess();
-    }, [refreshSidebarAccess]);
+    // Not fired here on mount anymore - NavigationProvider wraps
+    // AuthProvider (see main.jsx), so it has no way to know whether a
+    // real session exists yet, and firing unconditionally meant every
+    // anonymous visitor (LoginSignupPage, before any credential exists)
+    // also triggered this - and got a 401 back for it, every single
+    // load. App.jsx already has real auth state and calls
+    // refreshSidebarAccess itself once a session is confirmed (see its
+    // own dashboardPreloaded-style effect).
 
     const setTab = useCallback((nextTab) => {
 

@@ -103,7 +103,7 @@ const ADMIN_ONLY_TABS = new Set(["codeQuality", "sonarcloud", "services"]);
 
 function App(){
 
-    const { tab, setTab, sidebarAccess } = useNavigation();
+    const { tab, setTab, sidebarAccess, refreshSidebarAccess } = useNavigation();
     const { user, isAdminSession, grantedPages, oauthStatusChecked, bootstrapError } = useAuth();
     const toast = useToast();
 
@@ -162,6 +162,24 @@ function App(){
         }
 
     }, [configured, user, dashboardPreloaded]);
+
+    // Sidebar access settings are meaningless without a real session (see
+    // NavigationContext.jsx's own comment) - this used to fire
+    // unconditionally on mount there instead, which meant every anonymous
+    // visitor (LoginSignupPage, before any credential exists) triggered
+    // it too and got a 401 back, every single load. Fires once a real
+    // session is confirmed instead, same guarded-once shape as the
+    // Dashboard preload above.
+    const [sidebarAccessLoaded, setSidebarAccessLoaded] = useState(false);
+
+    useEffect(() => {
+
+        if (configured && user && !sidebarAccessLoaded) {
+            setSidebarAccessLoaded(true);
+            refreshSidebarAccess();
+        }
+
+    }, [configured, user, sidebarAccessLoaded, refreshSidebarAccess]);
 
     // Fired once per real app load (not polled) - reports this browser's
     // own build-time commit so Services -> Application Support can show
