@@ -1,7 +1,9 @@
 import { useMemo, useRef, useState } from "react";
 import { useFrame } from "@react-three/fiber";
+import { Billboard, Text } from "@react-three/drei";
 import Hotspot from "../Hotspot";
 import { useScene } from "../sceneStore";
+import { MONO_FONT } from "../fonts";
 import { ALL_SKILLS, SKILL_GROUPS } from "../../../data/portfolio3dData";
 
 export function CloudMarker({ onSelect, reducedMotion, dimmed }) {
@@ -53,12 +55,17 @@ export function CloudMarker({ onSelect, reducedMotion, dimmed }) {
 // graph read as noise instead of six recognizable categories. Hovering
 // a node, or clicking its skill's tag in the 2D panel (see
 // SkillsContent's setHighlightedSkillGroup below), highlights every
-// node in that same group.
+// node in that same group. Clicking a single node also selects just
+// that skill and shows a floating name label over it - clicking a
+// cluster's node highlights/expands its whole group in the panel
+// (shared setHighlightedSkillGroup), while clicking the individual
+// atom is the one that names that specific skill.
 export function SkillsGraph({ reducedMotion }) {
 
-    const { highlightedSkillGroup } = useScene();
+    const { highlightedSkillGroup, setHighlightedSkillGroup } = useScene();
     const groupRef = useRef();
     const [hoveredGroup, setHoveredGroup] = useState(null);
+    const [selectedLabel, setSelectedLabel] = useState(null);
     const activeGroup = hoveredGroup || highlightedSkillGroup;
 
     const nodes = useMemo(() => {
@@ -86,7 +93,7 @@ export function SkillsGraph({ reducedMotion }) {
                 ...skill,
                 position: [
                     Math.cos(baseAngle) * baseRadius + Math.cos(spiralAngle) * spiralRadius,
-                    1.5 + spread,
+                    spread,
                     Math.sin(baseAngle) * baseRadius + Math.sin(spiralAngle) * spiralRadius
                 ]
             };
@@ -100,13 +107,21 @@ export function SkillsGraph({ reducedMotion }) {
         if (groupRef.current && !reducedMotion) groupRef.current.rotation.y += delta * 0.06;
     });
 
+    const selectedNode = selectedLabel && nodes.find((n) => n.label === selectedLabel);
+
     return (
 
-        <group ref={groupRef} position={[0, 0, -0.5]}>
+        // Positioned to match CloudMarker's own [0, 3, -0.5] exactly - it
+        // previously sat at [0, 0, -0.5] with nodes centered around a
+        // local y of 1.5, 1.5 units below where the marker itself lives,
+        // so the whole cluster rendered disconnected from (well below)
+        // the icosahedron it's meant to surround.
+        <group ref={groupRef} position={[0, 3, -0.5]}>
 
             {nodes.map((node) => {
 
                 const dimmed = activeGroup && node.group !== activeGroup;
+                const selected = selectedLabel === node.label;
 
                 return (
                     <mesh
@@ -114,12 +129,17 @@ export function SkillsGraph({ reducedMotion }) {
                         position={node.position}
                         onPointerOver={(e) => { e.stopPropagation(); setHoveredGroup(node.group); }}
                         onPointerOut={(e) => { e.stopPropagation(); setHoveredGroup(null); }}
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedLabel((prev) => (prev === node.label ? null : node.label));
+                            setHighlightedSkillGroup(node.group);
+                        }}
                     >
-                        <sphereGeometry args={[0.06, 12, 12]} />
+                        <sphereGeometry args={[selected ? 0.08 : 0.06, 12, 12]} />
                         <meshStandardMaterial
-                            color="#22d3ee"
+                            color={selected ? "#eafaff" : "#22d3ee"}
                             emissive="#22d3ee"
-                            emissiveIntensity={dimmed ? 0.2 : 0.9}
+                            emissiveIntensity={dimmed ? 0.2 : selected ? 1.3 : 0.9}
                             transparent
                             opacity={dimmed ? 0.35 : 1}
                         />
@@ -145,6 +165,25 @@ export function SkillsGraph({ reducedMotion }) {
                 );
 
             }))}
+
+            {/* the one-skill label - only for whichever atom was clicked.
+                Billboard keeps it facing the camera regardless of the
+                graph's own idle rotation, so it stays legible. */}
+            {selectedNode && (
+                <Billboard position={[selectedNode.position[0], selectedNode.position[1] + 0.16, selectedNode.position[2]]}>
+                    <Text
+                        font={MONO_FONT}
+                        fontSize={0.075}
+                        color="#eafaff"
+                        outlineWidth={0.006}
+                        outlineColor="#05141a"
+                        anchorX="center"
+                        anchorY="bottom"
+                    >
+                        {selectedNode.label}
+                    </Text>
+                </Billboard>
+            )}
 
         </group>
 

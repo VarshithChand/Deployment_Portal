@@ -1,13 +1,7 @@
 import { Text } from "@react-three/drei";
 import Hotspot from "../Hotspot";
+import { MONO_FONT } from "../fonts";
 import { ABOUT, PROFILE } from "../../../data/portfolio3dData";
-
-// drei's <Text> needs an actual font file to rasterize glyphs from. Its
-// own default font is fetched from an external CDN at runtime, which
-// this app's CSP blocks (connect-src is locked to same-origin + the API
-// only, see vite.config.js) - self-hosting under /public keeps it a
-// same-origin request the CSP already allows.
-const MONO_FONT = "/fonts/JetBrainsMono-Medium.ttf";
 
 export function TerminalMarker({ onSelect, reducedMotion, dimmed }) {
 
