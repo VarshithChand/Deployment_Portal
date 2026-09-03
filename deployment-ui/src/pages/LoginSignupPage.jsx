@@ -634,8 +634,10 @@ export default function LoginSignupPage({ onMfaRequired }) {
                 {/* This app-wide toggle is hidden for Portfolio - the 3D
                     room (PortfolioRoom) is position:fixed/inset:0, so this
                     button would be permanently covered by the canvas
-                    either way, and the room itself is dark-only by design
-                    (a real control-room feel, not a togglable one). */}
+                    either way. It has its own theme toggle instead (see
+                    PortfolioRoom.jsx's proom-theme-toggle), reading and
+                    writing the same shared ThemeContext this one does, so
+                    the two stay in sync either way. */}
                 {toolMode !== "portfolio" && themeToggle}
 
                 <div className="aw-tools-view">

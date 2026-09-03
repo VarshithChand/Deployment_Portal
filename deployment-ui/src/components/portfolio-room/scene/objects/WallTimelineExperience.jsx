@@ -2,6 +2,7 @@ import { Billboard, Text } from "@react-three/drei";
 import Hotspot from "../Hotspot";
 import { MONO_FONT } from "../../fonts";
 import { useStore } from "../../state/store";
+import { labelTextColors } from "../../textTheme";
 import { EXPERIENCE_TIMELINE } from "../../data/experience";
 
 const CENTER_Z = -2;
@@ -9,13 +10,14 @@ const STEP = 0.6;
 
 // Lit timeline running along the left wall, like a metro line with a
 // glowing stop per year -> EXPERIENCE. Clicking a stop opens that year.
-export default function WallTimelineExperience({ reducedMotion }) {
+export default function WallTimelineExperience({ reducedMotion, theme }) {
 
     const active = useStore((s) => s.active);
     const setActive = useStore((s) => s.setActive);
     const selectedExperienceYear = useStore((s) => s.selectedExperienceYear);
     const setSelectedExperienceYear = useStore((s) => s.setSelectedExperienceYear);
     const isOpen = active === "experience";
+    const labelColors = labelTextColors(theme);
 
     const zPositions = EXPERIENCE_TIMELINE.map((_, i) => CENTER_Z + (i - (EXPERIENCE_TIMELINE.length - 1) / 2) * STEP);
 
@@ -32,7 +34,7 @@ export default function WallTimelineExperience({ reducedMotion }) {
 
             {!isOpen && (
                 <Billboard position={[-6.5, 2.5, CENTER_Z]}>
-                    <Text font={MONO_FONT} fontSize={0.1} color="#67e8f9" outlineWidth={0.007} outlineColor="#031014" anchorX="center" anchorY="bottom">
+                    <Text font={MONO_FONT} fontSize={0.1} color={labelColors.title} outlineWidth={0.007} outlineColor={labelColors.outline} anchorX="center" anchorY="bottom">
                         EXPERIENCE
                     </Text>
                 </Billboard>
@@ -62,7 +64,7 @@ export default function WallTimelineExperience({ reducedMotion }) {
                                     />
                                 </mesh>
                                 <Billboard position={[0, 0.2, 0]}>
-                                    <Text font={MONO_FONT} fontSize={0.06} color={selected ? "#eafaff" : "#9fd8e0"} outlineWidth={0.005} outlineColor="#05141a" anchorX="center" anchorY="bottom">
+                                    <Text font={MONO_FONT} fontSize={0.06} color={selected ? labelColors.selected : labelColors.idle} outlineWidth={0.005} outlineColor={labelColors.outline} anchorX="center" anchorY="bottom">
                                         {entry.year}
                                     </Text>
                                 </Billboard>

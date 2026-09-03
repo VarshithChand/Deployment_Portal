@@ -4,17 +4,19 @@ import { Billboard, Text } from "@react-three/drei";
 import Hotspot from "../Hotspot";
 import { MONO_FONT } from "../../fonts";
 import { useStore } from "../../state/store";
+import { labelTextColors } from "../../textTheme";
 import { SKILL_GROUPS, ALL_SKILLS } from "../../data/skills";
 
 // Pendant light hanging over the desk -> SKILLS. Starts dim/off; clicking
 // it flickers on, brightens the room (a real PointLight ramps up with it,
 // not just the fixture's own emissive), and the skill nodes spread out
 // around it, grouped and connected by thin cyan lines.
-export default function CeilingLightSkills({ reducedMotion }) {
+export default function CeilingLightSkills({ reducedMotion, theme }) {
 
     const active = useStore((s) => s.active);
     const setActive = useStore((s) => s.setActive);
     const isOpen = active === "skills";
+    const labelColors = labelTextColors(theme);
 
     const coreRef = useRef();
     const glowRef = useRef();
@@ -186,9 +188,9 @@ export default function CeilingLightSkills({ reducedMotion }) {
                                 <Text
                                     font={MONO_FONT}
                                     fontSize={selected ? 0.06 : 0.045}
-                                    color={selected ? "#eafaff" : "#9fd8e0"}
+                                    color={selected ? labelColors.selected : labelColors.idle}
                                     outlineWidth={0.004}
-                                    outlineColor="#05141a"
+                                    outlineColor={labelColors.outline}
                                     anchorX="center"
                                     anchorY="bottom"
                                 >

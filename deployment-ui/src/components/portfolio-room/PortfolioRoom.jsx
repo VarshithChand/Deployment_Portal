@@ -1,6 +1,6 @@
 import { Suspense, lazy, useEffect } from "react";
 import { AnimatePresence } from "framer-motion";
-import { X } from "lucide-react";
+import { X, Sun, Moon } from "lucide-react";
 import { useStore } from "./state/store";
 import Loader from "./scene/Loader";
 import Nav from "./ui/Nav";
@@ -8,6 +8,7 @@ import Panel from "./ui/Panel";
 import MobileFallback from "./ui/MobileFallback";
 import useReducedMotion from "../../hooks/useReducedMotion";
 import useIsMobile from "../../hooks/useIsMobile";
+import useTheme from "../../hooks/useTheme";
 import About from "./ui/sections/About";
 import Skills from "./ui/sections/Skills";
 import Projects from "./ui/sections/Projects";
@@ -30,7 +31,7 @@ const SECTION_CONTENT = {
     dashboard: Dashboard, projects: Projects, experience: Experience
 };
 
-function DesktopRoom({ reducedMotion }) {
+function DesktopRoom({ reducedMotion, theme }) {
 
     const active = useStore((s) => s.active);
     const back = useStore((s) => s.back);
@@ -50,7 +51,7 @@ function DesktopRoom({ reducedMotion }) {
 
             <div className="proom-canvas-wrap">
                 <Suspense fallback={null}>
-                    <SceneExperience reducedMotion={reducedMotion} />
+                    <SceneExperience reducedMotion={reducedMotion} theme={theme} />
                 </Suspense>
             </div>
 
@@ -78,6 +79,11 @@ export default function PortfolioRoom({ onExit }) {
     const reducedMotion = useReducedMotion();
     const isMobile = useIsMobile();
     const setReducedMotion = useStore((s) => s.setReducedMotion);
+    // Same shared ThemeContext every other page reads (see main.jsx's
+    // ThemeProvider) - not a room-local preference. Toggling here changes
+    // the theme for the whole application, and arriving here already
+    // reflects whatever was last chosen elsewhere.
+    const { theme, toggleTheme } = useTheme();
 
     useEffect(() => {
         setReducedMotion(reducedMotion);
@@ -85,7 +91,7 @@ export default function PortfolioRoom({ onExit }) {
 
     return (
 
-        <div className="proom-root">
+        <div className={`proom-root${theme === "light" ? " proom-light" : ""}`}>
             <style>{CSS}</style>
 
             {onExit && (
@@ -94,7 +100,17 @@ export default function PortfolioRoom({ onExit }) {
                 </button>
             )}
 
-            {isMobile ? <MobileFallback /> : <DesktopRoom reducedMotion={reducedMotion} />}
+            <button
+                type="button"
+                className="proom-theme-toggle"
+                onClick={toggleTheme}
+                aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+                title={theme === "dark" ? "Light mode" : "Dark mode"}
+            >
+                {theme === "dark" ? <Sun size={15} /> : <Moon size={15} />}
+            </button>
+
+            {isMobile ? <MobileFallback /> : <DesktopRoom reducedMotion={reducedMotion} theme={theme} />}
 
         </div>
 
@@ -109,6 +125,18 @@ const CSS = `
   --pr-vignette:rgba(2,4,8,.6);
   position:fixed; inset:0; background:var(--pr-bg); color:var(--pr-text);
   font-family:'Space Grotesk','Inter',system-ui,sans-serif; overflow:hidden;
+}
+/* Light theme - every 2D piece (nav/panel/loader/mobile fallback) already
+   reads these tokens instead of hardcoded colors, so this block alone
+   re-themes all of it. The 3D room itself (floor/walls/fog - real
+   Three.js material colors, not CSS) is re-themed separately via a theme
+   prop threaded into Experience.jsx/Room.jsx and the station objects
+   (see textTheme.js); the monitor/wall-screen "screens" stay
+   dark-screened in both themes on purpose. */
+.proom-root.proom-light{
+  --pr-bg:#eef2f7; --pr-panel:#ffffffee; --pr-line:#d7dee8; --pr-text:#0f172a;
+  --pr-muted:#5b6b83; --pr-cyan:#0891b2; --pr-purple:#7c3aed; --pr-track:#dde5ef;
+  --pr-vignette:rgba(148,163,184,.35);
 }
 .proom-root *{box-sizing:border-box;}
 .proom-root .mono{font-family:'JetBrains Mono',ui-monospace,monospace;}
@@ -150,6 +178,11 @@ const CSS = `
   background:var(--pr-panel); border:1px solid var(--pr-line); border-radius:12px; padding:9px 14px 9px 12px;
   font-size:12.5px; font-weight:600; color:var(--pr-muted); backdrop-filter:blur(10px);}
 .proom-exit:hover{color:var(--pr-cyan); border-color:var(--pr-cyan);}
+
+.proom-theme-toggle{position:absolute; top:20px; right:20px; z-index:10; display:flex; align-items:center;
+  justify-content:center; width:36px; height:36px; background:var(--pr-panel); border:1px solid var(--pr-line);
+  border-radius:12px; color:var(--pr-muted); backdrop-filter:blur(10px);}
+.proom-theme-toggle:hover{color:var(--pr-cyan); border-color:var(--pr-cyan);}
 
 .proom-panel{position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); z-index:15;
   width:min(92vw, 560px); max-height:80vh; overflow-y:auto; background:var(--pr-panel);

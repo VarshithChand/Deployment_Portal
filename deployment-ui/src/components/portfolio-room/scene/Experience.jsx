@@ -13,10 +13,19 @@ import WallTimelineExperience from "./objects/WallTimelineExperience";
 import GreeterErrorBoundary from "./objects/GreeterErrorBoundary";
 import Greeter from "./objects/Greeter";
 
-// Canvas root - camera, lights, fog, bloom. Dark is the room's only mode,
-// not a toggle - the whole point is a lit-up control room, not a bright
-// space with an on/off switch for that.
-export default function Experience({ reducedMotion }) {
+// Canvas root - camera, lights, fog, bloom. `theme` re-themes the room's
+// environment (background/fog/floor/walls/grid) and its floating open-air
+// labels to match the rest of the application - see PortfolioRoom.jsx,
+// which reads the same shared ThemeContext every other page uses rather
+// than a room-local preference. Left unchanged between themes on purpose:
+// the accent point lights (cyan/purple - the room's deliberate "glow"
+// identity, reads fine against either backdrop) and the monitor/wall-
+// screen "screen" materials (a real screen doesn't turn white just
+// because the room around it is bright).
+export default function Experience({ reducedMotion, theme }) {
+
+    const light = theme === "light";
+    const bg = light ? "#eef2f7" : "#0a0e14";
 
     return (
 
@@ -26,24 +35,24 @@ export default function Experience({ reducedMotion }) {
             dpr={[1, 1.5]}
         >
 
-            <color attach="background" args={["#0a0e14"]} />
-            <fog attach="fog" args={["#0a0e14", 9, 26]} />
+            <color attach="background" args={[bg]} />
+            <fog attach="fog" args={[bg, 9, 26]} />
 
-            <ambientLight intensity={0.3} />
-            <directionalLight position={[3, 6, 4]} intensity={0.7} />
+            <ambientLight intensity={light ? 0.45 : 0.3} />
+            <directionalLight position={[3, 6, 4]} intensity={light ? 0.9 : 0.7} />
             <pointLight color="#22d3ee" position={[-6, 4, -2]} intensity={1.4} />
             <pointLight color="#a78bfa" position={[3, 3, -4]} intensity={0.6} />
 
             <Suspense fallback={null}>
 
-                <Room />
+                <Room theme={theme} />
                 <Desk />
                 <MonitorAbout reducedMotion={reducedMotion} />
                 <PhoneContact reducedMotion={reducedMotion} />
-                <CeilingLightSkills reducedMotion={reducedMotion} />
+                <CeilingLightSkills reducedMotion={reducedMotion} theme={theme} />
                 <WallDashboard reducedMotion={reducedMotion} />
-                <ServerRackProjects reducedMotion={reducedMotion} />
-                <WallTimelineExperience reducedMotion={reducedMotion} />
+                <ServerRackProjects reducedMotion={reducedMotion} theme={theme} />
+                <WallTimelineExperience reducedMotion={reducedMotion} theme={theme} />
 
                 <GreeterErrorBoundary>
                     <Greeter reducedMotion={reducedMotion} />
