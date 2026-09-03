@@ -15,10 +15,17 @@ export function SceneProvider({ children }) {
 
     const [activeSection, setActiveSection] = useState(null);
     const [loaded, setLoaded] = useState(false);
+    // Shared between the 2D Skills panel's tag buttons and the 3D skills
+    // node-graph, so clicking a tag highlights its cluster in the room the
+    // same way hovering a node already does.
+    const [highlightedSkillGroup, setHighlightedSkillGroup] = useState(null);
 
     const value = useMemo(
-        () => ({ activeSection, setActiveSection, loaded, setLoaded }),
-        [activeSection, loaded]
+        () => ({
+            activeSection, setActiveSection, loaded, setLoaded,
+            highlightedSkillGroup, setHighlightedSkillGroup
+        }),
+        [activeSection, loaded, highlightedSkillGroup]
     );
 
     return <SceneContext.Provider value={value}>{children}</SceneContext.Provider>;

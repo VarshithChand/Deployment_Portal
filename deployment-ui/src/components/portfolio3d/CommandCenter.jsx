@@ -187,10 +187,13 @@ const CSS = `
 
 /* skills */
 .p3d-skills-group{margin-bottom:16px;}
-.p3d-skills-group h3{margin:0 0 8px; font-size:12.5px; color:var(--p3d-purple); text-transform:uppercase; letter-spacing:.04em;}
+.p3d-skills-group h3{margin:0 0 8px; font-size:12.5px; color:var(--p3d-purple); text-transform:uppercase; letter-spacing:.04em; transition:color .15s ease;}
+.p3d-skills-group.active h3{color:var(--p3d-cyan);}
 .p3d-skills-tags{display:flex; flex-wrap:wrap; gap:6px;}
 .p3d-tag{font-size:11.5px; padding:5px 9px; border-radius:7px; color:var(--p3d-muted);
-  background:#0f1620; border:1px solid var(--p3d-line);}
+  background:#0f1620; border:1px solid var(--p3d-line); transition:border-color .15s ease, color .15s ease;}
+.p3d-tag:hover{border-color:var(--p3d-cyan); color:var(--p3d-text);}
+.p3d-tag.on{border-color:var(--p3d-cyan); color:var(--p3d-cyan); background:color-mix(in srgb, var(--p3d-cyan) 14%, transparent);}
 
 /* projects */
 .p3d-pipeline-strip{display:flex; flex-wrap:wrap; gap:4px; font-size:10.5px; color:var(--p3d-muted);
