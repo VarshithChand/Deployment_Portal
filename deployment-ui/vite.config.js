@@ -33,18 +33,25 @@ function writeSecurityHeadersPlugin() {
         `script-src 'self'`,
         `style-src 'self' 'unsafe-inline' https://fonts.googleapis.com`,
         `font-src 'self' https://fonts.gstatic.com`,
-        // blob: added for CesiumMan.glb (Portfolio's 3D room) - its
-        // texture is embedded in the binary chunk (bufferView-referenced,
-        // not an external file), which is exactly the pattern that makes
-        // three.js's GLTFLoader build a Blob from that chunk and load it
-        // via a blob: URL - without this, the texture's image load is
-        // silently blocked by the browser, GLTFLoader's parse() promise
-        // rejects, and since useGLTF's Suspense integration surfaces a
-        // rejected loader promise as a thrown error, it crashes the whole
-        // Canvas (no ErrorBoundary around it) - reproduces only in the
-        // built/deployed site, never in `npm run dev`, since Vite's dev
-        // server never applies these CSP headers at all.
+        // img-src blob: was added for CesiumMan.glb's embedded texture
+        // (since removed - Portfolio's operator figure is plain
+        // primitives now) and left in place; harmless to keep, avoids
+        // re-litigating this if any future feature loads an image via a
+        // Blob again.
         `img-src 'self' data: blob: https://avatars.githubusercontent.com`,
+        // worker-src blob: - drei's <Text> (troika-three-text, used for
+        // every station title/label throughout the Portfolio 3D room)
+        // spins up a background Worker from a blob: URL for text layout.
+        // With no worker-src directive at all, that falls back to
+        // script-src 'self', which doesn't cover blob: - the browser
+        // blocks the worker creation, it throws, and with nothing
+        // catching it the error crashes the entire Canvas the instant
+        // Room tries to render its first label (which happens
+        // immediately on mount) - the actual cause of the 3D room
+        // rendering as a totally blank canvas on the deployed site,
+        // reproducing only there since Vite's dev server never applies
+        // these CSP headers at all.
+        `worker-src 'self' blob:`,
         `connect-src ${connectSrc}`,
         `frame-ancestors 'none'`,
         `base-uri 'self'`,
