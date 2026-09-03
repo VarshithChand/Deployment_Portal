@@ -67,7 +67,15 @@ export function TimelineMarker({ onSelect, reducedMotion, dimmed }) {
             })}
 
             {!dimmed && (
-                <Billboard position={[-3.2, 1.75, -1.5]}>
+                // Pushed higher than the "SKILLS"/"PROJECTS"/"CONTACT"
+                // titles - Timeline and Contact sit close together in the
+                // room (x -3.2/-2.6, z -1.5/-0.6), and at the room-overview
+                // camera angle their two titles were landing almost on top
+                // of each other on screen. Contact's marker is also
+                // shorter, so its title sits lower - giving Experience's
+                // title real clearance instead of matching the same
+                // height was the actual fix, not just "a bit higher".
+                <Billboard position={[-3.2, 2.15, -1.5]}>
                     <Text
                         font={MONO_FONT}
                         fontSize={0.11}
