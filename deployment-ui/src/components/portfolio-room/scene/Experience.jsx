@@ -71,13 +71,26 @@ export default function Experience({ reducedMotion, theme }) {
                 <WelcomeSign theme={theme} />
 
                 {/* furnishing - purely decorative, makes the space read
-                    as an actual room rather than a bare demo showroom */}
+                    as an actual room rather than a bare demo showroom.
+                    Positions are checked against every camera angle the
+                    room actually uses (CameraRig.jsx's CAMERA_TARGETS,
+                    plus the overview) - the room has no free-look, only
+                    those fixed views plus a little idle drift, so
+                    anything placed well outside all of them (the first
+                    pass had the window, switchboard, and 2 of 3 plants
+                    ~60-75 degrees off every camera's forward direction)
+                    is permanently invisible no matter what, regardless of
+                    its own color/lighting. */}
                 <Bed position={[-6, 0, -4]} />
-                <Plant position={[7, 0, 4]} />
-                <Plant position={[-7, 0, 4]} scale={0.85} />
+                <Plant position={[2.3, 0, -1.6]} />
+                <Plant position={[-2.2, 0, -1.5]} scale={0.85} />
                 <Plant position={[7, 0, -4.3]} scale={1.1} />
-                <SwitchBoard position={[7.95, 1.4, 3.5]} rotation={[0, -Math.PI / 2, 0]} />
-                <Window position={[-7.95, 2.6, 1.5]} rotation={[0, Math.PI / 2, 0]} theme={theme} />
+                {/* sits almost dead-center in the "projects" camera's own
+                    view (rack station) */}
+                <SwitchBoard position={[7.95, 1.4, -2.5]} rotation={[0, -Math.PI / 2, 0]} />
+                {/* sits a few degrees off-center in the "experience"
+                    camera's view (wall timeline station) */}
+                <Window position={[-7.95, 2.6, -3.5]} rotation={[0, Math.PI / 2, 0]} theme={theme} />
                 <Clock position={[-3, 2.6, -4.83]} theme={theme} />
 
                 <GreeterErrorBoundary>

@@ -8,17 +8,28 @@
 export default function Window({ position = [0, 0, 0], rotation = [0, 0, 0], theme }) {
 
     const day = theme !== "dark";
-    const sky = day ? "#bfe0f2" : "#0a1220";
+    // Night sky is a real blue, not a near-black that would sit almost
+    // indistinguishable from the room's own dark wall right next to it -
+    // a window that blends into the wall it's cut into doesn't read as a
+    // window at all.
+    const sky = day ? "#bfe0f2" : "#16233f";
     const glow = day ? "#fef3c7" : "#c7d2e0";
 
     return (
 
         <group position={position} rotation={rotation}>
 
-            {/* frame */}
+            {/* frame, with a thin cyan edge light matching the room's own
+                accent - gives the opening a defined boundary against the
+                wall regardless of how close the pane's own color sits to
+                the wall's */}
             <mesh>
                 <boxGeometry args={[0.06, 1.1, 1.5]} />
                 <meshStandardMaterial color="#2a1f16" roughness={0.7} />
+            </mesh>
+            <mesh position={[0.034, 0, 0]}>
+                <planeGeometry args={[1.02, 1.42]} />
+                <meshBasicMaterial color="#22d3ee" transparent opacity={0.35} toneMapped={false} />
             </mesh>
 
             {/* glass pane */}
