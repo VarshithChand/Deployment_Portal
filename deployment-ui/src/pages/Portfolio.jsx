@@ -8,7 +8,7 @@ import { PROFILE } from "../data/portfolio3dData";
 // decision (2026-09-03) to go all-in on full 3D despite the tradeoffs
 // (crawlability, bundle weight, accessibility) that were raised and
 // accepted going in. Still no login, still nothing saved.
-export default function Portfolio() {
+export default function Portfolio({ onExit }) {
 
     useEffect(() => {
 
@@ -19,6 +19,6 @@ export default function Portfolio() {
 
     }, []);
 
-    return <CommandCenter />;
+    return <CommandCenter onExit={onExit} />;
 
 }

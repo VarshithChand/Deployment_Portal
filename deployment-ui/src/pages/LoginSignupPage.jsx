@@ -649,7 +649,7 @@ export default function LoginSignupPage({ onMfaRequired }) {
                             ) : toolMode === "template-tester" ? (
                                 <TemplateTester />
                             ) : toolMode === "portfolio" ? (
-                                <Portfolio />
+                                <Portfolio onExit={closeTool} />
                             ) : toolMode === "about" ? (
                                 <About onOpenTool={openTool} />
                             ) : (

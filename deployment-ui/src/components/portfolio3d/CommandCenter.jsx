@@ -1,5 +1,6 @@
 import { Suspense, lazy, useEffect, useRef } from "react";
 import { AnimatePresence } from "framer-motion";
+import { X } from "lucide-react";
 import { SceneProvider, useScene, SECTIONS } from "./sceneStore";
 import Loader from "./Loader";
 import Nav from "./Nav";
@@ -120,7 +121,7 @@ function DesktopCommandCenter({ reducedMotion }) {
 
 }
 
-export default function CommandCenter() {
+export default function CommandCenter({ onExit }) {
 
     const reducedMotion = useReducedMotion();
     const isMobile = useIsMobile();
@@ -129,6 +130,18 @@ export default function CommandCenter() {
 
         <div className="p3d-root">
             <style>{CSS}</style>
+
+            {/* CommandCenter is position:fixed/inset:0 (see .p3d-root), so
+                it fully covers LoginSignupPage's own "Back to Login" chip
+                underneath it - that button still exists in the DOM, it's
+                just permanently hidden behind this. A real, visible exit
+                control belongs to the room itself instead of relying on
+                something behind it that can never be seen. */}
+            {onExit && (
+                <button type="button" className="p3d-exit" onClick={onExit} aria-label="Exit to login">
+                    <X size={15} /> Exit
+                </button>
+            )}
 
             <SceneProvider>
                 {isMobile ? (
@@ -189,6 +202,11 @@ const CSS = `
   color:var(--p3d-muted); font-weight:600;}
 .p3d-nav-btn:hover{color:var(--p3d-text);}
 .p3d-nav-btn.on{background:color-mix(in srgb, var(--p3d-cyan) 16%, transparent); color:var(--p3d-cyan);}
+
+.p3d-exit{position:absolute; top:20px; left:20px; z-index:10; display:flex; align-items:center; gap:6px;
+  background:var(--p3d-panel); border:1px solid var(--p3d-line); border-radius:12px; padding:9px 14px 9px 12px;
+  font-size:12.5px; font-weight:600; color:var(--p3d-muted); backdrop-filter:blur(10px);}
+.p3d-exit:hover{color:var(--p3d-cyan); border-color:var(--p3d-cyan);}
 
 /* panel */
 .p3d-panel{position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); z-index:15;

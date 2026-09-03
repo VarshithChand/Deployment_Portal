@@ -164,6 +164,15 @@
       }
       .boot-loader-caption .boot-loader-status { margin-top: 8px; max-width: none; }
       html[data-theme="dark"] .boot-loader-caption .boot-loader-sub { color: #a3b0cc; }
+      /* Visually hidden, not deleted - the description paragraph below is
+         still real crawlable text for a bot that never executes the JS
+         bundle (see that paragraph's own comment for why it exists at
+         all), it's just not something a sighted, JS-enabled visitor needs
+         to read on top of the H1 while waiting a fraction of a second. */
+      .boot-loader-visually-hidden {
+        position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0;
+        overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
+      }
 
       .boot-loader-dots span { animation: boot-blink 1.4s infinite; }
       .boot-loader-dots span:nth-child(2) { animation-delay: .2s; }
@@ -263,7 +272,7 @@
              visible for - nothing about the real loading UX changes. -->
         <div class="boot-loader-caption">
           <h1 class="boot-loader-title">Deployment Portal</h1>
-          <p class="boot-loader-sub">
+          <p class="boot-loader-sub boot-loader-visually-hidden">
             DevOps deployment platform — trigger releases, track GitHub Actions
             runs, and approve promotions across AWS, Azure, and GCP.
           </p>
