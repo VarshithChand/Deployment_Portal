@@ -33,7 +33,18 @@ function writeSecurityHeadersPlugin() {
         `script-src 'self'`,
         `style-src 'self' 'unsafe-inline' https://fonts.googleapis.com`,
         `font-src 'self' https://fonts.gstatic.com`,
-        `img-src 'self' data: https://avatars.githubusercontent.com`,
+        // blob: added for CesiumMan.glb (Portfolio's 3D room) - its
+        // texture is embedded in the binary chunk (bufferView-referenced,
+        // not an external file), which is exactly the pattern that makes
+        // three.js's GLTFLoader build a Blob from that chunk and load it
+        // via a blob: URL - without this, the texture's image load is
+        // silently blocked by the browser, GLTFLoader's parse() promise
+        // rejects, and since useGLTF's Suspense integration surfaces a
+        // rejected loader promise as a thrown error, it crashes the whole
+        // Canvas (no ErrorBoundary around it) - reproduces only in the
+        // built/deployed site, never in `npm run dev`, since Vite's dev
+        // server never applies these CSP headers at all.
+        `img-src 'self' data: blob: https://avatars.githubusercontent.com`,
         `connect-src ${connectSrc}`,
         `frame-ancestors 'none'`,
         `base-uri 'self'`,
