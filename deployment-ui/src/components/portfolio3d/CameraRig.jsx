@@ -25,7 +25,16 @@ const CAMERA_TARGETS = {
     // x recentered from 2.95 to 2.02 - the project row shrank from 6 to
     // 3 boxes (see portfolio3dData.js), moving its midpoint.
     projects: { position: [2.02, 2.15, 4.3], lookAt: [2.02, 0.95, -1] },
-    experience: { position: [-3.2, 2.15, 3.5], lookAt: [-3.2, 1.3, -1.5] },
+    // Pulled back further (z 3.5 -> 6.5) than a typical single-marker
+    // station needs - Timeline is 4 separate circles spread across real
+    // width (see TimelineExperience.jsx's STEP), and at the closer
+    // distance the outer ones straddled the open panel's edge: some
+    // circles landing clear of it, others half-cut, an inconsistent mix
+    // instead of the row reading either fully visible or (like every
+    // other station's own marker/content when its panel is open)
+    // consistently sitting behind it. This shrinks the row's on-screen
+    // footprint enough to sit fully behind the panel instead.
+    experience: { position: [-3.2, 2.15, 6.5], lookAt: [-3.2, 1.3, -1.5] },
     dashboard: { position: [0, 2.4, -2.9], lookAt: [0, 2.6, -5.7] },
     // x matches ContactMarker's position (see ContactConsole.jsx) -
     // -4.8, not -5.5, so the camera's straight-down-Z sightline doesn't
