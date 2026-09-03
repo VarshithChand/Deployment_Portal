@@ -273,16 +273,16 @@ const CSS = `
 .proom-skills-group h3{margin:0 0 8px; font-size:12.5px; color:var(--pr-purple); text-transform:uppercase; letter-spacing:.04em;}
 .proom-skills-tags{display:flex; flex-wrap:wrap; gap:6px;}
 .proom-tag{font-size:11.5px; padding:5px 9px; border-radius:7px; color:var(--pr-muted);
-  background:#0f1620; border:1px solid var(--pr-line);}
+  background:var(--pr-track); border:1px solid var(--pr-line);}
 
 .proom-project-card{border:1px solid var(--pr-line); border-radius:10px; margin-bottom:8px; overflow:hidden;}
-.proom-project-head{width:100%; text-align:left; background:#0f1620; border:0; padding:12px 14px;
+.proom-project-head{width:100%; text-align:left; background:var(--pr-track); border:0; padding:12px 14px;
   font-size:13.5px; font-weight:600; color:var(--pr-text);}
 .proom-project-body{padding:14px;}
 .proom-project-body p{margin:0 0 12px; font-size:12.5px; color:var(--pr-muted); line-height:1.6;}
 .proom-arch-diagram{display:flex; flex-wrap:wrap; gap:4px; margin-bottom:12px; font-size:11px; color:var(--pr-cyan);}
 .proom-arch-step-wrap{display:inline-flex; align-items:center; gap:4px;}
-.proom-arch-step{padding:4px 8px; border:1px solid var(--pr-line); border-radius:6px; background:#0a0e14;}
+.proom-arch-step{padding:4px 8px; border:1px solid var(--pr-line); border-radius:6px; background:var(--pr-track);}
 .proom-arch-arrow{color:var(--pr-cyan); margin:0 2px;}
 .proom-project-links{display:flex; gap:10px; margin-top:12px;}
 .proom-project-link{display:inline-flex; align-items:center; gap:4px; font-size:12px; color:var(--pr-cyan); text-decoration:none;}
@@ -308,7 +308,7 @@ const CSS = `
 .proom-contact p{font-size:13px; color:var(--pr-muted); margin:0 0 16px;}
 .proom-contact-actions{display:flex; flex-wrap:wrap; gap:10px; margin-bottom:18px;}
 .proom-btn{display:inline-flex; align-items:center; gap:8px; font-size:13px; font-weight:600; padding:10px 16px;
-  border-radius:9px; border:1px solid var(--pr-line); background:#0f1620; color:var(--pr-text); text-decoration:none;}
+  border-radius:9px; border:1px solid var(--pr-line); background:var(--pr-track); color:var(--pr-text); text-decoration:none;}
 .proom-btn:hover{border-color:var(--pr-cyan); color:var(--pr-cyan);}
 .proom-btn-primary{background:var(--pr-cyan); border-color:var(--pr-cyan); color:#04212b;}
 .proom-btn-primary:hover{filter:brightness(1.08); color:#04212b;}
