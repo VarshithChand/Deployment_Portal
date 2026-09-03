@@ -1,10 +1,43 @@
 import { useScene } from "./sceneStore";
+import Operator from "./Operator";
 import { TerminalMarker } from "./stations/TerminalAbout";
 import { CloudMarker, SkillsGraph } from "./stations/CloudSkills";
 import { PipelineMarkers } from "./stations/PipelineProjects";
 import { TimelineMarker } from "./stations/TimelineExperience";
 import { DashboardMarker } from "./stations/WallDashboard";
 import { ContactMarker } from "./stations/ContactConsole";
+
+// A handful of static decorative rack props for the otherwise-empty
+// floor areas (server-rack silhouettes - two stacked boxes each, no
+// interaction, just filling dead space between stations).
+const RACKS = [
+    [5.6, 0, -3.2],
+    [5.8, 0, 2.4],
+    [-5.9, 0, -4.6]
+];
+
+function RackProp({ position }) {
+
+    return (
+
+        <group position={position}>
+            <mesh position={[0, 0.28, 0]}>
+                <boxGeometry args={[0.4, 0.56, 0.32]} />
+                <meshStandardMaterial color="#0e161f" emissive="#123240" emissiveIntensity={0.25} roughness={0.8} />
+            </mesh>
+            <mesh position={[0, 0.06, 0.17]}>
+                <boxGeometry args={[0.34, 0.02, 0.01]} />
+                <meshStandardMaterial color="#164e63" emissive="#22d3ee" emissiveIntensity={0.5} toneMapped={false} />
+            </mesh>
+            <mesh position={[0, 0.18, 0.17]}>
+                <boxGeometry args={[0.34, 0.02, 0.01]} />
+                <meshStandardMaterial color="#164e63" emissive="#22d3ee" emissiveIntensity={0.5} toneMapped={false} />
+            </mesh>
+        </group>
+
+    );
+
+}
 
 // The environment itself - low-poly primitives (floor, back/side walls,
 // a desk), per the "primitives first, Blender models later" build order.
@@ -138,6 +171,10 @@ export default function Room({ reducedMotion }) {
             <ContactMarker onSelect={() => select("contact")} reducedMotion={reducedMotion} dimmed={activeSection && activeSection !== "contact"} />
 
             {activeSection === "skills" && <SkillsGraph reducedMotion={reducedMotion} />}
+
+            {RACKS.map((pos) => <RackProp key={pos.join(",")} position={pos} />)}
+
+            <Operator reducedMotion={reducedMotion} />
 
         </group>
 
