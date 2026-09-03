@@ -1,13 +1,28 @@
+import { useState } from "react";
 import { Text } from "@react-three/drei";
 import Hotspot from "../Hotspot";
 import { MONO_FONT } from "../../fonts";
 import { useStore } from "../../state/store";
-import { PROFILE } from "../../data/profile";
+import { ABOUT } from "../../data/profile";
 
-// Monitor on the desk, screen facing the visitor -> ABOUT.
+// Monitor on the desk, screen facing the visitor -> ABOUT. The screen
+// itself pages through ABOUT.whoami's blocks (identity, tagline,
+// education) one "container" at a time via a clickable "> Next" prompt,
+// rather than showing all of them stacked at once - the same real
+// content the About panel shows, just paginated in-world on the screen
+// itself. Next only advances the slide (stopPropagation keeps it from
+// also re-triggering the Hotspot's own onSelect); clicking anywhere else
+// on the screen still opens the About panel as before.
 export default function MonitorAbout({ reducedMotion }) {
 
     const setActive = useStore((s) => s.setActive);
+    const [slideIndex, setSlideIndex] = useState(0);
+
+    const slide = ABOUT.whoami[slideIndex];
+    const displayLines = [
+        ...(slide.prompt ? [{ text: slide.prompt, color: "#5eead4" }] : []),
+        ...slide.lines.map((text) => ({ text, color: "#eafaff" }))
+    ];
 
     return (
 
@@ -41,18 +56,43 @@ export default function MonitorAbout({ reducedMotion }) {
                         </mesh>
 
                         <group position={[0, 0, 0.033]}>
-                            <Text font={MONO_FONT} fontSize={0.06} color="#5eead4" anchorX="center" anchorY="middle" position={[0, 0.16, 0]}>
-                                $ whoami
+
+                            {displayLines.map((line, i) => (
+                                <Text
+                                    key={`${slideIndex}-${i}`}
+                                    font={MONO_FONT}
+                                    fontSize={i === 0 ? 0.06 : 0.05}
+                                    color={line.color}
+                                    anchorX="center"
+                                    anchorY="middle"
+                                    maxWidth={0.78}
+                                    textAlign="center"
+                                    position={[0, 0.15 - i * 0.12, 0]}
+                                >
+                                    {line.text}
+                                </Text>
+                            ))}
+
+                            {/* Next - a real click target, always visible
+                                (not just on hover, unlike the old one-shot
+                                "> Explore my work" prompt it replaces) */}
+                            <Text
+                                font={MONO_FONT}
+                                fontSize={0.045}
+                                color="#5eead4"
+                                anchorX="center"
+                                anchorY="middle"
+                                position={[0, -0.21, 0]}
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    setSlideIndex((i) => (i + 1) % ABOUT.whoami.length);
+                                }}
+                                onPointerOver={(e) => { e.stopPropagation(); document.body.style.cursor = "pointer"; }}
+                                onPointerOut={(e) => { e.stopPropagation(); document.body.style.cursor = "auto"; }}
+                            >
+                                {`> Next (${slideIndex + 1}/${ABOUT.whoami.length})`}
                             </Text>
-                            <Text font={MONO_FONT} fontSize={0.065} color="#eafaff" anchorX="center" anchorY="middle" position={[0, 0.03, 0]}>
-                                {PROFILE.name}
-                            </Text>
-                            <Text font={MONO_FONT} fontSize={0.05} color="#9fd8e0" anchorX="center" anchorY="middle" position={[0, -0.09, 0]}>
-                                {PROFILE.role}
-                            </Text>
-                            <Text font={MONO_FONT} fontSize={0.045} color="#5eead4" anchorX="center" anchorY="middle" maxWidth={0.8} textAlign="center" position={[0, -0.19, 0]}>
-                                {hovered ? "> Explore my work" : "_"}
-                            </Text>
+
                         </group>
                     </>
                 )}

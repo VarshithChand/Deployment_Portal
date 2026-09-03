@@ -97,6 +97,61 @@ function useSectionLoop(enabled) {
 
 }
 
+// o+1/o+2/o+3 turn the fan/bedLight/cluster switch ON, f+1/f+2/f+3 turn
+// the same three OFF - matches the explicit request's own notation.
+// "o"/"f" arm a mode (2s to follow up before it clears itself); the next
+// 1/2/3 press applies it to that switch and clears the armed mode again,
+// so each shortcut is a fresh two-key sequence rather than a held chord
+// (which isn't reliably capturable via keydown events the way a true
+// simultaneous chord would be). This is a second path to the exact same
+// store state the switchboard's own clickable switches drive (see
+// SwitchBoard.jsx) - either one moves the same lever.
+const SWITCH_KEYS = { 1: "fan", 2: "bedLight", 3: "cluster" };
+
+function useSwitchShortcuts(enabled) {
+
+    const setSwitch = useStore((s) => s.setSwitch);
+    const modeRef = useRef(null);
+    const timeoutRef = useRef(null);
+
+    useEffect(() => {
+
+        if (!enabled) return;
+
+        function onKeyDown(e) {
+
+            if (e.repeat) return;
+            if (e.target && ["INPUT", "TEXTAREA"].includes(e.target.tagName)) return;
+
+            const key = e.key.toLowerCase();
+
+            if (key === "o" || key === "f") {
+                modeRef.current = key === "o";
+                clearTimeout(timeoutRef.current);
+                timeoutRef.current = setTimeout(() => { modeRef.current = null; }, 2000);
+                return;
+            }
+
+            const switchName = SWITCH_KEYS[key];
+            if (!switchName || modeRef.current === null) return;
+
+            setSwitch(switchName, modeRef.current);
+            modeRef.current = null;
+            clearTimeout(timeoutRef.current);
+
+        }
+
+        window.addEventListener("keydown", onKeyDown);
+
+        return () => {
+            window.removeEventListener("keydown", onKeyDown);
+            clearTimeout(timeoutRef.current);
+        };
+
+    }, [enabled, setSwitch]);
+
+}
+
 function DesktopRoom({ reducedMotion, theme, onExit }) {
 
     const active = useStore((s) => s.active);
@@ -106,6 +161,7 @@ function DesktopRoom({ reducedMotion, theme, onExit }) {
     const ActiveContent = active && SECTION_CONTENT[active];
 
     useSectionLoop(loaded);
+    useSwitchShortcuts(loaded);
 
     return (
 

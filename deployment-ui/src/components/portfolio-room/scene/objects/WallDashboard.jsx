@@ -8,17 +8,24 @@ import { DASHBOARD } from "../../data/dashboard";
 import { PROJECTS } from "../../data/projects";
 import { ALL_SKILLS } from "../../data/skills";
 
-// Counts up from 0 to `value` once triggered - skipped (renders the
-// final value immediately) under reduced motion.
+// Always shows the real `value` by default - it used to start at 0 and
+// stay there until `trigger` (the Dashboard panel being opened) fired
+// even once, but this screen renders constantly on the back wall, fully
+// visible from other stations/the overview long before anyone opens
+// Dashboard - "0 DEPLOYS · 0 PROJECTS · 0 TECH" was a real, visibly
+// false claim sitting on the wall by default, not just an animation
+// that hadn't started yet. Now `trigger` only controls the flourish - a
+// drop-to-0-and-count-back-up - replayed each time Dashboard opens,
+// rather than gating whether the real number ever appears at all.
 function useCountUp(value, trigger, reducedMotion) {
 
-    const [n, setN] = useState(reducedMotion ? value : 0);
+    const [n, setN] = useState(value);
 
     useEffect(() => {
 
-        if (!trigger) return;
-        if (reducedMotion) { setN(value); return; }
+        if (!trigger || reducedMotion) return;
 
+        setN(0);
         let raf;
         const start = performance.now();
         const duration = 900;

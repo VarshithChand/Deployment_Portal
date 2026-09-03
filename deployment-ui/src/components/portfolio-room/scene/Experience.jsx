@@ -12,6 +12,8 @@ import Window from "./objects/Window";
 import Clock from "./objects/Clock";
 import Rug from "./objects/Rug";
 import Door from "./objects/Door";
+import Fan from "./objects/Fan";
+import BedLight from "./objects/BedLight";
 import MonitorAbout from "./objects/MonitorAbout";
 import PhoneContact from "./objects/PhoneContact";
 import CeilingLightSkills from "./objects/CeilingLightSkills";
@@ -79,7 +81,6 @@ export default function Experience({ reducedMotion, theme, onExit }) {
                     <MonitorAbout reducedMotion={reducedMotion} />
                     <PhoneContact reducedMotion={reducedMotion} />
                     <Rug position={[0, 0, -0.6]} size={[2.6, 1.9]} />
-                    <Plant position={[-2.2, 0, -1.5]} />
                 </group>
 
                 {/* Skills pendant light - a smaller shift than the desk
@@ -107,9 +108,14 @@ export default function Experience({ reducedMotion, theme, onExit }) {
                     permanently invisible no matter what, regardless of
                     its own color/lighting. */}
                 <Bed position={[-6, 0, -4]} />
-                {/* sits almost dead-center in the "projects" camera's own
-                    view (rack station) */}
-                <SwitchBoard position={[7.95, 1.4, -2.5]} rotation={[0, -Math.PI / 2, 0]} />
+                {/* fan hangs directly over the bed, on by default; the
+                    sconce sits on the back wall right behind the
+                    headboard */}
+                <Fan position={[-6, 5.5, -4]} />
+                <BedLight position={[-6, 1.3, -4.98]} />
+                {/* between the door and the window, per the explicit
+                    request - was near the rack instead */}
+                <SwitchBoard position={[4.4, 1.4, -4.85]} rotation={[0, -Math.PI / 2, 0]} />
                 {/* moved onto the back wall, right of the dashboard
                     screen and directly in the desk/monitor's own sightline
                     - "the desk should be in front of the window" - instead
@@ -117,6 +123,9 @@ export default function Experience({ reducedMotion, theme, onExit }) {
                     it nowhere near the desk at all */}
                 <Window position={[3, 2.2, -4.85]} rotation={[0, -Math.PI / 2, 0]} theme={theme} />
                 <Clock position={[-3, 2.6, -4.83]} />
+                {/* the plant, beside the door rather than next to the
+                    desk - moved per the explicit request */}
+                <Plant position={[6.9, 0, -4.4]} />
                 {/* The exit door - flush-mounted on the back wall (far
                     right, clear of the dashboard/window cluster), not
                     standing free-floating in the middle of the floor with

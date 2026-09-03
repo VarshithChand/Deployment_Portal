@@ -30,5 +30,17 @@ export const useStore = create((set) => ({
     setSelectedProjectId: (id) => set({ selectedProjectId: id }),
 
     selectedExperienceYear: null,
-    setSelectedExperienceYear: (year) => set({ selectedExperienceYear: year })
+    setSelectedExperienceYear: (year) => set({ selectedExperienceYear: year }),
+
+    // The switchboard's 3 physical switches (SwitchBoard.jsx) - fan
+    // (Fan.jsx, over the bed, on by default per the explicit request),
+    // bedLight (BedLight.jsx) and cluster (the Skills pendant light's
+    // own master power, gating it independently of whether the Skills
+    // station is open/hovered - see CeilingLightSkills.jsx). setSwitch
+    // sets an explicit value (for the o+N/f+N keyboard shortcuts, which
+    // mean a specific on/off, not toggle); toggleSwitch flips it (for
+    // clicking the physical switch itself).
+    switches: { fan: true, bedLight: false, cluster: false },
+    setSwitch: (name, value) => set((s) => ({ switches: { ...s.switches, [name]: value } })),
+    toggleSwitch: (name) => set((s) => ({ switches: { ...s.switches, [name]: !s.switches[name] } }))
 }));

@@ -10,11 +10,15 @@ import { SKILL_GROUPS, ALL_SKILLS } from "../../data/skills";
 // Pendant light hanging over the desk -> SKILLS. Starts dim/off; clicking
 // it flickers on, brightens the room (a real PointLight ramps up with it,
 // not just the fixture's own emissive), and the skill nodes spread out
-// around it, grouped and connected by thin cyan lines.
+// around it, grouped and connected by thin cyan lines. Also gated by the
+// switchboard's "cluster" switch (off by default) - like a real fixture's
+// master power, independent of whether the Skills station itself is
+// open/hovered: with the switch off, it stays fully dark no matter what.
 export default function CeilingLightSkills({ reducedMotion, theme }) {
 
     const active = useStore((s) => s.active);
     const setActive = useStore((s) => s.setActive);
+    const clusterSwitchOn = useStore((s) => s.switches.cluster);
     const isOpen = active === "skills";
     const labelColors = labelTextColors(theme);
 
@@ -65,12 +69,12 @@ export default function CeilingLightSkills({ reducedMotion, theme }) {
 
     useFrame((state, delta) => {
 
-        const targetIntensity = isOpen ? 1 : 0.15;
+        const targetIntensity = !clusterSwitchOn ? 0 : isOpen ? 1 : 0.15;
 
         if (coreRef.current) {
             let intensity = targetIntensity;
             // brief flicker-on burst right after opening
-            if (isOpen && flickerT.current < 0.5 && !reducedMotion) {
+            if (clusterSwitchOn && isOpen && flickerT.current < 0.5 && !reducedMotion) {
                 flickerT.current += delta;
                 intensity = Math.random() > 0.5 ? 1 : 0.2;
             } else if (!isOpen) {
@@ -80,11 +84,13 @@ export default function CeilingLightSkills({ reducedMotion, theme }) {
         }
 
         if (glowRef.current) {
-            glowRef.current.material.opacity += ((isOpen ? 0.5 : 0.12) - glowRef.current.material.opacity) * 0.15;
+            const targetOpacity = !clusterSwitchOn ? 0.02 : isOpen ? 0.5 : 0.12;
+            glowRef.current.material.opacity += (targetOpacity - glowRef.current.material.opacity) * 0.15;
         }
 
         if (roomLightRef.current) {
-            roomLightRef.current.intensity += ((isOpen ? 1.6 : 0) - roomLightRef.current.intensity) * 0.1;
+            const targetRoomLight = clusterSwitchOn && isOpen ? 1.6 : 0;
+            roomLightRef.current.intensity += (targetRoomLight - roomLightRef.current.intensity) * 0.1;
         }
 
         if (groupRef.current && isOpen && !reducedMotion) {
