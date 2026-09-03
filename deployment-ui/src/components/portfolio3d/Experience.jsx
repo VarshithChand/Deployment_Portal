@@ -23,13 +23,20 @@ export default function Experience({ reducedMotion }) {
             dpr={[1, 1.5]}
         >
 
-            <fog attach="fog" args={["#05070b", 6, 18]} />
+            {/* near/far pushed well past the room's own depth (back wall sits
+                ~15 units from the default camera) - the previous 6/18 range
+                fogged the back wall ~75% into the background color, which is
+                nearly identical to the wall's own color, so the whole back
+                half of the room (dashboard included) read as empty void. */}
+            <fog attach="fog" args={["#05070b", 12, 34]} />
             <color attach="background" args={["#05070b"]} />
 
-            <ambientLight intensity={0.35} />
-            <pointLight position={[0, 4, 2]} intensity={1.1} color="#22d3ee" distance={12} />
-            <pointLight position={[-3, 3, -2]} intensity={0.6} color="#a78bfa" distance={10} />
-            <pointLight position={[3, 3, -3]} intensity={0.5} color="#22d3ee" distance={10} />
+            <hemisphereLight args={["#1c3a4a", "#05070b", 0.55]} />
+            <ambientLight intensity={0.5} />
+            <pointLight position={[0, 4, 2]} intensity={1.4} color="#22d3ee" distance={16} />
+            <pointLight position={[-3, 3, -2]} intensity={0.9} color="#a78bfa" distance={14} />
+            <pointLight position={[3, 3, -3]} intensity={0.8} color="#22d3ee" distance={14} />
+            <pointLight position={[0, 3.5, -5.5]} intensity={1} color="#22d3ee" distance={10} />
 
             <Suspense fallback={null}>
                 <Room reducedMotion={reducedMotion} />

@@ -11,17 +11,18 @@ export function CloudMarker({ onSelect, reducedMotion }) {
             {(hovered) => (
                 <>
                     <mesh>
-                        <icosahedronGeometry args={[0.4, 0]} />
+                        <icosahedronGeometry args={[0.5, 0]} />
                         <meshStandardMaterial
                             color={hovered ? "#c4b5fd" : "#3b2a6b"}
                             emissive="#a78bfa"
-                            emissiveIntensity={hovered ? 1 : 0.5}
+                            emissiveIntensity={hovered ? 1 : 0.7}
                             wireframe
+                            toneMapped={false}
                         />
                     </mesh>
                     <mesh>
-                        <icosahedronGeometry args={[0.22, 0]} />
-                        <meshStandardMaterial color="#a78bfa" emissive="#a78bfa" emissiveIntensity={0.8} />
+                        <icosahedronGeometry args={[0.26, 0]} />
+                        <meshStandardMaterial color="#a78bfa" emissive="#a78bfa" emissiveIntensity={0.9} toneMapped={false} />
                     </mesh>
                 </>
             )}

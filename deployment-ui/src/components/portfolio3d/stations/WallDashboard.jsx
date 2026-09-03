@@ -9,12 +9,13 @@ export function DashboardMarker({ onSelect, reducedMotion }) {
         <Hotspot position={[0, 2.6, -5.7]} onSelect={onSelect} reducedMotion={reducedMotion}>
             {(hovered) => (
                 <mesh>
-                    <planeGeometry args={[1.6, 0.9]} />
+                    <planeGeometry args={[2, 1.1]} />
                     <meshStandardMaterial
                         color={hovered ? "#164e63" : "#0b2530"}
                         emissive="#22d3ee"
-                        emissiveIntensity={hovered ? 0.7 : 0.35}
+                        emissiveIntensity={hovered ? 0.9 : 0.6}
                         side={2}
+                        toneMapped={false}
                     />
                 </mesh>
             )}

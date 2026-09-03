@@ -28,11 +28,12 @@ export function PipelineMarkers({ onSelect, reducedMotion }) {
                     >
                         {(hovered) => (
                             <mesh>
-                                <boxGeometry args={[0.42, 0.28, 0.28]} />
+                                <boxGeometry args={[0.5, 0.34, 0.34]} />
                                 <meshStandardMaterial
                                     color={hovered ? "#67e8f9" : "#0e3540"}
                                     emissive="#22d3ee"
-                                    emissiveIntensity={hovered ? 1.1 : 0.5}
+                                    emissiveIntensity={hovered ? 1.1 : 0.75}
+                                    toneMapped={false}
                                 />
                             </mesh>
                         )}

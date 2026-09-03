@@ -21,20 +21,49 @@ export default function Room({ reducedMotion }) {
 
         <group>
 
-            {/* floor */}
+            {/* floor - lightened from the original #0a0e14 so it reads
+                against the #05070b void instead of nearly matching it */}
             <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 0]} receiveShadow>
                 <planeGeometry args={[16, 16]} />
-                <meshStandardMaterial color="#0a0e14" roughness={0.85} metalness={0.1} />
+                <meshStandardMaterial color="#0e141d" roughness={0.85} metalness={0.1} />
             </mesh>
 
             {/* back wall (dashboard sits on this) */}
             <mesh position={[0, 3, -6]}>
                 <planeGeometry args={[16, 8]} />
-                <meshStandardMaterial color="#0b0f16" roughness={0.9} />
+                <meshStandardMaterial color="#101722" roughness={0.9} />
+            </mesh>
+
+            {/* side walls - the room previously had a back wall but no
+                sides, so it read as a floor floating in a void rather than
+                an enclosed space */}
+            <mesh position={[-8, 3, 0]} rotation={[0, Math.PI / 2, 0]}>
+                <planeGeometry args={[16, 8]} />
+                <meshStandardMaterial color="#0d131c" roughness={0.9} />
+            </mesh>
+            <mesh position={[8, 3, 0]} rotation={[0, -Math.PI / 2, 0]}>
+                <planeGeometry args={[16, 8]} />
+                <meshStandardMaterial color="#0d131c" roughness={0.9} />
+            </mesh>
+
+            {/* thin emissive rim strips along the top of each wall - cheap
+                way to make the walls legibly *there* instead of blending
+                into the fog/background at a glance */}
+            <mesh position={[0, 6.98, -5.99]}>
+                <boxGeometry args={[16, 0.05, 0.05]} />
+                <meshStandardMaterial color="#0e7490" emissive="#22d3ee" emissiveIntensity={0.8} toneMapped={false} />
+            </mesh>
+            <mesh position={[-7.99, 6.98, 0]}>
+                <boxGeometry args={[0.05, 0.05, 16]} />
+                <meshStandardMaterial color="#0e7490" emissive="#22d3ee" emissiveIntensity={0.5} toneMapped={false} />
+            </mesh>
+            <mesh position={[7.99, 6.98, 0]}>
+                <boxGeometry args={[0.05, 0.05, 16]} />
+                <meshStandardMaterial color="#0e7490" emissive="#22d3ee" emissiveIntensity={0.5} toneMapped={false} />
             </mesh>
 
             {/* faint floor grid lines - reads as "server room floor" without a texture */}
-            <gridHelper args={[16, 32, "#123", "#0c1622"]} position={[0, 0.01, 0]} />
+            <gridHelper args={[16, 32, "#1a2c3d", "#101a26"]} position={[0, 0.01, 0]} />
 
             {/* desk (terminal sits on this) */}
             <mesh position={[0, 0.55, 0.6]}>
@@ -44,6 +73,18 @@ export default function Room({ reducedMotion }) {
             <mesh position={[0, 0.27, 0.6]}>
                 <boxGeometry args={[0.15, 0.5, 0.15]} />
                 <meshStandardMaterial color="#0a0e14" />
+            </mesh>
+
+            {/* floor accent strips tying each cluster of hotspots together
+                visually, so the pipeline/timeline read as built structures
+                rather than a scatter of identical unrelated boxes */}
+            <mesh position={[3.05, 0.02, -1]} rotation={[-Math.PI / 2, 0, 0]}>
+                <planeGeometry args={[4, 0.1]} />
+                <meshStandardMaterial color="#0e7490" emissive="#22d3ee" emissiveIntensity={0.6} toneMapped={false} />
+            </mesh>
+            <mesh position={[-3.2, 0.02, -1.5]} rotation={[-Math.PI / 2, 0, 0]}>
+                <planeGeometry args={[1.1, 0.1]} />
+                <meshStandardMaterial color="#0e7490" emissive="#22d3ee" emissiveIntensity={0.6} toneMapped={false} />
             </mesh>
 
             <TerminalMarker onSelect={() => select("about")} reducedMotion={reducedMotion} />

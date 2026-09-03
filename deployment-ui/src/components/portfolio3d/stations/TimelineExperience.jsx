@@ -10,11 +10,12 @@ export function TimelineMarker({ onSelect, reducedMotion }) {
                 <group>
                     {EXPERIENCE_TIMELINE.map((_, i) => (
                         <mesh key={i} position={[i * 0.35 - 0.35, 0, 0]}>
-                            <sphereGeometry args={[0.09, 12, 12]} />
+                            <sphereGeometry args={[0.12, 12, 12]} />
                             <meshStandardMaterial
                                 color={hovered ? "#67e8f9" : "#0e3540"}
                                 emissive="#22d3ee"
-                                emissiveIntensity={hovered ? 1.1 : 0.5}
+                                emissiveIntensity={hovered ? 1.1 : 0.75}
+                                toneMapped={false}
                             />
                         </mesh>
                     ))}

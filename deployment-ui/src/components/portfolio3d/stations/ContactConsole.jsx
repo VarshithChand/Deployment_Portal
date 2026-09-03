@@ -26,11 +26,12 @@ export function ContactMarker({ onSelect, reducedMotion }) {
         <Hotspot position={[-2.6, 0.9, -0.6]} onSelect={onSelect} reducedMotion={reducedMotion}>
             {(hovered) => (
                 <mesh>
-                    <cylinderGeometry args={[0.32, 0.38, 0.5, 6]} />
+                    <cylinderGeometry args={[0.38, 0.44, 0.6, 6]} />
                     <meshStandardMaterial
                         color={hovered ? "#67e8f9" : "#0e3540"}
                         emissive="#22d3ee"
-                        emissiveIntensity={hovered ? 1.1 : 0.5}
+                        emissiveIntensity={hovered ? 1.1 : 0.75}
+                        toneMapped={false}
                     />
                 </mesh>
             )}

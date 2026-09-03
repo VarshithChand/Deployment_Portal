@@ -13,7 +13,8 @@ export function TerminalMarker({ onSelect, reducedMotion }) {
                         <meshStandardMaterial
                             color={hovered ? "#67e8f9" : "#0d3b42"}
                             emissive="#22d3ee"
-                            emissiveIntensity={hovered ? 1.1 : 0.55}
+                            emissiveIntensity={hovered ? 1.1 : 0.75}
+                            toneMapped={false}
                         />
                     </mesh>
                     <mesh position={[0, -0.35, 0]}>
