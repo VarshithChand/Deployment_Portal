@@ -1,115 +1,226 @@
-import { useEffect, useRef } from "react";
+import { useMemo, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
-import { useGLTF, useAnimations } from "@react-three/drei";
+import { Billboard, Text } from "@react-three/drei";
 import * as THREE from "three";
+import { MONO_FONT } from "./fonts";
 
-// Real rigged/animated character (Khronos glTF-Sample-Assets "CesiumMan",
-// CC-BY 4.0 - https://github.com/KhronosGroup/glTF-Sample-Assets, credit
-// Cesium 2017). Self-hosted under /public/models (same reasoning as the
-// self-hosted font: same-origin, works within the existing CSP with no
-// policy changes). The file ships exactly one animation clip - a
-// full-body walk cycle, no separate idle/wave clip - which isn't used
-// for walking here (the figure no longer roams, see below); it's kept
-// paused at frame 0 for a consistent standing pose, and the greeting
-// wave is done by hand on the "Skeleton_arm_joint_R" shoulder joint
-// while the mixer sits frozen (safe: a paused mixer doesn't re-drive
-// that bone each frame, so the manual rotation isn't fought).
-const MODEL_URL = "/models/CesiumMan.glb";
-
-useGLTF.preload(MODEL_URL);
-
-// Fixed spot toward the room's front-right - no longer walks a
-// waypoint loop, just stands here facing back toward the room and
-// waves periodically.
+// A hand-built cartoon greeter avatar (ported from a standalone raw-
+// three.js page the user provided into this app's actual R3F/drei
+// stack - the original used its own <script src=cdn three.min.js>,
+// scene, camera and render loop, none of which can just be dropped in
+// here: a second copy of three.js from an external CDN would violate
+// this app's CSP (script-src 'self') and conflict with the one real
+// copy already bundled, and a standalone camera/render loop would
+// fight the room's own CameraRig-driven camera). Replaces the earlier
+// CesiumMan GLTF figure entirely - no external model/texture asset
+// anymore, so no CSP/async-load risk the way that one had.
 //
-// x=4.4/z=2.8 (the first version of this) put the figure entirely
-// outside the room-overview camera's frustum: an object close to the
-// camera needs a much smaller x-offset to stay in frame than a far
-// one does, for the same field of view, and z=2.8 is close (camera
-// sits at z=6.2) while x=4.4 is the kind of offset that only works
-// far away (e.g. the project row, out at z=-1). Verified this time by
-// computing the camera's actual half-FOV rather than eyeballing it -
-// x=2.0/z=1.0 keeps a real margin inside the frustum at the room's
-// default aspect ratio.
+// The source design was built at "fills a dedicated hero canvas" scale
+// (~2.5 units tall); SCALE below brings it down to roughly match the
+// room's other human-scale elements (the desk, the terminal screen,
+// ~0.7 units).
+const SCALE = 0.28;
 const POSITION = [2, 0, 1];
 const FACING = Math.atan2(-POSITION[0], -POSITION[2]);
 
-// Roughly matches the room's other human-scale primitives (the desk,
-// the terminal screen) - the model's native units aren't assumed, its
-// real bounding-box height is measured at runtime and scaled to this.
-const TARGET_HEIGHT = 0.7;
+const COLOR = {
+    skin: "#f1c8a0", hair: "#252a31", shirt: "#1c2733", pants: "#141a22",
+    cyan: "#22d3ee", platform: "#11161f", eye: "#1a1f26", mouth: "#8a4a3a"
+};
 
-const WAVE_EVERY_SECONDS = 6;
-const WAVE_DURATION_SECONDS = 2.2;
+const PARTICLE_COUNT = 90;
 
 export default function Operator({ reducedMotion }) {
 
-    const rootRef = useRef();
-    const armRRef = useRef(null);
-    const cycleTimer = useRef(0);
-    const waveTime = useRef(0);
-    const setUpDone = useRef(false);
+    const avatarRef = useRef();
+    const headRef = useRef();
+    const rightArmRef = useRef();
+    const particlesRef = useRef();
+    const timeRef = useRef(0);
 
-    const { scene, animations } = useGLTF(MODEL_URL);
-    const { actions } = useAnimations(animations, rootRef);
+    const particlePositions = useMemo(() => {
 
-    useEffect(() => {
-
-        if (!setUpDone.current) {
-
-            const box = new THREE.Box3().setFromObject(scene);
-            const height = box.max.y - box.min.y;
-            if (height > 0) scene.scale.setScalar(TARGET_HEIGHT / height);
-
-            // re-measure after scaling and sit the feet exactly at y=0,
-            // regardless of where the model's own origin/pivot was
-            const box2 = new THREE.Box3().setFromObject(scene);
-            scene.position.y -= box2.min.y;
-
-            armRRef.current = scene.getObjectByName("Skeleton_arm_joint_R") || null;
-            setUpDone.current = true;
-
+        const arr = new Float32Array(PARTICLE_COUNT * 3);
+        for (let i = 0; i < PARTICLE_COUNT; i++) {
+            arr[i * 3] = (Math.random() - 0.5) * 10;
+            arr[i * 3 + 1] = Math.random() * 6;
+            arr[i * 3 + 2] = (Math.random() - 0.5) * 8 - 2;
         }
-
-        const action = Object.values(actions)[0];
-        if (action) {
-            action.play();
-            action.time = 0;
-            action.paused = true;
-        }
+        return arr;
 
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [actions]);
+    }, []);
 
     useFrame((_, delta) => {
 
-        if (!rootRef.current || !armRRef.current) return;
+        if (reducedMotion) return;
 
-        cycleTimer.current += delta;
-        if (cycleTimer.current > WAVE_EVERY_SECONDS) cycleTimer.current = 0;
+        timeRef.current += delta;
+        const t = timeRef.current;
 
-        const waving = cycleTimer.current < WAVE_DURATION_SECONDS;
-
-        if (waving) {
-
-            waveTime.current += delta * 7;
-            armRRef.current.rotation.z = -1.3 + Math.sin(waveTime.current) * 0.3;
-
-        } else {
-
-            waveTime.current = 0;
-            armRRef.current.rotation.z = THREE.MathUtils.lerp(armRRef.current.rotation.z, 0, 0.1);
-
-        }
+        if (rightArmRef.current) rightArmRef.current.rotation.z = 2.35 + Math.sin(t * 6) * 0.24;
+        if (avatarRef.current) avatarRef.current.position.y = Math.sin(t * 1.4) * 0.03;
+        if (headRef.current) headRef.current.rotation.z = Math.sin(t * 1.4) * 0.03;
+        if (particlesRef.current) particlesRef.current.rotation.y = t * 0.03;
 
     });
 
-    if (reducedMotion) return null;
-
     return (
 
-        <group ref={rootRef} position={POSITION} rotation={[0, FACING, 0]}>
-            <primitive object={scene} />
+        <group position={POSITION} rotation={[0, FACING, 0]} scale={SCALE}>
+
+            {/* platform + glow rings */}
+            <mesh position={[0, -0.06, 0]}>
+                <cylinderGeometry args={[1.5, 1.6, 0.12, 48]} />
+                <meshStandardMaterial color={COLOR.platform} roughness={0.65} metalness={0.05} />
+            </mesh>
+            <mesh position={[0, 0.02, 0]} rotation={[Math.PI / 2, 0, 0]}>
+                <torusGeometry args={[1, 0.012, 8, 64]} />
+                <meshStandardMaterial color={COLOR.cyan} emissive={COLOR.cyan} emissiveIntensity={0.9} roughness={0.4} toneMapped={false} />
+            </mesh>
+            <mesh position={[0, 0.02, 0]} rotation={[Math.PI / 2, 0, 0]}>
+                <torusGeometry args={[1.35, 0.008, 8, 64]} />
+                <meshStandardMaterial color={COLOR.cyan} emissive={COLOR.cyan} emissiveIntensity={0.9} roughness={0.4} toneMapped={false} />
+            </mesh>
+
+            {/* ambient particle field */}
+            <points ref={particlesRef}>
+                <bufferGeometry>
+                    <bufferAttribute attach="attributes-position" args={[particlePositions, 3]} />
+                </bufferGeometry>
+                <pointsMaterial color={COLOR.cyan} size={0.03} transparent opacity={0.5} blending={THREE.AdditiveBlending} depthWrite={false} />
+            </points>
+
+            <group ref={avatarRef}>
+
+                {/* legs + feet */}
+                {[-0.2, 0.2].map((x) => (
+                    <group key={x}>
+                        <mesh position={[x, 0.45, 0]}>
+                            <cylinderGeometry args={[0.16, 0.14, 0.85, 20]} />
+                            <meshStandardMaterial color={COLOR.pants} roughness={0.65} metalness={0.05} />
+                        </mesh>
+                        <mesh position={[x, 0.05, 0.05]} scale={[1, 0.6, 1.4]}>
+                            <sphereGeometry args={[0.17, 16, 16]} />
+                            <meshStandardMaterial color={COLOR.pants} roughness={0.65} metalness={0.05} />
+                        </mesh>
+                    </group>
+                ))}
+
+                {/* hips + torso + collar */}
+                <mesh position={[0, 0.92, 0]} scale={[1, 0.7, 1]}>
+                    <sphereGeometry args={[0.37, 24, 24]} />
+                    <meshStandardMaterial color={COLOR.pants} roughness={0.65} metalness={0.05} />
+                </mesh>
+                <mesh position={[0, 1.32, 0]}>
+                    <cylinderGeometry args={[0.34, 0.42, 0.82, 28]} />
+                    <meshStandardMaterial color={COLOR.shirt} roughness={0.65} metalness={0.05} />
+                </mesh>
+                <mesh position={[0, 1.66, 0]} scale={[1, 0.7, 0.9]}>
+                    <sphereGeometry args={[0.43, 24, 24]} />
+                    <meshStandardMaterial color={COLOR.shirt} roughness={0.65} metalness={0.05} />
+                </mesh>
+                <mesh position={[0, 1.2, 0]} rotation={[Math.PI / 2, 0, 0]}>
+                    <torusGeometry args={[0.34, 0.02, 8, 40]} />
+                    <meshStandardMaterial color={COLOR.cyan} emissive={COLOR.cyan} emissiveIntensity={0.9} roughness={0.4} toneMapped={false} />
+                </mesh>
+
+                {/* neck + head */}
+                <mesh position={[0, 1.82, 0]}>
+                    <cylinderGeometry args={[0.12, 0.13, 0.16, 16]} />
+                    <meshStandardMaterial color={COLOR.skin} roughness={0.65} metalness={0.05} />
+                </mesh>
+
+                <group ref={headRef} position={[0, 2.12, 0]}>
+
+                    <mesh>
+                        <sphereGeometry args={[0.4, 32, 32]} />
+                        <meshStandardMaterial color={COLOR.skin} roughness={0.65} metalness={0.05} />
+                    </mesh>
+
+                    {/* hair cap + fringe */}
+                    <mesh position={[0, 0.06, -0.03]} scale={[1, 0.95, 1]}>
+                        <sphereGeometry args={[0.43, 32, 32]} />
+                        <meshStandardMaterial color={COLOR.hair} roughness={0.8} />
+                    </mesh>
+                    <mesh position={[0, 0.28, 0]}>
+                        <boxGeometry args={[0.86, 0.16, 0.5]} />
+                        <meshStandardMaterial color={COLOR.hair} roughness={0.8} />
+                    </mesh>
+
+                    {/* eyes */}
+                    {[-0.14, 0.14].map((x) => (
+                        <mesh key={x} position={[x, 0.04, 0.36]}>
+                            <sphereGeometry args={[0.05, 16, 16]} />
+                            <meshStandardMaterial color={COLOR.eye} roughness={0.65} metalness={0.05} />
+                        </mesh>
+                    ))}
+
+                    {/* smile */}
+                    <mesh position={[0, -0.1, 0.34]} rotation={[0, 0, Math.PI]}>
+                        <torusGeometry args={[0.12, 0.02, 8, 20, Math.PI]} />
+                        <meshStandardMaterial color={COLOR.mouth} roughness={0.65} metalness={0.05} />
+                    </mesh>
+
+                </group>
+
+                {/* arms - shoulder pivot, hangs down -y. Right arm waves,
+                    left rests at a slight inward angle. */}
+                <group ref={rightArmRef} position={[0.5, 1.6, 0]}>
+                    <mesh position={[0, -0.25, 0]}>
+                        <cylinderGeometry args={[0.12, 0.11, 0.5, 16]} />
+                        <meshStandardMaterial color={COLOR.shirt} roughness={0.65} metalness={0.05} />
+                    </mesh>
+                    <mesh position={[0, -0.5, 0]}>
+                        <sphereGeometry args={[0.12, 16, 16]} />
+                        <meshStandardMaterial color={COLOR.shirt} roughness={0.65} metalness={0.05} />
+                    </mesh>
+                    <mesh position={[0, -0.72, 0]}>
+                        <cylinderGeometry args={[0.11, 0.1, 0.45, 16]} />
+                        <meshStandardMaterial color={COLOR.skin} roughness={0.65} metalness={0.05} />
+                    </mesh>
+                    <mesh position={[0, -1, 0]}>
+                        <sphereGeometry args={[0.14, 20, 20]} />
+                        <meshStandardMaterial color={COLOR.skin} roughness={0.65} metalness={0.05} />
+                    </mesh>
+                </group>
+                <group position={[-0.5, 1.6, 0]} rotation={[0, 0, -0.16]}>
+                    <mesh position={[0, -0.25, 0]}>
+                        <cylinderGeometry args={[0.12, 0.11, 0.5, 16]} />
+                        <meshStandardMaterial color={COLOR.shirt} roughness={0.65} metalness={0.05} />
+                    </mesh>
+                    <mesh position={[0, -0.5, 0]}>
+                        <sphereGeometry args={[0.12, 16, 16]} />
+                        <meshStandardMaterial color={COLOR.shirt} roughness={0.65} metalness={0.05} />
+                    </mesh>
+                    <mesh position={[0, -0.72, 0]}>
+                        <cylinderGeometry args={[0.11, 0.1, 0.45, 16]} />
+                        <meshStandardMaterial color={COLOR.skin} roughness={0.65} metalness={0.05} />
+                    </mesh>
+                    <mesh position={[0, -1, 0]}>
+                        <sphereGeometry args={[0.14, 20, 20]} />
+                        <meshStandardMaterial color={COLOR.skin} roughness={0.65} metalness={0.05} />
+                    </mesh>
+                </group>
+
+            </group>
+
+            {/* greeting label - "Hi, I'm Varshith" in the source became
+                just "HI, WELCOME" per the request */}
+            <Billboard position={[0, 2.9, 0]}>
+                <Text
+                    font={MONO_FONT}
+                    fontSize={0.32}
+                    color="#eafaff"
+                    outlineWidth={0.02}
+                    outlineColor="#031014"
+                    anchorX="center"
+                    anchorY="bottom"
+                >
+                    HI, WELCOME
+                </Text>
+            </Billboard>
+
         </group>
 
     );

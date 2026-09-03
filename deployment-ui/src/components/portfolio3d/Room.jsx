@@ -1,4 +1,3 @@
-import { Suspense } from "react";
 import { useScene } from "./sceneStore";
 import Operator from "./Operator";
 import OperatorErrorBoundary from "./OperatorErrorBoundary";
@@ -176,19 +175,14 @@ export default function Room({ reducedMotion }) {
 
             {RACKS.map((pos) => <RackProp key={pos.join(",")} position={pos} />)}
 
-            {/* own Suspense boundary - CesiumMan.glb is a real network
-                fetch (useGLTF suspends until it resolves); isolating it
-                here means a slow load only ever hides the operator figure,
-                never the rest of the room (which has no async dependencies
-                of its own). OperatorErrorBoundary is the other half of
-                that isolation - Suspense only catches thrown PROMISES
-                (loading state); an actual thrown Error (a rejected load)
-                needs a real error boundary or it crashes past this
-                Suspense and takes the whole room down with it. */}
+            {/* Operator is built entirely from primitives now (no external
+                model/texture asset, unlike the earlier GLTF version), so
+                there's no async load to isolate with Suspense anymore -
+                kept the error boundary anyway as cheap insurance against
+                any future runtime error here taking the whole room down
+                with it. */}
             <OperatorErrorBoundary>
-                <Suspense fallback={null}>
-                    <Operator reducedMotion={reducedMotion} />
-                </Suspense>
+                <Operator reducedMotion={reducedMotion} />
             </OperatorErrorBoundary>
 
         </group>
