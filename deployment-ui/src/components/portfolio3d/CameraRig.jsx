@@ -13,12 +13,19 @@ const CAMERA_TARGETS = {
     // a lot of empty black frame. Closer + lower fov (see Experience.jsx)
     // makes the desk/hotspot cluster fill the view instead.
     room: { position: [0, 1.9, 6.2], lookAt: [0, 1.4, -0.8] },
-    about: { position: [0, 1.5, 2.6], lookAt: [0, 1.3, 0.4] },
-    skills: { position: [0.5, 3.6, 3.8], lookAt: [0, 3, -0.5] },
-    projects: { position: [3.8, 2, 4], lookAt: [1.5, 1.1, -1] },
-    experience: { position: [-4.2, 2, 3], lookAt: [-3.2, 1.6, -1.5] },
-    dashboard: { position: [0.3, 2.4, -2.6], lookAt: [0, 2.6, -6] },
-    contact: { position: [-2.4, 1.5, 2.4], lookAt: [-2.6, 1.2, -0.6] }
+    // lookAt now matches each marker's actual position exactly (it was
+    // only approximate before) and every position was pulled back a bit
+    // further - the 2D content panel is always screen-centered, so if the
+    // camera's lookAt doesn't land dead-on the marker, the marker projects
+    // off to one side and pokes out from behind the panel instead of
+    // sitting centered behind it, which is what "About" was doing (see
+    // the marker at [0, 1.1, 0.6] vs. the old lookAt of [0, 1.3, 0.4]).
+    about: { position: [0, 1.75, 4.1], lookAt: [0, 1.1, 0.6] },
+    skills: { position: [0, 3.6, 3.9], lookAt: [0, 3, -0.5] },
+    projects: { position: [3.26, 2.15, 4.3], lookAt: [3.26, 0.95, -1] },
+    experience: { position: [-3.2, 2.15, 3.5], lookAt: [-3.2, 1.3, -1.5] },
+    dashboard: { position: [0, 2.4, -2.9], lookAt: [0, 2.6, -5.7] },
+    contact: { position: [-2.6, 1.5, 3.4], lookAt: [-2.6, 0.9, -0.6] }
 };
 
 // Drives all camera movement with GSAP tweens (never React state driving
