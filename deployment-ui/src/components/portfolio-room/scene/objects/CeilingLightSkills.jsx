@@ -18,12 +18,20 @@ import { SKILL_GROUPS, ALL_SKILLS } from "../../data/skills";
 // clicked fresh. Also gated by the switchboard's "cluster" switch (off
 // by default) - like a real fixture's master power, independent of the
 // reveal state: with the switch off, it stays fully dark no matter what.
+//
+// `selectedLabel`/`setSelectedLabel` read/write the shared store's
+// `selectedSkill`, not local state - clicking a specific atom is also
+// what opens the Skills 2D panel (see PortfolioRoom.jsx), the same
+// "click a specific thing, not just arrive at the station" pattern
+// Projects/Experience already use for their own panels.
 export default function CeilingLightSkills({ reducedMotion, theme }) {
 
     const active = useStore((s) => s.active);
     const setActive = useStore((s) => s.setActive);
     const skillsRevealed = useStore((s) => s.skillsRevealed);
     const revealSkills = useStore((s) => s.revealSkills);
+    const selectedLabel = useStore((s) => s.selectedSkill);
+    const setSelectedLabel = useStore((s) => s.setSelectedSkill);
     const clusterSwitchOn = useStore((s) => s.switches.cluster);
     const isOpen = active === "skills" && skillsRevealed;
     const labelColors = labelTextColors(theme);
@@ -33,7 +41,6 @@ export default function CeilingLightSkills({ reducedMotion, theme }) {
     const roomLightRef = useRef();
     const flickerT = useRef(0);
     const [hoveredGroup, setHoveredGroup] = useState(null);
-    const [selectedLabel, setSelectedLabel] = useState(null);
     const groupRef = useRef();
     const labelRefs = useRef([]);
 

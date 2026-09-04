@@ -27,10 +27,14 @@ export const useStore = create((set) => ({
     setActive: (section) => set((s) => ({
         active: section,
         skillsRevealed: section === "skills" ? s.skillsRevealed : false,
+        selectedSkill: section === "skills" ? s.selectedSkill : null,
         selectedProjectId: section === "projects" ? s.selectedProjectId : null,
         selectedExperienceYear: section === "experience" ? s.selectedExperienceYear : null
     })),
-    back: () => set({ active: null, skillsRevealed: false, selectedProjectId: null, selectedExperienceYear: null }),
+    back: () => set({
+        active: null, skillsRevealed: false, selectedSkill: null,
+        selectedProjectId: null, selectedExperienceYear: null
+    }),
 
     loaded: false,
     setLoaded: (loaded) => set({ loaded }),
@@ -57,6 +61,15 @@ export const useStore = create((set) => ({
     // the pendant light is directly clicked, see CeilingLightSkills.jsx.
     skillsRevealed: false,
     revealSkills: () => set({ skillsRevealed: true }),
+
+    // Which individual skill node ("atom") was clicked - the Skills
+    // panel itself only opens once this is set (see PortfolioRoom.jsx),
+    // not just from being at the station or from the graph being
+    // revealed; a specific atom has to be clicked, same as Projects/
+    // Experience only opening their panel for a specific rack unit/
+    // timeline stop.
+    selectedSkill: null,
+    setSelectedSkill: (label) => set({ selectedSkill: label }),
 
     // The switchboard's 3 physical switches (SwitchBoard.jsx) - fan
     // (Fan.jsx, over the bed, on by default per the explicit request),

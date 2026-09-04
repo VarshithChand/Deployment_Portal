@@ -9,11 +9,9 @@ import MobileFallback from "./ui/MobileFallback";
 import useReducedMotion from "../../hooks/useReducedMotion";
 import useIsMobile from "../../hooks/useIsMobile";
 import useTheme from "../../hooks/useTheme";
-import About from "./ui/sections/About";
 import Skills from "./ui/sections/Skills";
 import Projects from "./ui/sections/Projects";
 import Experience from "./ui/sections/Experience";
-import Dashboard from "./ui/sections/Dashboard";
 import Contact from "./ui/sections/Contact";
 
 // The Canvas itself is lazy - it pulls in @react-three/fiber, drei, three
@@ -21,15 +19,37 @@ import Contact from "./ui/sections/Contact";
 // mobile visitor who gets the lighter MobileFallback instead.
 const SceneExperience = lazy(() => import("./scene/Experience"));
 
+// About and Dashboard have no panel on desktop at all - both are a
+// single whole-object hotspot with nothing to click into (unlike
+// Skills/Projects/Experience's atoms/rack units/timeline stops), and
+// their own 3D screen already shows the exact same content a panel
+// would just be duplicating. Clicking the monitor/wall screen still
+// flies the camera there; nothing else needs to pop up on top of a
+// screen that's already showing the real content. (Mobile keeps both -
+// see MobileFallback.jsx, which has no 3D scene to read them off of.)
 const SECTION_TITLES = {
-    about: "About", contact: "Contact", skills: "Skills",
-    dashboard: "Status", projects: "Projects", experience: "Experience"
+    contact: "Contact", skills: "Skills",
+    projects: "Projects", experience: "Experience"
 };
 
 const SECTION_CONTENT = {
-    about: About, contact: Contact, skills: Skills,
-    dashboard: Dashboard, projects: Projects, experience: Experience
+    contact: Contact, skills: Skills,
+    projects: Projects, experience: Experience
 };
+
+// Skills/Projects/Experience only actually open their panel once a
+// specific atom/rack unit/timeline stop has been clicked (their own
+// `selected*` store field is non-null) - not just from arriving at the
+// station. Contact has no such sub-item, so it opens immediately like
+// before.
+function isRevealed(section, selectedSkill, selectedProjectId, selectedExperienceYear) {
+
+    if (section === "skills") return selectedSkill !== null;
+    if (section === "projects") return selectedProjectId !== null;
+    if (section === "experience") return selectedExperienceYear !== null;
+    return true;
+
+}
 
 // WASD/arrow keys and mouse-scroll both step through SECTIONS as one
 // closed loop (about -> skills -> projects -> experience -> dashboard ->
@@ -158,7 +178,12 @@ function DesktopRoom({ reducedMotion, theme, onExit }) {
     const back = useStore((s) => s.back);
     const loaded = useStore((s) => s.loaded);
     const setLoaded = useStore((s) => s.setLoaded);
+    const selectedSkill = useStore((s) => s.selectedSkill);
+    const selectedProjectId = useStore((s) => s.selectedProjectId);
+    const selectedExperienceYear = useStore((s) => s.selectedExperienceYear);
+
     const ActiveContent = active && SECTION_CONTENT[active];
+    const showPanel = ActiveContent && isRevealed(active, selectedSkill, selectedProjectId, selectedExperienceYear);
 
     useSectionLoop(loaded);
     useSwitchShortcuts(loaded);
@@ -185,7 +210,7 @@ function DesktopRoom({ reducedMotion, theme, onExit }) {
             <Nav />
 
             <AnimatePresence>
-                {ActiveContent && (
+                {showPanel && (
                     <Panel key={active} title={SECTION_TITLES[active]} onClose={back}>
                         <ActiveContent />
                     </Panel>
