@@ -20,6 +20,11 @@ export default function MonitorAbout({ reducedMotion }) {
 
     const setActive = useStore((s) => s.setActive);
 
+    function goToProjects(e) {
+        e.stopPropagation();
+        setActive("projects");
+    }
+
     return (
 
         <group position={[0, 0, 0]}>
@@ -61,11 +66,28 @@ export default function MonitorAbout({ reducedMotion }) {
                             <Text font={MONO_FONT} fontSize={0.063} color="#9fd8e0" anchorX="center" anchorY="middle" position={[0, -0.1125, 0]}>
                                 {PROFILE.role}
                             </Text>
-                            {/* always visible now, not just on hover - a
-                                permanent "there's more here" prompt
-                                rather than something you'd only notice
-                                by accident */}
-                            <Text font={MONO_FONT} fontSize={0.056} color={hovered ? "#eafaff" : "#5eead4"} anchorX="center" anchorY="middle" maxWidth={1} textAlign="center" position={[0, -0.2375, 0]}>
+                            {/* real, distinct action - clicking this line
+                                specifically jumps straight to Projects
+                                (what "my work" actually refers to), not
+                                just a copy of what clicking anywhere else
+                                on the monitor already did. stopPropagation
+                                so it doesn't also trigger the parent
+                                Hotspot's own onSelect (which would
+                                otherwise re-fire right after, sending the
+                                camera to "about" instead). */}
+                            <Text
+                                font={MONO_FONT}
+                                fontSize={0.056}
+                                color={hovered ? "#eafaff" : "#5eead4"}
+                                anchorX="center"
+                                anchorY="middle"
+                                maxWidth={1}
+                                textAlign="center"
+                                position={[0, -0.2375, 0]}
+                                onClick={goToProjects}
+                                onPointerOver={(e) => { e.stopPropagation(); document.body.style.cursor = "pointer"; }}
+                                onPointerOut={(e) => { e.stopPropagation(); document.body.style.cursor = "auto"; }}
+                            >
                                 &gt; Explore my work
                             </Text>
                         </group>
