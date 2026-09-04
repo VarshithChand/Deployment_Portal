@@ -79,7 +79,13 @@ export default function CeilingLightSkills({ reducedMotion, theme }) {
 
     useFrame((state, delta) => {
 
-        const targetIntensity = !clusterSwitchOn ? 0 : isOpen ? 1 : 0.15;
+        // idle-on (switch flipped on, but not standing at the Skills
+        // station) was 0.15 - dim enough that "the switch is on" wasn't
+        // actually visible from anywhere else in the room, which is the
+        // whole point of a switch defaulting on at night. 0.4 reads as a
+        // clearly-lit fixture at rest; isOpen's fuller 1 (plus the
+        // flicker-in burst below) is still the brighter, focused state.
+        const targetIntensity = !clusterSwitchOn ? 0 : isOpen ? 1 : 0.4;
 
         if (coreRef.current) {
             let intensity = targetIntensity;
@@ -94,7 +100,7 @@ export default function CeilingLightSkills({ reducedMotion, theme }) {
         }
 
         if (glowRef.current) {
-            const targetOpacity = !clusterSwitchOn ? 0.02 : isOpen ? 0.5 : 0.12;
+            const targetOpacity = !clusterSwitchOn ? 0.02 : isOpen ? 0.5 : 0.28;
             glowRef.current.material.opacity += (targetOpacity - glowRef.current.material.opacity) * 0.15;
         }
 
@@ -104,7 +110,11 @@ export default function CeilingLightSkills({ reducedMotion, theme }) {
             // threshold (Experience.jsx, luminanceThreshold=0.2) to
             // overexpose the desk/monitor and everything else nearby
             // into blown highlights instead of just lighting the area.
-            const targetRoomLight = clusterSwitchOn && isOpen ? 0.9 : 0;
+            // Also now gives an idle-on baseline (0.4, not 0) once the
+            // switch itself is on - same reasoning as the core/glow
+            // above: a light that's "on" should visibly cast something
+            // even before you've walked over to look straight at it.
+            const targetRoomLight = !clusterSwitchOn ? 0 : isOpen ? 0.9 : 0.4;
             roomLightRef.current.intensity += (targetRoomLight - roomLightRef.current.intensity) * 0.1;
         }
 
