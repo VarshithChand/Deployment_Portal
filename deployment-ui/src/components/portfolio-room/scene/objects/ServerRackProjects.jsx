@@ -40,14 +40,29 @@ function RackUnit({ project, index, selected, onSelect, reducedMotion, labelColo
 
             {/* brown instead of the original near-black - the whole rack
                 read as an almost invisible dark mass against the equally
-                dark room/floor. Picked a shade dark enough to keep the
-                existing project-title text (labelColors, tuned against
-                this same dark body in both themes) readable - a bright
-                white would have flipped light theme's dark text into a
-                dark-on-light-ish-brown legibility problem instead. */}
+                dark room/floor. A dark-brown *base color* alone wasn't
+                enough - meshStandardMaterial's color is multiplied by
+                the scene's own (fairly dim, ~0.3 ambient) lighting, so
+                even a real brown crushed down to looking black again in
+                this corner of the room. Lighter base color plus a low
+                warm emissive gives it a guaranteed-visible floor
+                regardless of how much light actually reaches it here -
+                still well under the cyan LED's own intensity, so it
+                doesn't compete with that as the "lit" focal point. Kept
+                dark enough overall that the existing project-title text
+                (labelColors, tuned against a dark body in both themes)
+                stays readable - a much lighter/white body would have
+                flipped light theme's own dark text into the same
+                legibility problem from the other direction. */}
             <mesh>
                 <boxGeometry args={[0.9, UNIT_HEIGHT, 0.55]} />
-                <meshStandardMaterial color={hovered || selected ? "#6b4a30" : "#3d2a1a"} roughness={0.6} metalness={0.1} />
+                <meshStandardMaterial
+                    color={hovered || selected ? "#8a6242" : "#6b4a30"}
+                    emissive={hovered || selected ? "#5a3d28" : "#3d2a1a"}
+                    emissiveIntensity={0.35}
+                    roughness={0.6}
+                    metalness={0.1}
+                />
             </mesh>
 
             <mesh ref={ledRef} position={[0.38, 0, 0.28]}>
@@ -84,10 +99,11 @@ export default function ServerRackProjects({ reducedMotion, theme }) {
         <group position={[6.5, 1.4, -2]} rotation={[0, -Math.PI / 2, 0]}>
 
             {/* rack frame - a slightly darker brown than the units
-                themselves, so the frame still reads as "behind" them */}
+                themselves (so the frame still reads as "behind" them),
+                same emissive-floor treatment as the units below it */}
             <mesh position={[0, 0, -0.02]}>
                 <boxGeometry args={[1, PROJECTS.length * (UNIT_HEIGHT + 0.05) + 0.15, 0.6]} />
-                <meshStandardMaterial color="#2e1f14" roughness={0.85} />
+                <meshStandardMaterial color="#4a3220" emissive="#2e1f14" emissiveIntensity={0.3} roughness={0.85} />
             </mesh>
 
             {!isOpen && (
