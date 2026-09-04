@@ -1,6 +1,13 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "yaml",
+  // Adding `main` does NOT change how the site itself is served - static
+  // assets still go straight through Cloudflare's assets layer without
+  // ever invoking this script (assets.run_worker_first defaults to
+  // false, left unset/unchanged below). The script exists purely to give
+  // this Worker a `scheduled` handler for the Cron Trigger further down -
+  // see worker/keep-alive.js for what that actually does and why.
+  "main": "worker/keep-alive.js",
   "compatibility_date": "2026-07-27",
   "observability": {
     "enabled": true
@@ -10,5 +17,15 @@
   },
   "compatibility_flags": [
     "nodejs_compat"
-  ]
+  ],
+  // Pings the backend's health endpoint every 10 minutes to keep Render's
+  // free tier from spinning it down after ~15 minutes idle - see
+  // worker/keep-alive.js. Replaces .github/workflows/keep-alive.yml as
+  // the PRIMARY mechanism (that one is kept as a redundant backup, not
+  // deleted) because GitHub's scheduled-workflow trigger turned out to be
+  // unreliable at this interval - observed firing every 2-4.5 hours in
+  // practice, not every 10 minutes as configured.
+  "triggers": {
+    "crons": ["*/10 * * * *"]
+  }
 }

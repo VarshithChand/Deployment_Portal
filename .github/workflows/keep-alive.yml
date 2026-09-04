@@ -5,6 +5,16 @@ name: Keep Backend Awake
 # start. Pinging the health endpoint often enough that it never goes that
 # long idle keeps the portal responsive for anyone opening it after a gap,
 # without needing a paid Render plan.
+#
+# Demoted to a redundant BACKUP, not the primary mechanism - checked via
+# `gh run list --workflow="Keep Backend Awake"` and found this was
+# actually firing every 2-4.5 hours in practice, not every 10 minutes as
+# configured below. GitHub's own docs describe scheduled workflows as
+# best-effort and subject to delay under platform load, which is
+# consistent with what was observed. worker/keep-alive.js (a Cloudflare
+# Cron Trigger on the same Worker that already serves the frontend) is
+# now the primary keep-alive - this file is left running alongside it
+# since an extra ping is harmless, not because it's relied on alone.
 on:
   schedule:
     - cron: "*/10 * * * *"
