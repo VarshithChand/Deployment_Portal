@@ -1,6 +1,5 @@
 import { useMemo, useRef, useState } from "react";
 import { useFrame } from "@react-three/fiber";
-import { AdditiveBlending, DoubleSide } from "three";
 import { Billboard, Text } from "@react-three/drei";
 import Hotspot from "../Hotspot";
 import { MONO_FONT } from "../../fonts";
@@ -36,7 +35,6 @@ export default function CeilingLightSkills({ reducedMotion, theme }) {
 
     const coreRef = useRef();
     const glowRef = useRef();
-    const beamRef = useRef();
     const roomLightRef = useRef();
     const flickerT = useRef(0);
     const [hoveredGroup, setHoveredGroup] = useState(null);
@@ -114,30 +112,17 @@ export default function CeilingLightSkills({ reducedMotion, theme }) {
             glowRef.current.material.opacity += (targetOpacity - glowRef.current.material.opacity) * 0.15;
         }
 
-        if (beamRef.current) {
-            // visible downward light shaft, on top of the actual
-            // pointLight above - "I need light exposure like that" (a
-            // sketch of rays fanning down from the pendant onto the
-            // desk). Kept subtle (additive, low opacity) rather than a
-            // solid cone - a light shaft should look like it's made of
-            // the light itself, not an opaque object with a light-ish
-            // color, which is exactly what over-brightened the wireframe
-            // shell into a "thick" blob last round.
-            const targetOpacity = !clusterSwitchOn ? 0 : isOpen ? 0.16 : 0.09;
-            beamRef.current.material.opacity += (targetOpacity - beamRef.current.material.opacity) * 0.12;
-        }
-
         if (roomLightRef.current) {
-            // was 1.6 at a 9-unit falloff - almost the room's own
-            // diagonal - bright enough combined with Bloom's fairly low
-            // threshold (Experience.jsx, luminanceThreshold=0.2) to
-            // overexpose the desk/monitor and everything else nearby
-            // into blown highlights instead of just lighting the area.
-            // Also now gives an idle-on baseline (0.5, not 0) once the
-            // switch itself is on - same reasoning as the core/glow
-            // above: a light that's "on" should visibly cast something
-            // even before you've walked over to look straight at it.
-            const targetRoomLight = !clusterSwitchOn ? 0 : isOpen ? 0.9 : 0.5;
+            // distance pushed back out (5.5 -> 12, past the room's own
+            // ~9.4-unit half-diagonal from the pendant) and decay eased
+            // from the default physically-correct 2 down to 1 - at
+            // decay=2 reaching the far walls at any reasonable intensity
+            // needs enough near-field brightness to overexpose the desk
+            // again (the exact bug fixed 2 rounds ago); decay=1 falls
+            // off more gently, so the far side of the room actually
+            // receives a noticeable amount of light without pushing
+            // intensity back into overexposure range near the fixture.
+            const targetRoomLight = !clusterSwitchOn ? 0 : isOpen ? 1.1 : 0.65;
             roomLightRef.current.intensity += (targetRoomLight - roomLightRef.current.intensity) * 0.1;
         }
 
@@ -171,37 +156,23 @@ export default function CeilingLightSkills({ reducedMotion, theme }) {
                 <meshStandardMaterial color="#1a2028" />
             </mesh>
 
-            {/* distance pulled in from 9 to 5.5 - close to the room's own
-                diagonal, so this "pendant over the desk" light was
-                reaching well past the desk and into the rest of the
-                room instead of staying a localized glow */}
-            <pointLight ref={roomLightRef} color="#22d3ee" intensity={0} distance={5.5} />
-
-            {/* visible light shaft - a hollow cone (openEnded, no solid
-                caps) with its narrow tip at the fixture and its wide
-                base down at desk height (this group's own origin is
-                already at the fixture's world y=4.2, and the desk
-                surface sits at world y~0.785, so local y=-3.415 is
-                "desk height" from here). Cone's default orientation
-                already puts the apex up/base down, matching a light
-                narrowing at the source and spreading as it reaches a
-                surface, so no rotation is needed - only the mesh's own
-                y is offset so that apex and base land on those two
-                points. Additive + no depthWrite, same convention as
-                every other glow/beam-style material in this room, so it
-                reads as light rather than a solid tinted object. */}
-            <mesh ref={beamRef} position={[0, -1.7075, 0]}>
-                <coneGeometry args={[1.05, 3.415, 20, 1, true]} />
-                <meshBasicMaterial
-                    color="#22d3ee"
-                    transparent
-                    opacity={0}
-                    blending={AdditiveBlending}
-                    side={DoubleSide}
-                    depthWrite={false}
-                    toneMapped={false}
-                />
-            </mesh>
+            {/* This is the ONLY thing that should sell "the room is lit" -
+                a real point light brightening the actual walls/floor/
+                furniture around it, the way flipping a light switch
+                actually looks. An earlier pass tried an actual visible
+                cone-shaped beam mesh floating in the air between the
+                fixture and the desk; it read as a solid faceted shape
+                ("looking like a net"), not light, and got pulled back
+                out entirely - real light doesn't have a visible edge.
+                distance widened from 5.5 to 12 (past the room's own
+                ~9.4-unit half-diagonal from here) and decay eased from
+                the default physically-correct 2 down to 1, so this
+                genuinely reaches the far walls (rack/timeline/window/
+                door) instead of staying a localized desk glow - decay=2
+                would need enough near-field intensity to reach that far
+                that it overexposes the desk again (the bug fixed 2
+                rounds ago). */}
+            <pointLight ref={roomLightRef} color="#22d3ee" intensity={0} distance={12} decay={1} />
 
             <Hotspot position={[0, 0, 0]} onSelect={() => setActive("skills")} reducedMotion={reducedMotion}>
                 {(hovered) => (
