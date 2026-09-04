@@ -81,7 +81,7 @@ function Star({ y, z, size, phase, reducedMotion }) {
     });
 
     return (
-        <mesh ref={ref} position={[0.104, y, z]}>
+        <mesh ref={ref} position={[0.104, y, z]} rotation={[0, Math.PI / 2, 0]}>
             <circleGeometry args={[size, 6]} />
             <meshBasicMaterial color="#e7edf5" transparent opacity={1} toneMapped={false} />
         </mesh>
@@ -172,9 +172,19 @@ export default function Window({ position = [0, 0, 0], rotation = [0, 0, 0], the
                 <meshStandardMaterial color="#22d3ee" emissive="#22d3ee" emissiveIntensity={0.6} toneMapped={false} />
             </mesh>
 
-            {/* glass pane */}
-            <mesh position={[0.078, 0, 0]}>
-                <planeGeometry args={[1.235, 1.755]} />
+            {/* glass pane - rotation.y=90deg is load-bearing, not
+                decoration: PlaneGeometry defaults to the local X-Y plane
+                (face normal on local Z), but every box in this file
+                (frame/trim/muntins) was built on the opposite convention
+                - local X is "outward through the wall," Y is height, Z
+                is width (see the file-level comment below). Without this
+                rotation the pane's face was perpendicular to the wall
+                instead of flush with it, so the camera saw it edge-on -
+                a barely-visible sliver, with the dark frame showing
+                through everywhere else. Same fix applied to the sun/moon
+                disc below and to each Star. */}
+            <mesh position={[0.078, 0, 0]} rotation={[0, Math.PI / 2, 0]}>
+                <planeGeometry args={[1.95, 1.43]} />
                 <meshBasicMaterial color={sky} toneMapped={false} />
             </mesh>
 
@@ -190,7 +200,7 @@ export default function Window({ position = [0, 0, 0], rotation = [0, 0, 0], the
             </mesh>
 
             {/* sun (day) / moon (night) disc, low in the pane */}
-            <mesh position={[0.104, 0.364, day ? -0.455 : 0.455]}>
+            <mesh position={[0.104, 0.364, day ? -0.455 : 0.455]} rotation={[0, Math.PI / 2, 0]}>
                 <circleGeometry args={[0.143, 20]} />
                 <meshBasicMaterial color={glow} toneMapped={false} />
             </mesh>
