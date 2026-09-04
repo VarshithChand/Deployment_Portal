@@ -55,3 +55,15 @@ const tree = (
 ReactDOM.createRoot(
     document.getElementById("root")
 ).render(import.meta.env.DEV ? <React.StrictMode>{tree}</React.StrictMode> : tree);
+
+// Production only - the dev server doesn't apply this app's CSP/Cache-
+// Control headers at all (see vite.config.js's writeSecurityHeadersPlugin),
+// and a service worker caching Vite's dev-mode module graph would fight
+// HMR. public/sw.js's own header comment explains why it's safe alongside
+// index.html's existing no-cache setup (network-first for the page itself,
+// cache-first only for content-hashed assets).
+if (import.meta.env.PROD && "serviceWorker" in navigator) {
+    window.addEventListener("load", () => {
+        navigator.serviceWorker.register("/sw.js").catch((err) => console.error(err));
+    });
+}

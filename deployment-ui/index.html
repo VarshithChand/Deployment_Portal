@@ -4,6 +4,17 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- PWA - lets Android's "Add to Home Screen" install this as a real
+         standalone app icon (see public/manifest.json), and gives Chrome's
+         install prompt/task-switcher the same blue brand color as the
+         glyph itself. apple-mobile-web-app-* covers the equivalent iOS
+         Safari install path with the same icon. -->
+    <link rel="manifest" href="/manifest.json" />
+    <meta name="theme-color" content="#2563eb" />
+    <link rel="apple-touch-icon" href="/icon-192.png" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="Deploy Portal" />
     <title>Deployment Portal — One Console for Every Deployment</title>
     <meta
       name="description"
