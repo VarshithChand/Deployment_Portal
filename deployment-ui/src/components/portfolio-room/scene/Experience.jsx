@@ -24,8 +24,8 @@ import WelcomeSign from "./objects/WelcomeSign";
 import GreeterErrorBoundary from "./objects/GreeterErrorBoundary";
 import Greeter from "./objects/Greeter";
 
-// Canvas root - camera, lights, fog, bloom. `theme` re-themes the room's
-// environment (background/fog/floor/walls/grid) and its floating open-air
+// Canvas root - camera, lights, bloom. `theme` re-themes the room's
+// environment (background/floor/walls/carpet) and its floating open-air
 // labels to match the rest of the application - see PortfolioRoom.jsx,
 // which reads the same shared ThemeContext every other page uses rather
 // than a room-local preference. The monitor/wall-screen "screen"
@@ -54,7 +54,13 @@ export default function Experience({ reducedMotion, theme, onExit }) {
         >
 
             <color attach="background" args={[bg]} />
-            <fog attach="fog" args={[bg, 9, 26]} />
+            {/* No scene fog - it washed the whole room out to a pale haze
+                from the "room" overview camera (CameraRig.jsx), which
+                sits far enough back to fit the whole room in frame that
+                it crossed well into the fog falloff range. The room
+                already has real walls on every side but the open
+                entrance, so there was no boundary-hiding job left for
+                fog to do that was worth that tradeoff. */}
 
             <ambientLight intensity={light ? 0.35 : 0.3} />
             <directionalLight position={[3, 6, 4]} intensity={light ? 0.55 : 0.7} />

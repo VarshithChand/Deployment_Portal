@@ -48,12 +48,10 @@ export const CAMERA_TARGETS = {
     // enough that the near corners either side of the entrance fall
     // outside frame). Sitting straight back at doorway height would need
     // the camera roughly 15 units further out than the room is even deep
-    // to fit the full 16-unit width in frame - well past where fog
-    // (Experience.jsx, starts at 9 units) would wash the back wall out.
-    // Going up and over instead solves both at once: from height, the
-    // room's 16-unit width only needs ~10 units of vertical distance to
-    // fit in frame rather than ~15 of horizontal pull-back, and looking
-    // down and in keeps the whole floor plan inside the fog-free range.
+    // to fit the full 16-unit width in frame. Going up and over instead
+    // gets there with far less distance: from height, the room's 16-unit
+    // width only needs ~10 units of vertical distance to fit in frame
+    // rather than ~15 of horizontal pull-back.
     room: { pos: [0, 7.6, 8.6], look: [0, 1.4, -2] }
 };
 

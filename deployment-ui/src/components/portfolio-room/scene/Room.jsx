@@ -123,10 +123,10 @@ export default function Room({ theme }) {
 
             {/* thin cyan rim strips along the top of every wall - the back
                 wall's own rim was the only one before, which read fine
-                head-on but left the side walls fading into the fog with
-                no defined edge once the camera turned toward them. All
-                three together give the room a consistent, legible
-                boundary regardless of which way you're looking. */}
+                head-on but left the side walls with no defined edge once
+                the camera turned toward them. All three together give the
+                room a consistent, legible boundary regardless of which
+                way you're looking. */}
             <mesh position={[0, 5.97, -4.98]}>
                 <boxGeometry args={[16, 0.04, 0.04]} />
                 <meshStandardMaterial color={p.cyan} emissive={p.cyan} emissiveIntensity={0.8} toneMapped={false} />

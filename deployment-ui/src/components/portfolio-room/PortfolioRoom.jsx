@@ -303,7 +303,7 @@ const CSS = `
 }
 /* Light theme - every 2D piece (nav/panel/loader/mobile fallback) already
    reads these tokens instead of hardcoded colors, so this block alone
-   re-themes all of it. The 3D room itself (floor/walls/fog - real
+   re-themes all of it. The 3D room itself (floor/walls/carpet - real
    Three.js material colors, not CSS) is re-themed separately via a theme
    prop threaded into Experience.jsx/Room.jsx and the station objects
    (see textTheme.js); the monitor/wall-screen "screens" stay
