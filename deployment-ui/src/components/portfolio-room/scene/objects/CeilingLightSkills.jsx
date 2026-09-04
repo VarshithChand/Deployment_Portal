@@ -100,7 +100,15 @@ export default function CeilingLightSkills({ reducedMotion, theme }) {
         }
 
         if (glowRef.current) {
-            const targetOpacity = !clusterSwitchOn ? 0.02 : isOpen ? 0.5 : 0.28;
+            // idle-on eased back down from 0.28 to 0.16 - the glow shell
+            // is a WIREFRAME icosahedron, and pushing its opacity up
+            // that far made every edge cross Bloom's threshold and
+            // bloom into a thick glowing bar instead of a delicate
+            // wireframe halo - it read as a solid faceted blob ("the
+            // cluster is getting thick"), not a light. The actual
+            // illumination effect belongs to the real pointLight below,
+            // not this decorative shell.
+            const targetOpacity = !clusterSwitchOn ? 0.02 : isOpen ? 0.5 : 0.16;
             glowRef.current.material.opacity += (targetOpacity - glowRef.current.material.opacity) * 0.15;
         }
 
@@ -110,11 +118,11 @@ export default function CeilingLightSkills({ reducedMotion, theme }) {
             // threshold (Experience.jsx, luminanceThreshold=0.2) to
             // overexpose the desk/monitor and everything else nearby
             // into blown highlights instead of just lighting the area.
-            // Also now gives an idle-on baseline (0.4, not 0) once the
+            // Also now gives an idle-on baseline (0.5, not 0) once the
             // switch itself is on - same reasoning as the core/glow
             // above: a light that's "on" should visibly cast something
             // even before you've walked over to look straight at it.
-            const targetRoomLight = !clusterSwitchOn ? 0 : isOpen ? 0.9 : 0.4;
+            const targetRoomLight = !clusterSwitchOn ? 0 : isOpen ? 0.9 : 0.5;
             roomLightRef.current.intensity += (targetRoomLight - roomLightRef.current.intensity) * 0.1;
         }
 
