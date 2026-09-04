@@ -132,7 +132,7 @@ export default function Experience({ reducedMotion, theme, onExit }) {
                     - "the desk should be in front of the window" - instead
                     of the side wall near the timeline station, which put
                     it nowhere near the desk at all */}
-                <Window position={[3, 2.2, -4.85]} rotation={[0, -Math.PI / 2, 0]} theme={theme} />
+                <Window position={[3, 2.2, -4.85]} rotation={[0, -Math.PI / 2, 0]} theme={theme} reducedMotion={reducedMotion} />
                 <Clock position={[-3, 2.6, -4.83]} scale={1.1} />
                 {/* the plant, beside the door rather than next to the
                     desk - moved per the explicit request. Nudged a bit
