@@ -48,17 +48,26 @@ export default function SwitchBoard({ position = [0, 0, 0], rotation = [0, 0, 0]
 
                     <group key={name}>
 
-                        {/* toggle lever - larger invisible-ish hit area
-                            box behind it so the click target is easier to
-                            land than the thin lever mesh alone would be */}
+                        {/* toggle lever - larger, invisible-to-the-eye
+                            hit area box behind it so the click target is
+                            easier to land than the thin lever mesh alone
+                            would be. Real transparency (opacity=0), not
+                            visible={false} - Three.js's raycaster skips
+                            objects with visible=false entirely, so a
+                            mesh built that way is never actually
+                            clickable no matter how large it is; this was
+                            dead weight the whole time, leaving only the
+                            small lever mesh itself as a real click
+                            target, which is what made the switches hard
+                            to actually hit. */}
                         <mesh
                             position={[0.032, 0.128, z]}
-                            visible={false}
                             onClick={(e) => { e.stopPropagation(); toggleSwitch(name); }}
                             onPointerOver={(e) => { e.stopPropagation(); setHovered(name); document.body.style.cursor = "pointer"; }}
                             onPointerOut={(e) => { e.stopPropagation(); setHovered(null); document.body.style.cursor = "auto"; }}
                         >
                             <boxGeometry args={[0.08, 0.144, 0.096]} />
+                            <meshBasicMaterial transparent opacity={0} depthWrite={false} />
                         </mesh>
 
                         <mesh
