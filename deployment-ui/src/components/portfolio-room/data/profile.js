@@ -8,7 +8,12 @@ export const PROFILE = {
     tagline: "Cloud & Infrastructure · CI/CD Automation · Containerization · Test Automation",
     email: "v.varshith.2004@gmail.com",
     github: "https://github.com/VarshithChand",
-    linkedin: "https://linkedin.com/in/varshith-chand-vuyyuru"
+    linkedin: "https://linkedin.com/in/varshith-chand-vuyyuru",
+    // Served straight from /public, so it's just a static file - place
+    // the real PDF at deployment-ui/public/resume.pdf. Referenced from
+    // both the resume paper's viewer panel and its download link (see
+    // ui/sections/Resume.jsx) so there's one place to change the path.
+    resumeUrl: "/resume.pdf"
 };
 
 export const ABOUT = {

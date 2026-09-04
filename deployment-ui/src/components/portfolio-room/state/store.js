@@ -31,7 +31,13 @@ export const useStore = create((set) => ({
         active: section,
         selectedSkill: section === "skills" ? s.selectedSkill : null,
         selectedProjectId: section === "projects" ? s.selectedProjectId : null,
-        selectedExperienceYear: section === "experience" ? s.selectedExperienceYear : null
+        selectedExperienceYear: section === "experience" ? s.selectedExperienceYear : null,
+        // Navigating anywhere else closes the resume viewer if it was
+        // open - without this, opening it and then jumping to another
+        // station via Nav/the WASD loop would leave it stacked behind
+        // (or visually on top of) that station's own panel, both
+        // centered at once.
+        resumeOpen: false
     })),
     back: () => set({
         active: null, selectedSkill: null,
@@ -40,6 +46,15 @@ export const useStore = create((set) => ({
 
     loaded: false,
     setLoaded: (loaded) => set({ loaded }),
+
+    // The resume paper on the desk (Resume.jsx) - deliberately NOT routed
+    // through `active`/CAMERA_TARGETS like the real stations above. It's
+    // a small prop sitting on the already-visible desk, not a place to
+    // fly the camera to; clicking it should just pop the viewer open in
+    // place, the same way picking up a paper on a real desk doesn't move
+    // you across the room first.
+    resumeOpen: false,
+    setResumeOpen: (resumeOpen) => set({ resumeOpen }),
 
     reducedMotion: false,
     setReducedMotion: (reducedMotion) => set({ reducedMotion }),

@@ -16,6 +16,7 @@ import Fan from "./objects/Fan";
 import BedLight from "./objects/BedLight";
 import MonitorAbout from "./objects/MonitorAbout";
 import PhoneContact from "./objects/PhoneContact";
+import Resume from "./objects/Resume";
 import CeilingLightSkills from "./objects/CeilingLightSkills";
 import WallDashboard from "./objects/WallDashboard";
 import ServerRackProjects from "./objects/ServerRackProjects";
@@ -97,6 +98,14 @@ export default function Experience({ reducedMotion, theme, onExit }) {
                     <Chair position={[0, 0, -0.3]} />
                     <MonitorAbout reducedMotion={reducedMotion} />
                     <PhoneContact reducedMotion={reducedMotion} />
+                    {/* resume paper - open front-left corner of the desk,
+                        clear of the keyboard/mouse/phone footprints and
+                        the CPU tower (which is floor-standing further
+                        left, off the desk entirely). Not part of the
+                        about/contact camera-target tuning either target
+                        was built around - see Resume.jsx for why it isn't
+                        a "station." */}
+                    <Resume position={[-0.62, 0.792, -0.75]} reducedMotion={reducedMotion} theme={theme} />
                     <Rug position={[0, 0, -0.6]} size={[3, 2.2]} />
                 </group>
 

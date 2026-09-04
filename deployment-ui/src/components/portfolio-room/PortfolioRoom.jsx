@@ -14,6 +14,7 @@ import Skills from "./ui/sections/Skills";
 import Projects from "./ui/sections/Projects";
 import Experience from "./ui/sections/Experience";
 import Contact from "./ui/sections/Contact";
+import ResumeContent from "./ui/sections/Resume";
 
 // The Canvas itself is lazy - it pulls in @react-three/fiber, drei, three
 // and postprocessing, real weight that shouldn't cost anything for a
@@ -182,6 +183,8 @@ function DesktopRoom({ reducedMotion, theme, onExit }) {
     const selectedSkill = useStore((s) => s.selectedSkill);
     const selectedProjectId = useStore((s) => s.selectedProjectId);
     const selectedExperienceYear = useStore((s) => s.selectedExperienceYear);
+    const resumeOpen = useStore((s) => s.resumeOpen);
+    const setResumeOpen = useStore((s) => s.setResumeOpen);
 
     const ActiveContent = active && SECTION_CONTENT[active];
     const showPanel = ActiveContent && isRevealed(active, selectedSkill, selectedProjectId, selectedExperienceYear);
@@ -214,6 +217,19 @@ function DesktopRoom({ reducedMotion, theme, onExit }) {
                 {showPanel && (
                     <Panel key={active} title={SECTION_TITLES[active]} onClose={back}>
                         <ActiveContent />
+                    </Panel>
+                )}
+            </AnimatePresence>
+
+            {/* Separate from the station panel above on purpose - opening
+                the resume doesn't touch `active`/the camera at all (see
+                Resume.jsx, the desk object, and store.js's resumeOpen),
+                so it needs its own independent AnimatePresence rather
+                than sharing the station one keyed on `active`. */}
+            <AnimatePresence>
+                {resumeOpen && (
+                    <Panel key="resume" title="Resume" onClose={() => setResumeOpen(false)} closeLabel="Close resume">
+                        <ResumeContent />
                     </Panel>
                 )}
             </AnimatePresence>
@@ -411,6 +427,10 @@ const CSS = `
 .proom-metric-num{font-size:22px; font-weight:700; color:var(--pr-cyan);}
 .proom-dashboard-metrics span:last-child{font-size:10px; color:var(--pr-muted); letter-spacing:.04em;}
 .proom-dashboard-note{margin:0; font-size:11px; color:var(--pr-muted); font-style:italic;}
+
+.proom-resume-preview{width:100%; aspect-ratio:1/1.294; border:1px solid var(--pr-line); border-radius:10px;
+  overflow:hidden; background:var(--pr-track); margin-bottom:14px;}
+.proom-resume-preview iframe{width:100%; height:100%; border:0; display:block;}
 
 .proom-contact p{font-size:13px; color:var(--pr-muted); margin:0 0 16px;}
 .proom-contact-actions{display:flex; flex-wrap:wrap; gap:10px; margin-bottom:18px;}

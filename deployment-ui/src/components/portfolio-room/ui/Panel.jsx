@@ -4,7 +4,7 @@ import { X } from "lucide-react";
 // Reusable floating 2D content panel - real DOM/text (never baked into a
 // texture, so it stays screen-reader accessible), positioned over the 3D
 // scene.
-export default function Panel({ title, onClose, children }) {
+export default function Panel({ title, onClose, closeLabel = "Back to room overview", children }) {
 
     return (
 
@@ -20,7 +20,7 @@ export default function Panel({ title, onClose, children }) {
 
             <div className="proom-panel-head">
                 <h2>{title}</h2>
-                <button type="button" className="proom-panel-close" onClick={onClose} aria-label="Back to room overview">
+                <button type="button" className="proom-panel-close" onClick={onClose} aria-label={closeLabel}>
                     <X size={16} />
                 </button>
             </div>

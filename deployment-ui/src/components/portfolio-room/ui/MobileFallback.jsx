@@ -5,6 +5,7 @@ import Projects from "./sections/Projects";
 import Experience from "./sections/Experience";
 import Dashboard from "./sections/Dashboard";
 import Contact from "./sections/Contact";
+import Resume from "./sections/Resume";
 
 // Mobile doesn't get the full navigable 3D room - a lightweight static
 // hero plus a normal scrollable stack of the exact same section
@@ -46,6 +47,11 @@ export default function MobileFallback() {
             <section className="proom-mobile-section">
                 <h2>Status</h2>
                 <Dashboard />
+            </section>
+
+            <section className="proom-mobile-section">
+                <h2>Resume</h2>
+                <Resume />
             </section>
 
             <section className="proom-mobile-section">
