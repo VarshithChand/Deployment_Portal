@@ -210,6 +210,35 @@ public class SessionActivityService
             return (true, null);
         }
     }
+
+    // Throttles how often Program.cs's activity middleware actually calls
+    // SettingsService.TouchSessionAsync (a real read-modify-write against
+    // the single shared JSON blob every other write in the app also reads
+    // and writes wholesale, with no locking - see SettingsService.
+    // ReadRootAsync/WriteRootAsync). Calling that on literally every
+    // authenticated request - which this middleware runs on - turned every
+    // page load into a write racing against whatever else happened to be
+    // saving at the same moment (a GitHub PAT save, MFA enrollment, etc.),
+    // silently clobbering the other write with a stale copy of the blob.
+    // This dictionary is exactly the kind of cheap, in-memory, gone-on-
+    // restart state the rest of this file already uses for anything that
+    // doesn't need real persistence - here it's what lets the middleware
+    // decide "worth a real write this time" without touching the blob at
+    // all for the common case.
+    private readonly ConcurrentDictionary<string, DateTime> _lastPersistedSessionTouch = new();
+    private static readonly TimeSpan SessionTouchPersistInterval = TimeSpan.FromMinutes(5);
+
+    public bool ShouldPersistSessionTouch(string userId, string jti)
+    {
+        var key = $"{userId}|{jti}";
+        var now = DateTime.UtcNow;
+
+        if (_lastPersistedSessionTouch.TryGetValue(key, out var last) && now - last < SessionTouchPersistInterval)
+            return false;
+
+        _lastPersistedSessionTouch[key] = now;
+        return true;
+    }
 }
 
 public record FrontendBuildInfo(string Commit, string? Version, string Environment, DateTime ReportedAtUtc);

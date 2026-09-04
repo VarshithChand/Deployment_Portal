@@ -533,14 +533,26 @@ app.Use(async (context, next) =>
         var userAgent = context.Request.Headers.UserAgent.ToString();
         var ipAddress = context.Connection.RemoteIpAddress?.ToString();
         var endpoint = $"{context.Request.Method} {context.Request.Path}";
-        context.RequestServices.GetRequiredService<SessionActivityService>().Touch(key, userAgent, ipAddress, endpoint);
+        var activityService = context.RequestServices.GetRequiredService<SessionActivityService>();
+        activityService.Touch(key, userAgent, ipAddress, endpoint);
 
         // Keeps Settings > Account's Active Sessions list showing real
         // recency (see SettingsService.TouchSessionAsync) - a no-op for a
-        // token issued before the Jti claim existed.
+        // token issued before the Jti claim existed. Gated behind
+        // ShouldPersistSessionTouch (an in-memory-only check) rather than
+        // calling TouchSessionAsync on every single request - that method
+        // is a real read-modify-write against the one shared settings blob
+        // every other save in this app also writes to with no locking, and
+        // doing it unconditionally on every request turned ordinary page
+        // loads into a source of lost-update races against real saves
+        // (e.g. a GitHub PAT save silently getting clobbered by a stale
+        // touch-write from a parallel request). This throttles the actual
+        // persisted write to once per SessionTouchPersistInterval per
+        // session, which is what "Active Sessions" needs anyway - nobody
+        // is watching LastSeenAtUtc tick in real time.
         var jti = context.User.FindFirst(JwtRegisteredClaimNames.Jti)?.Value;
 
-        if (!string.IsNullOrEmpty(jti))
+        if (!string.IsNullOrEmpty(jti) && activityService.ShouldPersistSessionTouch(key, jti))
         {
             await settings.TouchSessionAsync(key, jti, userAgent, ipAddress);
         }
