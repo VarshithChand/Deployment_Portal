@@ -33,15 +33,24 @@ function Bird({ z0, y, speed, phase, reducedMotion }) {
 
     return (
         <group ref={groupRef} position={[0.111, y, z0]}>
+            {/* small body dot anchoring both wings - without it, at the
+                distance this window is actually viewed from (the fixed
+                overview camera, ~11 units away - the room has no
+                dedicated close-up window view), the two wing bars alone
+                read as disconnected specks rather than one bird */}
+            <mesh>
+                <sphereGeometry args={[0.011, 6, 6]} />
+                <meshBasicMaterial color="#16212e" toneMapped={false} />
+            </mesh>
             <group ref={leftWingRef}>
-                <mesh position={[0, 0, -0.024]}>
-                    <boxGeometry args={[0.004, 0.004, 0.048]} />
+                <mesh position={[0, 0, -0.05]}>
+                    <boxGeometry args={[0.012, 0.012, 0.1]} />
                     <meshBasicMaterial color="#16212e" toneMapped={false} />
                 </mesh>
             </group>
             <group ref={rightWingRef}>
-                <mesh position={[0, 0, 0.024]}>
-                    <boxGeometry args={[0.004, 0.004, 0.048]} />
+                <mesh position={[0, 0, 0.05]}>
+                    <boxGeometry args={[0.012, 0.012, 0.1]} />
                     <meshBasicMaterial color="#16212e" toneMapped={false} />
                 </mesh>
             </group>
@@ -85,17 +94,20 @@ function Star({ y, z, size, phase, reducedMotion }) {
 // two sections; the bottom two stayed empty at night. Kept the original
 // four positions (converted to this component) and added one per
 // quadrant so every "mirror" of the window actually shows stars.
+// Sizes bumped up from the original 0.013-0.0156 (same reasoning as the
+// birds above - too small to read from the fixed ~11-unit overview
+// camera, the only view that ever sees this window).
 const STARS = [
     // top-left / top-right (original placements)
-    { y: 0.39, z: -0.715, size: 0.0156, phase: 0.2 },
-    { y: 0.455, z: 0.52, size: 0.0156, phase: 2.1 },
-    { y: 0.26, z: 0.78, size: 0.0156, phase: 4.0 },
-    { y: 0.351, z: -0.195, size: 0.0156, phase: 5.6 },
+    { y: 0.39, z: -0.715, size: 0.032, phase: 0.2 },
+    { y: 0.455, z: 0.52, size: 0.032, phase: 2.1 },
+    { y: 0.26, z: 0.78, size: 0.032, phase: 4.0 },
+    { y: 0.351, z: -0.195, size: 0.032, phase: 5.6 },
     // bottom-left / bottom-right (new)
-    { y: -0.3, z: -0.6, size: 0.0156, phase: 1.1 },
-    { y: -0.55, z: -0.25, size: 0.013, phase: 3.3 },
-    { y: -0.25, z: 0.62, size: 0.013, phase: 0.7 },
-    { y: -0.58, z: 0.3, size: 0.0156, phase: 4.8 }
+    { y: -0.3, z: -0.6, size: 0.032, phase: 1.1 },
+    { y: -0.55, z: -0.25, size: 0.027, phase: 3.3 },
+    { y: -0.25, z: 0.62, size: 0.027, phase: 0.7 },
+    { y: -0.58, z: 0.3, size: 0.032, phase: 4.8 }
 ];
 
 // A wall-mounted window - frame + glass pane, tinted to match the room's
