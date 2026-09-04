@@ -16,9 +16,9 @@ const PALETTE = {
         cyan: "#22d3ee",
         floor: "#0b0f16", backWall: "#0d1119", sideWall: "#0b0e15",
         wallEmissive: "#08131a", wallEmissiveIntensity: 0.35, sideWallEmissiveIntensity: 0.25,
-        gridMajor: "#0e3540", gridMinor: "#0a1a24",
         ceiling: "#070a10",
-        wainscot: "#101f27"
+        wainscot: "#101f27",
+        carpetBorder: "#0e3948", carpetBase: "#131b26"
     },
     // First pass had walls sitting only a few % off pure white with the
     // floor barely darker - against the light ambient/directional light
@@ -32,9 +32,9 @@ const PALETTE = {
         cyan: "#0891b2",
         floor: "#b7c3d3", backWall: "#dbe2ea", sideWall: "#d2dae4",
         wallEmissive: "#000000", wallEmissiveIntensity: 0, sideWallEmissiveIntensity: 0,
-        gridMajor: "#5b6b83", gridMinor: "#8b98ab",
         ceiling: "#c7d1de",
-        wainscot: "#aebfd0"
+        wainscot: "#aebfd0",
+        carpetBorder: "#8fa3b8", carpetBase: "#c3ccd9"
     }
 };
 
@@ -52,8 +52,22 @@ export default function Room({ theme }) {
                 <meshStandardMaterial color={p.floor} roughness={0.9} metalness={0.05} />
             </mesh>
 
-            {/* faint cyan grid on the floor */}
-            <gridHelper args={[16, 32, p.gridMajor, p.gridMinor]} position={[0, 0.01, 0]} />
+            {/* full-room carpet, replacing the earlier bare floor + cyan
+                graph-paper grid overlay - the room read as a technical
+                grid rather than a furnished space. Same bordered-rug
+                layering Rug.jsx already uses under the desk (a slightly
+                larger base plane under a smaller top plane, reading as a
+                trimmed edge) just sized to the whole floor instead of
+                one corner of it; Rug.jsx's own desk-side accent rug still
+                sits on top of this as its own separate layer. */}
+            <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.006, 0]}>
+                <planeGeometry args={[15.4, 9.4]} />
+                <meshStandardMaterial color={p.carpetBorder} roughness={0.95} />
+            </mesh>
+            <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.007, 0]}>
+                <planeGeometry args={[15.1, 9.1]} />
+                <meshStandardMaterial color={p.carpetBase} roughness={0.95} />
+            </mesh>
 
             {/* back wall */}
             <mesh position={[0, 3, -5]}>

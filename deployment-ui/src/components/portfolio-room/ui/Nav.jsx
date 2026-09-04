@@ -2,7 +2,8 @@ import { useStore, SECTIONS } from "../state/store";
 
 const LABELS = {
     about: "About", contact: "Contact", skills: "Skills",
-    dashboard: "Dashboard", projects: "Projects", experience: "Experience"
+    dashboard: "Dashboard", projects: "Projects", experience: "Experience",
+    room: "Overview"
 };
 
 // Real, focusable, keyboard-operable buttons that fly the camera to each

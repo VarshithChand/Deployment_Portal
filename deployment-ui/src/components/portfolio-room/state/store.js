@@ -3,8 +3,11 @@ import { create } from "zustand";
 // SECTIONS order is the sequence Nav and the WASD/arrow-key/scroll loop
 // (see PortfolioRoom.jsx's useSectionLoop) all walk through, in the
 // order explicitly requested: about -> skills -> projects -> experience
-// -> dashboard -> contact, wrapping back to about.
-export const SECTIONS = ["about", "skills", "projects", "experience", "dashboard", "contact"];
+// -> dashboard -> contact, wrapping back to about. "room" is appended
+// last, not prepended - useSectionLoop's very first forward step from
+// the doorway (active still null) always has to land on "about", and
+// that only holds if "about" stays index 0.
+export const SECTIONS = ["about", "skills", "projects", "experience", "dashboard", "contact", "room"];
 
 // A single `active` field drives BOTH the camera fly-to and the 2D panel
 // - unlike the previous build (which kept "where the camera is looking"

@@ -42,7 +42,19 @@ export const CAMERA_TARGETS = {
     skills: { pos: [0, 3.3, 1.7 + SKILLS_SHIFT_Z], look: [0, 3.9, -1 + SKILLS_SHIFT_Z] },
     dashboard: { pos: [0, 2.3, -1.6], look: [0, 2.4, -4.7] },
     projects: { pos: [3.6, 1.5, -1.6], look: [6.3, 1.4, -2] },
-    experience: { pos: [-4, 2, -0.6], look: [-6.3, 2, -2] }
+    experience: { pos: [-4, 2, -0.6], look: [-6.3, 2, -2] },
+    // "room" - a pulled-back, elevated view of the whole room at once,
+    // distinct from "overview" (the doorway view above, which is close
+    // enough that the near corners either side of the entrance fall
+    // outside frame). Sitting straight back at doorway height would need
+    // the camera roughly 15 units further out than the room is even deep
+    // to fit the full 16-unit width in frame - well past where fog
+    // (Experience.jsx, starts at 9 units) would wash the back wall out.
+    // Going up and over instead solves both at once: from height, the
+    // room's 16-unit width only needs ~10 units of vertical distance to
+    // fit in frame rather than ~15 of horizontal pull-back, and looking
+    // down and in keeps the whole floor plan inside the fog-free range.
+    room: { pos: [0, 7.6, 8.6], look: [0, 1.4, -2] }
 };
 
 // GSAP-driven camera fly-to. A plain object (not the camera itself) is
