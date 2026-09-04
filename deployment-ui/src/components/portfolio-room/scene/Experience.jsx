@@ -104,8 +104,14 @@ export default function Experience({ reducedMotion, theme, onExit }) {
                         left, off the desk entirely). Not part of the
                         about/contact camera-target tuning either target
                         was built around - see Resume.jsx for why it isn't
-                        a "station." */}
-                    <Resume position={[-0.62, 0.792, -0.75]} reducedMotion={reducedMotion} theme={theme} />
+                        a "station."
+                        x pulled in from -0.62 to -0.88 - close enough to
+                        the monitor's own screen at the default overview
+                        camera's distance/angle that its floating RESUME
+                        label sat right at the screen's edge, reading as
+                        an overlap. -0.88 clears it with real margin while
+                        staying inside the desk's own left edge (-1.04). */}
+                    <Resume position={[-0.88, 0.792, -0.75]} reducedMotion={reducedMotion} theme={theme} />
                     <Rug position={[0, 0, -0.6]} size={[3, 2.2]} />
                 </group>
 

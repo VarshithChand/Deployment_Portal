@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useFrame } from "@react-three/fiber";
 import { useGLTF, useAnimations, Html } from "@react-three/drei";
 import { useStore } from "../../state/store";
 
@@ -34,6 +35,7 @@ const FACE_VIEWER = 0;
 export default function Greeter({ reducedMotion }) {
 
     const group = useRef();
+    const headMeshesRef = useRef([]);
     const { scene, animations } = useGLTF(MODEL_URL);
     const { actions, names } = useAnimations(animations, group);
     const active = useStore((s) => s.active);
@@ -53,6 +55,44 @@ export default function Greeter({ reducedMotion }) {
         return () => action.fadeOut(0.3);
 
     }, [actions, names, reducedMotion]);
+
+    // This particular GLB (Tomas Laulhe's "RobotExpressive") ships real
+    // facial morph targets on its Head mesh - Angry/Surprised/Sad,
+    // confirmed by reading the file's own glTF JSON rather than guessed -
+    // not just the body-language animation clips used above. The Head
+    // "mesh" is actually 3 separate primitives in the loaded scene graph
+    // (one per material), each carrying the same 3 targets in the same
+    // order, so every one of them needs its influence set together or
+    // only part of the face would move.
+    useEffect(() => {
+
+        const heads = [];
+        scene.traverse((obj) => {
+            if (obj.isMesh && obj.morphTargetDictionary && obj.name === "Head") heads.push(obj);
+        });
+        headMeshesRef.current = heads;
+
+    }, [scene]);
+
+    // A gentle, periodic "Surprised" pulse - eyebrows-up, alert - rather
+    // than a constant expression or anything negative (Angry/Sad don't
+    // fit a friendly greeter). Sharp sin^6 shaping makes it read as an
+    // occasional attentive perk instead of a slow constant wobble.
+    useFrame((state) => {
+
+        if (reducedMotion || headMeshesRef.current.length === 0) return;
+
+        const t = state.clock.elapsedTime;
+        const pulse = Math.max(0, Math.sin(t * 0.6)) ** 6 * 0.55;
+
+        headMeshesRef.current.forEach((mesh) => {
+            const idx = mesh.morphTargetDictionary.Surprised;
+            if (idx !== undefined && mesh.morphTargetInfluences) {
+                mesh.morphTargetInfluences[idx] = pulse;
+            }
+        });
+
+    });
 
     // Message swaps in once Overview has been active a moment (skipped
     // under reduced motion, where it should just show immediately).

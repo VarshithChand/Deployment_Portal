@@ -64,12 +64,19 @@ export default function Resume({ position = [0, 0, 0], reducedMotion, theme }) {
                             standing/overview distance, not a close-up
                             camera target, and the original size read as
                             illegible there rather than just modest */}
+                        {/* outlineWidth eased back down (0.008 -> 0.006,
+                            ratio to fontSize now closer to the rack/
+                            timeline titles' own ~0.06-0.07 convention) -
+                            at 0.008 it read as a heavy block rather than
+                            a clean outline, especially wherever it lands
+                            in front of the monitor's own fixed-dark
+                            screen from the default overview camera. */}
                         <Billboard position={[0, 0.24, 0]}>
                             <Text
                                 font={MONO_FONT}
                                 fontSize={0.13}
                                 color={labelColors.title}
-                                outlineWidth={0.008}
+                                outlineWidth={0.006}
                                 outlineColor={labelColors.outline}
                                 anchorX="center"
                                 anchorY="bottom"
