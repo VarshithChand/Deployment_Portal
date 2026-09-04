@@ -14,8 +14,23 @@ export const SECTIONS = ["about", "skills", "projects", "experience", "dashboard
 // both. `null` is the room overview / doorway view.
 export const useStore = create((set) => ({
     active: null,
-    setActive: (section) => set({ active: section }),
-    back: () => set({ active: null }),
+    // Leaving a section resets that section's own "which specific thing
+    // did you click" state - without this, arriving back at Projects or
+    // Experience via Nav/the WASD loop (rather than clicking a specific
+    // rack unit or timeline stop) would still show whatever was selected
+    // on your LAST visit, instead of nothing being expanded until you
+    // click something fresh this time. Only resets the ones you're
+    // actually leaving; the section you're arriving at keeps whatever it
+    // already had (relevant when a direct object click sets both active
+    // and its own selection in the same tick - see PipelineProjects.jsx/
+    // TimelineExperience.jsx's own onSelect handlers).
+    setActive: (section) => set((s) => ({
+        active: section,
+        skillsRevealed: section === "skills" ? s.skillsRevealed : false,
+        selectedProjectId: section === "projects" ? s.selectedProjectId : null,
+        selectedExperienceYear: section === "experience" ? s.selectedExperienceYear : null
+    })),
+    back: () => set({ active: null, skillsRevealed: false, selectedProjectId: null, selectedExperienceYear: null }),
 
     loaded: false,
     setLoaded: (loaded) => set({ loaded }),
@@ -25,12 +40,23 @@ export const useStore = create((set) => ({
 
     // Which rack unit (project) or timeline stop (year) was clicked -
     // read by that section's panel to expand/highlight the right entry
-    // instead of always defaulting to the first one.
+    // instead of always defaulting to the first one. setActive above
+    // resets these to null on leaving; a direct click on a specific
+    // rack unit/timeline stop sets the real id/year right after (two
+    // separate store calls in the same click handler, so the final
+    // state is the real selection, not null).
     selectedProjectId: null,
     setSelectedProjectId: (id) => set({ selectedProjectId: id }),
 
     selectedExperienceYear: null,
     setSelectedExperienceYear: (year) => set({ selectedExperienceYear: year }),
+
+    // Whether the Skills pendant light's node graph is actually showing.
+    // Deliberately separate from `active === "skills"` (arriving at the
+    // station via Nav/WASD/scroll) - the graph itself only reveals when
+    // the pendant light is directly clicked, see CeilingLightSkills.jsx.
+    skillsRevealed: false,
+    revealSkills: () => set({ skillsRevealed: true }),
 
     // The switchboard's 3 physical switches (SwitchBoard.jsx) - fan
     // (Fan.jsx, over the bed, on by default per the explicit request),

@@ -7,19 +7,25 @@ import { useStore } from "../../state/store";
 import { labelTextColors } from "../../textTheme";
 import { SKILL_GROUPS, ALL_SKILLS } from "../../data/skills";
 
-// Pendant light hanging over the desk -> SKILLS. Starts dim/off; clicking
-// it flickers on, brightens the room (a real PointLight ramps up with it,
-// not just the fixture's own emissive), and the skill nodes spread out
-// around it, grouped and connected by thin cyan lines. Also gated by the
-// switchboard's "cluster" switch (off by default) - like a real fixture's
-// master power, independent of whether the Skills station itself is
-// open/hovered: with the switch off, it stays fully dark no matter what.
+// Pendant light hanging over the desk -> SKILLS. Starts dim/off; a
+// direct click flickers it on, brightens the room (a real PointLight
+// ramps up with it, not just the fixture's own emissive), and spreads
+// the skill nodes out around it, grouped and connected by thin cyan
+// lines. Deliberately NOT triggered just by arriving at the station
+// (via Nav/WASD/scroll) - `skillsRevealed` (state/store.js) only flips
+// on a direct click on the fixture itself, and resets the moment you
+// leave, so navigating back later always starts hidden again until
+// clicked fresh. Also gated by the switchboard's "cluster" switch (off
+// by default) - like a real fixture's master power, independent of the
+// reveal state: with the switch off, it stays fully dark no matter what.
 export default function CeilingLightSkills({ reducedMotion, theme }) {
 
     const active = useStore((s) => s.active);
     const setActive = useStore((s) => s.setActive);
+    const skillsRevealed = useStore((s) => s.skillsRevealed);
+    const revealSkills = useStore((s) => s.revealSkills);
     const clusterSwitchOn = useStore((s) => s.switches.cluster);
-    const isOpen = active === "skills";
+    const isOpen = active === "skills" && skillsRevealed;
     const labelColors = labelTextColors(theme);
 
     const coreRef = useRef();
@@ -125,7 +131,7 @@ export default function CeilingLightSkills({ reducedMotion, theme }) {
 
             <pointLight ref={roomLightRef} color="#22d3ee" intensity={0} distance={9} />
 
-            <Hotspot position={[0, 0, 0]} onSelect={() => setActive("skills")} reducedMotion={reducedMotion}>
+            <Hotspot position={[0, 0, 0]} onSelect={() => { setActive("skills"); revealSkills(); }} reducedMotion={reducedMotion}>
                 {(hovered) => (
                     <>
                         <mesh ref={coreRef}>

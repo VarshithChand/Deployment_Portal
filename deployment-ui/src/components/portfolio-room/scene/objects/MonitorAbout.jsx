@@ -1,34 +1,17 @@
-import { useState } from "react";
 import { Text } from "@react-three/drei";
 import Hotspot from "../Hotspot";
 import { MONO_FONT } from "../../fonts";
 import { useStore } from "../../state/store";
-import { ABOUT } from "../../data/profile";
+import { PROFILE } from "../../data/profile";
 
-// Monitor on the desk, screen facing the visitor -> ABOUT. The screen
-// pages through ABOUT.whoami's blocks (identity, tagline, education) one
-// "container" at a time via a real click target on the screen itself.
-//
-// Everything (content + the "> Next" prompt) is left-aligned and
-// anchored toward the screen's own top-left, not centered - clicking the
-// monitor is what opens the About panel over top of it, and that panel
-// (centered, up to 560px wide) covers a column through roughly the
-// middle of the screen at every reasonable desktop width. The top-left
-// corner is the one region most likely to stay clear of it regardless of
-// exact window size, so that's where the actually-interactive part
-// lives. This can't be a hard guarantee for every viewport - it's a
-// best-effort placement, not a real clip/overlap query against the 2D
-// panel's DOM rect - but it's the most robust corner available.
+// Monitor on the desk, screen facing the visitor -> ABOUT. Plain, static
+// screen content - the paginated "container" version of this (a "> Next"
+// prompt cycling through ABOUT.whoami's blocks) was removed per explicit
+// feedback after several rounds of it fighting the About panel that
+// opens over the same part of the screen the moment it's reachable.
 export default function MonitorAbout({ reducedMotion }) {
 
     const setActive = useStore((s) => s.setActive);
-    const [slideIndex, setSlideIndex] = useState(0);
-
-    const slide = ABOUT.whoami[slideIndex];
-    const displayLines = [
-        ...(slide.prompt ? [{ text: slide.prompt, color: "#5eead4" }] : []),
-        ...slide.lines.map((text) => ({ text, color: "#eafaff" }))
-    ];
 
     return (
 
@@ -61,54 +44,19 @@ export default function MonitorAbout({ reducedMotion }) {
                             <meshBasicMaterial color={hovered ? "#0e5a63" : "#04141a"} toneMapped={false} />
                         </mesh>
 
-                        <group position={[-0.41, 0, 0.033]}>
-
-                            {displayLines.map((line, i) => (
-                                <Text
-                                    key={`${slideIndex}-${i}`}
-                                    font={MONO_FONT}
-                                    fontSize={i === 0 ? 0.052 : 0.044}
-                                    color={line.color}
-                                    anchorX="left"
-                                    anchorY="middle"
-                                    maxWidth={0.7}
-                                    position={[0, 0.19 - i * 0.09, 0]}
-                                >
-                                    {line.text}
-                                </Text>
-                            ))}
-
-                            {/* the real click target - stopPropagation
-                                keeps it from also re-triggering the
-                                Hotspot's own onSelect.
-                                A fixed y, not one computed from
-                                displayLines.length - the tagline slide is
-                                one long string that wraps into ~4 visual
-                                lines under maxWidth, but it's still just
-                                1 entry in displayLines, so a length-based
-                                offset only ever reserved room for 1 line
-                                and Next rendered on top of the wrapped
-                                text's 3rd/4th line instead of below it.
-                                This fixed position sits below the worst
-                                case (the tagline's own wrap) regardless
-                                of which slide is showing. */}
-                            <Text
-                                font={MONO_FONT}
-                                fontSize={0.045}
-                                color="#5eead4"
-                                anchorX="left"
-                                anchorY="middle"
-                                position={[0, -0.18, 0]}
-                                onClick={(e) => {
-                                    e.stopPropagation();
-                                    setSlideIndex((i) => (i + 1) % ABOUT.whoami.length);
-                                }}
-                                onPointerOver={(e) => { e.stopPropagation(); document.body.style.cursor = "pointer"; }}
-                                onPointerOut={(e) => { e.stopPropagation(); document.body.style.cursor = "auto"; }}
-                            >
-                                {`> Next (${slideIndex + 1}/${ABOUT.whoami.length})`}
+                        <group position={[0, 0, 0.033]}>
+                            <Text font={MONO_FONT} fontSize={0.06} color="#5eead4" anchorX="center" anchorY="middle" position={[0, 0.16, 0]}>
+                                $ whoami
                             </Text>
-
+                            <Text font={MONO_FONT} fontSize={0.065} color="#eafaff" anchorX="center" anchorY="middle" position={[0, 0.03, 0]}>
+                                {PROFILE.name}
+                            </Text>
+                            <Text font={MONO_FONT} fontSize={0.05} color="#9fd8e0" anchorX="center" anchorY="middle" position={[0, -0.09, 0]}>
+                                {PROFILE.role}
+                            </Text>
+                            <Text font={MONO_FONT} fontSize={0.045} color="#5eead4" anchorX="center" anchorY="middle" maxWidth={0.8} textAlign="center" position={[0, -0.19, 0]}>
+                                {hovered ? "> Explore my work" : "_"}
+                            </Text>
                         </group>
                     </>
                 )}

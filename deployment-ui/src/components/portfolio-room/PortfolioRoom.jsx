@@ -351,12 +351,13 @@ const CSS = `
 .proom-project-link{display:inline-flex; align-items:center; gap:4px; font-size:12px; color:var(--pr-cyan); text-decoration:none;}
 .proom-project-link:hover{text-decoration:underline;}
 
-.proom-timeline-entry{display:flex; gap:16px; padding:12px 10px; border-top:1px solid var(--pr-line); border-radius:8px; transition:background .15s ease;}
+.proom-timeline-entry{padding:4px 10px; border-top:1px solid var(--pr-line); border-radius:8px; transition:background .15s ease;}
 .proom-timeline-entry:first-child{border-top:0;}
 .proom-timeline-entry.active{background:color-mix(in srgb, var(--pr-cyan) 10%, transparent);}
+.proom-timeline-head{display:flex; align-items:center; gap:16px; width:100%; background:none; border:0; padding:8px 0; text-align:left; color:var(--pr-text);}
 .proom-timeline-year{color:var(--pr-cyan); font-weight:700; flex:0 0 50px;}
 .proom-timeline-entry strong{font-size:13.5px;}
-.proom-timeline-entry p{margin:4px 0 0; font-size:12.5px; color:var(--pr-muted); line-height:1.55;}
+.proom-timeline-entry p{margin:0 0 10px; padding-left:66px; font-size:12.5px; color:var(--pr-muted); line-height:1.55;}
 
 .proom-dashboard-table{width:100%; border-collapse:collapse; margin-bottom:18px; font-size:12px;}
 .proom-dashboard-table th{text-align:left; color:var(--pr-muted); font-weight:600; padding-bottom:8px; border-bottom:1px solid var(--pr-line);}
