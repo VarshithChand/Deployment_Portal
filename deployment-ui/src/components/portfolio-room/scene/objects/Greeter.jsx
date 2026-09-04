@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useFrame } from "@react-three/fiber";
 import { useGLTF, useAnimations, Html } from "@react-three/drei";
-import { PROFILE } from "../../data/profile";
 import { useStore } from "../../state/store";
 
 const MODEL_URL = "/models/Greeter.glb";
@@ -93,15 +92,26 @@ export default function Greeter({ reducedMotion }) {
         // "room" overview camera (CameraRig.jsx, positioned up and behind
         // the entrance) that it fell near the bottom edge of that shot's
         // frustum and read as clipped/sinking below the visible frame.
-        <group ref={outerRef} position={[2.5, 0, 2]} rotation={[0, FACE_DEFAULT, 0]}>
+        // x nudged in from 2.5 to 2.1 - extra clearance from the rack
+        // further along the right wall, now that the model reads at its
+        // true (much larger than expected) size at this camera distance.
+        <group ref={outerRef} position={[2.1, 0, 2]} rotation={[0, FACE_DEFAULT, 0]}>
 
-            <group ref={group} scale={0.42}>
+            {/* scale roughly halved (0.42 -> 0.2) - at 0.42 this GLB's own
+                raw export size towered over the desk/rack/door, which
+                only became obvious once it was fully in frame (see the
+                z-position note above; before that it was clipped near
+                the bottom edge, hiding how big it actually was). */}
+            <group ref={group} scale={0.2}>
                 <primitive object={scene} />
             </group>
 
-            <Html position={[0, 2, 0]} center distanceFactor={8} occlude={false}>
+            {/* y halved along with scale, roughly matching the model's
+                own new height so the bubble still sits just above its
+                head instead of floating high over a now-shorter figure */}
+            <Html position={[0, 1, 0]} center distanceFactor={8} occlude={false}>
                 <div className="proom-speech-bubble mono">
-                    {showGreeting ? "Welcome - take a look around!" : `Hi, I'm ${PROFILE.name.split(" ")[0]}`}
+                    {showGreeting ? "Welcome - take a look around!" : "Hi, I'm a bot! How can I help you?"}
                 </div>
             </Html>
 
