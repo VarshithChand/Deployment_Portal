@@ -344,14 +344,18 @@ const STORAGE_KEY = "sidebar-collapsed";
 const GROUP_STORAGE_KEY = "sidebar-groups-collapsed";
 
 // Left-hand nav. On tablet/desktop (>=768px, see global.css) it's a
-// persistent rail, collapsed to icons-only by default (matches the
-// reference the user pointed at — Google Keep's own left rail) with a
-// small arrow to pull it open. Below 768px the same markup instead becomes
-// an off-canvas drawer — hidden until TopBar's hamburger opens it, always
-// full-width/full-label there regardless of the desktop collapse state,
-// since an icon-only overlay makes little sense when it's not saving any
-// persistent layout space to begin with. Settings lives as the last nav
-// item rather than only being reachable through the account badge in TopBar.
+// persistent rail, expanded with full labels by default, with a small
+// arrow to collapse it to icons-only. (An earlier version defaulted to
+// collapsed, matching a Google Keep-style rail per an explicit request at
+// the time - reversed on later, equally explicit feedback that a bare
+// icon column with no labels, and every nested group inside it ALSO
+// collapsed by default, read as broken rather than intentional.) Below
+// 768px the same markup instead becomes an off-canvas drawer — hidden
+// until TopBar's hamburger opens it, always full-width/full-label there
+// regardless of the desktop collapse state, since an icon-only overlay
+// makes little sense when it's not saving any persistent layout space to
+// begin with. Settings lives as the last nav item rather than only being
+// reachable through the account badge in TopBar.
 export default function Sidebar() {
 
     const { tab, setTab, mobileNavOpen, setMobileNavOpen, sidebarAccess } = useNavigation();
@@ -361,8 +365,12 @@ export default function Sidebar() {
 
     const [collapsed, setCollapsed] = useState(() => {
 
+        // No stored preference (first visit, or localStorage cleared) now
+        // defaults to expanded, not collapsed - see the comment above this
+        // component. Anyone who's ever actually clicked the collapse
+        // toggle keeps exactly whatever they chose, either direction.
         const stored = localStorage.getItem(STORAGE_KEY);
-        return stored === null ? true : stored === "true";
+        return stored === null ? false : stored === "true";
 
     });
 
