@@ -58,12 +58,18 @@ export default function Resume({ position = [0, 0, 0], reducedMotion, theme }) {
                             </mesh>
                         ))}
 
-                        <Billboard position={[0, 0.19, 0]}>
+                        {/* fontSize doubled (0.062 -> 0.13) - same lesson
+                            as the window's birds/stars: this paper is a
+                            small object seen from the room's normal
+                            standing/overview distance, not a close-up
+                            camera target, and the original size read as
+                            illegible there rather than just modest */}
+                        <Billboard position={[0, 0.24, 0]}>
                             <Text
                                 font={MONO_FONT}
-                                fontSize={0.062}
+                                fontSize={0.13}
                                 color={labelColors.title}
-                                outlineWidth={0.004}
+                                outlineWidth={0.008}
                                 outlineColor={labelColors.outline}
                                 anchorX="center"
                                 anchorY="bottom"

@@ -11,10 +11,13 @@ export default function Resume() {
 
         <div className="proom-resume">
 
-            <div className="proom-resume-preview">
-                <iframe src={PROFILE.resumeUrl} title={`${PROFILE.name} resume`} />
-            </div>
-
+            {/* buttons come BEFORE the preview, not after - the preview
+                below is a full Letter-page iframe, taller than a lot of
+                real viewports even at its own capped height, so anything
+                placed after it risked sitting below the fold with no
+                visible hint to scroll for it. Putting the actions first
+                guarantees they're on screen the instant the panel opens,
+                with no dependency on viewport height or scroll position. */}
             <div className="proom-contact-actions">
 
                 <a href={PROFILE.resumeUrl} download className="proom-btn proom-btn-primary">
@@ -25,6 +28,10 @@ export default function Resume() {
                     <ExternalLink size={14} /> Open in new tab
                 </a>
 
+            </div>
+
+            <div className="proom-resume-preview">
+                <iframe src={PROFILE.resumeUrl} title={`${PROFILE.name} resume`} />
             </div>
 
         </div>
