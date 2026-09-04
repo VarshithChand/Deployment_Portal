@@ -80,7 +80,7 @@ export default function Experience({ reducedMotion, theme, onExit }) {
                     <Chair position={[0, 0, -0.3]} />
                     <MonitorAbout reducedMotion={reducedMotion} />
                     <PhoneContact reducedMotion={reducedMotion} />
-                    <Rug position={[0, 0, -0.6]} size={[2.6, 1.9]} />
+                    <Rug position={[0, 0, -0.6]} size={[3, 2.2]} />
                 </group>
 
                 {/* Skills pendant light - a smaller shift than the desk
@@ -122,10 +122,14 @@ export default function Experience({ reducedMotion, theme, onExit }) {
                     of the side wall near the timeline station, which put
                     it nowhere near the desk at all */}
                 <Window position={[3, 2.2, -4.85]} rotation={[0, -Math.PI / 2, 0]} theme={theme} />
-                <Clock position={[-3, 2.6, -4.83]} />
+                <Clock position={[-3, 2.6, -4.83]} scale={1.1} />
                 {/* the plant, beside the door rather than next to the
-                    desk - moved per the explicit request */}
-                <Plant position={[6.9, 0, -4.4]} />
+                    desk - moved per the explicit request. Nudged a bit
+                    further right (6.9 -> 7.1) than before - both this and
+                    the door grew this round, and the door's frame now
+                    reaches close enough to x=6.45 that the original spot
+                    left too little margin. */}
+                <Plant position={[7.1, 0, -4.4]} scale={1.3} />
                 {/* The exit door - flush-mounted on the back wall (far
                     right, clear of the dashboard/window cluster), not
                     standing free-floating in the middle of the floor with

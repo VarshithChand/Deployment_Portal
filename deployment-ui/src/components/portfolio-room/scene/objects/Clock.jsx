@@ -19,7 +19,7 @@ import { MONO_FONT } from "../../fonts";
 // for open-air labels - that helper's LIGHT-theme colors are dark
 // (meant for a pale wall), which against this always-dark plate was
 // dark-on-dark and nearly unreadable.
-export default function Clock({ position = [0, 0, 0] }) {
+export default function Clock({ position = [0, 0, 0], scale = 1 }) {
 
     const [now, setNow] = useState(() => new Date());
 
@@ -35,7 +35,7 @@ export default function Clock({ position = [0, 0, 0] }) {
 
     return (
 
-        <group position={position}>
+        <group position={position} scale={scale}>
 
             {/* cyan backing disc, slightly larger than the face plate so
                 its edge peeks out as a rim - a backing disc rather than a

@@ -6,6 +6,10 @@ import { useStore } from "../../state/store";
 // toggled by the switchboard's "fan" switch or the o+1/f+1 keyboard
 // shortcuts (see PortfolioRoom.jsx). Purely decorative, not clickable
 // itself - the switchboard is the control for it.
+//
+// Sized up ~1.4x from the original pass (the blades were tiny near the
+// ceiling, easy to miss entirely) - it sits in open air well clear of
+// anything else, so no neighbor clearance to check here.
 export default function Fan({ position = [0, 0, 0] }) {
 
     const on = useStore((s) => s.switches.fan);
@@ -24,20 +28,20 @@ export default function Fan({ position = [0, 0, 0] }) {
         <group position={position}>
 
             {/* mount rod from the ceiling */}
-            <mesh position={[0, 0.15, 0]}>
-                <cylinderGeometry args={[0.015, 0.015, 0.3, 6]} />
+            <mesh position={[0, 0.21, 0]}>
+                <cylinderGeometry args={[0.021, 0.021, 0.42, 6]} />
                 <meshStandardMaterial color="#1a2028" />
             </mesh>
 
             {/* motor housing */}
             <mesh>
-                <cylinderGeometry args={[0.06, 0.06, 0.06, 12]} />
+                <cylinderGeometry args={[0.084, 0.084, 0.084, 12]} />
                 <meshStandardMaterial color="#171d26" roughness={0.5} metalness={0.4} />
             </mesh>
 
             {/* power indicator - lit while on */}
-            <mesh position={[0, -0.035, 0]} rotation={[Math.PI / 2, 0, 0]}>
-                <circleGeometry args={[0.015, 10]} />
+            <mesh position={[0, -0.049, 0]} rotation={[Math.PI / 2, 0, 0]}>
+                <circleGeometry args={[0.021, 10]} />
                 <meshBasicMaterial color={on ? "#22d3ee" : "#20262e"} toneMapped={false} />
             </mesh>
 
@@ -46,12 +50,12 @@ export default function Fan({ position = [0, 0, 0] }) {
                 silhouette without a 3rd/4th mesh that would just overlap
                 the first two exactly at 180 degrees apart */}
             <group ref={bladesRef}>
-                <mesh position={[0, -0.02, 0]}>
-                    <boxGeometry args={[0.5, 0.015, 0.09]} />
+                <mesh position={[0, -0.028, 0]}>
+                    <boxGeometry args={[0.7, 0.021, 0.126]} />
                     <meshStandardMaterial color="#20262e" roughness={0.6} />
                 </mesh>
-                <mesh position={[0, -0.02, 0]} rotation={[0, Math.PI / 2, 0]}>
-                    <boxGeometry args={[0.5, 0.015, 0.09]} />
+                <mesh position={[0, -0.028, 0]} rotation={[0, Math.PI / 2, 0]}>
+                    <boxGeometry args={[0.7, 0.021, 0.126]} />
                     <meshStandardMaterial color="#20262e" roughness={0.6} />
                 </mesh>
             </group>

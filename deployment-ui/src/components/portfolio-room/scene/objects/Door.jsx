@@ -13,6 +13,10 @@ import { labelTextColors } from "../../textTheme";
 // real door would. Its handle protrudes toward local +z, which is
 // already the correct "into the room" direction for an unrotated back-
 // wall mount - no rotation prop needed for this placement.
+//
+// Only a minor ~1.1x bump from the original pass, unlike most of the
+// room's other furniture this round - this already read at roughly the
+// right real-door height/proportion.
 export default function Door({ position = [0, 0, 0], onExit, theme }) {
 
     const [hovered, setHovered] = useState(false);
@@ -23,27 +27,27 @@ export default function Door({ position = [0, 0, 0], onExit, theme }) {
         <group position={position}>
 
             {/* frame */}
-            <mesh position={[-0.55, 1.25, 0]}>
-                <boxGeometry args={[0.08, 2.5, 0.12]} />
+            <mesh position={[-0.605, 1.25, 0]}>
+                <boxGeometry args={[0.088, 2.75, 0.132]} />
                 <meshStandardMaterial color="#171d26" roughness={0.7} />
             </mesh>
-            <mesh position={[0.55, 1.25, 0]}>
-                <boxGeometry args={[0.08, 2.5, 0.12]} />
+            <mesh position={[0.605, 1.25, 0]}>
+                <boxGeometry args={[0.088, 2.75, 0.132]} />
                 <meshStandardMaterial color="#171d26" roughness={0.7} />
             </mesh>
-            <mesh position={[0, 2.46, 0]}>
-                <boxGeometry args={[1.18, 0.08, 0.12]} />
+            <mesh position={[0, 2.706, 0]}>
+                <boxGeometry args={[1.298, 0.088, 0.132]} />
                 <meshStandardMaterial color="#171d26" roughness={0.7} />
             </mesh>
 
             {/* door panel - the actual clickable target */}
             <mesh
-                position={[0, 1.15, 0]}
+                position={[0, 1.265, 0]}
                 onClick={(e) => { e.stopPropagation(); onExit?.(); }}
                 onPointerOver={(e) => { e.stopPropagation(); setHovered(true); document.body.style.cursor = "pointer"; }}
                 onPointerOut={(e) => { e.stopPropagation(); setHovered(false); document.body.style.cursor = "auto"; }}
             >
-                <boxGeometry args={[0.95, 2.3, 0.06]} />
+                <boxGeometry args={[1.045, 2.53, 0.066]} />
                 <meshStandardMaterial
                     color={hovered ? "#1c2836" : "#12181f"}
                     emissive="#22d3ee"
@@ -53,15 +57,15 @@ export default function Door({ position = [0, 0, 0], onExit, theme }) {
             </mesh>
 
             {/* handle */}
-            <mesh position={[0.36, 1.1, 0.045]}>
-                <boxGeometry args={[0.03, 0.16, 0.03]} />
+            <mesh position={[0.396, 1.21, 0.0495]}>
+                <boxGeometry args={[0.033, 0.176, 0.033]} />
                 <meshStandardMaterial color="#22d3ee" emissive="#22d3ee" emissiveIntensity={hovered ? 1 : 0.5} toneMapped={false} />
             </mesh>
 
-            <Billboard position={[0, 2.75, 0]}>
+            <Billboard position={[0, 3.025, 0]}>
                 <Text
                     font={MONO_FONT}
-                    fontSize={0.09}
+                    fontSize={0.099}
                     color={labelColors.title}
                     outlineWidth={0.006}
                     outlineColor={labelColors.outline}

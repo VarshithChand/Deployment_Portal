@@ -19,6 +19,11 @@ import { useStore } from "../../state/store";
 // below) - the base's BOTTOM face needs to land on the desk surface, not
 // the Hotspot's origin point itself. The previous y=1.05 put that gap at
 // a full 0.22 units above the desk, which is what read as "flying."
+//
+// Every part below is sized up ~1.3x from the original pass (it was
+// hard to make out at all in an overview shot) - the Hotspot's own
+// position is untouched, so the "contact" camera's close-up framing
+// keeps working exactly as tuned.
 export default function PhoneContact({ reducedMotion }) {
 
     const active = useStore((s) => s.active);
@@ -33,8 +38,8 @@ export default function PhoneContact({ reducedMotion }) {
     useFrame((state, delta) => {
 
         if (handsetRef.current) {
-            const targetY = isOpen ? 0.09 : 0;
-            const targetZ = isOpen ? 0.04 : 0;
+            const targetY = isOpen ? 0.117 : 0;
+            const targetZ = isOpen ? 0.052 : 0;
             handsetRef.current.position.y += (targetY - handsetRef.current.position.y) * 0.12;
             handsetRef.current.position.z += (targetZ - handsetRef.current.position.z) * 0.12;
         }
@@ -53,7 +58,7 @@ export default function PhoneContact({ reducedMotion }) {
             bubbleRef.current.scale.setScalar(s);
             bubbleRef.current.visible = s > 0.02;
             if (isOpen && !reducedMotion) {
-                bubbleRef.current.position.y = 0.42 + Math.sin(state.clock.elapsedTime * 2.5) * 0.015;
+                bubbleRef.current.position.y = 0.546 + Math.sin(state.clock.elapsedTime * 2.5) * 0.015;
             }
         }
 
@@ -67,37 +72,37 @@ export default function PhoneContact({ reducedMotion }) {
                     {/* base - a warmer, distinct dark green-gray so the
                         phone doesn't read as just another copy of the
                         monitor's own cooler graphite tone */}
-                    <mesh position={[0, -0.03, 0]}>
-                        <boxGeometry args={[0.22, 0.05, 0.16]} />
+                    <mesh position={[0, -0.039, 0]}>
+                        <boxGeometry args={[0.286, 0.065, 0.208]} />
                         <meshStandardMaterial color={hovered ? "#1c3028" : "#15241d"} roughness={0.6} />
                     </mesh>
 
                     {/* blinking status light */}
-                    <mesh ref={lightRef} position={[0.08, 0.005, -0.05]}>
-                        <sphereGeometry args={[0.012, 8, 8]} />
+                    <mesh ref={lightRef} position={[0.104, 0.0065, -0.065]}>
+                        <sphereGeometry args={[0.0156, 8, 8]} />
                         <meshStandardMaterial color="#22d3ee" emissive="#22d3ee" emissiveIntensity={0.6} toneMapped={false} />
                     </mesh>
 
                     {/* cradle prongs */}
-                    <mesh position={[-0.06, -0.003, 0.02]}>
-                        <boxGeometry args={[0.02, 0.02, 0.06]} />
+                    <mesh position={[-0.078, -0.0039, 0.026]}>
+                        <boxGeometry args={[0.026, 0.026, 0.078]} />
                         <meshStandardMaterial color="#0a130e" />
                     </mesh>
-                    <mesh position={[0.06, -0.003, 0.02]}>
-                        <boxGeometry args={[0.02, 0.02, 0.06]} />
+                    <mesh position={[0.078, -0.0039, 0.026]}>
+                        <boxGeometry args={[0.026, 0.026, 0.078]} />
                         <meshStandardMaterial color="#0a130e" />
                     </mesh>
 
                     {/* handset - rests on the cradle, lifts when Contact is open */}
-                    <mesh ref={handsetRef} position={[0, 0, 0.02]} rotation={[0, 0, isOpen ? 0.15 : 0]}>
-                        <boxGeometry args={[0.05, 0.045, 0.2]} />
+                    <mesh ref={handsetRef} position={[0, 0, 0.026]} rotation={[0, 0, isOpen ? 0.15 : 0]}>
+                        <boxGeometry args={[0.065, 0.0585, 0.26]} />
                         <meshStandardMaterial color={hovered ? "#213a2f" : "#182920"} roughness={0.55} />
                     </mesh>
 
                     {/* coiled cord to the base - a simple bent tube reads
                         as "phone cord" without needing a real curve asset */}
-                    <mesh position={[-0.02, 0.01, -0.08]} rotation={[0.3, 0, 0]}>
-                        <cylinderGeometry args={[0.006, 0.006, 0.08, 6]} />
+                    <mesh position={[-0.026, 0.013, -0.104]} rotation={[0.3, 0, 0]}>
+                        <cylinderGeometry args={[0.0078, 0.0078, 0.104, 6]} />
                         <meshStandardMaterial color="#1a2028" />
                     </mesh>
 
@@ -105,16 +110,16 @@ export default function PhoneContact({ reducedMotion }) {
                         like a real phone lighting up with a notification,
                         instead of the 2D panel being the only sign
                         anything happened */}
-                    <Billboard ref={bubbleRef} position={[0, 0.42, 0]} scale={0}>
+                    <Billboard ref={bubbleRef} position={[0, 0.546, 0]} scale={0}>
                         <mesh>
-                            <planeGeometry args={[0.22, 0.09]} />
+                            <planeGeometry args={[0.286, 0.117]} />
                             <meshBasicMaterial color="#0e131a" toneMapped={false} />
                         </mesh>
-                        <mesh position={[0, -0.052, 0]} rotation={[0, 0, Math.PI / 4]}>
-                            <planeGeometry args={[0.025, 0.025]} />
+                        <mesh position={[0, -0.0676, 0]} rotation={[0, 0, Math.PI / 4]}>
+                            <planeGeometry args={[0.0325, 0.0325]} />
                             <meshBasicMaterial color="#0e131a" toneMapped={false} />
                         </mesh>
-                        <Text font={MONO_FONT} fontSize={0.032} color="#22d3ee" anchorX="center" anchorY="middle" position={[0, 0, 0.001]}>
+                        <Text font={MONO_FONT} fontSize={0.0416} color="#22d3ee" anchorX="center" anchorY="middle" position={[0, 0, 0.001]}>
                             1 new message
                         </Text>
                     </Billboard>

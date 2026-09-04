@@ -9,6 +9,13 @@ import { PROFILE } from "../../data/profile";
 // prompt cycling through ABOUT.whoami's blocks) was removed per explicit
 // feedback after several rounds of it fighting the About panel that
 // opens over the same part of the screen the moment it's reachable.
+//
+// Bezel/screen/text sized up ~1.25x from the original pass (kept modest
+// here specifically - unlike the rest of the desk, this is the subject
+// of the "about" camera's own ~1-unit close-up shot, CameraRig.jsx, so
+// growing it too far would overflow the frame rather than just reading
+// as a bigger, clearer screen). The Hotspot's own position is untouched,
+// so that camera framing keeps working exactly as tuned.
 export default function MonitorAbout({ reducedMotion }) {
 
     const setActive = useStore((s) => s.setActive);
@@ -22,7 +29,7 @@ export default function MonitorAbout({ reducedMotion }) {
                 phone's dark green, so the three desk devices read as
                 separate objects rather than identical black boxes */}
             <mesh position={[0, 0.9, -1.2]}>
-                <boxGeometry args={[0.05, 0.2, 0.05]} />
+                <boxGeometry args={[0.06, 0.2, 0.06]} />
                 <meshStandardMaterial color="#1e1a24" />
             </mesh>
 
@@ -31,7 +38,7 @@ export default function MonitorAbout({ reducedMotion }) {
                     <>
                         {/* bezel */}
                         <mesh>
-                            <boxGeometry args={[1, 0.62, 0.06]} />
+                            <boxGeometry args={[1.25, 0.775, 0.075]} />
                             <meshStandardMaterial color="#221f2c" roughness={0.7} />
                         </mesh>
 
@@ -39,26 +46,26 @@ export default function MonitorAbout({ reducedMotion }) {
                             emitting screen regardless of scene lighting,
                             not a lit slab that brightens/darkens with the
                             room's own lights */}
-                        <mesh position={[0, 0, 0.031]}>
-                            <planeGeometry args={[0.88, 0.5]} />
+                        <mesh position={[0, 0, 0.038]}>
+                            <planeGeometry args={[1.1, 0.625]} />
                             <meshBasicMaterial color={hovered ? "#0e5a63" : "#04141a"} toneMapped={false} />
                         </mesh>
 
-                        <group position={[0, 0, 0.033]}>
-                            <Text font={MONO_FONT} fontSize={0.06} color="#5eead4" anchorX="center" anchorY="middle" position={[0, 0.16, 0]}>
+                        <group position={[0, 0, 0.04]}>
+                            <Text font={MONO_FONT} fontSize={0.075} color="#5eead4" anchorX="center" anchorY="middle" position={[0, 0.2, 0]}>
                                 $ whoami
                             </Text>
-                            <Text font={MONO_FONT} fontSize={0.065} color="#eafaff" anchorX="center" anchorY="middle" position={[0, 0.03, 0]}>
+                            <Text font={MONO_FONT} fontSize={0.081} color="#eafaff" anchorX="center" anchorY="middle" position={[0, 0.0375, 0]}>
                                 {PROFILE.name}
                             </Text>
-                            <Text font={MONO_FONT} fontSize={0.05} color="#9fd8e0" anchorX="center" anchorY="middle" position={[0, -0.09, 0]}>
+                            <Text font={MONO_FONT} fontSize={0.063} color="#9fd8e0" anchorX="center" anchorY="middle" position={[0, -0.1125, 0]}>
                                 {PROFILE.role}
                             </Text>
                             {/* always visible now, not just on hover - a
                                 permanent "there's more here" prompt
                                 rather than something you'd only notice
                                 by accident */}
-                            <Text font={MONO_FONT} fontSize={0.045} color={hovered ? "#eafaff" : "#5eead4"} anchorX="center" anchorY="middle" maxWidth={0.8} textAlign="center" position={[0, -0.19, 0]}>
+                            <Text font={MONO_FONT} fontSize={0.056} color={hovered ? "#eafaff" : "#5eead4"} anchorX="center" anchorY="middle" maxWidth={1} textAlign="center" position={[0, -0.2375, 0]}>
                                 &gt; Explore my work
                             </Text>
                         </group>
