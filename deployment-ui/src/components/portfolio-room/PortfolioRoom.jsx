@@ -253,6 +253,13 @@ export default function PortfolioRoom({ onExit }) {
                 </button>
             )}
 
+            {/* Icon shows the CURRENT theme (sun while light is active,
+                moon while dark is active), not "what clicking gives you"
+                - the earlier version showed a sun WHILE dark mode was
+                active (meaning "click for light"), which read to at
+                least one person as "light is already on" despite the
+                room clearly still being dark. Showing current state
+                removes that exact mismatch. */}
             <button
                 type="button"
                 className="proom-theme-toggle"
@@ -261,10 +268,10 @@ export default function PortfolioRoom({ onExit }) {
                 title={
                     themeMode === "auto"
                         ? `Auto - following your local time (currently ${theme}). Click to set it yourself.`
-                        : (theme === "dark" ? "Light mode" : "Dark mode")
+                        : (theme === "dark" ? "Dark mode" : "Light mode")
                 }
             >
-                {theme === "dark" ? <Sun size={15} /> : <Moon size={15} />}
+                {theme === "dark" ? <Moon size={15} /> : <Sun size={15} />}
             </button>
 
             {isMobile ? <MobileFallback /> : <DesktopRoom reducedMotion={reducedMotion} theme={theme} onExit={onExit} />}

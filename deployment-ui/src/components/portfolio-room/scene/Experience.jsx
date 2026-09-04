@@ -61,7 +61,18 @@ export default function Experience({ reducedMotion, theme, onExit }) {
             <pointLight color="#22d3ee" position={[-6, 4, -1]} intensity={light ? 0.7 : 1.4} distance={12} decay={2} />
             <pointLight color="#a78bfa" position={[3, 3, -2]} intensity={light ? 0.3 : 0.6} distance={10} decay={2} />
 
-            <Suspense fallback={null}>
+            {/* key={theme} forces the whole room to remount (not just
+                re-render) whenever the theme flips - a defensive
+                safeguard on top of the normal prop-driven re-theming
+                above and throughout Room.jsx/the station files: every
+                material in here gets freshly created against the
+                current theme's values instead of relying on React/R3F
+                correctly propagating a changed prop through this much
+                nested custom-component depth. Costs a brief re-creation
+                of the scene's primitives, but only on a deliberate,
+                infrequent user action (toggling the theme), not on
+                every render. */}
+            <Suspense key={theme} fallback={null}>
 
                 <Room theme={theme} />
 
