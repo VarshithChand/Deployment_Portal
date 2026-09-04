@@ -2,10 +2,23 @@ import { useEffect, useRef, useState } from "react";
 
 import { getMfaPendingStatus, verifyLoginMfa, cancelLoginMfa, sendMfaEmailOtp } from "../services/authLoginService";
 import Logo from "../components/common/Logo";
+import AuthShowcasePanel from "../components/common/AuthShowcasePanel";
 import useTheme from "../hooks/useTheme";
 import useToast from "../hooks/useToast";
 import useLockoutCountdown from "../hooks/useLockoutCountdown";
 import { SunIcon, MoonIcon } from "../components/layout/SidebarIcons";
+
+// This page and LoginSignupPage are mounted as full alternates of each
+// other in App.jsx (mfaPending ? <MfaVerifyPage/> : <LoginSignupPage/>) -
+// clicking "About"/"FAQ"/"Portfolio" on the shared showcase panel can't
+// reuse LoginSignupPage's own client-side openTool (that state lives
+// entirely inside the other, currently-unmounted component). A real
+// navigation is the honest equivalent here anyway - following one of
+// these links away from a pending MFA challenge abandons that challenge
+// the same way clicking "Back to Login" already does.
+function openToolViaNavigation(tool) {
+    window.location.href = `/?tool=${tool}`;
+}
 
 const RESEND_COOLDOWN_SECONDS = 45;
 
@@ -321,12 +334,17 @@ export default function MfaVerifyPage({ onBack }) {
     if (checking) {
 
         return (
-            <div className="auth-page">
-                <div className="auth-page-card" role="main" aria-busy="true">
-                    {themeToggle}
-                    <div className="auth-page-logo">
-                        <Logo showEyebrow={false} compact size={34} />
-                    </div>
+            <div className="aw-root">
+                <div className="aw-split">
+                    <AuthShowcasePanel onOpenTool={openToolViaNavigation} />
+                    <main className="authcol">
+                        <div className="auth-page-card" role="main" aria-busy="true">
+                            {themeToggle}
+                            <div className="auth-page-logo">
+                                <Logo showEyebrow={false} compact size={34} />
+                            </div>
+                        </div>
+                    </main>
                 </div>
             </div>
         );
@@ -335,7 +353,13 @@ export default function MfaVerifyPage({ onBack }) {
 
     return (
 
-        <div className="auth-page">
+        <div className="aw-root">
+
+          <div className="aw-split">
+
+            <AuthShowcasePanel onOpenTool={openToolViaNavigation} />
+
+            <main className="authcol">
 
             <div className="auth-page-card" role="main" aria-labelledby="mfa-verify-title">
 
@@ -473,6 +497,10 @@ export default function MfaVerifyPage({ onBack }) {
                 </div>
 
             </div>
+
+            </main>
+
+          </div>
 
         </div>
 

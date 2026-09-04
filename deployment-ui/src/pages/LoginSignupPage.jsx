@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState, lazy, Suspense } from "react";
 import {
-    Rocket, ShieldCheck, KeyRound, Lock, Eye, EyeOff, User,
-    Server, Clock, Wrench, ChevronLeft, FileText
+    ShieldCheck, Lock, Eye, EyeOff, User, Wrench, ChevronLeft
 } from "lucide-react";
 
 import {
@@ -11,6 +10,7 @@ import { API_BASE, getSessionId } from "../api/apiBase";
 import useTheme from "../hooks/useTheme";
 import useToast from "../hooks/useToast";
 import { SunIcon, MoonIcon } from "../components/layout/SidebarIcons";
+import AuthShowcasePanel from "../components/common/AuthShowcasePanel";
 
 // Lazy, not a normal import - this page is on the critical path for EVERY
 // visitor (it's the very first thing anyone sees), so a plain static
@@ -34,32 +34,18 @@ const Faq = lazy(() => import("./Faq"));
 // and follows the light/dark toggle, rather than being a separate fixed-
 // dark identity (an earlier version of this page was exactly that; it
 // didn't match the rest of the app and was explicitly asked to be fixed).
-// GitHub's brand mark isn't in lucide-react (dropped in this app's
-// installed version, same gap Dashboard.jsx hit) - GitHubIcon below is
-// the same inline octocat path the previous version of this page used.
-const S = { ok: "var(--viz-good)", running: "var(--heading-accent)", warn: "var(--viz-warning)" };
-
-const PROVIDERS = [
-    { n: "GitHub", s: "ok" }, { n: "Azure DevOps", s: "ok" },
-    { n: "AWS", s: "ok" }, { n: "Azure", s: "ok" }, { n: "GCP", s: "warn" },
-    { n: "Render", s: "ok" }, { n: "Cloudflare", s: "ok" }, { n: "Harbor", s: "ok" },
-    { n: "ECR", s: "ok" }, { n: "SonarQube", s: "ok" }
-];
-
-// A static illustration of what's behind the login, not live data - unlike
-// every in-app page this session has been careful to only ever show real
-// numbers on, there's no session yet here to fetch anything real WITH.
-// Framed as a preview/mockup (aria-hidden, no claim of live status)
-// specifically so it doesn't read as a lie about current system state.
-const PREVIEW_RUNS = [
-    { wf: "deploy-api.yml", env: "acpt", sha: "a91f3c7", s: "running", time: "now" },
-    { wf: "deploy-ui.yml", env: "prod", sha: "b4a0f91", s: "ok", time: "6h ago" }
-];
+// The left-hand marketing/showcase panel (PROVIDERS/PREVIEW_RUNS and the
+// S color lookup that used to live here) moved to
+// components/common/AuthShowcasePanel.jsx - MfaVerifyPage.jsx needs the
+// exact same panel and couldn't reach anything defined only in this file.
 
 function GoogleMark() {
     return <span className="oauth-g" aria-hidden>G</span>;
 }
 
+// GitHub's brand mark isn't in lucide-react (dropped in this app's
+// installed version, same gap Dashboard.jsx hit) - the inline octocat
+// path below is the same one the previous version of this page used.
 function GitHubIcon() {
     return (
         <svg width="17" height="17" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
@@ -111,91 +97,6 @@ function maskEmail(address) {
     const visible = local[0];
 
     return `${visible}${"*".repeat(Math.max(local.length - 1, 3))}${domain}`;
-
-}
-
-// The left-hand marketing/showcase panel - previously only rendered
-// alongside the main sign-in/register card (inside .aw-split), while
-// every other step of this page (forgot password's email/otp/
-// newPassword/done, and the post-signup "check your email" screen) used
-// a completely different single-column .aw-split-solo layout with no
-// panel at all. Landing on any of those felt like being redirected to a
-// different template rather than continuing on the same page - moving
-// between them dropped the entire left side and re-centered the card at
-// a different width. Extracted here so every one of those steps can
-// render the identical panel inside the identical .aw-split two-column
-// grid instead, with only the right-hand card's content actually
-// changing between steps.
-function ShowcasePanel({ openTool }) {
-
-    return (
-
-        <aside className="showcase">
-
-            <div className="brand">
-                <span className="glyph"><Rocket size={17} strokeWidth={2.4} /></span>
-                <span className="brand-name">Deployment Portal</span>
-            </div>
-
-            <div className="pitch">
-                <h1>Every deployment, one console.</h1>
-                <p>
-                    Trigger releases, watch runs, and approve promotions across GitHub Actions,
-                    AWS, Azure, GCP, and your registries — without hopping between ten dashboards.
-                </p>
-            </div>
-
-            {/* console preview - illustrative, not live data (see PREVIEW_RUNS comment) */}
-            <div className="preview" aria-hidden>
-
-                <div className="preview-bar">
-                    <span className="live"><span className="live-dot" />What's behind the login</span>
-                </div>
-
-                <div className="preview-runs">
-                    {PREVIEW_RUNS.map((r, i) => (
-                        <div key={i} className="prun">
-                            <span className="pdot" style={{ background: S[r.s] }}>
-                                {r.s === "running" && <span className="pping" style={{ background: S[r.s] }} />}
-                            </span>
-                            <span className="mono pwf">{r.wf}</span>
-                            <span className={"penv " + r.env}>{r.env}</span>
-                            <span className="mono psha">{r.sha}</span>
-                            <span className="ptime"><Clock size={10} />{r.time}</span>
-                            {r.s === "running" && <span className="pprog"><i /></span>}
-                        </div>
-                    ))}
-                </div>
-
-                <div className="preview-chips">
-                    {PROVIDERS.map((p) => (
-                        <span key={p.n} className="chip">
-                            <span className="cdot" style={{ background: S[p.s] }} />{p.n}
-                        </span>
-                    ))}
-                    <span className="chip more">+20 more</span>
-                </div>
-
-            </div>
-
-            <ul className="trust">
-                <li><ShieldCheck size={14} /> Multi-factor auth is required for every account</li>
-                <li><KeyRound size={14} /> Cloud keys and tokens encrypted at rest</li>
-                <li><Server size={14} /> Role-based access, enforced on every request</li>
-                <li><FileText size={14} /> Settings changes and admin actions are audit-logged</li>
-            </ul>
-
-            <div className="pitch-links">
-                <button type="button" onClick={() => openTool("about")}>About</button>
-                <span aria-hidden="true">·</span>
-                <button type="button" onClick={() => openTool("faq")}>FAQ</button>
-                <span aria-hidden="true">·</span>
-                <button type="button" onClick={() => openTool("portfolio")}>Portfolio</button>
-            </div>
-
-        </aside>
-
-    );
 
 }
 
@@ -797,7 +698,7 @@ export default function LoginSignupPage({ onMfaRequired }) {
 
                 <div className="aw-split">
 
-                    <ShowcasePanel openTool={openTool} />
+                    <AuthShowcasePanel onOpenTool={openTool} />
 
                     <main className="authcol">
 
@@ -872,7 +773,7 @@ export default function LoginSignupPage({ onMfaRequired }) {
 
                 <div className="aw-split">
 
-                    <ShowcasePanel openTool={openTool} />
+                    <AuthShowcasePanel onOpenTool={openTool} />
 
                     <main className="authcol">
 
@@ -965,7 +866,7 @@ export default function LoginSignupPage({ onMfaRequired }) {
 
                 <div className="aw-split">
 
-                    <ShowcasePanel openTool={openTool} />
+                    <AuthShowcasePanel onOpenTool={openTool} />
 
                     <main className="authcol">
 
@@ -1055,7 +956,7 @@ export default function LoginSignupPage({ onMfaRequired }) {
 
                 <div className="aw-split">
 
-                    <ShowcasePanel openTool={openTool} />
+                    <AuthShowcasePanel onOpenTool={openTool} />
 
                     <main className="authcol">
 
@@ -1098,7 +999,7 @@ export default function LoginSignupPage({ onMfaRequired }) {
 
                 <div className="aw-split">
 
-                    <ShowcasePanel openTool={openTool} />
+                    <AuthShowcasePanel onOpenTool={openTool} />
 
                     <main className="authcol">
 
@@ -1150,7 +1051,7 @@ export default function LoginSignupPage({ onMfaRequired }) {
 
             <div className="aw-split">
 
-                <ShowcasePanel openTool={openTool} />
+                <AuthShowcasePanel onOpenTool={openTool} />
 
                 {/* ---------------- auth card ---------------- */}
                 <main className="authcol">
@@ -1337,24 +1238,21 @@ export default function LoginSignupPage({ onMfaRequired }) {
 }
 
 const CSS = `
-/* #root itself (global.css) is height:100vh + overflow:hidden - built for
+/* .aw-root's own base rules (scroll container, box-sizing reset, mono/
+   button/a/focus-visible defaults) and everything for .aw-split/
+   .showcase/.authcol now live in global.css instead of here - MfaVerify
+   Page.jsx needs them too (see AuthShowcasePanel.jsx's own comment for
+   why: it and this page are mounted as full alternates of each other in
+   App.jsx, so nothing scoped to just one page's own <style> tag would
+   ever reach the other). What's left below is specific to this page's
+   own sign-in/register/forgot-password card content.
+   #root itself (global.css) is height:100vh + overflow:hidden - built for
    the authenticated app shell, where .app-content-column is the thing
    that actually scrolls internally. This page renders straight into that
    same #root with nothing else providing a scroll container, so anything
    taller than one viewport (the tools view especially) would otherwise
-   just get clipped with no way to reach it - height:100vh + its own
-   overflow-y here is what makes .aw-root scroll on its own instead. */
-.aw-root{
-  color:var(--text);
-  height:100vh; overflow-y:auto; -webkit-font-smoothing:antialiased;
-  scrollbar-width:none; -ms-overflow-style:none;
-}
-.aw-root::-webkit-scrollbar{display:none;}
-.aw-root *{box-sizing:border-box;}
-.aw-root .mono{font-family:'JetBrains Mono',ui-monospace,monospace; font-feature-settings:"tnum";}
-.aw-root button{font-family:inherit; cursor:pointer;}
-.aw-root a{color:inherit; text-decoration:none;}
-.aw-root :focus-visible{outline:2px solid var(--heading-accent); outline-offset:2px; border-radius:8px;}
+   just get clipped with no way to reach it - .aw-root's own height:100vh
+   + overflow-y (global.css) is what makes it scroll on its own instead. */
 
 /* Fixed (not absolute, unlike .auth-theme-toggle) since this page's
    layout has no single relatively-positioned card wrapper common to
@@ -1399,62 +1297,7 @@ const CSS = `
   .aw-root .aw-tools-view{padding:56px 18px 30px;}
 }
 
-.aw-root .aw-split{display:grid; grid-template-columns:1.15fr .85fr; min-height:100vh; max-width:1240px; margin:0 auto;}
-
-/* ---------- showcase ---------- */
-.aw-root .showcase{padding:44px 54px; display:flex; flex-direction:column; gap:30px; border-right:1px solid var(--border);}
-.aw-root .brand{display:flex; align-items:center; gap:11px;}
-.aw-root .glyph{width:32px; height:32px; border-radius:9px; display:grid; place-items:center; color:#fff;
-  background:linear-gradient(135deg, var(--heading-accent), var(--accent-secondary));
-  box-shadow:0 8px 20px -8px color-mix(in srgb, var(--heading-accent) 60%, transparent);}
-.aw-root .brand-name{font-weight:600; font-size:16px; letter-spacing:-.01em; color:var(--heading-accent);}
-
-.aw-root .pitch{margin-top:8px;}
-.aw-root .pitch h1{margin:0; font-size:38px; line-height:1.08; font-weight:600; letter-spacing:-.03em; color:var(--text);}
-.aw-root .pitch p{margin:16px 0 0; font-size:15px; line-height:1.55; color:var(--text-muted); max-width:46ch;}
-
-/* console preview */
-.aw-root .preview{background:var(--card-bg); border:1px solid var(--stroke);
-  border-radius:16px; padding:14px; box-shadow:0 10px 30px -12px var(--card-shadow);
-  backdrop-filter:blur(22px) saturate(160%); -webkit-backdrop-filter:blur(22px) saturate(160%);}
-.aw-root .preview-bar{display:flex; align-items:center; justify-content:space-between; padding:2px 4px 12px; border-bottom:1px solid var(--border);}
-.aw-root .live{display:flex; align-items:center; gap:8px; font-size:12.5px; color:var(--text); font-weight:500;}
-.aw-root .live-dot{width:8px; height:8px; border-radius:50%; background:${S.ok}; box-shadow:0 0 0 3px color-mix(in srgb, ${S.ok} 22%, transparent); animation:aw-blink 2s infinite;}
-@keyframes aw-blink{50%{opacity:.4}}
-
-.aw-root .preview-runs{display:flex; flex-direction:column; padding:6px 0;}
-.aw-root .prun{position:relative; display:flex; align-items:center; gap:10px; padding:9px 4px;}
-.aw-root .prun + .prun{border-top:1px solid var(--border);}
-.aw-root .pdot{position:relative; width:8px; height:8px; border-radius:50%; flex:0 0 auto;}
-.aw-root .pping{position:absolute; inset:0; border-radius:50%; animation:aw-ping 1.8s cubic-bezier(0,0,.2,1) infinite;}
-@keyframes aw-ping{0%{transform:scale(1);opacity:.6}80%,100%{transform:scale(3);opacity:0}}
-.aw-root .pwf{font-size:12.5px; font-weight:500; color:var(--text);}
-.aw-root .penv{font-size:10px; padding:1px 6px; border-radius:5px; text-transform:uppercase; letter-spacing:.03em; font-weight:600;}
-.aw-root .penv.acpt{background:color-mix(in srgb, ${S.warn} 20%, transparent); color:${S.warn};}
-.aw-root .penv.prod{background:color-mix(in srgb, ${S.ok} 18%, transparent); color:${S.ok};}
-.aw-root .psha{font-size:11.5px; color:var(--text-muted); margin-left:2px;}
-.aw-root .ptime{display:flex; align-items:center; gap:4px; font-size:11.5px; color:var(--text-muted); margin-left:auto;}
-.aw-root .ptime svg{color:var(--text-muted);}
-.aw-root .pprog{position:absolute; left:0; right:0; bottom:0; height:2px; background:var(--card-bg-strong); border-radius:2px; overflow:hidden;}
-.aw-root .pprog i{position:absolute; left:0; top:0; bottom:0; width:62%; background:linear-gradient(90deg, ${S.running}, var(--accent-secondary));}
-.aw-root .pprog i::after{content:""; position:absolute; inset:0; background:linear-gradient(90deg,transparent,rgba(255,255,255,.35),transparent); animation:aw-shine 1.5s infinite;}
-@keyframes aw-shine{100%{transform:translateX(140%)}}
-
-.aw-root .preview-chips{display:flex; flex-wrap:wrap; gap:6px; padding:12px 4px 4px; border-top:1px solid var(--border); margin-top:4px;}
-.aw-root .chip{display:flex; align-items:center; gap:6px; font-size:11.5px; color:var(--text-muted);
-  background:var(--card-bg-strong); border:1px solid var(--stroke); border-radius:7px; padding:5px 9px;}
-.aw-root .chip.more{color:var(--text-muted);}
-.aw-root .cdot{width:6px; height:6px; border-radius:50%;}
-
-.aw-root .trust{list-style:none; margin:auto 0 0; padding:0; display:flex; flex-direction:column; gap:11px;}
-.aw-root .trust li{display:flex; align-items:center; gap:10px; font-size:12.5px; color:var(--text-muted);}
-.aw-root .trust svg{color:var(--heading-accent); flex:0 0 auto;}
-.aw-root .pitch-links{display:flex; align-items:center; gap:9px; margin-top:16px; font-size:12px; color:var(--text-muted);}
-.aw-root .pitch-links button{background:none; border:0; padding:0; color:var(--text-muted); font-size:inherit; font-family:inherit; cursor:pointer;}
-.aw-root .pitch-links button:hover{color:var(--heading-accent); text-decoration:underline;}
-
 /* ---------- auth column ---------- */
-.aw-root .authcol{display:flex; flex-direction:column; justify-content:center; align-items:center; padding:44px 40px; gap:16px;}
 .aw-root .card{width:100%; max-width:400px; background:var(--card-bg); border:1px solid var(--stroke); border-radius:18px; overflow:hidden;
   box-shadow:0 10px 30px -12px var(--card-shadow); backdrop-filter:blur(22px) saturate(160%); -webkit-backdrop-filter:blur(22px) saturate(160%);}
 
@@ -1528,17 +1371,7 @@ const CSS = `
 .aw-root .allowlist{margin:18px 0 0; font-size:11.5px; line-height:1.5; color:var(--text-muted); text-align:center;}
 .aw-root .foot{font-size:11.5px; color:var(--text-muted);}
 
-@media (max-width:900px){
-  .aw-root .aw-split{grid-template-columns:1fr;}
-  .aw-root .showcase{border-right:0; border-bottom:1px solid var(--border); padding:34px 28px; gap:24px;}
-  .aw-root .pitch h1{font-size:30px;}
-  .aw-root .trust{margin-top:6px;}
-  .aw-root .authcol{padding:32px 22px;}
-}
-@media (max-width:560px){
-  .aw-root .preview{display:none;}
-}
 @media (prefers-reduced-motion:reduce){
-  .aw-root .live-dot,.aw-root .pping,.aw-root .pprog i::after,.aw-root .tab-ink{animation:none !important; transition:none !important;}
+  .aw-root .tab-ink{animation:none !important; transition:none !important;}
 }
 `;
