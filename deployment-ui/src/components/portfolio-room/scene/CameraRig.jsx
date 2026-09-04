@@ -23,6 +23,14 @@ import { useStore } from "../state/store";
 export const DESK_SHIFT_Z = -2.7;
 export const SKILLS_SHIFT_Z = -1.5;
 
+// Starting point for the one-time "walking in" dolly on arrival - further
+// back and a little higher than the overview position itself, so the
+// intro tween reads as stepping into the room through the doorway rather
+// than the room just fading into view already fully framed. Only used
+// once, right when the boot loader (Loader.jsx) finishes and hands off
+// to the real scene - see the `loaded`-gated effect below.
+const ENTRANCE = { pos: [0, 2.35, 11], look: [0, 1.3, -1] };
+
 export const CAMERA_TARGETS = {
     overview: { pos: [0, 1.6, 6], look: [0, 1.3, -1] },
     about: { pos: [0, 1.4, -0.1 + DESK_SHIFT_Z], look: [0, 1.3, -1.2 + DESK_SHIFT_Z] },
@@ -48,9 +56,12 @@ export default function CameraRig() {
     const { camera } = useThree();
     const active = useStore((s) => s.active);
     const reducedMotion = useStore((s) => s.reducedMotion);
+    const loaded = useStore((s) => s.loaded);
     const back = useStore((s) => s.back);
 
     const mounted = useRef(false);
+    const introDone = useRef(false);
+    const introPlaying = useRef(false);
     const proxy = useRef({
         x: CAMERA_TARGETS.overview.pos[0], y: CAMERA_TARGETS.overview.pos[1], z: CAMERA_TARGETS.overview.pos[2],
         lx: CAMERA_TARGETS.overview.look[0], ly: CAMERA_TARGETS.overview.look[1], lz: CAMERA_TARGETS.overview.look[2]
@@ -60,13 +71,21 @@ export default function CameraRig() {
 
         const target = CAMERA_TARGETS[active] || CAMERA_TARGETS.overview;
 
-        // First render: snap straight to the doorway view, no fly-in -
-        // the brief describes this as the starting state, not an
-        // entrance animation.
+        // First render: park at the entrance pose (under reduced motion,
+        // skip straight to the real doorway view - there's nothing to
+        // walk in from in that case). The actual walk-in happens below,
+        // once the boot loader hands off - not here, since the loader
+        // overlay is still covering the canvas at this point anyway.
         if (!mounted.current) {
             mounted.current = true;
-            camera.position.set(...target.pos);
-            camera.lookAt(...target.look);
+            const start = reducedMotion ? target : ENTRANCE;
+            camera.position.set(...start.pos);
+            camera.lookAt(...start.look);
+            proxy.current = {
+                x: start.pos[0], y: start.pos[1], z: start.pos[2],
+                lx: start.look[0], ly: start.look[1], lz: start.look[2]
+            };
+            if (reducedMotion) introDone.current = true;
             return;
         }
 
@@ -84,6 +103,37 @@ export default function CameraRig() {
 
     }, [active, camera, reducedMotion]);
 
+    // One-time "walking in" dolly from the entrance pose to the real
+    // overview, timed to start exactly when the boot loader finishes
+    // (Loader.jsx's fade-out) - so the room reveal and the camera motion
+    // land together instead of the camera sitting still under an opaque
+    // overlay. Only ever runs once per mount (introDone), and only when
+    // still at the overview (active is null) - if reduced motion is on
+    // the camera is already at the overview from the mount effect above,
+    // so this just marks intro as done without moving anything.
+    useEffect(() => {
+
+        if (!loaded || introDone.current || reducedMotion || active) return;
+
+        introDone.current = true;
+        introPlaying.current = true;
+
+        const target = CAMERA_TARGETS.overview;
+        gsap.killTweensOf(proxy.current);
+        gsap.to(proxy.current, {
+            x: target.pos[0], y: target.pos[1], z: target.pos[2],
+            lx: target.look[0], ly: target.look[1], lz: target.look[2],
+            duration: 1.9,
+            ease: "power3.out",
+            onUpdate: () => {
+                camera.position.set(proxy.current.x, proxy.current.y, proxy.current.z);
+                camera.lookAt(proxy.current.lx, proxy.current.ly, proxy.current.lz);
+            },
+            onComplete: () => { introPlaying.current = false; }
+        });
+
+    }, [loaded, active, reducedMotion, camera]);
+
     // Escape returns to the room overview from anywhere.
     useEffect(() => {
 
@@ -97,10 +147,13 @@ export default function CameraRig() {
     }, [back]);
 
     // Gentle idle drift when nothing is selected, so the room feels alive
-    // without being distracting - skipped entirely under reduced motion.
+    // without being distracting - skipped under reduced motion and while
+    // the intro dolly is still playing (both would otherwise fight over
+    // camera.position on the same frames, since idle drift reads/writes
+    // the exact same proxy the intro tween is actively animating).
     useFrame((state) => {
 
-        if (active || reducedMotion) return;
+        if (active || reducedMotion || introPlaying.current) return;
 
         const t = state.clock.elapsedTime;
         camera.position.x = proxy.current.x + Math.sin(t * 0.15) * 0.12;

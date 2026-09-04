@@ -1,8 +1,9 @@
-import { Suspense, lazy, useEffect, useRef } from "react";
+import { Suspense, lazy, useEffect, useRef, useState } from "react";
 import { AnimatePresence } from "framer-motion";
 import { X, Sun, Moon } from "lucide-react";
 import { useStore, SECTIONS } from "./state/store";
 import Loader from "./scene/Loader";
+import ExitOverlay from "./ui/ExitOverlay";
 import Nav from "./ui/Nav";
 import Panel from "./ui/Panel";
 import MobileFallback from "./ui/MobileFallback";
@@ -228,6 +229,14 @@ export default function PortfolioRoom({ onExit }) {
     const reducedMotion = useReducedMotion();
     const isMobile = useIsMobile();
     const setReducedMotion = useStore((s) => s.setReducedMotion);
+    // Exit used to call the real onExit prop directly, tearing the whole
+    // tool down the instant the corner button or the 3D door was
+    // clicked - no transition at all, just a hard cut back to the login
+    // page. requestExit instead shows ExitOverlay on top of the still-
+    // visible room; the overlay itself calls the real onExit once its
+    // own short "shutting down" sequence finishes.
+    const [exiting, setExiting] = useState(false);
+    function requestExit() { setExiting(true); }
     // Same shared ThemeContext every other page reads (see main.jsx's
     // ThemeProvider) - not a room-local preference. Toggling here changes
     // the theme for the whole application, and arriving here already
@@ -248,7 +257,7 @@ export default function PortfolioRoom({ onExit }) {
             <style>{CSS}</style>
 
             {onExit && (
-                <button type="button" className="proom-exit" onClick={onExit} aria-label="Exit to login">
+                <button type="button" className="proom-exit" onClick={requestExit} aria-label="Exit to login">
                     <X size={15} /> Exit
                 </button>
             )}
@@ -274,7 +283,9 @@ export default function PortfolioRoom({ onExit }) {
                 {theme === "dark" ? <Moon size={15} /> : <Sun size={15} />}
             </button>
 
-            {isMobile ? <MobileFallback /> : <DesktopRoom reducedMotion={reducedMotion} theme={theme} onExit={onExit} />}
+            {isMobile ? <MobileFallback /> : <DesktopRoom reducedMotion={reducedMotion} theme={theme} onExit={requestExit} />}
+
+            {exiting && <ExitOverlay reducedMotion={reducedMotion} onDone={onExit} />}
 
         </div>
 
