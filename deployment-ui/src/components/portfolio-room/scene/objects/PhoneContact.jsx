@@ -61,7 +61,7 @@ export default function PhoneContact({ reducedMotion }) {
 
     return (
 
-        <Hotspot position={[0.7, 0.84, -0.8]} onSelect={() => setActive("contact")} reducedMotion={reducedMotion}>
+        <Hotspot position={[0.7, 0.84, -0.8]} onSelect={() => setActive("contact")} reducedMotion={reducedMotion} float={false}>
             {(hovered) => (
                 <>
                     {/* base - a warmer, distinct dark green-gray so the

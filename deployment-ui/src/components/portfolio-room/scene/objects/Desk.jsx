@@ -24,17 +24,39 @@ export default function Desk() {
                 </mesh>
             ))}
 
-            {/* keyboard */}
-            <mesh position={[0, 0.79, 0.15]}>
-                <boxGeometry args={[0.55, 0.02, 0.2]} />
-                <meshStandardMaterial color="#10141b" roughness={0.6} />
-            </mesh>
+            {/* keyboard - a grid of individual raised keys on top of the
+                base slab, not just a flat featureless box, so it actually
+                reads as a keyboard up close rather than a plain block */}
+            <group position={[0, 0.79, 0.15]}>
+                <mesh>
+                    <boxGeometry args={[0.55, 0.02, 0.2]} />
+                    <meshStandardMaterial color="#10141b" roughness={0.6} />
+                </mesh>
+                {Array.from({ length: 4 }).flatMap((_, row) =>
+                    Array.from({ length: 12 }).map((_, col) => (
+                        <mesh key={`${row}-${col}`} position={[-0.22 + col * 0.04, 0.016, -0.06 + row * 0.04]}>
+                            <boxGeometry args={[0.032, 0.012, 0.032]} />
+                            <meshStandardMaterial color="#1c222b" roughness={0.45} />
+                        </mesh>
+                    ))
+                )}
+            </group>
 
-            {/* mouse, beside the keyboard */}
-            <mesh position={[0.34, 0.795, 0.18]}>
-                <boxGeometry args={[0.06, 0.03, 0.09]} />
-                <meshStandardMaterial color="#10141b" roughness={0.5} />
-            </mesh>
+            {/* mouse, beside the keyboard - a rounded body (a scaled
+                sphere, its lower half embedded in/occluded by the desk
+                surface) instead of a flat box, plus a scroll-wheel accent
+                strip, so it actually reads as a mouse rather than a
+                second small rectangle */}
+            <group position={[0.34, 0.78, 0.18]}>
+                <mesh scale={[0.045, 0.024, 0.075]}>
+                    <sphereGeometry args={[1, 16, 12]} />
+                    <meshStandardMaterial color="#10141b" roughness={0.4} />
+                </mesh>
+                <mesh position={[0, 0.026, 0.01]}>
+                    <boxGeometry args={[0.006, 0.008, 0.02]} />
+                    <meshStandardMaterial color="#22d3ee" emissive="#22d3ee" emissiveIntensity={0.4} toneMapped={false} />
+                </mesh>
+            </group>
 
             {/* CPU tower - floor-standing beside the desk, a color of its
                 own (a cool blue-graphite) rather than matching the

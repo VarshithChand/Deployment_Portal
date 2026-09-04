@@ -26,7 +26,7 @@ export default function MonitorAbout({ reducedMotion }) {
                 <meshStandardMaterial color="#1e1a24" />
             </mesh>
 
-            <Hotspot position={[0, 1.3, -1.2]} onSelect={() => setActive("about")} reducedMotion={reducedMotion}>
+            <Hotspot position={[0, 1.3, -1.2]} onSelect={() => setActive("about")} reducedMotion={reducedMotion} float={false}>
                 {(hovered) => (
                     <>
                         {/* bezel */}
@@ -54,8 +54,12 @@ export default function MonitorAbout({ reducedMotion }) {
                             <Text font={MONO_FONT} fontSize={0.05} color="#9fd8e0" anchorX="center" anchorY="middle" position={[0, -0.09, 0]}>
                                 {PROFILE.role}
                             </Text>
-                            <Text font={MONO_FONT} fontSize={0.045} color="#5eead4" anchorX="center" anchorY="middle" maxWidth={0.8} textAlign="center" position={[0, -0.19, 0]}>
-                                {hovered ? "> Explore my work" : "_"}
+                            {/* always visible now, not just on hover - a
+                                permanent "there's more here" prompt
+                                rather than something you'd only notice
+                                by accident */}
+                            <Text font={MONO_FONT} fontSize={0.045} color={hovered ? "#eafaff" : "#5eead4"} anchorX="center" anchorY="middle" maxWidth={0.8} textAlign="center" position={[0, -0.19, 0]}>
+                                &gt; Explore my work
                             </Text>
                         </group>
                     </>

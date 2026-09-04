@@ -7,33 +7,30 @@ import { useStore } from "../../state/store";
 import { labelTextColors } from "../../textTheme";
 import { SKILL_GROUPS, ALL_SKILLS } from "../../data/skills";
 
-// Pendant light hanging over the desk -> SKILLS. Starts dim/off; a
-// direct click flickers it on, brightens the room (a real PointLight
+// Pendant light hanging over the desk -> SKILLS. Starts dim/off; arriving
+// at the station flickers it on, brightens the room (a real PointLight
 // ramps up with it, not just the fixture's own emissive), and spreads
-// the skill nodes out around it, grouped and connected by thin cyan
-// lines. Deliberately NOT triggered just by arriving at the station
-// (via Nav/WASD/scroll) - `skillsRevealed` (state/store.js) only flips
-// on a direct click on the fixture itself, and resets the moment you
-// leave, so navigating back later always starts hidden again until
-// clicked fresh. Also gated by the switchboard's "cluster" switch (off
-// by default) - like a real fixture's master power, independent of the
-// reveal state: with the switch off, it stays fully dark no matter what.
+// the skill nodes ("atoms") out around it by default, grouped and
+// connected by thin cyan lines - not gated behind an extra click on the
+// fixture itself. Also gated by the switchboard's "cluster" switch (off
+// by default) - like a real fixture's master power, independent of
+// `isOpen`: with the switch off, it stays fully dark no matter what.
 //
 // `selectedLabel`/`setSelectedLabel` read/write the shared store's
 // `selectedSkill`, not local state - clicking a specific atom is also
 // what opens the Skills 2D panel (see PortfolioRoom.jsx), the same
 // "click a specific thing, not just arrive at the station" pattern
-// Projects/Experience already use for their own panels.
+// Projects/Experience already use for their own panels. That's the only
+// thing that stays gated behind a click here; the atoms themselves show
+// as soon as you're at the station.
 export default function CeilingLightSkills({ reducedMotion, theme }) {
 
     const active = useStore((s) => s.active);
     const setActive = useStore((s) => s.setActive);
-    const skillsRevealed = useStore((s) => s.skillsRevealed);
-    const revealSkills = useStore((s) => s.revealSkills);
     const selectedLabel = useStore((s) => s.selectedSkill);
     const setSelectedLabel = useStore((s) => s.setSelectedSkill);
     const clusterSwitchOn = useStore((s) => s.switches.cluster);
-    const isOpen = active === "skills" && skillsRevealed;
+    const isOpen = active === "skills";
     const labelColors = labelTextColors(theme);
 
     const coreRef = useRef();
@@ -138,7 +135,7 @@ export default function CeilingLightSkills({ reducedMotion, theme }) {
 
             <pointLight ref={roomLightRef} color="#22d3ee" intensity={0} distance={9} />
 
-            <Hotspot position={[0, 0, 0]} onSelect={() => { setActive("skills"); revealSkills(); }} reducedMotion={reducedMotion}>
+            <Hotspot position={[0, 0, 0]} onSelect={() => setActive("skills")} reducedMotion={reducedMotion}>
                 {(hovered) => (
                     <>
                         <mesh ref={coreRef}>

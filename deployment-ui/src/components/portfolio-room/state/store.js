@@ -26,13 +26,12 @@ export const useStore = create((set) => ({
     // TimelineExperience.jsx's own onSelect handlers).
     setActive: (section) => set((s) => ({
         active: section,
-        skillsRevealed: section === "skills" ? s.skillsRevealed : false,
         selectedSkill: section === "skills" ? s.selectedSkill : null,
         selectedProjectId: section === "projects" ? s.selectedProjectId : null,
         selectedExperienceYear: section === "experience" ? s.selectedExperienceYear : null
     })),
     back: () => set({
-        active: null, skillsRevealed: false, selectedSkill: null,
+        active: null, selectedSkill: null,
         selectedProjectId: null, selectedExperienceYear: null
     }),
 
@@ -55,19 +54,12 @@ export const useStore = create((set) => ({
     selectedExperienceYear: null,
     setSelectedExperienceYear: (year) => set({ selectedExperienceYear: year }),
 
-    // Whether the Skills pendant light's node graph is actually showing.
-    // Deliberately separate from `active === "skills"` (arriving at the
-    // station via Nav/WASD/scroll) - the graph itself only reveals when
-    // the pendant light is directly clicked, see CeilingLightSkills.jsx.
-    skillsRevealed: false,
-    revealSkills: () => set({ skillsRevealed: true }),
-
-    // Which individual skill node ("atom") was clicked - the Skills
-    // panel itself only opens once this is set (see PortfolioRoom.jsx),
-    // not just from being at the station or from the graph being
-    // revealed; a specific atom has to be clicked, same as Projects/
-    // Experience only opening their panel for a specific rack unit/
-    // timeline stop.
+    // Which individual skill node ("atom") was clicked - the atoms
+    // themselves show by default as soon as you're at the Skills
+    // station (see CeilingLightSkills.jsx), but the Skills panel only
+    // opens once this is set, not just from being at the station; a
+    // specific atom has to be clicked, same as Projects/Experience only
+    // opening their panel for a specific rack unit/timeline stop.
     selectedSkill: null,
     setSelectedSkill: (label) => set({ selectedSkill: label }),
 
