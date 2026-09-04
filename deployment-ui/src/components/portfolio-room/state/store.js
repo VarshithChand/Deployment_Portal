@@ -3,14 +3,36 @@ import { create } from "zustand";
 // Same day/night rule as ThemeContext.jsx's own isDaytimeNow() (6am-6pm
 // local = day) - duplicated rather than imported because this store
 // module has to be import-safe standalone (it's read from several
-// components independently) and the rule itself is one line; it's not
-// reading the theme's own output, just applying the identical clock
-// check so the cluster switch's default agrees with what the room
-// already looks like (dark theme) the first time it loads.
+// components independently) and the rule itself is one line. Used only
+// as the fallback below, when no theme has ever been explicitly chosen.
 function isNightNow() {
 
     const hour = new Date().getHours();
     return hour < 6 || hour >= 18;
+
+}
+
+// Whether the room's theme toggle is (or will start) dark - matches
+// ThemeContext.jsx's own readStored() logic (same localStorage keys),
+// not just the raw clock: the toggle can be manually overridden away
+// from what time of day it actually is (flip it to dark at noon, or to
+// light at midnight), and "the light switches should match the toggle"
+// means exactly that - whatever the toggle actually shows, including a
+// manual override, not the literal hour. Re-reads localStorage itself
+// rather than importing ThemeContext, for the same standalone-module
+// reason isNightNow() above is duplicated rather than shared.
+function initialThemeIsDark() {
+
+    try {
+        const storedTheme = localStorage.getItem("theme");
+        if (storedTheme === "light") return false;
+        if (storedTheme === "dark") return true;
+    } catch {
+        // localStorage can throw (privacy mode, disabled storage, etc.) -
+        // fall through to the clock-based default below either way.
+    }
+
+    return isNightNow();
 
 }
 
@@ -103,12 +125,14 @@ export const useStore = create((set) => ({
     // sets an explicit value (for the o+N/f+N keyboard shortcuts, which
     // mean a specific on/off, not toggle); toggleSwitch flips it (for
     // clicking the physical switch itself).
-    // cluster's initial value follows isNightNow() - "at night the
-    // cluster light should default on" - rather than always starting
-    // false. This is a one-time initial value, same as fan's own
-    // always-true default, not a continuous override: switching it off
-    // by hand (switchboard or the f+3 shortcut) sticks, same as before.
-    switches: { fan: true, bedLight: false, cluster: isNightNow() },
+    // bedLight/cluster's initial values follow the theme toggle - dark
+    // means both default on, light means both default off (fan stays
+    // unconditionally on regardless of theme, per the separate explicit
+    // request that established that default - a fan isn't a light).
+    // These are one-time initial values, not a continuous override:
+    // switching either off by hand (switchboard or the f+2/f+3
+    // shortcuts) sticks even if the toggle changes again afterward.
+    switches: { fan: true, bedLight: initialThemeIsDark(), cluster: initialThemeIsDark() },
     setSwitch: (name, value) => set((s) => ({ switches: { ...s.switches, [name]: value } })),
     toggleSwitch: (name) => set((s) => ({ switches: { ...s.switches, [name]: !s.switches[name] } }))
 }));
