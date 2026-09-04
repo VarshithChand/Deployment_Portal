@@ -1,6 +1,7 @@
-import { Suspense } from "react";
-import { Canvas } from "@react-three/fiber";
+import { Suspense, useRef } from "react";
+import { Canvas, useFrame } from "@react-three/fiber";
 import { EffectComposer, Bloom } from "@react-three/postprocessing";
+import { useStore } from "../state/store";
 import Room from "./Room";
 import CameraRig, { DESK_SHIFT_Z, SKILLS_SHIFT_Z } from "./CameraRig";
 import Desk from "./objects/Desk";
@@ -41,6 +42,38 @@ import Greeter from "./objects/Greeter";
 // before clipping to white than a pale one does). Moved back from the
 // wall too, so the same "glow accent" effect reads as a highlight rather
 // than a localized hot spot either way.
+// A single point light (CeilingLightSkills.jsx's own pendant light) can
+// never make "the room becomes lit" read as true room-wide brightening,
+// no matter how far its distance/decay reach - realistic falloff always
+// leaves the far corners dim relative to right under the fixture. Real
+// rooms don't work that way either, but stylized ones are allowed to:
+// lifting the scene's overall ambient light when the switch is on is
+// what actually sells "I flipped a switch and the room got brighter,"
+// on top of (not instead of) the pendant's own localized glow. Has to
+// live in its own child component, not directly in Experience below -
+// useFrame only works on something rendered inside <Canvas>, and
+// Experience's own function body runs outside that tree.
+function RoomAmbient({ base }) {
+
+    const ref = useRef();
+    const clusterOn = useStore((s) => s.switches.cluster);
+
+    useFrame(() => {
+        if (!ref.current) return;
+        // +0.2 (checked with an actual before/after screenshot) barely
+        // registered - dark theme's own base is only 0.3, so even a 67%
+        // relative jump reads as "slightly less dim" rather than "the
+        // room turned on." +0.55 roughly doubles total ambient in dark
+        // theme, which is the kind of jump an actual switch flip should
+        // read as.
+        const target = base + (clusterOn ? 0.55 : 0);
+        ref.current.intensity += (target - ref.current.intensity) * 0.08;
+    });
+
+    return <ambientLight ref={ref} intensity={base} />;
+
+}
+
 export default function Experience({ reducedMotion, theme, onExit }) {
 
     const light = theme === "light";
@@ -63,7 +96,7 @@ export default function Experience({ reducedMotion, theme, onExit }) {
                 entrance, so there was no boundary-hiding job left for
                 fog to do that was worth that tradeoff. */}
 
-            <ambientLight intensity={light ? 0.35 : 0.3} />
+            <RoomAmbient base={light ? 0.35 : 0.3} />
             <directionalLight position={[3, 6, 4]} intensity={light ? 0.55 : 0.7} />
             <pointLight color="#22d3ee" position={[-6, 4, -1]} intensity={light ? 0.7 : 1.4} distance={12} decay={2} />
             <pointLight color="#a78bfa" position={[3, 3, -2]} intensity={light ? 0.3 : 0.6} distance={10} decay={2} />
