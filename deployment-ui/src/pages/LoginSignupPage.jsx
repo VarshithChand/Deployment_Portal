@@ -114,6 +114,91 @@ function maskEmail(address) {
 
 }
 
+// The left-hand marketing/showcase panel - previously only rendered
+// alongside the main sign-in/register card (inside .aw-split), while
+// every other step of this page (forgot password's email/otp/
+// newPassword/done, and the post-signup "check your email" screen) used
+// a completely different single-column .aw-split-solo layout with no
+// panel at all. Landing on any of those felt like being redirected to a
+// different template rather than continuing on the same page - moving
+// between them dropped the entire left side and re-centered the card at
+// a different width. Extracted here so every one of those steps can
+// render the identical panel inside the identical .aw-split two-column
+// grid instead, with only the right-hand card's content actually
+// changing between steps.
+function ShowcasePanel({ openTool }) {
+
+    return (
+
+        <aside className="showcase">
+
+            <div className="brand">
+                <span className="glyph"><Rocket size={17} strokeWidth={2.4} /></span>
+                <span className="brand-name">Deployment Portal</span>
+            </div>
+
+            <div className="pitch">
+                <h1>Every deployment, one console.</h1>
+                <p>
+                    Trigger releases, watch runs, and approve promotions across GitHub Actions,
+                    AWS, Azure, GCP, and your registries — without hopping between ten dashboards.
+                </p>
+            </div>
+
+            {/* console preview - illustrative, not live data (see PREVIEW_RUNS comment) */}
+            <div className="preview" aria-hidden>
+
+                <div className="preview-bar">
+                    <span className="live"><span className="live-dot" />What's behind the login</span>
+                </div>
+
+                <div className="preview-runs">
+                    {PREVIEW_RUNS.map((r, i) => (
+                        <div key={i} className="prun">
+                            <span className="pdot" style={{ background: S[r.s] }}>
+                                {r.s === "running" && <span className="pping" style={{ background: S[r.s] }} />}
+                            </span>
+                            <span className="mono pwf">{r.wf}</span>
+                            <span className={"penv " + r.env}>{r.env}</span>
+                            <span className="mono psha">{r.sha}</span>
+                            <span className="ptime"><Clock size={10} />{r.time}</span>
+                            {r.s === "running" && <span className="pprog"><i /></span>}
+                        </div>
+                    ))}
+                </div>
+
+                <div className="preview-chips">
+                    {PROVIDERS.map((p) => (
+                        <span key={p.n} className="chip">
+                            <span className="cdot" style={{ background: S[p.s] }} />{p.n}
+                        </span>
+                    ))}
+                    <span className="chip more">+20 more</span>
+                </div>
+
+            </div>
+
+            <ul className="trust">
+                <li><ShieldCheck size={14} /> Multi-factor auth is required for every account</li>
+                <li><KeyRound size={14} /> Cloud keys and tokens encrypted at rest</li>
+                <li><Server size={14} /> Role-based access, enforced on every request</li>
+                <li><FileText size={14} /> Settings changes and admin actions are audit-logged</li>
+            </ul>
+
+            <div className="pitch-links">
+                <button type="button" onClick={() => openTool("about")}>About</button>
+                <span aria-hidden="true">·</span>
+                <button type="button" onClick={() => openTool("faq")}>FAQ</button>
+                <span aria-hidden="true">·</span>
+                <button type="button" onClick={() => openTool("portfolio")}>Portfolio</button>
+            </div>
+
+        </aside>
+
+    );
+
+}
+
 // Replaces PatLoginPage - the ONLY thing a not-yet-authenticated visitor
 // sees (see App.jsx's top-level gate; TopBar/Sidebar never mount
 // alongside this). Three ways in, all funneling into the same server-side
@@ -622,9 +707,9 @@ export default function LoginSignupPage({ onMfaRequired }) {
     // Reuses the same .aw-root shell/theme toggle as everything else here
     // so it doesn't look like a different, disconnected page - just a
     // "Back to Login" instead of the split showcase layout. Deliberately
-    // NOT wrapped in .aw-split/.aw-split-solo (those cap out at 520px/
-    // 1240px for the login card's own two-column grid) - this needs the
-    // full page width, same as every other in-app page's .main does.
+    // NOT wrapped in .aw-split (caps out at 1240px for the login card's
+    // own two-column grid) - this needs the full page width, same as
+    // every other in-app page's .main does.
     if (toolMode) {
 
         return (
@@ -710,7 +795,9 @@ export default function LoginSignupPage({ onMfaRequired }) {
                 {themeToggle}
                 {toolsMenu}
 
-                <div className="aw-split aw-split-solo">
+                <div className="aw-split">
+
+                    <ShowcasePanel openTool={openTool} />
 
                     <main className="authcol">
 
@@ -783,7 +870,9 @@ export default function LoginSignupPage({ onMfaRequired }) {
                 {themeToggle}
                 {toolsMenu}
 
-                <div className="aw-split aw-split-solo">
+                <div className="aw-split">
+
+                    <ShowcasePanel openTool={openTool} />
 
                     <main className="authcol">
 
@@ -874,7 +963,9 @@ export default function LoginSignupPage({ onMfaRequired }) {
                 {themeToggle}
                 {toolsMenu}
 
-                <div className="aw-split aw-split-solo">
+                <div className="aw-split">
+
+                    <ShowcasePanel openTool={openTool} />
 
                     <main className="authcol">
 
@@ -962,7 +1053,9 @@ export default function LoginSignupPage({ onMfaRequired }) {
                 {themeToggle}
                 {toolsMenu}
 
-                <div className="aw-split aw-split-solo">
+                <div className="aw-split">
+
+                    <ShowcasePanel openTool={openTool} />
 
                     <main className="authcol">
 
@@ -1003,7 +1096,9 @@ export default function LoginSignupPage({ onMfaRequired }) {
                 {themeToggle}
                 {toolsMenu}
 
-                <div className="aw-split aw-split-solo">
+                <div className="aw-split">
+
+                    <ShowcasePanel openTool={openTool} />
 
                     <main className="authcol">
 
@@ -1055,71 +1150,7 @@ export default function LoginSignupPage({ onMfaRequired }) {
 
             <div className="aw-split">
 
-                {/* ---------------- brand / showcase ---------------- */}
-                <aside className="showcase">
-
-                    <div className="brand">
-                        <span className="glyph"><Rocket size={17} strokeWidth={2.4} /></span>
-                        <span className="brand-name">Deployment Portal</span>
-                    </div>
-
-                    <div className="pitch">
-                        <h1>Every deployment, one console.</h1>
-                        <p>
-                            Trigger releases, watch runs, and approve promotions across GitHub Actions,
-                            AWS, Azure, GCP, and your registries — without hopping between ten dashboards.
-                        </p>
-                    </div>
-
-                    {/* console preview - illustrative, not live data (see PREVIEW_RUNS comment) */}
-                    <div className="preview" aria-hidden>
-
-                        <div className="preview-bar">
-                            <span className="live"><span className="live-dot" />What's behind the login</span>
-                        </div>
-
-                        <div className="preview-runs">
-                            {PREVIEW_RUNS.map((r, i) => (
-                                <div key={i} className="prun">
-                                    <span className="pdot" style={{ background: S[r.s] }}>
-                                        {r.s === "running" && <span className="pping" style={{ background: S[r.s] }} />}
-                                    </span>
-                                    <span className="mono pwf">{r.wf}</span>
-                                    <span className={"penv " + r.env}>{r.env}</span>
-                                    <span className="mono psha">{r.sha}</span>
-                                    <span className="ptime"><Clock size={10} />{r.time}</span>
-                                    {r.s === "running" && <span className="pprog"><i /></span>}
-                                </div>
-                            ))}
-                        </div>
-
-                        <div className="preview-chips">
-                            {PROVIDERS.map((p) => (
-                                <span key={p.n} className="chip">
-                                    <span className="cdot" style={{ background: S[p.s] }} />{p.n}
-                                </span>
-                            ))}
-                            <span className="chip more">+20 more</span>
-                        </div>
-
-                    </div>
-
-                    <ul className="trust">
-                        <li><ShieldCheck size={14} /> Multi-factor auth is required for every account</li>
-                        <li><KeyRound size={14} /> Cloud keys and tokens encrypted at rest</li>
-                        <li><Server size={14} /> Role-based access, enforced on every request</li>
-                        <li><FileText size={14} /> Settings changes and admin actions are audit-logged</li>
-                    </ul>
-
-                    <div className="pitch-links">
-                        <button type="button" onClick={() => openTool("about")}>About</button>
-                        <span aria-hidden="true">·</span>
-                        <button type="button" onClick={() => openTool("faq")}>FAQ</button>
-                        <span aria-hidden="true">·</span>
-                        <button type="button" onClick={() => openTool("portfolio")}>Portfolio</button>
-                    </div>
-
-                </aside>
+                <ShowcasePanel openTool={openTool} />
 
                 {/* ---------------- auth card ---------------- */}
                 <main className="authcol">
@@ -1369,7 +1400,6 @@ const CSS = `
 }
 
 .aw-root .aw-split{display:grid; grid-template-columns:1.15fr .85fr; min-height:100vh; max-width:1240px; margin:0 auto;}
-.aw-root .aw-split-solo{grid-template-columns:1fr; align-items:center; justify-items:center; max-width:520px;}
 
 /* ---------- showcase ---------- */
 .aw-root .showcase{padding:44px 54px; display:flex; flex-direction:column; gap:30px; border-right:1px solid var(--border);}
