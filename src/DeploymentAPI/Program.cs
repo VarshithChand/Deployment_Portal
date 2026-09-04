@@ -1,3 +1,5 @@
+using System.IdentityModel.Tokens.Jwt;
+using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
 using DeploymentAPI.Configuration;
@@ -362,6 +364,29 @@ builder.Services
                         CorrelationId = context.HttpContext.TraceIdentifier
                     }
                 });
+            },
+
+            // What actually makes Settings > Account's "sign out this
+            // device" take effect immediately, rather than just removing a
+            // row from a list nothing else checks (see the pre-existing
+            // admin force-logout / SessionActivityService, which was found
+            // to write and read under mismatched key namespaces). A token
+            // with no jti claim at all (issued before this feature
+            // existed) is let through unchecked - there's nothing to look
+            // up for it, and it still expires on its own via the JWT's
+            // normal lifetime.
+            OnTokenValidated = async context =>
+            {
+                var jti = context.Principal?.FindFirst(JwtRegisteredClaimNames.Jti)?.Value;
+                var userId = context.Principal?.FindFirst(ClaimTypes.Name)?.Value;
+
+                if (string.IsNullOrEmpty(jti) || string.IsNullOrEmpty(userId))
+                    return;
+
+                var settings = context.HttpContext.RequestServices.GetRequiredService<SettingsService>();
+
+                if (await settings.IsSessionRevokedAsync(userId, jti))
+                    context.Fail("Session has been revoked.");
             }
         };
     });
@@ -509,6 +534,16 @@ app.Use(async (context, next) =>
         var ipAddress = context.Connection.RemoteIpAddress?.ToString();
         var endpoint = $"{context.Request.Method} {context.Request.Path}";
         context.RequestServices.GetRequiredService<SessionActivityService>().Touch(key, userAgent, ipAddress, endpoint);
+
+        // Keeps Settings > Account's Active Sessions list showing real
+        // recency (see SettingsService.TouchSessionAsync) - a no-op for a
+        // token issued before the Jti claim existed.
+        var jti = context.User.FindFirst(JwtRegisteredClaimNames.Jti)?.Value;
+
+        if (!string.IsNullOrEmpty(jti))
+        {
+            await settings.TouchSessionAsync(key, jti, userAgent, ipAddress);
+        }
     }
 
     await next();

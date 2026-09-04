@@ -101,4 +101,52 @@ public class PortalUserAccount
     // generating it, is ever populated - a general read (GetUserByIdAsync/
     // FindUserByEmailAsync) never returns this.
     public string? PasswordResetToken { get; set; }
+
+    public string? PhoneNumber { get; set; }
+
+    // A small (client-resized to <=256px before upload) data-URI-ready
+    // base64 blob, stored inline in this same JSON entry rather than any
+    // new object storage - see AccountAuthController's avatar endpoints.
+    // Null clears it back to AccountAvatar's initials fallback.
+    public string? AvatarBase64 { get; set; }
+
+    // Every device/browser currently (or recently) holding a valid JWT for
+    // this account - one entry per login, keyed by that JWT's own Jti
+    // claim (see AuthService.IssueJwt). Populated by SettingsService.
+    // RecordSessionAsync right after a login issues a token, kept fresh by
+    // TouchSessionAsync on every authenticated request (Program.cs's
+    // activity middleware), and consulted by IsSessionRevokedAsync on
+    // every request too - this is what lets "sign out this device" in
+    // Settings > Account actually end that device's session immediately,
+    // unlike the pre-existing admin force-logout (SessionActivityService),
+    // which was found to write and read under mismatched key namespaces.
+    public List<UserSession> Sessions { get; set; } = new();
+
+    // The most recent ~20 login attempts for this account - both
+    // successful logins AND a failed password/MFA-code attempt against
+    // this specific account (see SettingsService.RecordLoginHistoryAsync's
+    // own pruning and comment). Distinct from Sessions above, which only
+    // tracks currently-live sessions - this is never pruned by JWT expiry,
+    // a rolling audit trail for Settings > Account's Login History list.
+    public List<LoginEvent> LoginHistory { get; set; } = new();
+}
+
+// One row per active-or-recent login - see PortalUserAccount.Sessions.
+public class UserSession
+{
+    public string Jti { get; set; } = string.Empty;
+    public string? UserAgent { get; set; }
+    public string? IpAddress { get; set; }
+    public DateTime CreatedAtUtc { get; set; }
+    public DateTime LastSeenAtUtc { get; set; }
+    public bool Revoked { get; set; }
+}
+
+// One row per login attempt - see PortalUserAccount.LoginHistory.
+public class LoginEvent
+{
+    public DateTime TimestampUtc { get; set; }
+    public string? IpAddress { get; set; }
+    public string? UserAgent { get; set; }
+    public bool Success { get; set; }
 }

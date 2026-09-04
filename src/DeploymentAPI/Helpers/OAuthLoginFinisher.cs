@@ -43,10 +43,12 @@ public static class OAuthLoginFinisher
             return controller.Redirect($"{frontendUrl}?mfaPending=1");
         }
 
-        var jwt = auth.IssueJwt(userId, role, userEmail);
+        var (jwt, jti) = auth.IssueJwt(userId, role, userEmail);
 
         controller.Response.Cookies.Append(
             "portal_token", jwt, AuthCookie.CrossSiteOptions(controller.Request, DateTimeOffset.UtcNow.AddHours(8)));
+
+        await SessionRecorder.RecordSuccessfulLoginAsync(settings, controller.Request, userId, jti);
 
         if (!string.IsNullOrWhiteSpace(userEmail))
         {

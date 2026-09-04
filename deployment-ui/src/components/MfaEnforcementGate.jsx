@@ -1,8 +1,21 @@
 import { lazy, Suspense, useState } from "react";
 
 import useAuth from "../hooks/useAuth";
+import useTheme from "../hooks/useTheme";
 import { skipMfaNudge } from "../services/settingsService";
 import performSignOut from "../utils/performSignOut";
+import Logo from "./common/Logo";
+import AuthShowcasePanel from "./common/AuthShowcasePanel";
+import { SunIcon, MoonIcon } from "./layout/SidebarIcons";
+
+// A page reload lands here before any tool navigation state exists (this
+// component is mounted at the app root, not inside LoginSignupPage), so
+// "About"/"FAQ"/"Portfolio" on the shared showcase panel go through a real
+// navigation - same reasoning, and the same helper shape, as
+// MfaVerifyPage's own openToolViaNavigation.
+function openToolViaNavigation(tool) {
+    window.location.href = `/?tool=${tool}`;
+}
 
 // Lazy, not a normal import - this component is mounted eagerly in App.jsx
 // (it has to be, to decide on every render whether to block the app), but
@@ -41,6 +54,7 @@ const MfaSection = lazy(() => import("./settings/credentials/MfaSection"));
 export default function MfaEnforcementGate() {
 
     const { mfaNudgeShow, mfaNudgeMandatory, mfaNudgeBlocked, mfaNudgeReason, refresh } = useAuth();
+    const { theme, toggleTheme } = useTheme();
 
     const [dismissedForNow, setDismissedForNow] = useState(false);
     const [enrollOpen, setEnrollOpen] = useState(false);
@@ -90,31 +104,66 @@ export default function MfaEnforcementGate() {
 
         const isRegistration = mfaNudgeReason === "mustSetUp";
 
+        // Same aw-root/aw-split/AuthShowcasePanel shell LoginSignupPage and
+        // MfaVerifyPage already share (see AuthShowcasePanel.jsx's own
+        // comment) - this is really a third pre-dashboard gate in the same
+        // family (a brand new account can't reach anything else until this
+        // clears), so it gets the same treatment rather than the old
+        // plain auth-page/auth-page-card look. position:fixed/zIndex still
+        // overlays the app shell underneath, which is what makes clearing
+        // the block below (onEnrolled -> refresh -> mfaNudgeBlocked turns
+        // false) reveal the dashboard immediately, with no navigation of
+        // its own - the dashboard was already mounted the whole time,
+        // just covered.
         return (
 
-            <div className="auth-page" style={{ position: "fixed", inset: 0, zIndex: 1200 }}>
+            <div className="aw-root" style={{ position: "fixed", inset: 0, zIndex: 1200 }}>
 
-                <div className="auth-page-card" style={{ maxWidth: 460 }}>
+                <div className="aw-split">
 
-                    <h1 className="setup-gate-title">
-                        {isRegistration ? "Secure your new account" : "Multi-Factor Authentication Required"}
-                    </h1>
+                    <AuthShowcasePanel onOpenTool={openToolViaNavigation} />
 
-                    <p className="field-hint" style={{ textAlign: "center" }}>
-                        {isRegistration
-                            ? "Set up multi-factor authentication to finish creating your account — this step can't be skipped."
-                            : "Your account has cloud credentials saved, which makes MFA mandatory for this portal. Finish enrolling below to continue — this screen won't go away until you do."}
-                    </p>
+                    <main className="authcol">
 
-                    <Suspense fallback={<p className="field-hint">Loading...</p>}>
-                        <MfaSection onEnrolled={refresh} showCancelEnrollButton={false} />
-                    </Suspense>
+                        <div className="auth-page-card" role="main" aria-labelledby="mfa-gate-title">
 
-                    <div className="button-row" style={{ marginTop: 16, justifyContent: "center" }}>
-                        <button type="button" className="btn" onClick={handleCancel} disabled={signingOut}>
-                            {signingOut ? "Signing out..." : "Cancel"}
-                        </button>
-                    </div>
+                            <button
+                                type="button"
+                                className="auth-theme-toggle"
+                                onClick={toggleTheme}
+                                title={theme === "dark" ? "Light mode" : "Dark mode"}
+                                aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+                            >
+                                {theme === "dark" ? <SunIcon /> : <MoonIcon />}
+                            </button>
+
+                            <div className="auth-page-logo">
+                                <Logo showEyebrow={false} compact size={34} />
+                            </div>
+
+                            <h1 id="mfa-gate-title" className="setup-gate-title">
+                                {isRegistration ? "Secure your new account" : "Multi-Factor Authentication Required"}
+                            </h1>
+
+                            <p className="field-hint" style={{ textAlign: "center" }}>
+                                {isRegistration
+                                    ? "Set up multi-factor authentication to finish creating your account — this step can't be skipped."
+                                    : "Your account has cloud credentials saved, which makes MFA mandatory for this portal. Finish enrolling below to continue — this screen won't go away until you do."}
+                            </p>
+
+                            <Suspense fallback={<p className="field-hint">Loading...</p>}>
+                                <MfaSection onEnrolled={refresh} showCancelEnrollButton={false} />
+                            </Suspense>
+
+                            <div className="button-row" style={{ marginTop: 16, justifyContent: "center" }}>
+                                <button type="button" className="btn" onClick={handleCancel} disabled={signingOut}>
+                                    {signingOut ? "Signing out..." : "Cancel"}
+                                </button>
+                            </div>
+
+                        </div>
+
+                    </main>
 
                 </div>
 

@@ -12,6 +12,14 @@ export default function SettingsHubView({
 
         <div className="settings-hub">
 
+            <button type="button" className="settings-hub-tile" onClick={() => setView("account")}>
+                <h2>Account</h2>
+                <p>
+                    Your profile, password, two-factor authentication, active sessions, and
+                    login history — plus sign out or delete your account.
+                </p>
+            </button>
+
             <button type="button" className="settings-hub-tile" onClick={() => setView("credentials")}>
                 <h2>Credentials</h2>
                 <p>

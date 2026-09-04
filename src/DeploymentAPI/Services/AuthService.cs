@@ -144,14 +144,22 @@ public class AuthService
         return string.IsNullOrWhiteSpace(fallback) ? null : fallback;
     }
 
-    public string IssueJwt(string login, string role, string? email = null)
+    // jti (a fresh GUID per token, never reused) is what Settings > Account's
+    // Active Sessions / "sign out this device" is built on - see
+    // SessionRecorder and Program.cs's OnTokenValidated event, which looks
+    // this claim up against PortalUserAccount.Sessions on every request.
+    // Callers get it back alongside the token string so they can record the
+    // session right after issuing it.
+    public (string Token, string Jti) IssueJwt(string login, string role, string? email = null)
     {
         var settings = _jwtOptions.CurrentValue;
+        var jti = Guid.NewGuid().ToString();
 
         var claims = new List<Claim>
         {
             new(ClaimTypes.Name, login),
-            new(ClaimTypes.Role, role)
+            new(ClaimTypes.Role, role),
+            new(JwtRegisteredClaimNames.Jti, jti)
         };
 
         if (!string.IsNullOrWhiteSpace(email))
@@ -167,6 +175,6 @@ public class AuthService
             expires: DateTime.UtcNow.AddMinutes(settings.ExpiryMinutes),
             signingCredentials: creds);
 
-        return new JwtSecurityTokenHandler().WriteToken(token);
+        return (new JwtSecurityTokenHandler().WriteToken(token), jti);
     }
 }

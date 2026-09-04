@@ -98,3 +98,60 @@ export const setPassword = async (newPassword) => {
     const response = await authApi.post("/set-password", { newPassword });
     return response.data;
 };
+
+// Backs Settings > Account's Profile "Edit Profile" save - each field left
+// undefined/null keeps its current value server-side (see
+// AccountAuthController.UpdateProfile).
+export const updateMyProfile = async ({ displayName, username, phoneNumber }) => {
+    const response = await authApi.put("/account", { displayName, username, phoneNumber });
+    return response.data;
+};
+
+// base64 is already client-resized (<=256px, see AccountView.jsx's canvas
+// step) - no data: prefix, just the raw base64 payload.
+export const uploadMyAvatar = async (base64) => {
+    const response = await authApi.post("/account/avatar", { base64 });
+    return response.data;
+};
+
+export const removeMyAvatar = async () => {
+    const response = await authApi.delete("/account/avatar");
+    return response.data;
+};
+
+// Unlike setPassword above, this is for an account that ALREADY has one -
+// see AccountAuthService.ChangePasswordAsync, which re-verifies
+// currentPassword before replacing it.
+export const changeMyPassword = async (currentPassword, newPassword) => {
+    const response = await authApi.post("/change-password", { currentPassword, newPassword });
+    return response.data;
+};
+
+// Settings > Account's Active Sessions list - see AccountAuthController.
+// GetSessions, which flags the request's own jti as isCurrent.
+export const getMySessions = async () => {
+    const response = await authApi.get("/sessions");
+    return response.data;
+};
+
+// "Sign out this device" - see SettingsService.RevokeSessionAsync/
+// Program.cs's OnTokenValidated, which is what makes this take effect on
+// that device's very next request.
+export const revokeMySession = async (jti) => {
+    const response = await authApi.post(`/sessions/${encodeURIComponent(jti)}/revoke`);
+    return response.data;
+};
+
+export const getMyLoginHistory = async () => {
+    const response = await authApi.get("/login-history");
+    return response.data;
+};
+
+// Settings > Account's Danger Zone "Delete Account" - exactly one of
+// currentPassword/confirmPhrase is actually checked server-side depending
+// on whether the account has a password (see AccountAuthController.
+// DeleteAccount).
+export const deleteMyAccount = async ({ currentPassword, confirmPhrase }) => {
+    const response = await authApi.delete("/account", { data: { currentPassword, confirmPhrase } });
+    return response.data;
+};

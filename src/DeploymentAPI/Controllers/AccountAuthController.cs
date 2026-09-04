@@ -60,6 +60,22 @@ public class AccountAuthController : ControllerBase
     public async Task<IActionResult> Login(PasswordLoginRequestDto request)
     {
         var result = await _accountAuth.LoginWithPasswordAsync(request.EmailOrUsername ?? string.Empty, request.Password ?? string.Empty);
+
+        // A failure that still resolved to a real account (wrong password,
+        // or a correct password on a not-yet-verified account) - see
+        // AccountAuthService.LoginWithPasswordAsync's own comment on why
+        // recording this doesn't weaken the enumeration-safe response
+        // below, which is identical either way. An identifier that never
+        // matched any account has no User to record against - there's
+        // nothing to show that account's owner because there is no
+        // account.
+        if (!result.Success && result.User != null)
+        {
+            var userAgent = Request.Headers.UserAgent.ToString();
+            var ipAddress = Request.HttpContext.Connection.RemoteIpAddress?.ToString();
+            await _settings.RecordLoginHistoryAsync(result.User.Id, ipAddress, userAgent, success: false);
+        }
+
         return await FinishPrimaryFactorAsync(result);
     }
 
@@ -280,6 +296,14 @@ public class AccountAuthController : ControllerBase
 
         if (!valid)
         {
+            // The password step already passed by the time anyone reaches
+            // an MFA challenge, so userId is always a real, known account
+            // here - no enumeration concern the way Login's own failure
+            // recording has to account for (see that action's comment).
+            await _settings.RecordLoginHistoryAsync(
+                userId, Request.HttpContext.Connection.RemoteIpAddress?.ToString(),
+                Request.Headers.UserAgent.ToString(), success: false);
+
             var lockedUntil = await MfaLockoutPolicy.RecordFailureAsync(_settings, _notifications, userId);
 
             if (lockedUntil.HasValue)
@@ -330,8 +354,208 @@ public class AccountAuthController : ControllerBase
         if (user == null)
             return StatusCode(401, new { message = "Unable to verify your identity right now." });
 
-        return Ok(new { email = user.Email, provider = user.Provider, hasPassword = user.HasPassword });
+        return Ok(new
+        {
+            email = user.Email,
+            provider = user.Provider,
+            hasPassword = user.HasPassword,
+            displayName = user.DisplayName,
+            username = user.Username,
+            phoneNumber = user.PhoneNumber,
+            avatarUrl = BuildAvatarDataUri(user.AvatarBase64),
+            lastLoginAtUtc = user.LastLoginAtUtc
+        });
     }
+
+    // Settings > Account's Profile section "Edit Profile" save - each field
+    // left null in the request keeps its current value (see
+    // SettingsService.UpdateUserProfileAsync). Email is deliberately not
+    // editable here at all - see AccountView.jsx's own comment on why.
+    [HttpPut("account")]
+    public async Task<IActionResult> UpdateProfile(UpdateProfileRequestDto request)
+    {
+        var (userId, denied) = RequireAuth.RequireUserId(this);
+        if (denied != null) return denied;
+
+        await _settings.UpdateUserProfileAsync(userId!, request.DisplayName, request.Username, request.PhoneNumber);
+
+        return Ok(new { success = true });
+    }
+
+    // 512KB is a generous ceiling for a client-resized (<=256px) avatar
+    // already encoded as base64 - defensive only, AccountView.jsx's own
+    // canvas resize step keeps real uploads far under this.
+    private const int MaxAvatarBase64Length = 512 * 1024;
+
+    [HttpPost("account/avatar")]
+    public async Task<IActionResult> UploadAvatar(AvatarUploadRequestDto request)
+    {
+        var (userId, denied) = RequireAuth.RequireUserId(this);
+        if (denied != null) return denied;
+
+        if (string.IsNullOrWhiteSpace(request.Base64))
+            return Ok(new { success = false, message = "No image data received." });
+
+        if (request.Base64.Length > MaxAvatarBase64Length)
+            return Ok(new { success = false, message = "Image is too large." });
+
+        try
+        {
+            Convert.FromBase64String(request.Base64);
+        }
+        catch (FormatException)
+        {
+            return Ok(new { success = false, message = "Invalid image data." });
+        }
+
+        await _settings.SetUserAvatarAsync(userId!, request.Base64);
+
+        return Ok(new { success = true });
+    }
+
+    [HttpDelete("account/avatar")]
+    public async Task<IActionResult> RemoveAvatar()
+    {
+        var (userId, denied) = RequireAuth.RequireUserId(this);
+        if (denied != null) return denied;
+
+        await _settings.SetUserAvatarAsync(userId!, null);
+
+        return Ok(new { success = true });
+    }
+
+    // Settings > Account's Change Password (an already-has-a-password
+    // account) - see AccountAuthService.ChangePasswordAsync for why this
+    // re-verifies CurrentPassword rather than trusting the session alone
+    // the way SetPassword above does.
+    [HttpPost("change-password")]
+    public async Task<IActionResult> ChangePassword(ChangePasswordRequestDto request)
+    {
+        var (userId, denied) = RequireAuth.RequireUserId(this);
+        if (denied != null) return denied;
+
+        var result = await _accountAuth.ChangePasswordAsync(userId!, request.CurrentPassword ?? string.Empty, request.NewPassword ?? string.Empty);
+
+        if (!result.Success)
+            return Ok(new { success = false, message = result.Error });
+
+        var user = await _settings.GetUserByIdAsync(userId!);
+
+        if (user != null)
+        {
+            try
+            {
+                await _email.SendPasswordResetConfirmationAsync(user.Email, user.Username ?? user.Email);
+            }
+            catch (Exception)
+            {
+            }
+        }
+
+        return Ok(new { success = true });
+    }
+
+    // Settings > Account's Active Sessions list - the current request's own
+    // jti (read off its own validated token) is flagged so the frontend can
+    // label that row "This device" instead of listing it as just another
+    // anonymous session.
+    [HttpGet("sessions")]
+    public async Task<IActionResult> GetSessions()
+    {
+        var (userId, denied) = RequireAuth.RequireUserId(this);
+        if (denied != null) return denied;
+
+        var currentJti = User.FindFirst(System.IdentityModel.Tokens.Jwt.JwtRegisteredClaimNames.Jti)?.Value;
+        var sessions = await _settings.GetUserSessionsAsync(userId!);
+
+        return Ok(new
+        {
+            sessions = sessions.Select(s => new
+            {
+                jti = s.Jti,
+                userAgent = s.UserAgent,
+                ipAddress = s.IpAddress,
+                createdAtUtc = s.CreatedAtUtc,
+                lastSeenAtUtc = s.LastSeenAtUtc,
+                isCurrent = s.Jti == currentJti
+            })
+        });
+    }
+
+    // "Sign out this device" - see SettingsService.RevokeSessionAsync and
+    // Program.cs's OnTokenValidated event, which is what actually makes
+    // this take effect on that device's very next request rather than just
+    // removing a row from a list nothing else checks.
+    [HttpPost("sessions/{jti}/revoke")]
+    public async Task<IActionResult> RevokeSession(string jti)
+    {
+        var (userId, denied) = RequireAuth.RequireUserId(this);
+        if (denied != null) return denied;
+
+        await _settings.RevokeSessionAsync(userId!, jti);
+
+        return Ok(new { success = true });
+    }
+
+    [HttpGet("login-history")]
+    public async Task<IActionResult> GetLoginHistory()
+    {
+        var (userId, denied) = RequireAuth.RequireUserId(this);
+        if (denied != null) return denied;
+
+        var history = await _settings.GetLoginHistoryAsync(userId!);
+
+        return Ok(new
+        {
+            history = history.Select(h => new
+            {
+                timestampUtc = h.TimestampUtc,
+                ipAddress = h.IpAddress,
+                userAgent = h.UserAgent,
+                success = h.Success
+            })
+        });
+    }
+
+    // Settings > Account's Danger Zone "Delete Account" - re-proves identity
+    // first (current password for an account that has one, a typed
+    // confirmation phrase otherwise - see DeleteAccountRequestDto's own
+    // comment), same reasoning as ChangePassword above: an active session
+    // alone isn't proof enough for a change this destructive. Reuses
+    // SettingsService.DeletePatUserAsync - the exact same full delete
+    // (account + MFA + linked credentials + sidebar access + block flag)
+    // the admin Users tab already performs, since PortalUserAccount rows
+    // live in that same Users section regardless of who deletes them.
+    [HttpDelete("account")]
+    public async Task<IActionResult> DeleteAccount(DeleteAccountRequestDto request)
+    {
+        var (userId, denied) = RequireAuth.RequireUserId(this);
+        if (denied != null) return denied;
+
+        var user = await _settings.GetUserByIdAsync(userId!);
+
+        if (user == null)
+            return StatusCode(401, new { message = "Unable to verify your identity right now." });
+
+        if (user.HasPassword)
+        {
+            if (!await _settings.VerifyUserPasswordAsync(userId!, request.CurrentPassword ?? string.Empty))
+                return Ok(new { success = false, message = "Current password is incorrect." });
+        }
+        else if (!string.Equals(request.ConfirmPhrase, "DELETE", StringComparison.Ordinal))
+        {
+            return Ok(new { success = false, message = "Type DELETE to confirm." });
+        }
+
+        await _settings.DeletePatUserAsync(userId!);
+
+        Response.Cookies.Delete("portal_token");
+
+        return Ok(new { success = true });
+    }
+
+    private static string? BuildAvatarDataUri(string? avatarBase64) =>
+        string.IsNullOrWhiteSpace(avatarBase64) ? null : $"data:image/png;base64,{avatarBase64}";
 
     // Lets an already-authenticated Google/GitHub-only account add password
     // login for the first time (see AccountAuthService.SetPasswordAsync and
@@ -447,10 +671,11 @@ public class AccountAuthController : ControllerBase
 
     private async Task<string> IssueSessionAsync(string userId, string role, string? email)
     {
-        var jwt = _auth.IssueJwt(userId, role, email);
+        var (jwt, jti) = _auth.IssueJwt(userId, role, email);
         Response.Cookies.Append("portal_token", jwt, AuthCookie.CrossSiteOptions(Request, DateTimeOffset.UtcNow.AddHours(8)));
 
         await _settings.UpdateUserLastLoginAsync(userId);
+        await SessionRecorder.RecordSuccessfulLoginAsync(_settings, Request, userId, jti);
 
         if (!string.IsNullOrWhiteSpace(email))
         {

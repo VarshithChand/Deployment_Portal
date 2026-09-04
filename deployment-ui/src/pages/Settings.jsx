@@ -35,6 +35,7 @@ import PageLayout from "../components/layout/PageLayout";
 import AccessLevels from "../components/settings/AccessLevels";
 import BranchManager from "../components/settings/BranchManager";
 import SettingsHubView from "../components/settings/SettingsHubView";
+import AccountView from "../components/settings/AccountView";
 import CredentialsView from "../components/settings/CredentialsView";
 import AdminAccessView from "../components/settings/AdminAccessView";
 import SidebarAccessView from "../components/settings/SidebarAccessView";
@@ -1131,6 +1132,12 @@ export default function Settings() {
                     handleSignOut={handleSignOut}
                     signingOut={signingOut}
                 />
+
+            )}
+
+            {view === "account" && (
+
+                <AccountView />
 
             )}
 

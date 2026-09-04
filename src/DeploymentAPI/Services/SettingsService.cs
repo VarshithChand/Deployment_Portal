@@ -1905,6 +1905,213 @@ public class SettingsService
         return result is PasswordVerificationResult.Success or PasswordVerificationResult.SuccessRehashNeeded;
     }
 
+    // Generous buffer past the JWT's own 8h lifetime (Jwt:ExpiryMinutes) -
+    // this only decides when a Sessions row is safe to prune as dead
+    // weight, not whether a token is still valid (IsSessionRevokedAsync/
+    // the JWT's own expiry already handle that); a bit of slack here just
+    // avoids pruning a row a slow request might still touch right at the
+    // boundary.
+    private static readonly TimeSpan SessionRetention = TimeSpan.FromHours(24);
+
+    private const int MaxLoginHistoryEntries = 20;
+
+    // Settings > Account's Profile section - Name/Username/Phone, whichever
+    // of the three the caller actually passed (each null argument leaves
+    // that field untouched, matching AccountAuthController.UpdateProfile's
+    // "send only what changed" contract from a partial edit form). Email is
+    // deliberately not settable here - see AccountView.jsx's own comment on
+    // why it's read-only.
+    public async Task UpdateUserProfileAsync(string id, string? displayName, string? username, string? phoneNumber)
+    {
+        var root = await ReadRootAsync();
+        var (users, _) = await GetOrCreateUsersSectionAsync(root);
+
+        if (users[id] is not JObject entry)
+            return;
+
+        if (displayName != null)
+            entry["DisplayName"] = displayName;
+
+        if (username != null)
+            entry["Username"] = username;
+
+        if (phoneNumber != null)
+            entry["PhoneNumber"] = phoneNumber;
+
+        await WriteRootAsync(root);
+    }
+
+    // Null clears the avatar back to AccountAvatar's initials fallback -
+    // see AccountAuthController's DELETE avatar endpoint.
+    public async Task SetUserAvatarAsync(string id, string? base64)
+    {
+        var root = await ReadRootAsync();
+        var (users, _) = await GetOrCreateUsersSectionAsync(root);
+
+        if (users[id] is not JObject entry)
+            return;
+
+        entry["AvatarBase64"] = base64;
+
+        await WriteRootAsync(root);
+    }
+
+    // Called once per login (both AccountAuthController.IssueSessionAsync
+    // and OAuthLoginFinisher.FinishAsync, via the shared SessionRecorder
+    // helper) right after a JWT is issued - this is what makes that jti
+    // show up in Settings > Account's Active Sessions list. Also prunes
+    // anything past SessionRetention so one account's Sessions list can't
+    // grow unbounded across years of logins.
+    public async Task RecordSessionAsync(string id, string jti, string? userAgent, string? ipAddress)
+    {
+        var root = await ReadRootAsync();
+        var (users, _) = await GetOrCreateUsersSectionAsync(root);
+
+        if (users[id] is not JObject entry)
+            return;
+
+        var sessions = entry["Sessions"]?.ToObject<List<UserSession>>() ?? new();
+        var now = DateTime.UtcNow;
+
+        sessions.RemoveAll(s => now - s.LastSeenAtUtc > SessionRetention);
+        sessions.Add(new UserSession
+        {
+            Jti = jti,
+            UserAgent = userAgent,
+            IpAddress = ipAddress,
+            CreatedAtUtc = now,
+            LastSeenAtUtc = now
+        });
+
+        entry["Sessions"] = JArray.FromObject(sessions);
+
+        await WriteRootAsync(root);
+    }
+
+    // Called on every authenticated request (Program.cs's activity
+    // middleware, right beside its existing SessionActivityService.Touch
+    // call) - keeps a session's LastSeenAtUtc fresh so Active Sessions
+    // shows real recency, not just the moment it was created. A jti that
+    // isn't in the list (an older token issued before this feature
+    // existed, or one already pruned) is a silent no-op, not an error -
+    // there's nothing to touch.
+    public async Task TouchSessionAsync(string id, string jti, string? userAgent, string? ipAddress)
+    {
+        var root = await ReadRootAsync();
+        var (users, _) = await GetOrCreateUsersSectionAsync(root);
+
+        if (users[id] is not JObject entry)
+            return;
+
+        var sessions = entry["Sessions"]?.ToObject<List<UserSession>>() ?? new();
+        var match = sessions.FirstOrDefault(s => s.Jti == jti);
+
+        if (match == null)
+            return;
+
+        match.LastSeenAtUtc = DateTime.UtcNow;
+        match.UserAgent ??= userAgent;
+        match.IpAddress ??= ipAddress;
+
+        entry["Sessions"] = JArray.FromObject(sessions);
+
+        await WriteRootAsync(root);
+    }
+
+    // Consulted by Program.cs's JWT OnTokenValidated event on every request
+    // (see that file's own comment for why this is what actually makes
+    // "sign out this device" take effect immediately, not just remove the
+    // row from a list nothing else checks). A jti this account has no
+    // record of at all (e.g. a session already pruned past
+    // SessionRetention) is treated as revoked too - an expired token
+    // shouldn't stay valid just because its bookkeeping row aged out.
+    public async Task<bool> IsSessionRevokedAsync(string id, string jti)
+    {
+        var root = await ReadRootAsync();
+        var (users, _) = await GetOrCreateUsersSectionAsync(root);
+
+        var sessions = (users[id] as JObject)?["Sessions"]?.ToObject<List<UserSession>>();
+        var match = sessions?.FirstOrDefault(s => s.Jti == jti);
+
+        return match == null || match.Revoked;
+    }
+
+    // Settings > Account's per-row "Sign out this device" - marks the
+    // session revoked rather than deleting the row outright, so a repeat
+    // IsSessionRevokedAsync check (or a mid-flight request from that same
+    // device) reliably sees it as revoked instead of racing a delete.
+    public async Task RevokeSessionAsync(string id, string jti)
+    {
+        var root = await ReadRootAsync();
+        var (users, _) = await GetOrCreateUsersSectionAsync(root);
+
+        if (users[id] is not JObject entry)
+            return;
+
+        var sessions = entry["Sessions"]?.ToObject<List<UserSession>>() ?? new();
+        var match = sessions.FirstOrDefault(s => s.Jti == jti);
+
+        if (match == null)
+            return;
+
+        match.Revoked = true;
+        entry["Sessions"] = JArray.FromObject(sessions);
+
+        await WriteRootAsync(root);
+    }
+
+    public async Task<List<UserSession>> GetUserSessionsAsync(string id)
+    {
+        var root = await ReadRootAsync();
+        var (users, _) = await GetOrCreateUsersSectionAsync(root);
+
+        var sessions = (users[id] as JObject)?["Sessions"]?.ToObject<List<UserSession>>() ?? new();
+
+        return sessions.Where(s => !s.Revoked).OrderByDescending(s => s.LastSeenAtUtc).ToList();
+    }
+
+    // Settings > Account's Login History list - called by SessionRecorder
+    // (success: true) after every JWT issuance, and directly by
+    // AccountAuthController for a failed password or MFA-code attempt
+    // against a KNOWN account (success: false) - see Login/VerifyMfa's own
+    // comments for why recording a failure there doesn't weaken either
+    // endpoint's enumeration-safe response. Capped to
+    // MaxLoginHistoryEntries, oldest dropped first, so this is a rolling
+    // recent-activity view rather than a permanent audit log.
+    public async Task RecordLoginHistoryAsync(string id, string? ipAddress, string? userAgent, bool success)
+    {
+        var root = await ReadRootAsync();
+        var (users, _) = await GetOrCreateUsersSectionAsync(root);
+
+        if (users[id] is not JObject entry)
+            return;
+
+        var history = entry["LoginHistory"]?.ToObject<List<LoginEvent>>() ?? new();
+
+        history.Insert(0, new LoginEvent
+        {
+            TimestampUtc = DateTime.UtcNow,
+            IpAddress = ipAddress,
+            UserAgent = userAgent,
+            Success = success
+        });
+
+        if (history.Count > MaxLoginHistoryEntries)
+            history.RemoveRange(MaxLoginHistoryEntries, history.Count - MaxLoginHistoryEntries);
+
+        entry["LoginHistory"] = JArray.FromObject(history);
+
+        await WriteRootAsync(root);
+    }
+
+    public async Task<List<LoginEvent>> GetLoginHistoryAsync(string id)
+    {
+        var root = await ReadRootAsync();
+        var (users, _) = await GetOrCreateUsersSectionAsync(root);
+
+        return (users[id] as JObject)?["LoginHistory"]?.ToObject<List<LoginEvent>>() ?? new();
+    }
+
     private static PortalUserAccount? ParseUser(string id, JObject entry) => new()
     {
         Id = id,
@@ -1926,7 +2133,11 @@ public class SettingsService
         // created with this flag, nothing retroactively forces an existing
         // account through mandatory enrollment it was never promised.
         MustSetUpMfa = entry["MustSetUpMfa"]?.Value<bool>() ?? false,
-        HasPassword = entry["PasswordHash"] != null && entry["PasswordHash"]!.Type != JTokenType.Null
+        HasPassword = entry["PasswordHash"] != null && entry["PasswordHash"]!.Type != JTokenType.Null,
+        PhoneNumber = entry["PhoneNumber"]?.ToString(),
+        AvatarBase64 = entry["AvatarBase64"]?.ToString(),
+        Sessions = entry["Sessions"]?.ToObject<List<UserSession>>() ?? new(),
+        LoginHistory = entry["LoginHistory"]?.ToObject<List<LoginEvent>>() ?? new()
     };
 
     // Same shape as SaveAdminUsernamesAsync, just the email-based lists -

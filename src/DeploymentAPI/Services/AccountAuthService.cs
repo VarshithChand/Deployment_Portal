@@ -82,9 +82,18 @@ public class AccountAuthService
 
         // Same message whether the identifier doesn't exist or the
         // password is wrong - distinguishing the two would let an
-        // attacker enumerate which emails/usernames have accounts.
+        // attacker enumerate which emails/usernames have accounts. The
+        // resolved user (when there is one) still rides along on User
+        // even though Success is false - AccountAuthController.Login uses
+        // it to record a failed attempt to THAT account's own Login
+        // History, which leaks nothing new to the caller (the HTTP
+        // response is identical either way, still just the generic
+        // message) but gives the real owner visibility into wrong-
+        // password attempts against their account. user is null here
+        // when the identifier itself didn't match anything - nothing to
+        // record a failure against in that case.
         if (user == null || !await _settings.VerifyUserPasswordAsync(user.Id, password))
-            return AccountAuthResult.Fail("Invalid email/username or password.");
+            return AccountAuthResult.Fail("Invalid email/username or password.", user);
 
         // Registration-only gate, not a login-time one otherwise - once
         // verified this never blocks a login again. Correct credentials
@@ -94,7 +103,7 @@ public class AccountAuthService
         if (!user.EmailVerified)
         {
             return AccountAuthResult.Fail(
-                "Verify your email before logging in - check your inbox for the link we sent when you signed up.");
+                "Verify your email before logging in - check your inbox for the link we sent when you signed up.", user);
         }
 
         // LastLoginAtUtc is updated once the login actually completes (see
@@ -227,6 +236,35 @@ public class AccountAuthService
         return SetPasswordResult.Ok();
     }
 
+    // The opposite guard from SetPasswordAsync above - that one is "add a
+    // password to an account that has none," this is "prove the current
+    // one, then replace it," for Settings > Account's Change Password
+    // section. Re-verifying CurrentPassword here (rather than trusting the
+    // active session alone, the way SetPasswordAsync does) matters because
+    // this is changing a secret that already exists - a hijacked but not-
+    // yet-expired session shouldn't be able to lock the real owner out by
+    // silently swapping it.
+    public async Task<SetPasswordResult> ChangePasswordAsync(string userId, string currentPassword, string newPassword)
+    {
+        if (string.IsNullOrWhiteSpace(newPassword) || newPassword.Length < MinPasswordLength)
+            return SetPasswordResult.Fail($"Password must be at least {MinPasswordLength} characters.");
+
+        var user = await _settings.GetUserByIdAsync(userId);
+
+        if (user == null)
+            return SetPasswordResult.Fail("Unable to verify your identity right now.");
+
+        if (!user.HasPassword)
+            return SetPasswordResult.Fail("This account doesn't have a password yet - use \"Set Password\" instead.");
+
+        if (!await _settings.VerifyUserPasswordAsync(userId, currentPassword))
+            return SetPasswordResult.Fail("Current password is incorrect.");
+
+        await _settings.SetUserPasswordAsync(userId, newPassword, username: null);
+
+        return SetPasswordResult.Ok();
+    }
+
     // Derived from the email's local part (e.g. "jane.doe" from
     // "jane.doe@example.com"), stripped down to what a username actually
     // allows and de-duplicated against existing accounts - lets every
@@ -295,7 +333,14 @@ public class AccountAuthResult
     // is what the controller needs to build the verify link and send it.
     public bool EmailVerificationRequired { get; private init; }
 
-    public static AccountAuthResult Fail(string error) => new() { Success = false, Error = error };
+    // user is optional and ONLY ever meaningful for a login-attempt
+    // failure (see LoginWithPasswordAsync) - every other Fail() call site
+    // in this file passes nothing, matching their existing behavior
+    // exactly. Setting User here doesn't change how a Fail result is
+    // handled anywhere else (every caller already checks Success first),
+    // so this is purely additive.
+    public static AccountAuthResult Fail(string error, PortalUserAccount? user = null) =>
+        new() { Success = false, Error = error, User = user };
 
     public static AccountAuthResult Ok(PortalUserAccount user, string role) =>
         new() { Success = true, User = user, Role = role };
