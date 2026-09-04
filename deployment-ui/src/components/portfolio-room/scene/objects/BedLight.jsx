@@ -22,7 +22,13 @@ export default function BedLight({ position = [0, 0, 0] }) {
                 <meshBasicMaterial color={on ? "#ffe9b8" : "#2a2620"} toneMapped={false} />
             </mesh>
 
-            {on && <pointLight color="#ffe9b8" intensity={0.6} distance={3.5} position={[0, -0.1, 0.1]} />}
+            {/* intensity/distance bumped up (0.6/3.5 -> 1.1/4.5) - at the
+                old values this technically lit the bed/wall but weakly
+                enough to barely register against the room's other,
+                brighter accent lights; this should now visibly wash the
+                headboard and nearby wall/floor when switched on, not
+                just tint them. */}
+            {on && <pointLight color="#ffe9b8" intensity={1.1} distance={4.5} position={[0, -0.1, 0.1]} />}
 
         </group>
 
