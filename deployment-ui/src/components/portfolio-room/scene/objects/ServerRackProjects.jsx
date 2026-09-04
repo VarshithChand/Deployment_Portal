@@ -38,9 +38,16 @@ function RackUnit({ project, index, selected, onSelect, reducedMotion, labelColo
             onPointerOut={(e) => { e.stopPropagation(); setHovered(false); document.body.style.cursor = "auto"; }}
         >
 
+            {/* brown instead of the original near-black - the whole rack
+                read as an almost invisible dark mass against the equally
+                dark room/floor. Picked a shade dark enough to keep the
+                existing project-title text (labelColors, tuned against
+                this same dark body in both themes) readable - a bright
+                white would have flipped light theme's dark text into a
+                dark-on-light-ish-brown legibility problem instead. */}
             <mesh>
                 <boxGeometry args={[0.9, UNIT_HEIGHT, 0.55]} />
-                <meshStandardMaterial color={hovered || selected ? "#151f28" : "#0e131a"} roughness={0.6} metalness={0.2} />
+                <meshStandardMaterial color={hovered || selected ? "#6b4a30" : "#3d2a1a"} roughness={0.6} metalness={0.1} />
             </mesh>
 
             <mesh ref={ledRef} position={[0.38, 0, 0.28]}>
@@ -76,10 +83,11 @@ export default function ServerRackProjects({ reducedMotion, theme }) {
 
         <group position={[6.5, 1.4, -2]} rotation={[0, -Math.PI / 2, 0]}>
 
-            {/* rack frame */}
+            {/* rack frame - a slightly darker brown than the units
+                themselves, so the frame still reads as "behind" them */}
             <mesh position={[0, 0, -0.02]}>
                 <boxGeometry args={[1, PROJECTS.length * (UNIT_HEIGHT + 0.05) + 0.15, 0.6]} />
-                <meshStandardMaterial color="#080a0f" roughness={0.85} />
+                <meshStandardMaterial color="#2e1f14" roughness={0.85} />
             </mesh>
 
             {!isOpen && (
