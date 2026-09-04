@@ -1,5 +1,6 @@
 import { useMemo, useRef, useState } from "react";
 import { useFrame } from "@react-three/fiber";
+import { AdditiveBlending, DoubleSide } from "three";
 import { Billboard, Text } from "@react-three/drei";
 import Hotspot from "../Hotspot";
 import { MONO_FONT } from "../../fonts";
@@ -35,6 +36,7 @@ export default function CeilingLightSkills({ reducedMotion, theme }) {
 
     const coreRef = useRef();
     const glowRef = useRef();
+    const beamRef = useRef();
     const roomLightRef = useRef();
     const flickerT = useRef(0);
     const [hoveredGroup, setHoveredGroup] = useState(null);
@@ -112,6 +114,19 @@ export default function CeilingLightSkills({ reducedMotion, theme }) {
             glowRef.current.material.opacity += (targetOpacity - glowRef.current.material.opacity) * 0.15;
         }
 
+        if (beamRef.current) {
+            // visible downward light shaft, on top of the actual
+            // pointLight above - "I need light exposure like that" (a
+            // sketch of rays fanning down from the pendant onto the
+            // desk). Kept subtle (additive, low opacity) rather than a
+            // solid cone - a light shaft should look like it's made of
+            // the light itself, not an opaque object with a light-ish
+            // color, which is exactly what over-brightened the wireframe
+            // shell into a "thick" blob last round.
+            const targetOpacity = !clusterSwitchOn ? 0 : isOpen ? 0.16 : 0.09;
+            beamRef.current.material.opacity += (targetOpacity - beamRef.current.material.opacity) * 0.12;
+        }
+
         if (roomLightRef.current) {
             // was 1.6 at a 9-unit falloff - almost the room's own
             // diagonal - bright enough combined with Bloom's fairly low
@@ -161,6 +176,32 @@ export default function CeilingLightSkills({ reducedMotion, theme }) {
                 reaching well past the desk and into the rest of the
                 room instead of staying a localized glow */}
             <pointLight ref={roomLightRef} color="#22d3ee" intensity={0} distance={5.5} />
+
+            {/* visible light shaft - a hollow cone (openEnded, no solid
+                caps) with its narrow tip at the fixture and its wide
+                base down at desk height (this group's own origin is
+                already at the fixture's world y=4.2, and the desk
+                surface sits at world y~0.785, so local y=-3.415 is
+                "desk height" from here). Cone's default orientation
+                already puts the apex up/base down, matching a light
+                narrowing at the source and spreading as it reaches a
+                surface, so no rotation is needed - only the mesh's own
+                y is offset so that apex and base land on those two
+                points. Additive + no depthWrite, same convention as
+                every other glow/beam-style material in this room, so it
+                reads as light rather than a solid tinted object. */}
+            <mesh ref={beamRef} position={[0, -1.7075, 0]}>
+                <coneGeometry args={[1.05, 3.415, 20, 1, true]} />
+                <meshBasicMaterial
+                    color="#22d3ee"
+                    transparent
+                    opacity={0}
+                    blending={AdditiveBlending}
+                    side={DoubleSide}
+                    depthWrite={false}
+                    toneMapped={false}
+                />
+            </mesh>
 
             <Hotspot position={[0, 0, 0]} onSelect={() => setActive("skills")} reducedMotion={reducedMotion}>
                 {(hovered) => (
