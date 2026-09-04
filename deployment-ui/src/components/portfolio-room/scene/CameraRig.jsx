@@ -40,7 +40,17 @@ export const CAMERA_TARGETS = {
     // delta as look.y, preserving the original camera-above-target angle.
     contact: { pos: [0.75, 1.04, 0.15 + DESK_SHIFT_Z], look: [0.7, 0.84, -0.8 + DESK_SHIFT_Z] },
     skills: { pos: [0, 3.3, 1.7 + SKILLS_SHIFT_Z], look: [0, 3.9, -1 + SKILLS_SHIFT_Z] },
-    dashboard: { pos: [0, 2.3, -1.6], look: [0, 2.4, -4.7] },
+    // pos.z pulled back from -1.6 to -1.4 - the screen (2x1.1 units, only
+    // ~3.2 units from the old position) filled almost the entire frame
+    // with barely any surrounding wall visible. First tried -1.0 (a
+    // 0.6-unit pull-back) and checked it with a real screenshot - in
+    // this OPEN room (nothing constrains the field of view sideways the
+    // way a hallway would), that overshot badly: the camera was
+    // suddenly central enough in the room that almost the entire back
+    // wall came into frame, shrinking the screen to a small distant
+    // object instead of giving it a modest margin. -1.4 is a much
+    // smaller, re-verified step.
+    dashboard: { pos: [0, 2.3, -1.4], look: [0, 2.4, -4.7] },
     projects: { pos: [3.6, 1.5, -1.6], look: [6.3, 1.4, -2] },
     experience: { pos: [-4, 2, -0.6], look: [-6.3, 2, -2] },
     // "room" - a pulled-back, elevated view of the whole room at once,

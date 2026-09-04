@@ -1,5 +1,6 @@
 import { useRef, useState, useEffect } from "react";
 import { useFrame } from "@react-three/fiber";
+import { AdditiveBlending } from "three";
 import { Text } from "@react-three/drei";
 import Hotspot from "../Hotspot";
 import { MONO_FONT } from "../../fonts";
@@ -54,24 +55,39 @@ export default function WallDashboard({ reducedMotion }) {
     const isOpen = active === "dashboard";
 
     const screenRef = useRef();
+    const glowRef = useRef();
     const flickerT = useRef(0);
 
     const deployments = useCountUp(DASHBOARD.illustrativeDeployments, isOpen, reducedMotion);
     const projects = useCountUp(PROJECTS.length, isOpen, reducedMotion);
     const technologies = useCountUp(ALL_SKILLS.length, isOpen, reducedMotion);
 
-    useFrame((_, delta) => {
+    useFrame((state, delta) => {
 
-        if (!screenRef.current) return;
+        if (screenRef.current) {
 
-        const targetOpacity = isOpen ? 1 : 0.55;
+            const targetOpacity = isOpen ? 1 : 0.55;
 
-        if (isOpen && flickerT.current < 0.4 && !reducedMotion) {
-            flickerT.current += delta;
-            screenRef.current.material.opacity = Math.random() > 0.4 ? targetOpacity : 0.15;
-        } else {
-            if (!isOpen) flickerT.current = 0;
-            screenRef.current.material.opacity += (targetOpacity - screenRef.current.material.opacity) * 0.2;
+            if (isOpen && flickerT.current < 0.4 && !reducedMotion) {
+                flickerT.current += delta;
+                screenRef.current.material.opacity = Math.random() > 0.4 ? targetOpacity : 0.15;
+            } else {
+                if (!isOpen) flickerT.current = 0;
+                screenRef.current.material.opacity += (targetOpacity - screenRef.current.material.opacity) * 0.2;
+            }
+
+        }
+
+        if (glowRef.current) {
+            // slow "breathing" backlight behind the frame - a bias-light
+            // halo, like the ambient glow strip behind a real monitor,
+            // gently pulsing rather than sitting at one flat opacity so
+            // the wall panel reads as an alive fixture even before/
+            // without opening the panel. Skipped under reduced motion
+            // (holds at the resting midpoint of its own range instead).
+            const base = isOpen ? 0.32 : 0.16;
+            const wobble = reducedMotion ? 0 : (Math.sin(state.clock.elapsedTime * 0.7) + 1) / 2 * 0.1;
+            glowRef.current.material.opacity += (base + wobble - glowRef.current.material.opacity) * 0.08;
         }
 
     });
@@ -81,6 +97,24 @@ export default function WallDashboard({ reducedMotion }) {
         <Hotspot position={[0, 2.4, -4.8]} onSelect={() => setActive("dashboard")} reducedMotion={reducedMotion}>
             {(hovered) => (
                 <>
+                    {/* breathing backlight halo - larger than the frame
+                        and sitting just behind it (closer to the wall),
+                        additive + no depthWrite so it reads as a soft
+                        glow bleeding out from behind the panel rather
+                        than a second flat-colored plate. Opacity is
+                        entirely useFrame-driven (starts at 0 here). */}
+                    <mesh ref={glowRef} position={[0, 0, -0.04]}>
+                        <planeGeometry args={[2.6, 1.7]} />
+                        <meshBasicMaterial
+                            color="#22d3ee"
+                            transparent
+                            opacity={0}
+                            blending={AdditiveBlending}
+                            depthWrite={false}
+                            toneMapped={false}
+                        />
+                    </mesh>
+
                     <mesh>
                         <boxGeometry args={[2.1, 1.2, 0.06]} />
                         <meshStandardMaterial color="#0a0d13" roughness={0.7} />
