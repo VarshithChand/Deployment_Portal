@@ -88,7 +88,12 @@ export default function Greeter({ reducedMotion }) {
 
     return (
 
-        <group ref={outerRef} position={[2.5, 0, 4]} rotation={[0, FACE_DEFAULT, 0]}>
+        // z pulled in from 4 to 2 (further from the entrance, deeper into
+        // the room) - at the old z=4 it sat close enough to the elevated
+        // "room" overview camera (CameraRig.jsx, positioned up and behind
+        // the entrance) that it fell near the bottom edge of that shot's
+        // frustum and read as clipped/sinking below the visible frame.
+        <group ref={outerRef} position={[2.5, 0, 2]} rotation={[0, FACE_DEFAULT, 0]}>
 
             <group ref={group} scale={0.42}>
                 <primitive object={scene} />
