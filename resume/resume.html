@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Varshith Chand Vuyyuru - Resume</title>
+<style>
+  @page { size: Letter; margin: 0.42in 0.55in; }
+  * { box-sizing: border-box; }
+  body {
+    font-family: Georgia, 'Times New Roman', 'Liberation Serif', serif;
+    color: #000;
+    font-size: 10.3pt;
+    line-height: 1.22;
+    margin: 0;
+  }
+  .header { text-align: center; margin-bottom: 4pt; }
+  .header .name {
+    font-size: 23pt;
+    font-weight: 700;
+    font-variant: small-caps;
+    letter-spacing: 0.5px;
+  }
+  .header .contact { font-size: 9.4pt; margin-top: 2pt; }
+  .header .contact a { color: #000; text-decoration: underline; }
+  .header .contact .sep { margin: 0 6pt; }
+
+  .objective { font-size: 9.6pt; margin: 5pt 0 7pt; }
+
+  h2 {
+    font-variant: small-caps;
+    font-size: 12.5pt;
+    font-weight: 700;
+    margin: 7pt 0 2pt;
+    border-bottom: 1px solid #000;
+    padding-bottom: 1pt;
+  }
+
+  .entry { margin-bottom: 3pt; }
+  .row { display: flex; justify-content: space-between; align-items: baseline; gap: 10pt; }
+  .row .left { font-weight: 700; font-size: 10.2pt; }
+  .row .right { font-size: 10pt; text-align: right; white-space: nowrap; }
+  .row.sub .left, .row.sub .right { font-style: italic; font-weight: 400; font-size: 9.6pt; }
+
+  .proj-row .left { font-weight: 400; font-size: 10pt; }
+  .proj-row .left b { font-weight: 700; }
+  .proj-row .left em { font-style: italic; }
+
+  ul.bullets {
+    margin: 1pt 0 4pt;
+    padding-left: 15pt;
+  }
+  ul.bullets li {
+    font-size: 9.6pt;
+    margin-bottom: 1pt;
+  }
+
+  .skills-block p { font-size: 9.6pt; margin: 1.5pt 0; }
+  .skills-block b { font-weight: 700; }
+
+  .soft-skills { font-size: 9.6pt; }
+</style>
+</head>
+<body>
+
+  <div class="header">
+    <div class="name">Varshith Chand Vuyyuru</div>
+    <div class="contact">
+      +91-6300706438
+      <span class="sep">|</span>
+      <a href="mailto:v.varshith.2004@gmail.com">v.varshith.2004@gmail.com</a>
+      <span class="sep">|</span>
+      Bapatla, Andhra Pradesh
+    </div>
+    <div class="contact">
+      <a href="https://linkedin.com/in/varshith-chand-vuyyuru">linkedin.com/in/varshith-chand-vuyyuru</a>
+      <span class="sep">|</span>
+      <a href="https://github.com/VarshithChand">github.com/VarshithChand</a>
+    </div>
+  </div>
+
+  <div class="objective">
+    Aspiring DevOps Engineer with a strong foundation in cloud infrastructure, containerization, CI/CD,
+    and automation, building scalable and secure systems using AWS, Docker, Kubernetes, and Jenkins.
+  </div>
+
+  <h2>Education</h2>
+  <div class="entry">
+    <div class="row"><span class="left">NRI Institute of Technology</span><span class="right">GPA: 8.0 / 10</span></div>
+    <div class="row sub"><span class="left">B.Tech in Artificial Intelligence &amp; Machine Learning</span><span class="right">2026</span></div>
+  </div>
+  <div class="entry">
+    <div class="row"><span class="left">Sri Chaitanya Junior College</span><span class="right">GPA: 6.0 / 10</span></div>
+    <div class="row sub"><span class="left">Intermediate Education (MPC)</span><span class="right">2022</span></div>
+  </div>
+  <div class="entry">
+    <div class="row"><span class="left">Sri Chaitanya Techno School</span><span class="right">GPA: 9.8 / 10</span></div>
+    <div class="row sub"><span class="left">SSC Board of Education</span><span class="right">2020</span></div>
+  </div>
+
+  <h2>Technical Skills</h2>
+  <div class="skills-block">
+    <p><b>Languages:</b> Python, C#, JavaScript, YAML</p>
+    <p><b>Backend:</b> ASP.NET Core, Flask, Django, REST APIs, JWT &amp; OAuth 2.0 &nbsp;&nbsp; <b>Frontend:</b> React, HTML, CSS</p>
+    <p><b>Cloud:</b> AWS (EC2, S3, IAM, VPC, EKS, Route 53, ECR), Azure (App Service, DevOps), GCP</p>
+    <p><b>DevOps &amp; CI/CD:</b> Jenkins, GitHub Actions, Azure DevOps Pipelines, Docker, Kubernetes, Ansible, Terraform, Prometheus, Grafana</p>
+    <p><b>Data &amp; Hosting:</b> PostgreSQL, MongoDB, Render, Cloudflare Workers &nbsp;&nbsp; <b>Tools &amp; OS:</b> Git, GitHub, Maven, Linux, Windows</p>
+  </div>
+
+  <h2>Projects</h2>
+
+  <div class="entry">
+    <div class="row proj-row">
+      <span class="left"><b>Deployment Portal</b> | <em>React, ASP.NET Core, PostgreSQL, GitHub Actions, AWS/Azure/GCP, Docker</em></span>
+      <span class="right">2026</span>
+    </div>
+    <ul class="bullets">
+      <li>Built a full-stack internal CI/CD deployment portal (React 19 + Vite, ASP.NET Core) to trigger, monitor, and approve GitHub Actions workflows across environments</li>
+      <li>Implemented email/password signup, Google &amp; GitHub OAuth 2.0, JWT sessions, and mandatory TOTP multi-factor authentication</li>
+      <li>Integrated AWS, Azure, and GCP cloud service management, container registries, and Docker-based deployments directly into the portal</li>
+      <li>Designed role-based (Admin/Viewer) access with an audit log and granular per-page permissions; deployed via Cloudflare Workers, Render, and PostgreSQL</li>
+    </ul>
+  </div>
+
+  <div class="entry">
+    <div class="row proj-row">
+      <span class="left"><b>EduVault - Role-Based File Vault</b> | <em>Python, Flask, MongoDB Atlas, Werkzeug</em></span>
+      <span class="right">2026</span>
+    </div>
+    <ul class="bullets">
+      <li>Built a role-based file vault where regular users log in to upload and browse their own files, and a separate superuser dashboard manages every user and every uploaded file across the system</li>
+      <li>Used Flask with MongoDB Atlas for storage and Werkzeug for secure file handling and session-based authentication</li>
+    </ul>
+  </div>
+
+  <div class="entry">
+    <div class="row proj-row">
+      <span class="left"><b>Self-Hosted DevOps Platform</b> | <em>Docker, Forgejo, Woodpecker CI, Harbor, Traefik</em></span>
+      <span class="right">2026</span>
+    </div>
+    <ul class="bullets">
+      <li>Stood up a full DevOps stack on a single Ubuntu + Docker server: Forgejo for Git hosting, Woodpecker CI for continuous integration, and Harbor as a private container registry</li>
+      <li>Configured Traefik as a reverse proxy in front of every service, plus monitoring across the stack</li>
+    </ul>
+  </div>
+
+  <h2>Internship &amp; Certifications</h2>
+  <ul class="bullets" style="margin-top:4pt;">
+    <li><b>DevOps with AWS (Internship)</b> &mdash; IntelliQ IT Trainings, Hyderabad: Git, Jenkins, Docker, Kubernetes, Ansible, Terraform, AWS, Prometheus, Maven, Python</li>
+    <li><b>Generative AI Internship</b> &mdash; NRI Institute of Technology: prompt engineering, integrating AI APIs with Flask</li>
+    <li><b>AWS Cloud Foundations</b> &mdash; Udemy: EC2, IAM, VPC configuration</li>
+  </ul>
+
+  <h2>Soft Skills</h2>
+  <div class="soft-skills">
+    Collaboration with teams &middot; Troubleshooting and root-cause analysis &middot; Documentation &middot; Adaptability &middot; Continuous learning
+  </div>
+
+</body>
+</html>

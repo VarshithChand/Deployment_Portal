@@ -1,0 +1,177 @@
+%-------------------------
+% Resume in Latex
+% Template Author : Jake Gutierrez
+% Based off of: https://github.com/sb2nov/resume
+% License : MIT
+%------------------------
+
+\documentclass[letterpaper,11pt]{article}
+
+\usepackage{latexsym}
+\usepackage[empty]{fullpage}
+\usepackage{titlesec}
+\usepackage{marvosym}
+\usepackage[usenames,dvipsnames]{color}
+\usepackage{verbatim}
+\usepackage{enumitem}
+\usepackage[hidelinks]{hyperref}
+\usepackage{fancyhdr}
+\usepackage[english]{babel}
+\usepackage{tabularx}
+\input{glyphtounicode}
+
+
+\pagestyle{fancy}
+\fancyhf{} % clear all header and footer fields
+\fancyfoot{}
+\renewcommand{\headrulewidth}{0pt}
+\renewcommand{\footrulewidth}{0pt}
+
+% Adjust margins
+\addtolength{\oddsidemargin}{-0.5in}
+\addtolength{\evensidemargin}{-0.5in}
+\addtolength{\textwidth}{1in}
+\addtolength{\topmargin}{-.5in}
+\addtolength{\textheight}{1.0in}
+
+\urlstyle{same}
+
+\raggedbottom
+\raggedright
+\setlength{\tabcolsep}{0in}
+
+% Sections formatting
+\titleformat{\section}{
+  \vspace{-4pt}\scshape\raggedright\large
+}{}{0em}{}[\color{black}\titlerule \vspace{-5pt}]
+
+% Ensure that generate pdf is machine readable/ATS parsable
+\pdfgentounicode=1
+
+%-------------------------
+% Custom commands
+\newcommand{\resumeItem}[1]{
+  \item\small{
+    {#1 \vspace{-2pt}}
+  }
+}
+
+\newcommand{\resumeSubheading}[4]{
+  \vspace{-2pt}\item
+    \begin{tabular*}{0.97\textwidth}[t]{l@{\extracolsep{\fill}}r}
+      \textbf{#1} & #2 \\
+      \textit{\small#3} & \textit{\small #4} \\
+    \end{tabular*}\vspace{-7pt}
+}
+
+\newcommand{\resumeSubSubheading}[2]{
+    \item
+    \begin{tabular*}{0.97\textwidth}{l@{\extracolsep{\fill}}r}
+      \textit{\small#1} & \textit{\small #2} \\
+    \end{tabular*}\vspace{-7pt}
+}
+
+\newcommand{\resumeProjectHeading}[2]{
+    \item
+    \begin{tabular*}{0.97\textwidth}{l@{\extracolsep{\fill}}r}
+      \small#1 & #2 \\
+    \end{tabular*}\vspace{-7pt}
+}
+
+\newcommand{\resumeSubItem}[1]{\resumeItem{#1}\vspace{-4pt}}
+
+\renewcommand\labelitemii{$\vcenter{\hbox{\tiny$\bullet$}}$}
+
+\newcommand{\resumeSubHeadingListStart}{\begin{itemize}[leftmargin=0.15in, label={}]}
+\newcommand{\resumeSubHeadingListEnd}{\end{itemize}}
+\newcommand{\resumeItemListStart}{\begin{itemize}}
+\newcommand{\resumeItemListEnd}{\end{itemize}\vspace{-5pt}}
+
+%-------------------------------------------
+%%%%%%  RESUME STARTS HERE  %%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\begin{document}
+
+%----------HEADING----------
+\begin{center}
+    \textbf{\Huge \scshape Varshith Chand Vuyyuru} \\ \vspace{1pt}
+    \small +91-6300706438 $|$ \href{mailto:v.varshith.2004@gmail.com}{\underline{v.varshith.2004@gmail.com}} $|$
+    Bapatla, Andhra Pradesh \\ \vspace{1pt}
+    \small \href{https://linkedin.com/in/varshith-chand-vuyyuru}{\underline{linkedin.com/in/varshith-chand-vuyyuru}} $|$
+    \href{https://github.com/VarshithChand}{\underline{github.com/VarshithChand}}
+\end{center}
+
+%-----------CAREER OBJECTIVE-----------
+\small{Aspiring DevOps Engineer with a strong foundation in cloud infrastructure, containerization, CI/CD,
+and automation, building scalable and secure systems using AWS, Docker, Kubernetes, and Jenkins.} \\[4pt]
+
+%-----------EDUCATION-----------
+\section{Education}
+  \resumeSubHeadingListStart
+    \resumeSubheading
+      {NRI Institute of Technology}{GPA: 8.0 / 10}
+      {B.Tech in Artificial Intelligence \& Machine Learning}{2026}
+    \resumeSubheading
+      {Sri Chaitanya Junior College}{GPA: 6.0 / 10}
+      {Intermediate Education (MPC)}{2022}
+    \resumeSubheading
+      {Sri Chaitanya Techno School}{GPA: 9.8 / 10}
+      {SSC Board of Education}{2020}
+  \resumeSubHeadingListEnd
+
+%-----------TECHNICAL SKILLS-----------
+\section{Technical Skills}
+ \begin{itemize}[leftmargin=0.15in, label={}]
+    \small{\item{
+     \textbf{Languages}{: Python, C\#, JavaScript, YAML} \\
+     \textbf{Backend}{: ASP.NET Core, Flask, Django, REST APIs, JWT \& OAuth 2.0} \quad
+     \textbf{Frontend}{: React, HTML, CSS} \\
+     \textbf{Cloud}{: AWS (EC2, S3, IAM, VPC, EKS, Route 53, ECR), Azure (App Service, DevOps), GCP} \\
+     \textbf{DevOps \& CI/CD}{: Jenkins, GitHub Actions, Azure DevOps Pipelines, Docker, Kubernetes, Ansible, Terraform, Prometheus, Grafana} \\
+     \textbf{Data \& Hosting}{: PostgreSQL, MongoDB, Render, Cloudflare Workers} \quad
+     \textbf{Tools \& OS}{: Git, GitHub, Maven, Linux, Windows}
+    }}
+ \end{itemize}
+
+%-----------PROJECTS-----------
+\section{Projects}
+    \resumeSubHeadingListStart
+
+      \resumeProjectHeading
+          {\textbf{Deployment Portal} $|$ \emph{React, ASP.NET Core, PostgreSQL, GitHub Actions, AWS/Azure/GCP, Docker}}{2026}
+          \resumeItemListStart
+            \resumeItem{Built a full-stack internal CI/CD deployment portal (React 19 + Vite, ASP.NET Core) to trigger, monitor, and approve GitHub Actions workflows across environments}
+            \resumeItem{Implemented email/password signup, Google \& GitHub OAuth 2.0, JWT sessions, and mandatory TOTP multi-factor authentication}
+            \resumeItem{Integrated AWS, Azure, and GCP cloud service management, container registries, and Docker-based deployments directly into the portal}
+            \resumeItem{Designed role-based (Admin/Viewer) access with an audit log and granular per-page permissions; deployed via Cloudflare Workers, Render, and PostgreSQL}
+          \resumeItemListEnd
+
+      \resumeProjectHeading
+          {\textbf{EduVault -- Role-Based File Vault} $|$ \emph{Python, Flask, MongoDB Atlas, Werkzeug}}{2026}
+          \resumeItemListStart
+            \resumeItem{Built a role-based file vault where regular users log in to upload and browse their own files, and a separate superuser dashboard manages every user and every uploaded file across the system}
+            \resumeItem{Used Flask with MongoDB Atlas for storage and Werkzeug for secure file handling and session-based authentication}
+          \resumeItemListEnd
+
+      \resumeProjectHeading
+          {\textbf{Self-Hosted DevOps Platform} $|$ \emph{Docker, Forgejo, Woodpecker CI, Harbor, Traefik}}{2026}
+          \resumeItemListStart
+            \resumeItem{Stood up a full DevOps stack on a single Ubuntu + Docker server: Forgejo for Git hosting, Woodpecker CI for continuous integration, and Harbor as a private container registry}
+            \resumeItem{Configured Traefik as a reverse proxy in front of every service, plus monitoring across the stack}
+          \resumeItemListEnd
+
+    \resumeSubHeadingListEnd
+
+%-----------INTERNSHIP & CERTIFICATIONS-----------
+\section{Internship \& Certifications}
+  \resumeSubHeadingListStart
+    \resumeItem{\textbf{DevOps with AWS (Internship)} --- IntelliQ IT Trainings, Hyderabad: Git, Jenkins, Docker, Kubernetes, Ansible, Terraform, AWS, Prometheus, Maven, Python}
+    \resumeItem{\textbf{Generative AI Internship} --- NRI Institute of Technology: prompt engineering, integrating AI APIs with Flask}
+    \resumeItem{\textbf{AWS Cloud Foundations} --- Udemy: EC2, IAM, VPC configuration}
+  \resumeSubHeadingListEnd
+
+%-----------SOFT SKILLS-----------
+\section{Soft Skills}
+\small{Collaboration with teams $\cdot$ Troubleshooting and root-cause analysis $\cdot$ Documentation $\cdot$ Adaptability $\cdot$ Continuous learning}
+
+\end{document}
