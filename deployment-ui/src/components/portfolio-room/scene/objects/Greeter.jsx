@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from "react";
-import { useFrame } from "@react-three/fiber";
 import { useGLTF, useAnimations, Html } from "@react-three/drei";
 import { useStore } from "../../state/store";
 
@@ -21,20 +20,20 @@ const MODEL_URL = "/models/Greeter.glb";
 // public/models/Greeter.glb for your own export whenever you have one -
 // nothing else needs to change as long as the new file also has a clip
 // with "wave" in its name (see the animation lookup below).
-// Default facing (into the room, per the original placement); turns to
-// face the opposite way - toward the "room" overview camera, which sits
-// well outside the entrance the greeter already stands near - while that
-// view is active. FACE_ROOM is just the negation of FACE_DEFAULT rather
-// than a precisely-aimed angle at the camera's exact position - a full
-// turnaround reads as "now facing you" regardless of the model's own
-// raw forward axis, without needing to know that axis for real.
-const FACE_DEFAULT = Math.PI;
-const FACE_ROOM = 0;
+// Faces the viewer by default. The earlier version had this at Math.PI
+// (into the room) on the assumption that was the original placement's
+// intent, with a turn-to-0 gesture reserved for when the "room" overview
+// camera was active - a screenshot showing the greeter's back turned to
+// the camera in the *default* view (not Overview) proved that assumption
+// backwards: 0 is the angle that actually faces the camera, in both the
+// default and the Overview views alike (they sit on the same general
+// side of the room, just at different distances/heights), so there's no
+// second angle left to turn to - just one correct facing, used always.
+const FACE_VIEWER = 0;
 
 export default function Greeter({ reducedMotion }) {
 
     const group = useRef();
-    const outerRef = useRef();
     const { scene, animations } = useGLTF(MODEL_URL);
     const { actions, names } = useAnimations(animations, group);
     const active = useStore((s) => s.active);
@@ -55,9 +54,8 @@ export default function Greeter({ reducedMotion }) {
 
     }, [actions, names, reducedMotion]);
 
-    // Turn first, speak after - the message only appears once the turn
-    // has had time to mostly finish (skipped under reduced motion, where
-    // the turn itself is instant anyway).
+    // Message swaps in once Overview has been active a moment (skipped
+    // under reduced motion, where it should just show immediately).
     useEffect(() => {
 
         if (!facingRoom) {
@@ -70,21 +68,6 @@ export default function Greeter({ reducedMotion }) {
 
     }, [facingRoom, reducedMotion]);
 
-    useFrame(() => {
-
-        if (!outerRef.current) return;
-
-        const target = facingRoom ? FACE_ROOM : FACE_DEFAULT;
-
-        if (reducedMotion) {
-            outerRef.current.rotation.y = target;
-            return;
-        }
-
-        outerRef.current.rotation.y += (target - outerRef.current.rotation.y) * 0.06;
-
-    });
-
     return (
 
         // z pulled in from 4 to 2 (further from the entrance, deeper into
@@ -95,7 +78,7 @@ export default function Greeter({ reducedMotion }) {
         // x nudged in from 2.5 to 2.1 - extra clearance from the rack
         // further along the right wall, now that the model reads at its
         // true (much larger than expected) size at this camera distance.
-        <group ref={outerRef} position={[2.1, 0, 2]} rotation={[0, FACE_DEFAULT, 0]}>
+        <group position={[2.1, 0, 2]} rotation={[0, FACE_VIEWER, 0]}>
 
             {/* scale roughly halved (0.42 -> 0.2) - at 0.42 this GLB's own
                 raw export size towered over the desk/rack/door, which

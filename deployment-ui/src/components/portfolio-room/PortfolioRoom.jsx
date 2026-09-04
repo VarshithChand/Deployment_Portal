@@ -428,7 +428,13 @@ const CSS = `
 .proom-dashboard-metrics span:last-child{font-size:10px; color:var(--pr-muted); letter-spacing:.04em;}
 .proom-dashboard-note{margin:0; font-size:11px; color:var(--pr-muted); font-style:italic;}
 
-.proom-resume-preview{width:100%; aspect-ratio:1/1.294; border:1px solid var(--pr-line); border-radius:10px;
+/* fixed height (was aspect-ratio:1/1.294 - a full letter-page ratio at
+   this panel's own width worked out to ~725px tall, taller than the
+   panel's own 80vh cap, so the preview alone pushed the Download/Open
+   buttons below it out of view entirely, scroll or not) rather than
+   trying to show a full page at its real proportions - this is a quick
+   peek, not the reading view; Download/Open are the real actions. */
+.proom-resume-preview{width:100%; height:min(46vh, 380px); border:1px solid var(--pr-line); border-radius:10px;
   overflow:hidden; background:var(--pr-track); margin-bottom:14px;}
 .proom-resume-preview iframe{width:100%; height:100%; border:0; display:block;}
 
