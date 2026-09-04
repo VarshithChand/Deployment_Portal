@@ -99,7 +99,12 @@ export default function CeilingLightSkills({ reducedMotion, theme }) {
         }
 
         if (roomLightRef.current) {
-            const targetRoomLight = clusterSwitchOn && isOpen ? 1.6 : 0;
+            // was 1.6 at a 9-unit falloff - almost the room's own
+            // diagonal - bright enough combined with Bloom's fairly low
+            // threshold (Experience.jsx, luminanceThreshold=0.2) to
+            // overexpose the desk/monitor and everything else nearby
+            // into blown highlights instead of just lighting the area.
+            const targetRoomLight = clusterSwitchOn && isOpen ? 0.9 : 0;
             roomLightRef.current.intensity += (targetRoomLight - roomLightRef.current.intensity) * 0.1;
         }
 
@@ -133,7 +138,11 @@ export default function CeilingLightSkills({ reducedMotion, theme }) {
                 <meshStandardMaterial color="#1a2028" />
             </mesh>
 
-            <pointLight ref={roomLightRef} color="#22d3ee" intensity={0} distance={9} />
+            {/* distance pulled in from 9 to 5.5 - close to the room's own
+                diagonal, so this "pendant over the desk" light was
+                reaching well past the desk and into the rest of the
+                room instead of staying a localized glow */}
+            <pointLight ref={roomLightRef} color="#22d3ee" intensity={0} distance={5.5} />
 
             <Hotspot position={[0, 0, 0]} onSelect={() => setActive("skills")} reducedMotion={reducedMotion}>
                 {(hovered) => (

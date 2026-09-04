@@ -1,5 +1,19 @@
 import { create } from "zustand";
 
+// Same day/night rule as ThemeContext.jsx's own isDaytimeNow() (6am-6pm
+// local = day) - duplicated rather than imported because this store
+// module has to be import-safe standalone (it's read from several
+// components independently) and the rule itself is one line; it's not
+// reading the theme's own output, just applying the identical clock
+// check so the cluster switch's default agrees with what the room
+// already looks like (dark theme) the first time it loads.
+function isNightNow() {
+
+    const hour = new Date().getHours();
+    return hour < 6 || hour >= 18;
+
+}
+
 // SECTIONS order is the sequence Nav and the WASD/arrow-key/scroll loop
 // (see PortfolioRoom.jsx's useSectionLoop) all walk through, in the
 // order explicitly requested: about -> skills -> projects -> experience
@@ -89,7 +103,12 @@ export const useStore = create((set) => ({
     // sets an explicit value (for the o+N/f+N keyboard shortcuts, which
     // mean a specific on/off, not toggle); toggleSwitch flips it (for
     // clicking the physical switch itself).
-    switches: { fan: true, bedLight: false, cluster: false },
+    // cluster's initial value follows isNightNow() - "at night the
+    // cluster light should default on" - rather than always starting
+    // false. This is a one-time initial value, same as fan's own
+    // always-true default, not a continuous override: switching it off
+    // by hand (switchboard or the f+3 shortcut) sticks, same as before.
+    switches: { fan: true, bedLight: false, cluster: isNightNow() },
     setSwitch: (name, value) => set((s) => ({ switches: { ...s.switches, [name]: value } })),
     toggleSwitch: (name) => set((s) => ({ switches: { ...s.switches, [name]: !s.switches[name] } }))
 }));
