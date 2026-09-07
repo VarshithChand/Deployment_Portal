@@ -54,6 +54,64 @@ public class SettingsService
     // harmless (the statement is safe to run concurrently).
     private static bool _tableEnsured;
 
+    // Serializes read-modify-write cycles against this file's single
+    // shared JSON blob (no other locking exists anywhere in the read/write
+    // path - see ReadRootAsync/WriteRootAsync below). Without this, two
+    // requests that both read the blob before either writes it back will
+    // silently lose whichever one wrote second's changes - confirmed twice
+    // now: once when a per-request session-touch write clobbered a saved
+    // GitHub PAT, and again when SaveUserGitHubCredentialsAsync itself lost
+    // a token the same way. AcquireWriteLockAsync is reentrant (via
+    // _holdingWriteLock) specifically because SaveUserGitHubCredentialsAsync
+    // calls DeletePatUserAsync/MigrateSessionDataAsync internally, each of
+    // which also needs this same lock when called on their own - without
+    // reentrancy, that nested call would deadlock against itself.
+    //
+    // This wraps the specific write paths already proven to collide in
+    // practice (GitHub credential saves/clears, and the login-time writes -
+    // session recording, login history, last-login - most likely to fire in
+    // the background while someone is saving something else) rather than
+    // every one of this file's ~90 write methods. The rest of this file's
+    // writes remain unprotected against each other - a real gap, but a
+    // separate, larger piece of work (see the account team's own
+    // architecture discussion) than patching the specific failure this was
+    // written to fix.
+    private static readonly SemaphoreSlim _writeLock = new(1, 1);
+    private static readonly AsyncLocal<bool> _holdingWriteLock = new();
+
+    // Instance method (not static) specifically so it can clear THIS
+    // request's own _cachedRoot below - a scoped SettingsService instance
+    // that already did an earlier read this same request (very real: see
+    // SettingsController's GitHub save action, which reads existing
+    // credentials before calling the save) would otherwise hand
+    // ReadRootAsync() a snapshot taken before this lock was even acquired,
+    // silently defeating the lock the moment it's actually granted.
+    private async Task<IDisposable> AcquireWriteLockAsync()
+    {
+        if (_holdingWriteLock.Value)
+            return NoopLockHandle.Instance;
+
+        await _writeLock.WaitAsync();
+        _holdingWriteLock.Value = true;
+        _cachedRoot = null;
+        return new WriteLockHandle();
+    }
+
+    private sealed class WriteLockHandle : IDisposable
+    {
+        public void Dispose()
+        {
+            _holdingWriteLock.Value = false;
+            _writeLock.Release();
+        }
+    }
+
+    private sealed class NoopLockHandle : IDisposable
+    {
+        public static readonly NoopLockHandle Instance = new();
+        public void Dispose() { }
+    }
+
     // Memoized for the lifetime of THIS request only - SettingsService is
     // registered AddScoped (one instance per HTTP request, see Program.cs),
     // so there's no cross-request staleness risk here at all, just a plain
@@ -322,6 +380,8 @@ public class SettingsService
     // of this data.
     public async Task DeletePatUserAsync(string key)
     {
+        using var _ = await AcquireWriteLockAsync();
+
         var root = await ReadRootAsync();
 
         (root["Users"] as JObject)?.Remove(key);
@@ -358,6 +418,8 @@ public class SettingsService
     // being silently overwritten by it.
     private async Task MigrateSessionDataAsync(string fromKey, string toKey)
     {
+        using var _ = await AcquireWriteLockAsync();
+
         var root = await ReadRootAsync();
 
         // Returns whether it actually migrated something, rather than
@@ -437,6 +499,8 @@ public class SettingsService
     public async Task<SaveGitHubCredentialsResult> SaveUserGitHubCredentialsAsync(
         string login, GitHubSettingsUpdateDto update, bool allowTakeoverIfActive = false)
     {
+        using var _ = await AcquireWriteLockAsync();
+
         var root = await ReadRootAsync();
 
         var users = root["UserGitHubCredentials"] as JObject ?? new JObject();
@@ -553,6 +617,8 @@ public class SettingsService
 
     public async Task ClearUserGitHubTokenAsync(string login)
     {
+        using var _ = await AcquireWriteLockAsync();
+
         var root = await ReadRootAsync();
 
         if (root["UserGitHubCredentials"] is JObject users && users[login] is JObject entry)
@@ -1822,6 +1888,8 @@ public class SettingsService
 
     public async Task UpdateUserLastLoginAsync(string id)
     {
+        using var _ = await AcquireWriteLockAsync();
+
         var root = await ReadRootAsync();
         var (users, _) = await GetOrCreateUsersSectionAsync(root);
 
@@ -1964,6 +2032,8 @@ public class SettingsService
     // grow unbounded across years of logins.
     public async Task RecordSessionAsync(string id, string jti, string? userAgent, string? ipAddress)
     {
+        using var _ = await AcquireWriteLockAsync();
+
         var root = await ReadRootAsync();
         var (users, _) = await GetOrCreateUsersSectionAsync(root);
 
@@ -1997,6 +2067,8 @@ public class SettingsService
     // there's nothing to touch.
     public async Task TouchSessionAsync(string id, string jti, string? userAgent, string? ipAddress)
     {
+        using var _ = await AcquireWriteLockAsync();
+
         var root = await ReadRootAsync();
         var (users, _) = await GetOrCreateUsersSectionAsync(root);
 
@@ -2042,6 +2114,8 @@ public class SettingsService
     // device) reliably sees it as revoked instead of racing a delete.
     public async Task RevokeSessionAsync(string id, string jti)
     {
+        using var _ = await AcquireWriteLockAsync();
+
         var root = await ReadRootAsync();
         var (users, _) = await GetOrCreateUsersSectionAsync(root);
 
@@ -2080,6 +2154,8 @@ public class SettingsService
     // recent-activity view rather than a permanent audit log.
     public async Task RecordLoginHistoryAsync(string id, string? ipAddress, string? userAgent, bool success)
     {
+        using var _ = await AcquireWriteLockAsync();
+
         var root = await ReadRootAsync();
         var (users, _) = await GetOrCreateUsersSectionAsync(root);
 
