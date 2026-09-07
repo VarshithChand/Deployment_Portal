@@ -10,10 +10,14 @@ import useNavigation from "../hooks/useNavigation";
 import useToast from "../hooks/useToast";
 import usePolling from "../hooks/usePolling";
 import useGithubDeploymentActivity from "../hooks/useGithubDeploymentActivity";
+import useAzureDevOpsStatus from "../hooks/useAzureDevOpsStatus";
 import useSystemHealthSummary from "../hooks/useSystemHealthSummary";
 import { getPendingApprovals, submitApprovalDecision } from "../services/approvalsService";
 import { getEnvironments } from "../services/environmentsService";
 import PageLayout from "../components/layout/PageLayout";
+import { GitHubGroupIcon, AzureDevOpsIcon, GitLabIcon, BitbucketIcon } from "../components/layout/SidebarIcons";
+import AllRepositoriesCard from "../components/dashboard/AllRepositoriesCard";
+import AzureDevOpsCard from "../components/dashboard/AzureDevOpsCard";
 
 // Round 7 - a full visual + structural rework, replacing the flex-column
 // card layout (rounds 1-6) with a single dense "ops console" page. Every
@@ -154,12 +158,13 @@ function Dot({ s, pulse }) {
 
 export default function Dashboard() {
 
-    const { githubTokenConfigured, canApproveReleases } = useAuth();
+    const { githubTokenConfigured, canApproveReleases, githubOwner, githubRepository } = useAuth();
     const { setTab, goToEnvironment } = useNavigation();
     const toast = useToast();
 
     const { rows } = useSystemHealthSummary();
-    const { runs } = useGithubDeploymentActivity(githubTokenConfigured);
+    const { runs, repoCount } = useGithubDeploymentActivity(githubTokenConfigured);
+    const azureDevOps = useAzureDevOpsStatus();
 
     const [environments, setEnvironments] = useState([]);
     const [envLoading, setEnvLoading] = useState(true);
@@ -225,6 +230,17 @@ export default function Dashboard() {
 
     const selectedEnvDef = envFilter === "all" ? null : environments.find((e) => e.name === envFilter);
 
+    // AllRepositoriesCard's own `repository` prop wants the GitHub API's
+    // full repo shape (full_name, or owner.login + name - see its
+    // currentFullName logic) so it can mark the active card "Current".
+    // AuthContext only exposes owner/repo as plain strings, and fetching
+    // the full GitHub object again here would just duplicate a call this
+    // page doesn't otherwise need - a minimal { full_name } object is
+    // enough for that one comparison.
+    const currentRepository = githubOwner && githubRepository
+        ? { full_name: `${githubOwner}/${githubRepository}` }
+        : null;
+
     const visibleRuns = safeRuns
         .filter((r) => !selectedEnvDef || r.name === selectedEnvDef.workflowName)
         .filter((r) => {
@@ -235,6 +251,40 @@ export default function Dashboard() {
         .slice(0, 10);
 
     const inFlight = safeRuns.filter((r) => r.status === "in_progress" || r.status === "queued").length;
+
+    // GitLab/Bitbucket have no real backend integration yet (see
+    // pages/GitLab.jsx and pages/Bitbucket.jsx - real, visible placeholders,
+    // not a guessed credential shape), so their tiles here say exactly that
+    // rather than fabricating a count. GitHub/Azure DevOps reuse the same
+    // TTL-cached hooks other dashboard cards already call (repoCount rides
+    // along on useGithubDeploymentActivity's existing call above - no new
+    // fetch), so this section is real data, not a second data layer.
+    const sourceControlTiles = [
+        {
+            key: "github", label: "GitHub", Icon: GitHubGroupIcon, tab: "deploy",
+            connected: githubTokenConfigured,
+            stat: githubTokenConfigured ? `${repoCount ?? "—"} ${repoCount === 1 ? "repo" : "repos"}` : "Not connected",
+            sub: githubTokenConfigured && inFlight > 0 ? `${inFlight} running` : null
+        },
+        {
+            key: "azuredevops", label: "Azure DevOps", Icon: AzureDevOpsIcon, tab: "azureDevOpsPipelines",
+            connected: azureDevOps.configured,
+            stat: azureDevOps.configured ? "Connected" : "Not connected",
+            sub: null
+        },
+        {
+            key: "gitlab", label: "GitLab", Icon: GitLabIcon, tab: "gitlab",
+            connected: false,
+            stat: "Not built yet",
+            sub: null
+        },
+        {
+            key: "bitbucket", label: "Bitbucket", Icon: BitbucketIcon, tab: "bitbucket",
+            connected: false,
+            stat: "Not built yet",
+            sub: null
+        }
+    ];
 
     const downRows = rows.filter((r) => r.configured && !r.healthy);
     const okRows = rows.filter((r) => r.configured && r.healthy);
@@ -378,6 +428,36 @@ export default function Dashboard() {
                             <span className="dp-vlabel"><ShieldCheck size={12} /> Approvals</span>
                             <span className="dp-vval" style={{ color: pendingApprovals.length ? S.queued : S.ok }}>{pendingApprovals.length}</span>
                         </div>
+
+                    </div>
+
+                </section>
+
+                <section className="dp-panel dp-sc-panel">
+
+                    <div className="dp-panel-head">
+                        <div className="dp-panel-title"><GitBranch size={15} /> Source Control</div>
+                    </div>
+
+                    <div className="dp-sc-grid">
+
+                        {sourceControlTiles.map((t) => (
+
+                            <button
+                                key={t.key}
+                                type="button"
+                                className={"dp-sc-card" + (t.connected ? " on" : "")}
+                                onClick={() => setTab(t.tab)}
+                            >
+                                <span className="dp-sc-icon"><t.Icon /></span>
+                                <span className="dp-sc-txt">
+                                    <span className="dp-sc-name">{t.label}</span>
+                                    <span className="dp-sc-stat">{t.stat}{t.sub ? ` · ${t.sub}` : ""}</span>
+                                </span>
+                                <ChevronRight size={14} className="dp-sc-chevron" />
+                            </button>
+
+                        ))}
 
                     </div>
 
@@ -587,6 +667,29 @@ export default function Dashboard() {
 
                 </section>
 
+                {/* AllRepositoriesCard manages its own visibility (a
+                    ReconnectPrompt when the token was cleared but an owner/
+                    repo is still remembered, the full picker once
+                    configured, or nothing at all otherwise) - gated here on
+                    the same condition so this section never renders an
+                    empty panel box around a null child. */}
+                {(githubTokenConfigured || (githubOwner && githubRepository)) && (
+
+                    // Not wrapped in .dp-panel - AllRepositoriesCard already
+                    // renders its own .card (near-identical tokens: same
+                    // border/radius/shadow variables .dp-panel uses), so
+                    // this is just the page's own 16px rhythm around it,
+                    // not a second nested box.
+                    <div className="dp-sc-browser">
+
+                        <AllRepositoriesCard repository={currentRepository}>
+                            <AzureDevOpsCard />
+                        </AllRepositoriesCard>
+
+                    </div>
+
+                )}
+
                 <section className="dp-panel">
 
                     <div className="dp-panel-head">
@@ -701,6 +804,20 @@ const CSS = `
 .dp-spark-col{display:flex; flex-direction:column-reverse; gap:1px; flex:1;}
 .dp-spark-col .good{background:color-mix(in srgb, ${S.ok} 85%, transparent); border-radius:1px; min-height:1px;}
 .dp-spark-col .bad{background:${S.down}; border-radius:1px;}
+
+.dp-sc-panel{margin-bottom:16px;}
+.dp-sc-browser{margin-bottom:16px;}
+.dp-sc-grid{display:grid; grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); gap:10px; padding:14px;}
+.dp-sc-card{display:flex; align-items:center; gap:11px; padding:12px 13px; border-radius:12px;
+  background:var(--card-bg-strong); border:1px solid var(--stroke); text-align:left; transition:.15s;}
+.dp-sc-card:hover{border-color:var(--heading-accent);}
+.dp-sc-card.on .dp-sc-icon{color:var(--heading-accent); background:color-mix(in srgb, var(--heading-accent) 16%, transparent);}
+.dp-sc-icon{display:grid; place-items:center; width:32px; height:32px; border-radius:9px; flex:0 0 auto;
+  color:var(--text-muted); background:var(--card-bg); border:1px solid var(--stroke);}
+.dp-sc-txt{display:flex; flex-direction:column; gap:2px; min-width:0; flex:1;}
+.dp-sc-name{font-size:13px; font-weight:600; color:var(--text);}
+.dp-sc-stat{font-size:11.5px; color:var(--text-muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+.dp-sc-chevron{color:var(--text-muted); flex:0 0 auto;}
 
 .dp-grid{display:grid; grid-template-columns:1.7fr 1fr; gap:16px; margin-bottom:16px; align-items:start;}
 .dp-rail-col{display:flex; flex-direction:column; gap:16px;}
