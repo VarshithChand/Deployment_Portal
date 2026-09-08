@@ -1991,6 +1991,8 @@ public class SettingsService
     // why it's read-only.
     public async Task UpdateUserProfileAsync(string id, string? displayName, string? username, string? phoneNumber)
     {
+        using var _ = await AcquireWriteLockAsync();
+
         var root = await ReadRootAsync();
         var (users, _) = await GetOrCreateUsersSectionAsync(root);
 
@@ -2013,6 +2015,8 @@ public class SettingsService
     // see AccountAuthController's DELETE avatar endpoint.
     public async Task SetUserAvatarAsync(string id, string? base64)
     {
+        using var _ = await AcquireWriteLockAsync();
+
         var root = await ReadRootAsync();
         var (users, _) = await GetOrCreateUsersSectionAsync(root);
 
