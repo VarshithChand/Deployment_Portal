@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { Pencil, Check, X } from "lucide-react";
 
 import useToast from "../../hooks/useToast";
 import useConfirm from "../../hooks/useConfirm";
@@ -91,6 +92,24 @@ function formatDateTime(value) {
     if (!value) return "—";
 
     return new Date(value).toLocaleString();
+
+}
+
+// Read-only "view mode" row for one profile field - a plain label+value
+// pair rather than a disabled input. A disabled-looking input read as
+// broken/blocked rather than "click the pencil to edit this," which is
+// what actually prompted this redesign - see AccountView's own header
+// comment.
+function ProfileField({ label, value }) {
+
+    return (
+
+        <div className="profile-field">
+            <span className="profile-field-label">{label}</span>
+            <span className={"profile-field-value" + (value ? "" : " muted")}>{value || "Not set"}</span>
+        </div>
+
+    );
 
 }
 
@@ -369,7 +388,57 @@ export default function AccountView() {
 
         <div className="card">
 
-            <h2 className="card-title">Profile</h2>
+            <div className="access-panel-header">
+
+                <h2 className="card-title">Profile</h2>
+
+                {!loading && (
+
+                    editingProfile ? (
+
+                        <div style={{ display: "flex", gap: 6 }}>
+
+                            <button
+                                type="submit"
+                                form="account-profile-form"
+                                className="icon-btn icon-btn-success"
+                                disabled={savingProfile}
+                                title="Save changes"
+                                aria-label="Save changes"
+                            >
+                                <Check size={16} />
+                            </button>
+
+                            <button
+                                type="button"
+                                className="icon-btn icon-btn-danger"
+                                disabled={savingProfile}
+                                onClick={handleCancelProfile}
+                                title="Cancel"
+                                aria-label="Cancel"
+                            >
+                                <X size={16} />
+                            </button>
+
+                        </div>
+
+                    ) : (
+
+                        <button
+                            type="button"
+                            className="icon-btn"
+                            onClick={() => setEditingProfile(true)}
+                            title="Edit profile"
+                            aria-label="Edit profile"
+                        >
+                            <Pencil size={15} />
+                        </button>
+
+                    )
+
+                )}
+
+            </div>
 
             {loading ? (
 
@@ -421,82 +490,59 @@ export default function AccountView() {
 
                 </div>
 
-                <form onSubmit={handleSaveProfile}>
+                <ProfileField label="Email" value={account?.email} />
+                <p className="field-hint" style={{ marginTop: -6 }}>
+                    Your email is tied to how you sign in and can't be changed here.
+                </p>
 
-                    <div className="form-group">
-                        <label htmlFor="account-email">Email</label>
-                        <input
-                            id="account-email"
-                            type="email"
-                            className="form-control"
-                            value={account?.email || ""}
-                            disabled
-                        />
-                        <p className="field-hint" style={{ marginBottom: 0 }}>
-                            Your email is tied to how you sign in and can't be changed here.
-                        </p>
-                    </div>
+                {editingProfile ? (
 
-                    <div className="form-group">
-                        <label htmlFor="account-display-name">Name</label>
-                        <input
-                            id="account-display-name"
-                            type="text"
-                            className="form-control"
-                            value={profileForm.displayName}
-                            disabled={!editingProfile}
-                            onChange={(e) => setProfileForm({ ...profileForm, displayName: e.target.value })}
-                        />
-                    </div>
+                    <form id="account-profile-form" onSubmit={handleSaveProfile}>
 
-                    <div className="form-group">
-                        <label htmlFor="account-username">Username</label>
-                        <input
-                            id="account-username"
-                            type="text"
-                            className="form-control"
-                            value={profileForm.username}
-                            disabled={!editingProfile}
-                            onChange={(e) => setProfileForm({ ...profileForm, username: e.target.value })}
-                        />
-                    </div>
+                        <div className="form-group">
+                            <label htmlFor="account-display-name">Name</label>
+                            <input
+                                id="account-display-name"
+                                type="text"
+                                className="form-control"
+                                value={profileForm.displayName}
+                                onChange={(e) => setProfileForm({ ...profileForm, displayName: e.target.value })}
+                            />
+                        </div>
 
-                    <div className="form-group">
-                        <label htmlFor="account-phone">Phone Number</label>
-                        <input
-                            id="account-phone"
-                            type="tel"
-                            className="form-control"
-                            value={profileForm.phoneNumber}
-                            disabled={!editingProfile}
-                            onChange={(e) => setProfileForm({ ...profileForm, phoneNumber: e.target.value })}
-                        />
-                    </div>
+                        <div className="form-group">
+                            <label htmlFor="account-username">Username</label>
+                            <input
+                                id="account-username"
+                                type="text"
+                                className="form-control"
+                                value={profileForm.username}
+                                onChange={(e) => setProfileForm({ ...profileForm, username: e.target.value })}
+                            />
+                        </div>
 
-                    <div className="button-row">
+                        <div className="form-group">
+                            <label htmlFor="account-phone">Phone Number</label>
+                            <input
+                                id="account-phone"
+                                type="tel"
+                                className="form-control"
+                                value={profileForm.phoneNumber}
+                                onChange={(e) => setProfileForm({ ...profileForm, phoneNumber: e.target.value })}
+                            />
+                        </div>
 
-                        {editingProfile ? (
+                    </form>
 
-                            <>
-                                <button type="submit" className="btn btn-primary" disabled={savingProfile}>
-                                    {savingProfile ? "Saving..." : "Save"}
-                                </button>
-                                <button type="button" className="btn" disabled={savingProfile} onClick={handleCancelProfile}>
-                                    Cancel
-                                </button>
-                            </>
+                ) : (
 
-                        ) : (
+                    <>
+                        <ProfileField label="Name" value={account?.displayName} />
+                        <ProfileField label="Username" value={account?.username} />
+                        <ProfileField label="Phone Number" value={account?.phoneNumber} />
+                    </>
 
-                            <button type="button" className="btn btn-primary" onClick={() => setEditingProfile(true)}>
-                                Edit Profile
-                            </button>
-
-                        )}
-
-                    </div>
-
-                </form>
+                )}
 
                 </>
 

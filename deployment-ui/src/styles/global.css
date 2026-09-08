@@ -2994,6 +2994,125 @@ textarea{
 
 }
 
+/* Settings > Account's Profile card - a pencil-icon edit trigger in the
+   card header (.access-panel-header, reused as-is) instead of a bottom
+   "Edit Profile" button, swapping to a check/cancel pair while editing.
+   .profile-field is the read-only "view mode" row a field shows before
+   that pencil is clicked - a plain label+value pair, not a greyed-out
+   disabled input (which read as broken/blocked rather than "not editing
+   yet" - see AccountView.jsx's own comment on why this replaced that). */
+.icon-btn{
+
+    display:inline-flex;
+
+    align-items:center;
+
+    justify-content:center;
+
+    width:32px;
+
+    height:32px;
+
+    border-radius:8px;
+
+    border:1px solid var(--stroke);
+
+    background:var(--card-bg-strong);
+
+    color:var(--text-muted);
+
+    transition:.15s;
+
+}
+
+.icon-btn:hover:not(:disabled){
+
+    color:var(--heading-accent);
+
+    border-color:var(--heading-accent);
+
+}
+
+.icon-btn:disabled{
+
+    opacity:.5;
+
+}
+
+.icon-btn-success{
+
+    color:var(--viz-good, #16a34a);
+
+}
+
+.icon-btn-success:hover:not(:disabled){
+
+    color:var(--viz-good, #16a34a);
+
+    border-color:var(--viz-good, #16a34a);
+
+    background:color-mix(in srgb, var(--viz-good, #16a34a) 14%, var(--card-bg-strong));
+
+}
+
+.icon-btn-danger:hover:not(:disabled){
+
+    color:#dc2626;
+
+    border-color:#dc2626;
+
+}
+
+.profile-field{
+
+    display:flex;
+
+    flex-direction:column;
+
+    gap:4px;
+
+    padding:10px 0;
+
+    border-bottom:1px solid var(--border);
+
+}
+
+.profile-field:last-of-type{
+
+    border-bottom:0;
+
+}
+
+.profile-field-label{
+
+    font-size:12px;
+
+    font-weight:600;
+
+    text-transform:uppercase;
+
+    letter-spacing:.04em;
+
+    color:var(--text-muted);
+
+}
+
+.profile-field-value{
+
+    font-size:15px;
+
+    color:var(--text);
+
+}
+
+.profile-field-value.muted{
+
+    color:var(--text-muted);
+
+    font-style:italic;
+
+}
+
 /* Standard "sr-only" technique - present for screen readers/assistive
    tech (unlike display:none, which removes it from the accessibility
    tree too) but takes no visual space. Used for fieldset legends and
