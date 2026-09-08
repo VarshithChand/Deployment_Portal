@@ -31,6 +31,11 @@ export const getAzureDevOpsRunningBuilds = async (project) => {
     return response.data;
 };
 
+export const cancelAzureDevOpsBuild = async (project, buildId) => {
+    const response = await azureDevOpsApi.post(`/projects/${encodeURIComponent(project)}/builds/${buildId}/cancel`);
+    return response.data;
+};
+
 // ---- History: every run across every pipeline in the project ----
 
 export const getAzureDevOpsHistory = async (project) => {

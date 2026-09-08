@@ -34,6 +34,10 @@ export const getRepoRuns = async (owner, repo) => {
     return await api.get("/repo-runs", { params: { owner, repo } });
 };
 
+export const cancelWorkflowRun = async (runId) => {
+    return await api.post(`/runs/${runId}/cancel`);
+};
+
 // Batched version of getRepoRuns - one request for every repo in the grid
 // instead of one per repo. `repos` is [{ owner, repo }, ...]; the response
 // is a { "owner/repo": [...runs] } map.

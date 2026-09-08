@@ -2,7 +2,7 @@ import { useState } from "react";
 import {
     Cloud, Server, Boxes, ShieldCheck, Activity,
     GitBranch, Clock, ArrowUpRight, Check, X,
-    AlertTriangle, CircleDot, Play, Radio, Terminal, ChevronRight
+    AlertTriangle, CircleDot, Play, Radio, Terminal, ChevronRight, Square
 } from "lucide-react";
 
 import useAuth from "../hooks/useAuth";
@@ -14,6 +14,7 @@ import useAzureDevOpsStatus from "../hooks/useAzureDevOpsStatus";
 import useSystemHealthSummary from "../hooks/useSystemHealthSummary";
 import { getPendingApprovals, submitApprovalDecision } from "../services/approvalsService";
 import { getEnvironments } from "../services/environmentsService";
+import { cancelWorkflowRun } from "../services/githubService";
 import PageLayout from "../components/layout/PageLayout";
 import { GitHubGroupIcon, AzureDevOpsIcon, GitLabIcon, BitbucketIcon } from "../components/layout/SidebarIcons";
 import AllRepositoriesCard from "../components/dashboard/AllRepositoriesCard";
@@ -159,7 +160,8 @@ function Dot({ s, pulse }) {
 
 export default function Dashboard() {
 
-    const { githubTokenConfigured, canApproveReleases, githubOwner, githubRepository } = useAuth();
+    const { githubTokenConfigured, canApproveReleases, githubOwner, githubRepository, tokenOwner, isAdminSession } = useAuth();
+    const canStopRuns = isAdminSession || !!tokenOwner?.canDeploy;
     const { setTab, goToEnvironment } = useNavigation();
     const toast = useToast();
 
@@ -167,6 +169,7 @@ export default function Dashboard() {
     const { runs, repoCount } = useGithubDeploymentActivity(githubTokenConfigured);
     const azureDevOps = useAzureDevOpsStatus();
 
+    const [stoppingRunId, setStoppingRunId] = useState(null);
     const [environments, setEnvironments] = useState([]);
     const [envLoading, setEnvLoading] = useState(true);
     const [approvals, setApprovals] = useState([]);
@@ -235,6 +238,29 @@ export default function Dashboard() {
         }
         catch (err) {
             toast.show(err.response?.data?.message || "Couldn't submit that decision.", "error");
+        }
+
+    }
+
+    // Reloads on success rather than trying to patch useGithubDeploymentActivity's
+    // own module-level cache from here - same "something changed, refresh
+    // everything" pattern AllRepositoriesCard's switch-repo flow already
+    // uses, simpler than threading a refetch callback through a hook this
+    // page doesn't otherwise control.
+    async function handleStopRun(run) {
+
+        if (stoppingRunId) return;
+
+        setStoppingRunId(run.id);
+
+        try {
+            await cancelWorkflowRun(run.id);
+            toast.show(`Stopping ${run.name || "run"}...`, "success");
+            setTimeout(() => window.location.reload(), 900);
+        }
+        catch (err) {
+            toast.show(err.response?.data?.message || "Couldn't stop that run.", "error");
+            setStoppingRunId(null);
         }
 
     }
@@ -576,6 +602,7 @@ export default function Dashboard() {
                                 <div className="dp-board-head">
                                     <span>Workflow</span><span>Branch</span><span className="dp-hcell">Commit</span>
                                     <span className="dp-hcell">By</span><span className="dp-hcell">Duration</span><span className="dp-hcell">When</span>
+                                    <span className="dp-hcell"><span className="visually-hidden">Actions</span></span>
                                 </div>
 
                                 <div className="dp-rows">
@@ -597,6 +624,20 @@ export default function Dashboard() {
                                                 <div className="dp-cell dp-hcell"><span className="dp-who">{initials(r.triggeredBy)}</span></div>
                                                 <div className="dp-cell dp-hcell dp-mono dp-muted">{formatDuration(r)}</div>
                                                 <div className="dp-cell dp-hcell dp-time"><Clock size={11} /><span>{relativeTime(r.createdAt)}</span></div>
+                                                <div className="dp-cell dp-hcell">
+                                                    {tone === "running" && canStopRuns && (
+                                                        <button
+                                                            type="button"
+                                                            className="dp-stop-btn"
+                                                            title="Stop this run"
+                                                            aria-label="Stop this run"
+                                                            disabled={stoppingRunId === r.id}
+                                                            onClick={() => handleStopRun(r)}
+                                                        >
+                                                            <Square size={12} />
+                                                        </button>
+                                                    )}
+                                                </div>
                                                 {tone === "running" && <div className="dp-progress"><span /></div>}
                                             </div>
                                         );
@@ -964,7 +1005,11 @@ const CSS = `
 .dp-seg-b.on{background:var(--card-bg); color:var(--text);}
 .dp-seg-b:hover:not(.on){color:var(--text);}
 
-.dp-board-head, .dp-row{display:grid; grid-template-columns:minmax(0,2.2fr) minmax(0,1.5fr) 78px 40px 78px 88px; align-items:center;}
+.dp-board-head, .dp-row{display:grid; grid-template-columns:minmax(0,2.2fr) minmax(0,1.5fr) 78px 40px 78px 88px 30px; align-items:center;}
+.dp-stop-btn{display:grid; place-items:center; margin-left:auto; width:22px; height:22px; border-radius:6px;
+  border:1px solid var(--stroke); background:var(--card-bg-strong); color:var(--viz-critical); transition:.15s;}
+.dp-stop-btn:hover:not(:disabled){background:color-mix(in srgb, var(--viz-critical) 14%, var(--card-bg-strong)); border-color:var(--viz-critical);}
+.dp-stop-btn:disabled{opacity:.5;}
 .dp-board-head{padding:9px 16px; font-size:11px; color:var(--text-muted); border-bottom:1px solid var(--border); font-weight:500;}
 .dp-hcell{text-align:right;}
 .dp-rows{display:flex; flex-direction:column; max-height:520px; overflow-y:auto;}

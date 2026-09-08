@@ -141,6 +141,21 @@ public class GitHubController : ControllerBase
         return Ok(await _service.GetWorkflowDefinitionsAsync(force));
     }
 
+    // Same gate DeploymentController.Deploy already uses ("trigger a
+    // deployment" / "deploy" / allowRepoWrite: true) - cancelling a run is
+    // the natural inverse of triggering one, so anyone who could have
+    // started this run (real repo write access, not just Admin role) can
+    // also stop it.
+    [HttpPost("runs/{runId}/cancel")]
+    public async Task<IActionResult> CancelRun(long runId)
+    {
+        if (await AdminGate.DenyUnlessAdminAsync(this, _settings, "cancel a workflow run", "deploy", allowRepoWrite: true) is IActionResult denied)
+            return denied;
+
+        await _service.CancelWorkflowRunAsync(runId);
+        return Ok();
+    }
+
     [HttpGet("workflow-inputs")]
     public async Task<IActionResult> WorkflowInputs([FromQuery] string path, [FromQuery] string? branch)
     {

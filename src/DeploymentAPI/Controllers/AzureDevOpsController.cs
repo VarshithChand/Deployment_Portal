@@ -104,6 +104,16 @@ public class AzureDevOpsController : ControllerBase
         return Ok(await _azureDevOps.GetRunningBuildsAsync(creds, project));
     }
 
+    // Self-service, no AdminGate - see CancelBuildAsync's own comment.
+    [HttpPost("projects/{project}/builds/{buildId}/cancel")]
+    public async Task<IActionResult> CancelBuild(string project, int buildId)
+    {
+        var (key, authDenied) = RequireAuth.RequireUserId(this);
+        if (authDenied != null) return authDenied;
+        var creds = await _settings.GetUserPaasCredentialsAsync(Provider, key);
+        return Ok(await _azureDevOps.CancelBuildAsync(creds, project, buildId));
+    }
+
     [HttpGet("projects/{project}/history")]
     public async Task<IActionResult> GetHistory(string project)
     {

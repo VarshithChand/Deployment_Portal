@@ -194,6 +194,36 @@ public class AzureDevOpsService
         return result;
     }
 
+    // Dashboard's "Stop" action on a running build - Azure DevOps' own Build
+    // API has no dedicated cancel endpoint, just this: PATCH the build with
+    // status "cancelling" (its own documented spelling/casing). Self-
+    // service, same reasoning as RunPipelineAsync's own comment - this acts
+    // on the calling session's own connected Azure DevOps org, so that
+    // credential's real permission there is the auth boundary, not
+    // AdminGate.
+    public async Task<AzureDevOpsGitActionResultDto> CancelBuildAsync(UserPaasCredentials credentials, string project, int buildId)
+    {
+        if (!credentials.IsConfigured)
+            return new AzureDevOpsGitActionResultDto { Success = false, Error = "Azure DevOps is not configured." };
+
+        try
+        {
+            var url = $"https://dev.azure.com/{Uri.EscapeDataString(credentials.AccountId!)}/{Uri.EscapeDataString(project)}/_apis/build/builds/{buildId}?api-version=7.1";
+
+            await SendJsonAsync(DevOpsHttpClient, HttpMethod.Patch, url, credentials.Token!, new { status = "cancelling" });
+
+            return new AzureDevOpsGitActionResultDto { Success = true, Message = "Build cancellation requested." };
+        }
+        catch (Exception ex)
+        {
+            return new AzureDevOpsGitActionResultDto
+            {
+                Success = false,
+                Error = CloudErrorSanitizer.Describe(ex, "Azure DevOps", "cancel build")
+            };
+        }
+    }
+
     // History page - every run across EVERY pipeline in the project,
     // finished or in-flight (no statusFilter, unlike GetRunningBuildsAsync
     // above which deliberately only wants inProgress for the Dashboard).

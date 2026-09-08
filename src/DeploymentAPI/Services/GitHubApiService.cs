@@ -1367,6 +1367,27 @@ public class GitHubApiService
             return runs.Select(MapRun).ToList();
         });
 
+    // Dashboard/History's "Stop" action on a running run - GitHub's own
+    // vocabulary for this is "cancel," the frontend just labels the button
+    // "Stop" to match the plain-language most CI tools use. A run that's
+    // already finished (or already cancelling) still gets a 2xx here -
+    // GitHub's cancel endpoint is idempotent - so this never needs its own
+    // "already stopped" special case.
+    public async Task CancelWorkflowRunAsync(long runId)
+    {
+        var client = _auth.CreateClient();
+
+        var url = $"https://api.github.com/repos/{Uri.EscapeDataString(_auth.Owner)}/{Uri.EscapeDataString(_auth.Repository)}/actions/runs/{runId}/cancel";
+
+        var response = await client.PostAsync(url, null);
+        await HttpClientHelper.EnsureSuccessAsync(response);
+
+        // Same cache-busting SubmitApprovalAsync already does for the same
+        // reason - a just-cancelled run shouldn't still read as "in
+        // progress" for up to CacheDuration.
+        _cache.Remove($"runs:{_auth.Owner}/{_auth.Repository}");
+    }
+
     // For the Dashboard's "all your repos" container — unlike every other
     // method here, owner/repository is an explicit argument rather than
     // _auth.Owner/_auth.Repository, since this checks OTHER repos the same

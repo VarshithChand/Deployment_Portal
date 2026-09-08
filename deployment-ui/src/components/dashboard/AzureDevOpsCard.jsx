@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 
-import { getAzureDevOpsProjects, getAzureDevOpsRunningBuilds } from "../../services/azureDevOpsService";
+import { getAzureDevOpsProjects, getAzureDevOpsRunningBuilds, cancelAzureDevOpsBuild } from "../../services/azureDevOpsService";
 import useAzureDevOpsProject from "../../hooks/useAzureDevOpsProject";
+import useToast from "../../hooks/useToast";
 import SearchBox from "../common/SearchBox";
 
 // Embedded inside AllRepositoriesCard's own Source Control container as
@@ -18,6 +19,7 @@ import SearchBox from "../common/SearchBox";
 export default function AzureDevOpsCard() {
 
     const { project, setProject } = useAzureDevOpsProject();
+    const toast = useToast();
 
     const [projects, setProjects] = useState(null);
     const [loading, setLoading] = useState(true);
@@ -25,6 +27,7 @@ export default function AzureDevOpsCard() {
 
     const [runningBuilds, setRunningBuilds] = useState(null);
     const [runningBuildsLoading, setRunningBuildsLoading] = useState(false);
+    const [stoppingBuildId, setStoppingBuildId] = useState(null);
 
     useEffect(() => {
 
@@ -53,6 +56,36 @@ export default function AzureDevOpsCard() {
             setRunningBuilds({ configured: false, error: "Unable to load running pipelines." });
             setRunningBuildsLoading(false);
         });
+
+    }
+
+    // Reuses loadRunningBuilds to refresh the list in place rather than a
+    // full page reload - Azure DevOps' cancel is a request ("cancelling"),
+    // not instant, so the row usually still shows as running for a moment
+    // right after this resolves; that's real state, not a stale read.
+    async function handleStopBuild(build) {
+
+        if (stoppingBuildId) return;
+
+        setStoppingBuildId(build.id);
+
+        try {
+            const result = await cancelAzureDevOpsBuild(project.name, build.id);
+
+            if (result.success === false) {
+                toast.show(result.error || "Couldn't stop that pipeline.", "error");
+            }
+            else {
+                toast.show(`Stopping ${build.pipelineName || "pipeline"}...`, "success");
+                loadRunningBuilds(project);
+            }
+        }
+        catch (err) {
+            toast.show(err.response?.data?.message || "Couldn't stop that pipeline.", "error");
+        }
+        finally {
+            setStoppingBuildId(null);
+        }
 
     }
 
@@ -189,6 +222,7 @@ export default function AzureDevOpsCard() {
                                 <th>Build</th>
                                 <th>Branch</th>
                                 <th>Started</th>
+                                <th><span className="visually-hidden">Actions</span></th>
                             </tr>
                         </thead>
 
@@ -205,6 +239,16 @@ export default function AzureDevOpsCard() {
                                     <td>{build.buildNumber}</td>
                                     <td>{build.sourceBranch || "—"}</td>
                                     <td>{build.startTime ? new Date(build.startTime).toLocaleString() : "—"}</td>
+                                    <td>
+                                        <button
+                                            type="button"
+                                            className="btn btn-danger btn-sm"
+                                            disabled={stoppingBuildId === build.id}
+                                            onClick={() => handleStopBuild(build)}
+                                        >
+                                            {stoppingBuildId === build.id ? "Stopping..." : "Stop"}
+                                        </button>
+                                    </td>
                                 </tr>
 
                             ))}
