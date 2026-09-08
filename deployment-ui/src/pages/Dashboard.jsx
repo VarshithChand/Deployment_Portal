@@ -2,7 +2,7 @@ import { useState } from "react";
 import {
     Cloud, Server, Boxes, ShieldCheck, Activity,
     GitBranch, Clock, ArrowUpRight, Check, X,
-    AlertTriangle, CircleDot, Play, Radio, Terminal, ChevronRight, FileText
+    AlertTriangle, CircleDot, Play, Radio, Terminal, ChevronRight
 } from "lucide-react";
 
 import useAuth from "../hooks/useAuth";
@@ -174,6 +174,19 @@ export default function Dashboard() {
 
     const [envFilter, setEnvFilter] = useState("all");
     const [runFilter, setRunFilter] = useState("all");
+
+    // "overview" is everything this page already showed (ribbon, runs,
+    // blockers, connection health, environments). "source" swaps ALL of
+    // that out for a dedicated pick-a-provider view - a real sub-page, not
+    // an extra section squeezed into the normal flow (that's what the
+    // now-removed always-visible Source Code panel was, and the whole
+    // point of this toggle is to NOT do that). Lives in the same pill row
+    // as the environment filter (by explicit request - "beside all
+    // environments") even though it isn't an environment filter itself;
+    // picking an environment pill always snaps back to "overview" since
+    // that filter has nothing to act on while this view is showing.
+    const [viewMode, setViewMode] = useState("overview");
+    const [expandedProvider, setExpandedProvider] = useState("github");
 
     async function loadEnvironments() {
 
@@ -371,24 +384,95 @@ export default function Dashboard() {
             <div className="dp-root">
                 <style>{CSS}</style>
 
-                {environments.length > 0 && (
+                <div className="dp-env-pills" role="tablist" aria-label="Overview view">
 
-                    <div className="dp-env-pills" role="tablist" aria-label="Environment filter">
-                        <button role="tab" aria-selected={envFilter === "all"}
-                            className={"dp-env-pill" + (envFilter === "all" ? " on" : "")}
-                            onClick={() => setEnvFilter("all")}>
-                            All environments
+                    <button role="tab" aria-selected={viewMode === "overview" && envFilter === "all"}
+                        className={"dp-env-pill" + (viewMode === "overview" && envFilter === "all" ? " on" : "")}
+                        onClick={() => { setViewMode("overview"); setEnvFilter("all"); }}>
+                        All environments
+                    </button>
+
+                    {environments.map((e) => (
+                        <button key={e.name} role="tab" aria-selected={viewMode === "overview" && envFilter === e.name}
+                            className={"dp-env-pill" + (viewMode === "overview" && envFilter === e.name ? " on" : "")}
+                            onClick={() => { setViewMode("overview"); setEnvFilter(e.name); }}>
+                            {e.name}
                         </button>
-                        {environments.map((e) => (
-                            <button key={e.name} role="tab" aria-selected={envFilter === e.name}
-                                className={"dp-env-pill" + (envFilter === e.name ? " on" : "")}
-                                onClick={() => setEnvFilter(e.name)}>
-                                {e.name}
-                            </button>
+                    ))}
+
+                    <button role="tab" aria-selected={viewMode === "source"}
+                        className={"dp-env-pill dp-env-pill-source" + (viewMode === "source" ? " on" : "")}
+                        onClick={() => setViewMode("source")}>
+                        Source
+                    </button>
+
+                </div>
+
+                {viewMode === "source" ? (
+
+                    <div className="dp-source-view">
+
+                        {[
+                            { key: "github", label: "GitHub", Icon: GitHubGroupIcon, status: githubTokenConfigured ? `${repoCount ?? "—"} ${repoCount === 1 ? "repo" : "repos"}` : "Not connected", available: true },
+                            { key: "azuredevops", label: "Azure DevOps", Icon: AzureDevOpsIcon, status: azureDevOps.configured ? "Connected" : "Not connected", available: true },
+                            { key: "gitlab", label: "GitLab", Icon: GitLabIcon, status: "Not built yet", available: false },
+                            { key: "bitbucket", label: "Bitbucket", Icon: BitbucketIcon, status: "Not built yet", available: false }
+                        ].map((p) => (
+
+                            <section key={p.key} className={"dp-panel dp-src-container" + (expandedProvider === p.key ? " open" : "")}>
+
+                                <button
+                                    type="button"
+                                    className="dp-panel-head dp-src-head"
+                                    onClick={() => setExpandedProvider(expandedProvider === p.key ? null : p.key)}
+                                    aria-expanded={expandedProvider === p.key}
+                                >
+                                    <div className="dp-panel-title"><p.Icon /> {p.label}</div>
+                                    <div className="dp-src-headright">
+                                        <span className="dp-src-status">{p.status}</span>
+                                        <ChevronRight size={15} className="dp-src-chevron" />
+                                    </div>
+                                </button>
+
+                                {expandedProvider === p.key && (
+
+                                    <div className="dp-src-body">
+
+                                        {p.key === "github" && (
+                                            githubTokenConfigured
+                                                ? <RepoFileBrowserCard />
+                                                : <p className="dp-empty dp-small">Connect GitHub in Settings to browse this repo's files.</p>
+                                        )}
+
+                                        {p.key === "azuredevops" && (
+                                            azureDevOps.configured
+                                                ? <AzureDevOpsCard />
+                                                : <p className="dp-empty dp-small">Connect Azure DevOps in Settings to browse projects.</p>
+                                        )}
+
+                                        {!p.available && (
+                                            <p className="dp-empty dp-small">
+                                                Not built yet — coming in a later update.
+                                                {" "}
+                                                <button type="button" className="dp-fb-crumb" style={{ textDecoration: "underline" }} onClick={() => setTab(p.key)}>
+                                                    See what's needed &rarr;
+                                                </button>
+                                            </p>
+                                        )}
+
+                                    </div>
+
+                                )}
+
+                            </section>
+
                         ))}
+
                     </div>
 
-                )}
+                ) : (
+
+                <>
 
                 <section className={"dp-ribbon " + verdict}>
 
@@ -463,20 +547,6 @@ export default function Dashboard() {
                     </div>
 
                 </section>
-
-                {githubTokenConfigured && (
-
-                    <section className="dp-panel dp-sc-panel">
-
-                        <div className="dp-panel-head">
-                            <div className="dp-panel-title"><FileText size={15} /> Source Code</div>
-                        </div>
-
-                        <RepoFileBrowserCard />
-
-                    </section>
-
-                )}
 
                 <div className="dp-grid">
 
@@ -767,6 +837,10 @@ export default function Dashboard() {
                     <span className="dp-mono">Refreshed just now</span>
                 </footer>
 
+                </>
+
+                )}
+
             </div>
 
         </PageLayout>
@@ -858,6 +932,19 @@ const CSS = `
 .dp-sc-name{font-size:13px; font-weight:600; color:var(--text);}
 .dp-sc-stat{font-size:11.5px; color:var(--text-muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
 .dp-sc-chevron{color:var(--text-muted); flex:0 0 auto;}
+
+.dp-env-pill-source{border-left:1px solid var(--border); margin-left:2px; padding-left:13px;}
+
+.dp-source-view{display:flex; flex-direction:column; gap:16px;}
+.dp-src-container{margin-bottom:0;}
+.dp-src-head{width:100%; display:flex; align-items:center; justify-content:space-between; gap:12px;
+  padding:14px 16px; border:0; background:transparent; border-bottom:1px solid var(--border); text-align:left; font:inherit; color:inherit;}
+.dp-src-container:not(.open) .dp-src-head{border-bottom-color:transparent;}
+.dp-src-headright{display:flex; align-items:center; gap:10px;}
+.dp-src-status{font-size:12px; color:var(--text-muted);}
+.dp-src-chevron{color:var(--text-muted); transition:transform .15s;}
+.dp-src-container.open .dp-src-chevron{transform:rotate(90deg);}
+.dp-src-body{padding:4px 0 6px;}
 
 .dp-grid{display:grid; grid-template-columns:1.7fr 1fr; gap:16px; margin-bottom:16px; align-items:start;}
 .dp-rail-col{display:flex; flex-direction:column; gap:16px;}
