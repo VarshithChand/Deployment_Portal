@@ -76,3 +76,11 @@ export const explainPipeline = async (path, branch) => {
 export const getLastRun = async (workflow, branch) => {
     return await api.get("/workflows/last-run", { params: { workflow, branch } });
 };
+
+// Overview dashboard's file browser - path omitted (undefined, not "")
+// means the repo root, since axios drops undefined params instead of
+// sending an empty ?path= that the backend would otherwise have to treat
+// as "root" separately anyway.
+export const getRepoContents = async (path, branch, force = false) => {
+    return await api.get("/contents", { params: { path: path || undefined, branch: branch || undefined, force: force || undefined } });
+};

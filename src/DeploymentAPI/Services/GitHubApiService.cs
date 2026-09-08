@@ -1165,6 +1165,112 @@ public class GitHubApiService
     public Task<string> GetWorkflowYamlAsync(string workflowPath, string? branch) =>
         FetchFileTextAsync(workflowPath, branch);
 
+    //===========================================================
+    // Repo Contents (Overview dashboard's file browser)
+    //===========================================================
+
+    // Extensions this never attempts to UTF-8-decode as text - GitHub's own
+    // /contents response has no "is this binary" flag, just base64 content
+    // for everything, so a real binary file (a PNG, a font, a zip) would
+    // otherwise decode into garbage/replacement characters instead of the
+    // "binary file" message this shows. Not exhaustive - a binary file with
+    // an unrecognized extension still falls through to the MaxPreviewableFileSize
+    // check below, and worst case just renders as mangled text, which is
+    // the same failure mode every plain-text code viewer has for this.
+    private static readonly HashSet<string> BinaryExtensions = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ".png", ".jpg", ".jpeg", ".gif", ".webp", ".ico", ".bmp",
+        ".pdf", ".zip", ".gz", ".tar", ".7z", ".rar",
+        ".woff", ".woff2", ".ttf", ".eot", ".otf",
+        ".exe", ".dll", ".so", ".dylib", ".bin",
+        ".mp3", ".mp4", ".mov", ".avi", ".wav",
+        ".jar", ".class", ".pyc"
+    };
+
+    // GitHub's contents API itself refuses to return base64 content for a
+    // file over 1MB at all - this is a tighter, earlier cutoff so the
+    // browser shows a clear "too large to preview" message instead of
+    // GitHub's own less obvious empty-content response.
+    private const long MaxPreviewableFileSize = 512_000;
+
+    // path is null/empty for the repo root, otherwise a repo-relative
+    // folder or file path (validated by GitHubController before this is
+    // ever called - see GitHubNameValidator.IsValidRepoPath). Mirrors
+    // GitHub's own /contents endpoint: it answers a directory listing OR a
+    // single file's content from the exact same URL, depending on what the
+    // path actually points at, so this does the same rather than needing
+    // two separate endpoints/methods.
+    public Task<RepoContentsResultDto> GetRepoContentsAsync(string? path, string? branch, bool forceRefresh = false)
+    {
+        var normalizedPath = path?.Trim('/') ?? string.Empty;
+
+        return GetCachedAsync($"contents:{_auth.Owner}/{_auth.Repository}:{normalizedPath}:{branch}", async () =>
+        {
+            var client = _auth.CreateClient();
+
+            var refQuery = string.IsNullOrWhiteSpace(branch) ? "" : $"?ref={Uri.EscapeDataString(branch)}";
+
+            var escapedPath = string.IsNullOrEmpty(normalizedPath)
+                ? ""
+                : "/" + string.Join('/', normalizedPath.Split('/').Select(Uri.EscapeDataString));
+
+            try
+            {
+                var json = await HttpClientHelper.GetAsync(
+                    client,
+                    $"https://api.github.com/repos/{Uri.EscapeDataString(_auth.Owner)}/{Uri.EscapeDataString(_auth.Repository)}/contents{escapedPath}{refQuery}");
+
+                var token = JToken.Parse(json);
+
+                if (token is JArray dirArray)
+                {
+                    var entries = dirArray
+                        .Select(e => new RepoContentEntryDto
+                        {
+                            Name = e["name"]?.ToString() ?? string.Empty,
+                            Path = e["path"]?.ToString() ?? string.Empty,
+                            Type = e["type"]?.ToString() ?? "file",
+                            Size = (long?)e["size"] ?? 0
+                        })
+                        // Folders first, then alphabetical within each group -
+                        // the conventional file-browser sort, since GitHub's
+                        // own API returns entries in whatever order its
+                        // filesystem happens to enumerate them.
+                        .OrderBy(e => e.Type == "dir" ? 0 : 1)
+                        .ThenBy(e => e.Name, StringComparer.OrdinalIgnoreCase)
+                        .ToList();
+
+                    return new RepoContentsResultDto { Path = normalizedPath, IsDirectory = true, Entries = entries };
+                }
+
+                var fileObj = (JObject)token;
+                var name = fileObj["name"]?.ToString() ?? string.Empty;
+                var size = (long?)fileObj["size"] ?? 0;
+                var extension = System.IO.Path.GetExtension(name);
+
+                if (BinaryExtensions.Contains(extension))
+                    return new RepoContentsResultDto { Path = normalizedPath, IsDirectory = false, Name = name, Size = size, IsBinary = true };
+
+                if (size > MaxPreviewableFileSize)
+                    return new RepoContentsResultDto { Path = normalizedPath, IsDirectory = false, Name = name, Size = size, TooLarge = true };
+
+                var base64 = fileObj["content"]?.ToString() ?? string.Empty;
+                var text = Encoding.UTF8.GetString(Convert.FromBase64String(base64.Replace("\n", "").Replace("\r", "")));
+
+                return new RepoContentsResultDto { Path = normalizedPath, IsDirectory = false, Name = name, Size = size, Content = text };
+            }
+            catch (HttpRequestException ex)
+            {
+                return new RepoContentsResultDto
+                {
+                    Found = false,
+                    Path = normalizedPath,
+                    Error = DescribeGitHubError(ex, "That path doesn't exist in this repository.")
+                };
+            }
+        }, forceRefresh);
+    }
+
     public async Task<List<WorkflowInputDto>> GetWorkflowInputsAsync(string workflowPath, string? branch)
     {
         var yamlText = await FetchFileTextAsync(workflowPath, branch);

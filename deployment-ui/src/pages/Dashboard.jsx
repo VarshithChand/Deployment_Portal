@@ -2,7 +2,7 @@ import { useState } from "react";
 import {
     Cloud, Server, Boxes, ShieldCheck, Activity,
     GitBranch, Clock, ArrowUpRight, Check, X,
-    AlertTriangle, CircleDot, Play, Radio, Terminal, ChevronRight
+    AlertTriangle, CircleDot, Play, Radio, Terminal, ChevronRight, FileText
 } from "lucide-react";
 
 import useAuth from "../hooks/useAuth";
@@ -18,6 +18,7 @@ import PageLayout from "../components/layout/PageLayout";
 import { GitHubGroupIcon, AzureDevOpsIcon, GitLabIcon, BitbucketIcon } from "../components/layout/SidebarIcons";
 import AllRepositoriesCard from "../components/dashboard/AllRepositoriesCard";
 import AzureDevOpsCard from "../components/dashboard/AzureDevOpsCard";
+import RepoFileBrowserCard from "../components/dashboard/RepoFileBrowserCard";
 
 // Round 7 - a full visual + structural rework, replacing the flex-column
 // card layout (rounds 1-6) with a single dense "ops console" page. Every
@@ -463,6 +464,20 @@ export default function Dashboard() {
 
                 </section>
 
+                {githubTokenConfigured && (
+
+                    <section className="dp-panel dp-sc-panel">
+
+                        <div className="dp-panel-head">
+                            <div className="dp-panel-title"><FileText size={15} /> Source Code</div>
+                        </div>
+
+                        <RepoFileBrowserCard />
+
+                    </section>
+
+                )}
+
                 <div className="dp-grid">
 
                     <section className="dp-panel dp-board">
@@ -807,6 +822,31 @@ const CSS = `
 
 .dp-sc-panel{margin-bottom:16px;}
 .dp-sc-browser{margin-bottom:16px;}
+
+.dp-fb{padding:8px 16px 16px;}
+.dp-fb-breadcrumb{display:flex; align-items:center; gap:2px; flex-wrap:wrap; padding:6px 0 12px;}
+.dp-fb-crumb-group{display:flex; align-items:center; gap:2px;}
+.dp-fb-crumb-sep{color:var(--text-muted); flex:0 0 auto;}
+.dp-fb-crumb{border:0; background:transparent; color:var(--text-muted); font-size:12.5px; font-weight:500; padding:3px 6px; border-radius:6px; transition:.15s;}
+.dp-fb-crumb:hover:not(:disabled){background:var(--card-bg-strong); color:var(--text);}
+.dp-fb-crumb:disabled{color:var(--text); font-weight:600; cursor:default;}
+.dp-fb-refresh{margin-left:auto; border:1px solid var(--stroke); background:var(--card-bg-strong); color:var(--text-muted); width:26px; height:26px; border-radius:7px; display:grid; place-items:center; flex:0 0 auto; transition:.15s;}
+.dp-fb-refresh:hover{color:var(--heading-accent); border-color:var(--heading-accent);}
+.dp-fb-list{display:flex; flex-direction:column; border:1px solid var(--stroke); border-radius:10px; overflow:hidden;}
+.dp-fb-row{display:flex; align-items:center; gap:9px; padding:9px 12px; background:var(--card-bg-strong); border:0; border-bottom:1px solid var(--border); width:100%; text-align:left; font:inherit; color:inherit;}
+.dp-fb-row:last-child{border-bottom:0;}
+.dp-fb-row:not(:disabled):hover{background:var(--table-row-hover);}
+.dp-fb-row:disabled{cursor:default;}
+.dp-fb-icon{color:var(--text-muted); flex:0 0 auto;}
+.dp-fb-icon.dir{color:var(--heading-accent);}
+.dp-fb-name{font-size:13px; color:var(--text); flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+.dp-fb-size{font-size:11.5px; color:var(--text-muted); flex:0 0 auto;}
+.dp-fb-chevron{color:var(--text-muted); flex:0 0 auto;}
+.dp-fb-file-head{display:flex; align-items:center; justify-content:space-between; gap:10px; padding-bottom:10px; border-bottom:1px solid var(--border); margin-bottom:12px;}
+.dp-fb-file-name{font-size:13px; font-weight:600; color:var(--text);}
+.dp-fb-code{margin:0; padding:14px; border:1px solid var(--stroke); border-radius:10px; background:var(--card-bg-strong);
+  font-family:'JetBrains Mono',ui-monospace,monospace; font-size:12px; line-height:1.55; color:var(--text);
+  max-height:420px; overflow:auto; white-space:pre;}
 .dp-sc-grid{display:grid; grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); gap:10px; padding:14px;}
 .dp-sc-card{display:flex; align-items:center; gap:11px; padding:12px 13px; border-radius:12px;
   background:var(--card-bg-strong); border:1px solid var(--stroke); text-align:left; transition:.15s;}

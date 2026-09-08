@@ -157,6 +157,19 @@ public class GitHubController : ControllerBase
         return Ok(await _service.GetWorkflowInputsAsync(path, branch));
     }
 
+    // Overview dashboard's file browser - path is optional (root when
+    // omitted), otherwise must be a valid repo-relative path. See
+    // GitHubApiService.GetRepoContentsAsync's own comment for why one
+    // endpoint answers both a directory listing and a file's content.
+    [HttpGet("contents")]
+    public async Task<IActionResult> Contents([FromQuery] string? path, [FromQuery] string? branch, [FromQuery] bool force = false)
+    {
+        if (!string.IsNullOrWhiteSpace(path) && !GitHubNameValidator.IsValidRepoPath(path))
+            return BadRequest(new { message = "path must be a valid repository-relative path." });
+
+        return Ok(await _service.GetRepoContentsAsync(path, branch, force));
+    }
+
     [HttpGet("workflow-yaml")]
     public async Task<IActionResult> WorkflowYaml([FromQuery] string path, [FromQuery] string? branch)
     {
