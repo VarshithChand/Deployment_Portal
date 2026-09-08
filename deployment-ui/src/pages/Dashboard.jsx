@@ -19,7 +19,6 @@ import PageLayout from "../components/layout/PageLayout";
 import { GitHubGroupIcon, AzureDevOpsIcon, GitLabIcon, BitbucketIcon } from "../components/layout/SidebarIcons";
 import AllRepositoriesCard from "../components/dashboard/AllRepositoriesCard";
 import AzureDevOpsCard from "../components/dashboard/AzureDevOpsCard";
-import RepoFileBrowserCard from "../components/dashboard/RepoFileBrowserCard";
 
 // Round 7 - a full visual + structural rework, replacing the flex-column
 // card layout (rounds 1-6) with a single dense "ops console" page. Every
@@ -465,9 +464,9 @@ export default function Dashboard() {
                                     <div className="dp-src-body">
 
                                         {p.key === "github" && (
-                                            githubTokenConfigured
-                                                ? <RepoFileBrowserCard />
-                                                : <p className="dp-empty dp-small">Connect GitHub in Settings to browse this repo's files.</p>
+                                            githubTokenConfigured || (githubOwner && githubRepository)
+                                                ? <AllRepositoriesCard repository={currentRepository} />
+                                                : <p className="dp-empty dp-small">Connect GitHub in Settings to see your repositories.</p>
                                         )}
 
                                         {p.key === "azuredevops" && (
@@ -793,29 +792,6 @@ export default function Dashboard() {
 
                 </section>
 
-                {/* AllRepositoriesCard manages its own visibility (a
-                    ReconnectPrompt when the token was cleared but an owner/
-                    repo is still remembered, the full picker once
-                    configured, or nothing at all otherwise) - gated here on
-                    the same condition so this section never renders an
-                    empty panel box around a null child. */}
-                {(githubTokenConfigured || (githubOwner && githubRepository)) && (
-
-                    // Not wrapped in .dp-panel - AllRepositoriesCard already
-                    // renders its own .card (near-identical tokens: same
-                    // border/radius/shadow variables .dp-panel uses), so
-                    // this is just the page's own 16px rhythm around it,
-                    // not a second nested box.
-                    <div className="dp-sc-browser">
-
-                        <AllRepositoriesCard repository={currentRepository}>
-                            <AzureDevOpsCard />
-                        </AllRepositoriesCard>
-
-                    </div>
-
-                )}
-
                 <section className="dp-panel">
 
                     <div className="dp-panel-head">
@@ -936,7 +912,6 @@ const CSS = `
 .dp-spark-col .bad{background:${S.down}; border-radius:1px;}
 
 .dp-sc-panel{margin-bottom:16px;}
-.dp-sc-browser{margin-bottom:16px;}
 
 .dp-fb{padding:8px 16px 16px;}
 .dp-fb-breadcrumb{display:flex; align-items:center; gap:2px; flex-wrap:wrap; padding:6px 0 12px;}
