@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" version="1.2" baseProfile="tiny-ps" viewBox="0 0 48 48" width="48" height="48">
+  <title>Deployment Portal</title>
+  <rect width="48" height="48" rx="10" fill="#2563eb"/>
+  <path d="M13.5 18 L24 9 L34.5 18" fill="none" stroke="#ffffff" stroke-width="4.9" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M13.5 27.8 L24 18.8 L34.5 27.8" fill="none" stroke="#ffffff" stroke-width="4.9" stroke-linecap="round" stroke-linejoin="round" opacity="0.62"/>
+  <path d="M13.5 37.5 L24 28.5 L34.5 37.5" fill="none" stroke="#ffffff" stroke-width="4.9" stroke-linecap="round" stroke-linejoin="round" opacity="0.34"/>
+</svg>
