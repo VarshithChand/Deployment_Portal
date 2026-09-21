@@ -6836,6 +6836,16 @@ textarea{
    than one viewport (LoginSignupPage's own "tools" view especially)
    would otherwise just get clipped with no way to reach it. */
 .aw-root{
+  /* Own background is required here, not just inherited from <body> - this
+     class started out only ever being a standalone page's entire content
+     (LoginSignupPage/MfaVerifyPage), where body's own background showing
+     through was correct since nothing else was on screen. MfaEnforcementGate
+     later reused this same class as a position:fixed overlay ON TOP OF the
+     already-rendered Dashboard - without its own opaque fill, that overlay
+     let the live page underneath show straight through it (the exact "messed
+     up"/overlapping-text bug this was introduced to fix), since z-index alone
+     doesn't hide anything without an actual opaque paint layer beneath it. */
+  background:var(--bg);
   color:var(--text);
   height:100vh; overflow-y:auto; -webkit-font-smoothing:antialiased;
   scrollbar-width:none; -ms-overflow-style:none;
