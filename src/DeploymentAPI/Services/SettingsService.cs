@@ -298,6 +298,8 @@ public class SettingsService
 
     public async Task<SettingsViewDto> GetViewAsync()
     {
+        using var _ = await AcquireWriteLockAsync();
+
         var root = await ReadRootAsync();
 
         // Ensures the one-time super-admin seed (see
@@ -372,6 +374,8 @@ public class SettingsService
     // same one) immediately undoes it.
     public async Task SoftSignOutPatUserAsync(string key)
     {
+        using var _ = await AcquireWriteLockAsync();
+
         var root = await ReadRootAsync();
 
         if (root["UserGitHubCredentials"] is JObject users && users[key] is JObject entry)
@@ -683,6 +687,8 @@ public class SettingsService
 
     public async Task<List<EnvironmentDefinitionDto>> SaveEnvironmentDefinitionsAsync(List<EnvironmentDefinitionDto> environments)
     {
+        using var _ = await AcquireWriteLockAsync();
+
         var root = await ReadRootAsync();
 
         var section = root["Environments"] as JObject ?? new JObject();
@@ -728,6 +734,8 @@ public class SettingsService
     // new session at all.
     public async Task SaveUserAwsCredentialsAsync(string key, AwsCredentialsUpdateDto update, AwsSessionCredentials? session = null)
     {
+        using var _ = await AcquireWriteLockAsync();
+
         var root = await ReadRootAsync();
         var users = root["UserAwsCredentials"] as JObject ?? new JObject();
         var entry = users[key] as JObject ?? new JObject();
@@ -764,6 +772,8 @@ public class SettingsService
 
     public async Task ClearUserAwsCredentialsAsync(string key)
     {
+        using var _ = await AcquireWriteLockAsync();
+
         var root = await ReadRootAsync();
 
         if (root["UserAwsCredentials"] is JObject users && users[key] != null)
@@ -790,6 +800,8 @@ public class SettingsService
     // Blank fields keep whatever was already saved - see SaveUserAwsCredentialsAsync.
     public async Task SaveUserAzureCredentialsAsync(string key, AzureCredentialsUpdateDto update)
     {
+        using var _ = await AcquireWriteLockAsync();
+
         var root = await ReadRootAsync();
         var users = root["UserAzureCredentials"] as JObject ?? new JObject();
         var entry = users[key] as JObject ?? new JObject();
@@ -815,6 +827,8 @@ public class SettingsService
 
     public async Task ClearUserAzureCredentialsAsync(string key)
     {
+        using var _ = await AcquireWriteLockAsync();
+
         var root = await ReadRootAsync();
 
         if (root["UserAzureCredentials"] is JObject users && users[key] != null)
@@ -840,6 +854,8 @@ public class SettingsService
     // Blank fields keep whatever was already saved - see SaveUserAwsCredentialsAsync.
     public async Task SaveUserGcpCredentialsAsync(string key, GcpCredentialsUpdateDto update)
     {
+        using var _ = await AcquireWriteLockAsync();
+
         var root = await ReadRootAsync();
         var users = root["UserGcpCredentials"] as JObject ?? new JObject();
         var entry = users[key] as JObject ?? new JObject();
@@ -862,6 +878,8 @@ public class SettingsService
 
     public async Task ClearUserGcpCredentialsAsync(string key)
     {
+        using var _ = await AcquireWriteLockAsync();
+
         var root = await ReadRootAsync();
 
         if (root["UserGcpCredentials"] is JObject users && users[key] != null)
@@ -894,6 +912,8 @@ public class SettingsService
     // Blank fields keep whatever was already saved - see SaveUserAwsCredentialsAsync.
     public async Task SaveUserPaasCredentialsAsync(string provider, string key, PaasCredentialsUpdateDto update)
     {
+        using var _ = await AcquireWriteLockAsync();
+
         var root = await ReadRootAsync();
         var providers = root["UserPaasCredentials"] as JObject ?? new JObject();
         var users = providers[provider] as JObject ?? new JObject();
@@ -915,6 +935,8 @@ public class SettingsService
 
     public async Task ClearUserPaasCredentialsAsync(string provider, string key)
     {
+        using var _ = await AcquireWriteLockAsync();
+
         var root = await ReadRootAsync();
 
         if (root["UserPaasCredentials"] is JObject providers
@@ -951,6 +973,8 @@ public class SettingsService
     // Blank fields keep whatever was already saved - see SaveUserPaasCredentialsAsync.
     public async Task SavePortalPaasCredentialsAsync(string provider, PaasCredentialsUpdateDto update)
     {
+        using var _ = await AcquireWriteLockAsync();
+
         var root = await ReadRootAsync();
         var providers = root["PortalPaasCredentials"] as JObject ?? new JObject();
         var entry = providers[provider] as JObject ?? new JObject();
@@ -970,6 +994,8 @@ public class SettingsService
 
     public async Task ClearPortalPaasCredentialsAsync(string provider)
     {
+        using var _ = await AcquireWriteLockAsync();
+
         var root = await ReadRootAsync();
 
         if (root["PortalPaasCredentials"] is JObject providers && providers[provider] != null)
@@ -1009,6 +1035,8 @@ public class SettingsService
     // Blank fields keep whatever was already saved - see SaveUserPaasCredentialsAsync.
     public async Task SaveUserGitLabRegistryCredentialsAsync(string key, GitLabRegistryCredentialsUpdateDto update)
     {
+        using var _ = await AcquireWriteLockAsync();
+
         var root = await ReadRootAsync();
         var users = root["UserGitLabRegistryCredentials"] as JObject ?? new JObject();
         var node = users[key] as JObject ?? new JObject();
@@ -1031,6 +1059,8 @@ public class SettingsService
 
     public async Task ClearUserGitLabRegistryCredentialsAsync(string key)
     {
+        using var _ = await AcquireWriteLockAsync();
+
         var root = await ReadRootAsync();
 
         if (root["UserGitLabRegistryCredentials"] is JObject users && users[key] != null)
@@ -1058,6 +1088,8 @@ public class SettingsService
 
     public async Task SaveUserJfrogCredentialsAsync(string key, JfrogCredentialsUpdateDto update)
     {
+        using var _ = await AcquireWriteLockAsync();
+
         var root = await ReadRootAsync();
         var users = root["UserJfrogCredentials"] as JObject ?? new JObject();
         var node = users[key] as JObject ?? new JObject();
@@ -1077,6 +1109,8 @@ public class SettingsService
 
     public async Task ClearUserJfrogCredentialsAsync(string key)
     {
+        using var _ = await AcquireWriteLockAsync();
+
         var root = await ReadRootAsync();
 
         if (root["UserJfrogCredentials"] is JObject users && users[key] != null)
@@ -1109,6 +1143,8 @@ public class SettingsService
     // Blank fields keep whatever was already saved - see SaveUserPaasCredentialsAsync.
     public async Task SaveUserHostCredentialsAsync(string provider, string key, HostCredentialsUpdateDto update)
     {
+        using var _ = await AcquireWriteLockAsync();
+
         var root = await ReadRootAsync();
         var providers = root["UserHostCredentials"] as JObject ?? new JObject();
         var users = providers[provider] as JObject ?? new JObject();
@@ -1133,6 +1169,8 @@ public class SettingsService
 
     public async Task ClearUserHostCredentialsAsync(string provider, string key)
     {
+        using var _ = await AcquireWriteLockAsync();
+
         var root = await ReadRootAsync();
 
         if (root["UserHostCredentials"] is JObject providers
@@ -1170,6 +1208,8 @@ public class SettingsService
 
     public async Task SavePortalDeploymentTargetsAsync(PortalDeploymentTargetsDto targets)
     {
+        using var _ = await AcquireWriteLockAsync();
+
         var root = await ReadRootAsync();
         root["PortalDeploymentTargets"] = JObject.FromObject(targets);
         await WriteRootAsync(root);
@@ -1232,6 +1272,8 @@ public class SettingsService
     // SaveUserPaasCredentialsAsync's identical convention.
     private async Task SaveDatabaseConnectionAsync(string storageKey, PortalDatabaseConnectionUpdateDto update)
     {
+        using var _ = await AcquireWriteLockAsync();
+
         var root = await ReadRootAsync();
         var entry = root[storageKey] as JObject ?? new JObject();
 
@@ -1249,6 +1291,8 @@ public class SettingsService
 
     private async Task ClearDatabaseConnectionAsync(string storageKey, string ownerLabel)
     {
+        using var _ = await AcquireWriteLockAsync();
+
         var root = await ReadRootAsync();
 
         if (root[storageKey] != null)
@@ -1295,6 +1339,8 @@ public class SettingsService
 
     public async Task<SettingsViewDto> SaveDockerAsync(DockerSettingsUpdateDto update)
     {
+        using var _ = await AcquireWriteLockAsync();
+
         var root = await ReadRootAsync();
 
         var docker = root["Docker"] as JObject ?? new JObject();
@@ -1317,6 +1363,8 @@ public class SettingsService
 
     public async Task<SettingsViewDto> SaveGitHubOAuthAsync(GitHubOAuthUpdateDto update)
     {
+        using var _ = await AcquireWriteLockAsync();
+
         var root = await ReadRootAsync();
 
         var oauth = root["GitHubOAuth"] as JObject ?? new JObject();
@@ -1356,6 +1404,8 @@ public class SettingsService
     // GitHub credentials already follow.
     public async Task SaveUserSonarCredentialsAsync(string provider, string key, SonarSettingsUpdateDto update)
     {
+        using var _ = await AcquireWriteLockAsync();
+
         var root = await ReadRootAsync();
         var providers = root["UserSonarCredentials"] as JObject ?? new JObject();
         var users = providers[provider] as JObject ?? new JObject();
@@ -1400,6 +1450,8 @@ public class SettingsService
 
     public async Task ClearUserSonarCredentialsAsync(string provider, string key)
     {
+        using var _ = await AcquireWriteLockAsync();
+
         var root = await ReadRootAsync();
 
         if (root["UserSonarCredentials"] is JObject providers
@@ -1420,6 +1472,8 @@ public class SettingsService
     // callers of GetAiAssistantCredentialsAsync below.
     public async Task<SettingsViewDto> SaveAiAssistantAsync(AiAssistantSettingsUpdateDto update)
     {
+        using var _ = await AcquireWriteLockAsync();
+
         var root = await ReadRootAsync();
 
         var ai = root["AiAssistant"] as JObject ?? new JObject();
@@ -1466,6 +1520,8 @@ public class SettingsService
     // the key back, only NotificationsApiKeyConfigured/FromEmail/FromName.
     public async Task<SettingsViewDto> SaveNotificationSettingsAsync(NotificationSettingsUpdateDto update)
     {
+        using var _ = await AcquireWriteLockAsync();
+
         var root = await ReadRootAsync();
         var notifications = root["Notifications"] as JObject ?? new JObject();
 
@@ -1559,6 +1615,8 @@ public class SettingsService
 
     public async Task<PortalUserAccount?> FindUserByEmailAsync(string email)
     {
+        using var _ = await AcquireWriteLockAsync();
+
         var root = await ReadRootAsync();
         var (users, seeded) = await GetOrCreateUsersSectionAsync(root);
 
@@ -1578,6 +1636,8 @@ public class SettingsService
     // here to keep a freshly-derived username unique before it's saved).
     public async Task<PortalUserAccount?> FindUserByUsernameAsync(string username)
     {
+        using var _ = await AcquireWriteLockAsync();
+
         var root = await ReadRootAsync();
         var (users, seeded) = await GetOrCreateUsersSectionAsync(root);
 
@@ -1593,6 +1653,8 @@ public class SettingsService
 
     public async Task<PortalUserAccount?> GetUserByIdAsync(string id)
     {
+        using var _ = await AcquireWriteLockAsync();
+
         var root = await ReadRootAsync();
         var (users, seeded) = await GetOrCreateUsersSectionAsync(root);
 
@@ -1619,6 +1681,8 @@ public class SettingsService
     // yet" moment MfaPolicy.EvaluateAsync's unconditional block exists for.
     public async Task<PortalUserAccount> CreateUserAsync(string id, string email, string? plaintextPassword, string provider, string? displayName = null, string? username = null, bool emailVerified = true, bool mustSetUpMfa = false)
     {
+        using var _ = await AcquireWriteLockAsync();
+
         var root = await ReadRootAsync();
         var (users, _) = await GetOrCreateUsersSectionAsync(root);
 
@@ -1650,6 +1714,8 @@ public class SettingsService
     // offer later without needing separate invalidation logic.
     public async Task SetEmailVerificationTokenAsync(string userId, string token, DateTime expiresAtUtc)
     {
+        using var _ = await AcquireWriteLockAsync();
+
         var root = await ReadRootAsync();
         var (users, _) = await GetOrCreateUsersSectionAsync(root);
 
@@ -1671,6 +1737,8 @@ public class SettingsService
     // same way, so there's no need to distinguish them here.
     public async Task<PortalUserAccount?> VerifyEmailAsync(string token)
     {
+        using var _ = await AcquireWriteLockAsync();
+
         var root = await ReadRootAsync();
         var (users, _) = await GetOrCreateUsersSectionAsync(root);
 
@@ -1855,6 +1923,8 @@ public class SettingsService
     // on every read.
     public async Task SetPasswordResetTokenAsync(string userId, string token, DateTime expiresAtUtc)
     {
+        using var _ = await AcquireWriteLockAsync();
+
         var root = await ReadRootAsync();
         var (users, _) = await GetOrCreateUsersSectionAsync(root);
 
@@ -1876,6 +1946,8 @@ public class SettingsService
     // has, since the new password IS the thing submitted alongside the token.
     public async Task<PortalUserAccount?> ConsumePasswordResetTokenAsync(string token, string newPlaintextPassword)
     {
+        using var _ = await AcquireWriteLockAsync();
+
         if (string.IsNullOrWhiteSpace(token))
             return null;
 
@@ -1930,6 +2002,8 @@ public class SettingsService
     // password signup gets from the start.
     public async Task SetUserPasswordAsync(string id, string plaintextPassword, string? username)
     {
+        using var _ = await AcquireWriteLockAsync();
+
         var root = await ReadRootAsync();
         var (users, _) = await GetOrCreateUsersSectionAsync(root);
 
@@ -1953,6 +2027,8 @@ public class SettingsService
     // methods they used this time. See AccountAuthService.
     public async Task LinkProviderAsync(string id, string? gitHubLogin, string? googleSub)
     {
+        using var _ = await AcquireWriteLockAsync();
+
         var root = await ReadRootAsync();
         var (users, _) = await GetOrCreateUsersSectionAsync(root);
 
@@ -1976,6 +2052,8 @@ public class SettingsService
     // rather than throwing.
     public async Task<bool> VerifyUserPasswordAsync(string id, string plaintextPassword)
     {
+        using var _ = await AcquireWriteLockAsync();
+
         var root = await ReadRootAsync();
         var (users, seeded) = await GetOrCreateUsersSectionAsync(root);
 
@@ -2245,6 +2323,8 @@ public class SettingsService
     // email allowlist, or vice versa.
     public async Task<SettingsViewDto> SaveAdminEmailsAsync(List<string> adminEmails, List<string> viewerEmails)
     {
+        using var _ = await AcquireWriteLockAsync();
+
         var root = await ReadRootAsync();
         var auth = root["Auth"] as JObject ?? new JObject();
 
@@ -2261,6 +2341,8 @@ public class SettingsService
 
     public async Task<SettingsViewDto> SetSuperAdminEmailAsync(string email)
     {
+        using var _ = await AcquireWriteLockAsync();
+
         var root = await ReadRootAsync();
         var auth = root["Auth"] as JObject ?? new JObject();
 
@@ -2289,6 +2371,8 @@ public class SettingsService
 
     public async Task<long> IncrementAppVersionAsync()
     {
+        using var _ = await AcquireWriteLockAsync();
+
         var root = await ReadRootAsync();
         var cache = root["AppCache"] as JObject ?? new JObject();
 
@@ -2306,6 +2390,8 @@ public class SettingsService
 
     public async Task<SettingsViewDto> SaveAdminUsernamesAsync(AdminUsernamesUpdateDto update)
     {
+        using var _ = await AcquireWriteLockAsync();
+
         var root = await ReadRootAsync();
 
         var auth = root["Auth"] as JObject ?? new JObject();
@@ -2339,6 +2425,8 @@ public class SettingsService
     // next request - no logout, no waiting for a token to expire.
     public async Task<SettingsViewDto> SuspendAdminAsync(string username)
     {
+        using var _ = await AcquireWriteLockAsync();
+
         var root = await ReadRootAsync();
         var auth = root["Auth"] as JObject ?? new JObject();
         var suspended = auth["SuspendedAdminGitHubUsernames"] as JArray ?? new JArray();
@@ -2357,6 +2445,8 @@ public class SettingsService
 
     public async Task<SettingsViewDto> UnsuspendAdminAsync(string username)
     {
+        using var _ = await AcquireWriteLockAsync();
+
         var root = await ReadRootAsync();
 
         if (root["Auth"] is JObject auth && auth["SuspendedAdminGitHubUsernames"] is JArray suspended)
@@ -2400,6 +2490,8 @@ public class SettingsService
     // another session's data.
     public async Task<SettingsViewDto> ClearMyCredentialsAsync(string callerKey)
     {
+        using var _ = await AcquireWriteLockAsync();
+
         var root = await ReadRootAsync();
 
         if (root["UserGitHubCredentials"] is JObject githubUsers)
@@ -2444,6 +2536,8 @@ public class SettingsService
     // per-session credential this generic portal-wide reset never touches.
     public async Task<SettingsViewDto> ClearAllAsync(string callerKey)
     {
+        using var _ = await AcquireWriteLockAsync();
+
         var root = await ReadRootAsync();
 
         root.Remove("Docker");
@@ -2460,6 +2554,8 @@ public class SettingsService
 
     public async Task<SettingsViewDto> ClearAsync(string section)
     {
+        using var _ = await AcquireWriteLockAsync();
+
         if (!SectionInfo.TryGetValue(section, out var info))
             throw new ArgumentException($"Unknown settings section '{section}'.");
 
@@ -2510,6 +2606,8 @@ public class SettingsService
 
     public async Task<Dictionary<string, string>> SaveSidebarAccessAsync(string key, Dictionary<string, string> states)
     {
+        using var _ = await AcquireWriteLockAsync();
+
         var root = await ReadRootAsync();
         var users = root["SidebarAccess"] as JObject ?? new JObject();
         var entry = new JObject();
@@ -2612,6 +2710,8 @@ public class SettingsService
 
     public async Task<List<string>> GrantPageAdminAsync(string pageKey, string login)
     {
+        using var _ = await AcquireWriteLockAsync();
+
         if (!GrantablePageKeys.Contains(pageKey))
             throw new ArgumentException($"'{pageKey}' isn't a grantable page.");
 
@@ -2634,6 +2734,8 @@ public class SettingsService
 
     public async Task<List<string>> RevokePageAdminAsync(string pageKey, string login)
     {
+        using var _ = await AcquireWriteLockAsync();
+
         var root = await ReadRootAsync();
         var grants = root["PageAdminGrants"] as JObject;
         var list = grants?[pageKey] as JArray;
@@ -2670,6 +2772,8 @@ public class SettingsService
 
     public async Task<string> SaveExternalHealthEndpointsAsync(string endpointsText)
     {
+        using var _ = await AcquireWriteLockAsync();
+
         var root = await ReadRootAsync();
         var section = root["ExternalHealth"] as JObject ?? new JObject();
 
@@ -2721,6 +2825,8 @@ public class SettingsService
     // MaxSecurityTestingTargets for the same URL.
     public async Task<SecurityTestingTargetDto> AddSecurityTestingTargetAsync(string url)
     {
+        using var _ = await AcquireWriteLockAsync();
+
         var root = await ReadRootAsync();
         var targets = root["SecurityTestingTargets"] as JArray ?? new JArray();
 
@@ -2758,6 +2864,8 @@ public class SettingsService
 
     public async Task RemoveSecurityTestingTargetAsync(string id)
     {
+        using var _ = await AcquireWriteLockAsync();
+
         var root = await ReadRootAsync();
         var targets = root["SecurityTestingTargets"] as JArray;
 
@@ -2840,6 +2948,8 @@ public class SettingsService
 
     public async Task SaveSecurityTestingScanAsync(SecurityScanResultDto scan)
     {
+        using var _ = await AcquireWriteLockAsync();
+
         var root = await ReadRootAsync();
         var scans = root["SecurityTestingScans"] as JArray ?? new JArray();
 
@@ -2854,6 +2964,8 @@ public class SettingsService
 
     public async Task DeleteSecurityTestingScanAsync(string id)
     {
+        using var _ = await AcquireWriteLockAsync();
+
         var root = await ReadRootAsync();
         var scans = root["SecurityTestingScans"] as JArray;
 
@@ -2991,6 +3103,8 @@ public class SettingsService
 
     private async Task<byte[]> GetOrCreateRowIdSecretAsync()
     {
+        using var _ = await AcquireWriteLockAsync();
+
         var root = await ReadRootAsync();
         var existing = root["Internal"]?["RowIdSecret"]?.ToString();
 
@@ -3023,6 +3137,8 @@ public class SettingsService
 
     public async Task BlockPatUserAsync(string key)
     {
+        using var _ = await AcquireWriteLockAsync();
+
         var root = await ReadRootAsync();
         var blocked = root["BlockedPatUsers"] as JArray ?? new JArray();
 
@@ -3037,6 +3153,8 @@ public class SettingsService
 
     public async Task UnblockPatUserAsync(string key)
     {
+        using var _ = await AcquireWriteLockAsync();
+
         var root = await ReadRootAsync();
 
         if (root["BlockedPatUsers"] is JArray blocked)
@@ -3072,6 +3190,8 @@ public class SettingsService
     // SecurityApiKeysController whenever this list is read back.
     public async Task<(ApiKey Entry, string RawKey)> CreateApiKeyAsync(string name, string ownerKey)
     {
+        using var _ = await AcquireWriteLockAsync();
+
         var rawKey = "sk_" + Convert.ToHexString(RandomNumberGenerator.GetBytes(24)).ToLowerInvariant();
         var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(rawKey))).ToLowerInvariant();
 
@@ -3104,6 +3224,8 @@ public class SettingsService
 
     public async Task<bool> RevokeApiKeyAsync(int id)
     {
+        using var _ = await AcquireWriteLockAsync();
+
         var root = await ReadRootAsync();
 
         if (root["ApiKeys"] is not JArray array)
@@ -3152,6 +3274,8 @@ public class SettingsService
 
     public async Task SetPinAsync(string key, string pin)
     {
+        using var _ = await AcquireWriteLockAsync();
+
         var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(pin))).ToLowerInvariant();
 
         var root = await ReadRootAsync();
@@ -3167,6 +3291,8 @@ public class SettingsService
 
     public async Task ClearPinAsync(string key)
     {
+        using var _ = await AcquireWriteLockAsync();
+
         var root = await ReadRootAsync();
 
         if (root["SecurityPins"] is JObject pins && pins.Remove(key))
@@ -3260,6 +3386,8 @@ public class SettingsService
     // forward for someone who hasn't enrolled.
     public async Task SetMfaRequiredAsync(string login, bool required)
     {
+        using var _ = await AcquireWriteLockAsync();
+
         var root = await ReadRootAsync();
         var mfa = root["Mfa"] as JObject ?? new JObject();
         var entry = mfa[login] as JObject;
@@ -3306,6 +3434,8 @@ public class SettingsService
     // Portal: google:108234...".
     public async Task<(string Secret, string OtpAuthUri)> EnrollMfaAsync(string login, string displayLabel)
     {
+        using var _ = await AcquireWriteLockAsync();
+
         var secret = GenerateTotpSecret();
         var now = DateTime.UtcNow;
 
@@ -3349,6 +3479,8 @@ public class SettingsService
     // "enrollment finished."
     public async Task<bool> VerifyMfaEnrollmentAsync(string login, string code)
     {
+        using var _ = await AcquireWriteLockAsync();
+
         var root = await ReadRootAsync();
         var entry = (root["Mfa"] as JObject)?[login] as JObject;
         var secret = Unprotect(entry?["SecretEncrypted"]?.ToString());
@@ -3388,6 +3520,8 @@ public class SettingsService
     // invalidated by issuing a new one.
     public async Task<string?> GenerateAdminRecoveryCodeAsync(string login)
     {
+        using var _ = await AcquireWriteLockAsync();
+
         var root = await ReadRootAsync();
         var entry = (root["Mfa"] as JObject)?[login] as JObject;
 
@@ -3421,6 +3555,8 @@ public class SettingsService
     // linger for some future re-enrollment to accidentally trust.
     public async Task DisableMfaAsync(string login)
     {
+        using var _ = await AcquireWriteLockAsync();
+
         var root = await ReadRootAsync();
 
         if (root["Mfa"] is not JObject mfa || mfa[login] is not JObject existing)
@@ -3489,6 +3625,8 @@ public class SettingsService
 
     public async Task SaveMfaLockoutStateAsync(string login, MfaLockoutStateDto state)
     {
+        using var _ = await AcquireWriteLockAsync();
+
         var root = await ReadRootAsync();
         var lockouts = root["MfaLockouts"] as JObject ?? new JObject();
 
@@ -3517,6 +3655,8 @@ public class SettingsService
 
     public async Task SetMfaNotificationEmailAsync(string login, string email)
     {
+        using var _ = await AcquireWriteLockAsync();
+
         var root = await ReadRootAsync();
         var mfa = root["Mfa"] as JObject;
         var entry = mfa?[login] as JObject;
@@ -3538,6 +3678,8 @@ public class SettingsService
 
     public async Task<bool> VerifyMfaCodeAsync(string login, string code)
     {
+        using var _ = await AcquireWriteLockAsync();
+
         var root = await ReadRootAsync();
         var entry = (root["Mfa"] as JObject)?[login] as JObject;
         var secret = Unprotect(entry?["SecretEncrypted"]?.ToString());
@@ -3553,6 +3695,8 @@ public class SettingsService
 
     public async Task<bool> VerifyMfaRecoveryCodeAsync(string login, string code)
     {
+        using var _ = await AcquireWriteLockAsync();
+
         var root = await ReadRootAsync();
         var entry = (root["Mfa"] as JObject)?[login] as JObject;
         var codes = entry?["RecoveryCodes"] as JArray;
@@ -3624,6 +3768,8 @@ public class SettingsService
 
     public async Task<int> IncrementMfaNudgeSkipCountAsync(string key)
     {
+        using var _ = await AcquireWriteLockAsync();
+
         var root = await ReadRootAsync();
         var skips = root["MfaNudgeSkips"] as JObject ?? new JObject();
 
@@ -3800,6 +3946,8 @@ public class SettingsService
 
     public async Task ClearSidebarAccessAsync(string key)
     {
+        using var _ = await AcquireWriteLockAsync();
+
         var root = await ReadRootAsync();
 
         if (root["SidebarAccess"] is JObject users && users.Remove(key))
@@ -3824,6 +3972,8 @@ public class SettingsService
 
     public async Task SaveBranchPurposeAsync(string branch, string purpose)
     {
+        using var _ = await AcquireWriteLockAsync();
+
         var root = await ReadRootAsync();
         var purposes = root["BranchPurposes"] as JObject ?? new JObject();
 
@@ -3858,6 +4008,8 @@ public class SettingsService
 
     public async Task SaveBranchCreatorAsync(string branch, string login)
     {
+        using var _ = await AcquireWriteLockAsync();
+
         var root = await ReadRootAsync();
         var creators = root["BranchCreators"] as JObject ?? new JObject();
 
@@ -3869,6 +4021,8 @@ public class SettingsService
 
     public async Task RemoveBranchCreatorAsync(string branch)
     {
+        using var _ = await AcquireWriteLockAsync();
+
         var root = await ReadRootAsync();
 
         if (root["BranchCreators"] is JObject creators && creators.Remove(branch))
@@ -4129,6 +4283,8 @@ public class SettingsService
     // restart/redeploy afterward, not just call this and keep going.
     public async Task ImportBackupAsync(PortalBackupDto backup)
     {
+        using var _ = await AcquireWriteLockAsync();
+
         if (_connectionString == null)
             throw new InvalidOperationException(
                 "This portal isn't running against a Postgres database (DATABASE_URL not set) - there's nothing to restore into.");
