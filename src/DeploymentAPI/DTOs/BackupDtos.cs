@@ -30,3 +30,21 @@ public class PortalBackupDto
 
     public List<string> DataProtectionKeyXmls { get; set; } = new();
 }
+
+// Backup & Restore's "Export Backup" now requires an emailed OTP first
+// (OtpPurpose.BackupExport) - that file carries every credential in the
+// portal, so downloading it needs the same "prove it's really you, right
+// now" step MFA/password-reset already require.
+public class ExportBackupRequestDto
+{
+    public string? Otp { get; set; }
+}
+
+// "Delete All Data" - ConfirmPhrase is checked server-side too (not just
+// the frontend's typed-confirmation UI, which is a nicety, not a real
+// gate on its own) since this is the most destructive action in the
+// entire portal.
+public class WipeDatabaseRequestDto
+{
+    public string? ConfirmPhrase { get; set; }
+}

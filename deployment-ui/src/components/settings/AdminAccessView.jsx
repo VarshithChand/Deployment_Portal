@@ -8,10 +8,11 @@ import useToast from "../../hooks/useToast";
 import useConfirm from "../../hooks/useConfirm";
 import {
     resetUserMfa, generateMfaRecoveryCode, requireUserMfa, unrequireUserMfa,
-    exportBackup, importBackup
+    sendExportOtp, exportBackup, importBackup, wipeDatabase
 } from "../../services/adminService";
 
 const IMPORT_CONFIRM_PHRASE = "OVERWRITE EVERYTHING";
+const WIPE_CONFIRM_PHRASE = "DELETE ALL DATA";
 
 const TABS = [
     { key: "allowlist", label: "Admin Allowlist" },
@@ -356,19 +357,66 @@ export default function AdminAccessView({
 
     // ---- Backup & Restore -----------------------------------------
 
-    const [exporting, setExporting] = useState(false);
     const [pendingImport, setPendingImport] = useState(null);
     const [importing, setImporting] = useState(false);
     const importFileRef = useRef(null);
 
-    async function handleExport() {
+    // Export is now a two-step, OTP-gated flow (see OtpPurpose.BackupExport's
+    // own comment for why this file specifically needs a fresh code, not
+    // just the standing super-admin session) - sendingOtp covers the first
+    // request, otpDialogOpen/otpCode/verifyingOtp cover the code-entry step
+    // that follows it.
+    const [sendingOtp, setSendingOtp] = useState(false);
+    const [otpDialogOpen, setOtpDialogOpen] = useState(false);
+    const [otpCode, setOtpCode] = useState("");
+    const [verifyingOtp, setVerifyingOtp] = useState(false);
 
-        setExporting(true);
+    async function handleStartExport() {
+
+        setSendingOtp(true);
 
         try {
 
-            const response = await exportBackup();
-            const blob = new Blob([JSON.stringify(response.data, null, 2)], { type: "application/json" });
+            const response = await sendExportOtp();
+
+            if (!response.data.success) {
+                toast.show(response.data.message || "Couldn't send the verification code.", "error");
+                return;
+            }
+
+            toast.show("A verification code has been sent to your email address.", "success");
+            setOtpCode("");
+            setOtpDialogOpen(true);
+
+        }
+        catch (err) {
+
+            console.error(err);
+            toast.show(err.response?.data?.message || "Failed to send the verification code.", "error");
+
+        }
+        finally {
+
+            setSendingOtp(false);
+
+        }
+
+    }
+
+    async function handleVerifyExportOtp() {
+
+        setVerifyingOtp(true);
+
+        try {
+
+            const response = await exportBackup(otpCode.trim());
+
+            if (!response.data.success) {
+                toast.show(response.data.message || "Invalid or expired verification code.", "error");
+                return;
+            }
+
+            const blob = new Blob([JSON.stringify(response.data.backup, null, 2)], { type: "application/json" });
             const url = URL.createObjectURL(blob);
 
             const link = document.createElement("a");
@@ -380,6 +428,7 @@ export default function AdminAccessView({
             URL.revokeObjectURL(url);
 
             toast.show("Backup downloaded. Store it somewhere as protected as your credentials — never in a git repo.", "success");
+            setOtpDialogOpen(false);
 
         }
         catch (err) {
@@ -390,7 +439,7 @@ export default function AdminAccessView({
         }
         finally {
 
-            setExporting(false);
+            setVerifyingOtp(false);
 
         }
 
@@ -441,6 +490,44 @@ export default function AdminAccessView({
         finally {
 
             setImporting(false);
+
+        }
+
+    }
+
+    // "Delete All Data" - the server emails a full safety-net backup to
+    // this admin's own address BEFORE wiping anything (see
+    // BackupController.Wipe) - the success toast below is what actually
+    // confirms that happened, not a separate step this page has to manage.
+    const [wipeDialogOpen, setWipeDialogOpen] = useState(false);
+    const [wiping, setWiping] = useState(false);
+
+    async function handleConfirmWipe() {
+
+        setWiping(true);
+
+        try {
+
+            const response = await wipeDatabase(WIPE_CONFIRM_PHRASE);
+
+            if (!response.data.success) {
+                toast.show(response.data.message || "Failed to delete all data.", "error");
+                return;
+            }
+
+            toast.show(response.data.message || "All data deleted.", "success");
+            setWipeDialogOpen(false);
+
+        }
+        catch (err) {
+
+            console.error(err);
+            toast.show(err.response?.data?.message || "Failed to delete all data.", "error");
+
+        }
+        finally {
+
+            setWiping(false);
 
         }
 
@@ -911,8 +998,8 @@ export default function AdminAccessView({
 
                 <div className="button-row">
 
-                    <button type="button" className="btn btn-primary" onClick={handleExport} disabled={exporting}>
-                        {exporting ? "Exporting..." : "Export Backup"}
+                    <button type="button" className="btn btn-primary" onClick={handleStartExport} disabled={sendingOtp}>
+                        {sendingOtp ? "Sending code..." : "Export Backup"}
                     </button>
 
                     <button
@@ -933,6 +1020,24 @@ export default function AdminAccessView({
                     />
 
                 </div>
+
+                <hr className="dashboard-section-divider" />
+
+                <h3 className="settings-subhead" style={{ color: "#dc2626" }}>Delete All Data</h3>
+
+                <p className="field-hint field-hint-bad" style={{ margin: "0 0 15px" }}>
+                    Permanently wipes the admin allowlist, every account, and every connected
+                    credential - everything Backup & Restore above exports. Before anything is
+                    deleted, a full backup is automatically emailed to your own admin address, so
+                    this is recoverable through Import Backup above, not a true point of no return.
+                    The encryption keys are left in place - there's nothing left for them to decrypt
+                    either way, and the next request after this simply re-seeds a fresh default
+                    admin account, same as a brand new deployment.
+                </p>
+
+                <button type="button" className="btn btn-danger" onClick={() => setWipeDialogOpen(true)}>
+                    Delete All Data
+                </button>
 
             </div>
 
@@ -955,6 +1060,77 @@ export default function AdminAccessView({
             onConfirm={handleConfirmImport}
             onCancel={() => !importing && setPendingImport(null)}
         />
+
+        <TypedConfirmDialog
+            open={wipeDialogOpen}
+            title="Delete all portal data?"
+            message={(
+                <>
+                    A full backup will be emailed to your own admin address first, then the admin
+                    allowlist, every account, and every connected credential in this portal is
+                    permanently deleted. The next request re-seeds a fresh default admin account,
+                    same as a brand new deployment.
+                </>
+            )}
+            resourceName={WIPE_CONFIRM_PHRASE}
+            confirmLabel={wiping ? "Deleting..." : "Delete All Data"}
+            loading={wiping}
+            onConfirm={handleConfirmWipe}
+            onCancel={() => !wiping && setWipeDialogOpen(false)}
+        />
+
+        {otpDialogOpen && (
+
+            <div
+                className="dialog-backdrop"
+                role="presentation"
+                onClick={(e) => { if (e.target === e.currentTarget && !verifyingOtp) setOtpDialogOpen(false); }}
+            >
+
+                <div className="dialog" role="alertdialog" aria-modal="true" aria-labelledby="export-otp-title">
+
+                    <h2 id="export-otp-title" style={{ marginTop: 0 }}>Enter your verification code</h2>
+
+                    <p className="field-hint">
+                        A 6-digit code was just emailed to your admin address - it expires in 5 minutes.
+                    </p>
+
+                    <div className="form-group">
+                        <label htmlFor="export-otp-code">Verification code</label>
+                        <input
+                            id="export-otp-code"
+                            type="text"
+                            inputMode="numeric"
+                            className="form-control"
+                            value={otpCode}
+                            onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                            autoComplete="off"
+                            placeholder="123456"
+                        />
+                    </div>
+
+                    <div className="button-row">
+
+                        <button
+                            type="button"
+                            className="btn btn-primary"
+                            disabled={otpCode.length !== 6 || verifyingOtp}
+                            onClick={handleVerifyExportOtp}
+                        >
+                            {verifyingOtp ? "Verifying..." : "Verify & Download"}
+                        </button>
+
+                        <button type="button" className="btn btn-secondary" onClick={() => setOtpDialogOpen(false)} disabled={verifyingOtp}>
+                            Cancel
+                        </button>
+
+                    </div>
+
+                </div>
+
+            </div>
+
+        )}
 
         {revealedCode && (
 

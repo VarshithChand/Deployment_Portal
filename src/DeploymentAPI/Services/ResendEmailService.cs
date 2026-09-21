@@ -91,7 +91,38 @@ public class ResendEmailService : IEmailService
         return await SendAsync(toEmail, subject, html, logContext: $"password-changed confirmation for '{username}'");
     }
 
-    private async Task<EmailSendResultDto> SendAsync(string toEmail, string subject, string html, string logContext)
+    public async Task<EmailSendResultDto> SendBackupExportOtpEmailAsync(string toEmail, string username, string otp)
+    {
+        var subject = "Your Deployment Portal Backup Export Code";
+        var html = BuildOtpHtml(
+            username, otp,
+            "A full portal backup - every credential this portal has saved - is about to be exported. Your verification code is:",
+            reasonNote: "If you did not request this, someone else may have your admin session - sign out everywhere and rotate your password.");
+
+        return await SendAsync(toEmail, subject, html, logContext: $"backup export OTP email for '{username}'");
+    }
+
+    public async Task<EmailSendResultDto> SendDatabaseWipeBackupEmailAsync(
+        string toEmail, string performedByLogin, string databaseHost, string backupJsonBase64, string backupFileName)
+    {
+        var subject = "Deployment Portal — Backup Before Database Wipe";
+        var html = BuildDatabaseWipeBackupHtml(performedByLogin, databaseHost);
+
+        return await SendAsync(
+            toEmail, subject, html,
+            logContext: $"pre-wipe safety backup for '{performedByLogin}'",
+            attachment: (backupFileName, backupJsonBase64));
+    }
+
+    // attachment is (filename, base64Content) - Resend's own attachment
+    // shape (https://resend.com/docs/api-reference/emails/send-email,
+    // "attachments": [{"filename", "content"}]). Only the pre-wipe safety
+    // backup uses this today.
+    private Task<EmailSendResultDto> SendAsync(string toEmail, string subject, string html, string logContext) =>
+        SendAsync(toEmail, subject, html, logContext, attachment: null);
+
+    private async Task<EmailSendResultDto> SendAsync(
+        string toEmail, string subject, string html, string logContext, (string FileName, string Base64Content)? attachment)
     {
         if (string.IsNullOrWhiteSpace(toEmail))
             return new EmailSendResultDto { Success = false, Message = "No recipient email address was available." };
@@ -124,6 +155,18 @@ public class ResendEmailService : IEmailService
                 ["subject"] = subject,
                 ["html"] = html
             };
+
+            if (attachment is { } att)
+            {
+                body["attachments"] = new JsonArray
+                {
+                    new JsonObject
+                    {
+                        ["filename"] = att.FileName,
+                        ["content"] = att.Base64Content
+                    }
+                };
+            }
 
             var content = new StringContent(body.ToJsonString(), Encoding.UTF8, "application/json");
             var response = await client.PostAsync(ResendApiUrl, content);
@@ -383,6 +426,43 @@ public class ResendEmailService : IEmailService
         </p>
         <p style="margin:0;font-size:13px;line-height:1.6;color:#6b7280;">
         If you did not change your password, please contact support immediately.
+        </p>
+        </td></tr>
+        </table>
+        </td></tr>
+        </table>
+        </body>
+        </html>
+        """;
+    }
+
+    private static string BuildDatabaseWipeBackupHtml(string performedByLogin, string databaseHost)
+    {
+        return $$"""
+        <!DOCTYPE html>
+        <html>
+        <body style="margin:0;padding:0;background:#f3f4f6;font-family:Segoe UI,Helvetica,Arial,sans-serif;">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f3f4f6;padding:32px 0;">
+        <tr><td align="center">
+        <table role="presentation" width="480" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:8px;overflow:hidden;border:1px solid #e5e7eb;">
+        <tr><td style="background:#dc2626;padding:24px 32px;">
+        <span style="color:#ffffff;font-size:18px;font-weight:700;">Deployment Portal — Database Wipe</span>
+        </td></tr>
+        <tr><td style="padding:32px;">
+        <p style="margin:0 0 20px;font-size:14px;line-height:1.6;color:#374151;">
+        <strong>{{WebUtility.HtmlEncode(performedByLogin)}}</strong> just used "Delete All Data" in Settings &gt; Admin Access &gt; Backup &amp; Restore
+        on the database at <strong>{{WebUtility.HtmlEncode(databaseHost)}}</strong>.
+        </p>
+        <p style="margin:0 0 20px;font-size:14px;line-height:1.6;color:#374151;">
+        Attached is a full backup taken immediately before the wipe - the admin allowlist, every account, and every connected
+        credential, exactly as they were the instant before deletion. This is a real, working restore point.
+        </p>
+        <p style="margin:0 0 20px;font-size:13px;line-height:1.6;color:#6b7280;">
+        To bring this data back: Settings &gt; Admin Access &gt; Backup &amp; Restore &gt; Import Backup, choose the attached file,
+        then restart or redeploy the backend afterward so the restored encryption keys take effect.
+        </p>
+        <p style="margin:0;font-size:13px;line-height:1.6;color:#6b7280;">
+        Store this file as protected as every credential in this portal - it carries the encryption key that unlocks all of them.
         </p>
         </td></tr>
         </table>

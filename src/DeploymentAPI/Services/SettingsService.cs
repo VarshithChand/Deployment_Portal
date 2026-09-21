@@ -1733,6 +1733,8 @@ public class SettingsService
     // they're unrelated flows that could otherwise starve each other.
     public async Task<OtpRequestResult> IssueOtpAsync(string userId, string purpose)
     {
+        using var _ = await AcquireWriteLockAsync();
+
         var root = await ReadRootAsync();
         var (users, _) = await GetOrCreateUsersSectionAsync(root);
 
@@ -1798,6 +1800,8 @@ public class SettingsService
     // flow double as a bypass for the other.
     public async Task<OtpVerifyOutcome> VerifyOtpAsync(string userId, string purpose, string submittedCode)
     {
+        using var _ = await AcquireWriteLockAsync();
+
         var root = await ReadRootAsync();
         var (users, _) = await GetOrCreateUsersSectionAsync(root);
 
@@ -4177,5 +4181,24 @@ public class SettingsService
             connection);
 
         await command.ExecuteNonQueryAsync();
+    }
+
+    // Admin Access's "Delete All Data" - wipes portal_settings back to an
+    // empty object, which GetOrCreateUsersSectionAsync then treats as a
+    // fresh install on the very next read: it re-seeds the original
+    // default super-admin account exactly like a brand new deployment.
+    // Deliberately does NOT touch data_protection_keys - with no settings
+    // data left, there's nothing left for those keys to decrypt anyway,
+    // so leaving them in place is harmless and one less thing to go wrong.
+    // The caller (BackupController.Wipe) is responsible for emailing a
+    // safety-net backup BEFORE calling this - this method itself has no
+    // idea that already happened, it just does the deletion.
+    public async Task WipeSettingsAsync()
+    {
+        using var _ = await AcquireWriteLockAsync();
+
+        await WriteRootAsync(new JObject());
+
+        _log.LogInfo("Settings", "All portal settings data was wiped via Admin Access > Backup & Restore > Delete All Data.");
     }
 }

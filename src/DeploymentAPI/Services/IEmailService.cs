@@ -62,4 +62,18 @@ public interface IEmailService
     // failure here is swallowed the same way SendWelcomeVerificationEmailAsync's
     // caller does. Never includes the new password.
     Task<EmailSendResultDto> SendPasswordResetConfirmationAsync(string toEmail, string username);
+
+    // Gates Backup & Restore's "Export Backup" (see OtpPurpose.BackupExport) -
+    // same security-critical/non-swallowed reasoning as SendMfaOtpEmailAsync:
+    // a caller must never be told a code is on its way when it isn't.
+    Task<EmailSendResultDto> SendBackupExportOtpEmailAsync(string toEmail, string username, string otp);
+
+    // The safety-net copy sent automatically right before Admin Access's
+    // "Delete All Data" actually wipes portal_settings - backupJsonBase64
+    // is the exact same export ExportBackupAsync produces, attached as a
+    // file rather than inlined, so this email IS a working restore point
+    // (see BackupController.Import). databaseHost is masked host:port/db
+    // only (BuildMaskedConnection - never credentials), included so
+    // whoever reads this later knows which database it came from.
+    Task<EmailSendResultDto> SendDatabaseWipeBackupEmailAsync(string toEmail, string performedByLogin, string databaseHost, string backupJsonBase64, string backupFileName);
 }

@@ -57,6 +57,19 @@ export const removeDuplicateUsers = async () => await api.post("/users/dedupe");
 // plaintext (it carries both the encrypted settings AND the only key
 // ring that can decrypt them). Never logged, never cached - the caller
 // is responsible for what happens to it once it leaves this response.
-export const exportBackup = async () => await api.get("/backup/export");
+//
+// Export is now a two-step, OTP-gated flow (OtpPurpose.BackupExport) -
+// sendExportOtp emails a code to the caller's own address, exportBackup
+// then requires it. Mirrors the login-mfa/send-otp + verify pair this app
+// already uses elsewhere, not a new pattern.
+export const sendExportOtp = async () => await api.post("/backup/export/otp");
+
+export const exportBackup = async (otp) => await api.post("/backup/export", { otp });
 
 export const importBackup = async (backup) => await api.post("/backup/import", backup);
+
+// Admin Access's "Delete All Data" - wipes portal_settings back to empty
+// after emailing a full safety-net backup to the caller first (see
+// BackupController.Wipe). confirmPhrase must be exactly "DELETE ALL DATA",
+// checked server-side too, not just this dialog's own typed-confirmation UI.
+export const wipeDatabase = async (confirmPhrase) => await api.post("/backup/wipe", { confirmPhrase });
