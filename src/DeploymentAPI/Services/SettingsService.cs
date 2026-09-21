@@ -4110,7 +4110,7 @@ public class SettingsService
         return new PortalBackupDto
         {
             ExportedAtUtc = DateTime.UtcNow,
-            Settings = root,
+            Settings = root.ToString(Newtonsoft.Json.Formatting.None),
             DataProtectionKeyXmls = keys
         };
     }
@@ -4129,10 +4129,21 @@ public class SettingsService
             throw new InvalidOperationException(
                 "This portal isn't running against a Postgres database (DATABASE_URL not set) - there's nothing to restore into.");
 
-        if (backup.Settings == null)
+        if (string.IsNullOrWhiteSpace(backup.Settings))
             throw new ArgumentException("Backup file is missing its settings data.");
 
-        await WriteRootAsync(backup.Settings);
+        JObject parsedSettings;
+
+        try
+        {
+            parsedSettings = JObject.Parse(backup.Settings);
+        }
+        catch (Newtonsoft.Json.JsonException)
+        {
+            throw new ArgumentException("Backup file's settings data isn't valid JSON - is this really an exported backup?");
+        }
+
+        await WriteRootAsync(parsedSettings);
 
         await using var connection = new NpgsqlConnection(_connectionString);
         await connection.OpenAsync();
