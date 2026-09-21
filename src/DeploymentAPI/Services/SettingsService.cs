@@ -209,7 +209,22 @@ public class SettingsService
             Username = Uri.UnescapeDataString(userInfo[0]),
             Password = userInfo.Length > 1 ? Uri.UnescapeDataString(userInfo[1]) : string.Empty,
             Database = uri.AbsolutePath.TrimStart('/'),
-            SslMode = sslMode
+            SslMode = sslMode,
+            // Npgsql's own default (100) comfortably exceeds a small managed
+            // Postgres plan's total connection limit (Aiven/Render's free
+            // tiers cap out around 20-25, some of that further reserved for
+            // superuser-only roles) - this app opens a fresh NpgsqlConnection
+            // per settings read/write across several call sites (SettingsService,
+            // PostgresXmlRepository, DatabaseManagementService), all sharing
+            // this one pool since they all resolve to this exact same
+            // connection string. Under any burst of concurrent requests the
+            // pool tried to grow toward 100 and blew through the plan's real
+            // ceiling, producing Postgres error 53300 ("remaining connection
+            // slots are reserved for roles with the SUPERUSER attribute").
+            // Capped well under typical small-plan limits so the app queues
+            // for a pooled connection instead of the database rejecting the
+            // connection outright.
+            MaxPoolSize = 10
         };
 
         return builder.ConnectionString;
