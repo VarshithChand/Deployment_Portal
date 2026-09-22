@@ -177,7 +177,9 @@ public static class OrganizationSchema
     // section for why separate keys per level was chosen over an ordinal
     // enum: credentials.use vs credentials.read is what lets a Contributor
     // deploy using a credential without ever seeing it).
-    private static readonly (string Key, string Resource, string Action, string Description)[] PermissionCatalog =
+    // internal (not private) so the test project can assert the seeded
+    // matrix directly - see AssemblyInfo.cs's InternalsVisibleTo.
+    internal static readonly (string Key, string Resource, string Action, string Description)[] PermissionCatalog =
     [
         ("organization.manage", "organization", "manage", "Rename, update, or delete the organization"),
         ("members.manage", "members", "manage", "Invite, remove, or change the role of organization members"),
@@ -199,13 +201,25 @@ public static class OrganizationSchema
     ];
 
     // The 3 fixed system roles and the permission keys each one grants -
-    // see the plan's seeded matrix. Contributor gets credentials.use +
-    // deployments.execute/view but NOT credentials.read - the "can deploy
-    // with a credential without seeing it" requirement.
-    private static readonly (string Key, string DisplayName, string[] PermissionKeys)[] SystemRoles =
+    // see the plan's seeded matrix. Contributor gets credentials.read +
+    // credentials.use (can see the organization's credentials and deploy
+    // with them) but never credentials.write/delete - only Admin can
+    // create, edit, or remove a credential. Read gets credentials.read
+    // only - can see the list, can't use or edit it.
+    // internal (not private) so the test project can assert the seeded
+    // matrix directly - see AssemblyInfo.cs's InternalsVisibleTo.
+    internal static readonly (string Key, string DisplayName, string[] PermissionKeys)[] SystemRoles =
     [
         ("admin", "Admin", PermissionCatalog.Select(p => p.Key).ToArray()),
-        ("contributor", "Contributor", ["credentials.use", "deployments.execute", "deployments.view", "cloud_services.read"]),
+        // credentials.read (not write/delete) lets a Contributor SEE the
+        // organization's saved credentials (name/provider/configured -
+        // never the secret value, see OrgCredentialService/
+        // OrganizationCredentialDto) alongside the credentials.use they
+        // already had to deploy with one - only Admin has credentials.write/
+        // delete, so the Credentials panel's Add/Edit/Delete controls stay
+        // Admin-only while the list itself becomes visible to Contributor
+        // and Read alike.
+        ("contributor", "Contributor", ["credentials.read", "credentials.use", "deployments.execute", "deployments.view", "cloud_services.read"]),
         ("read", "Read", ["credentials.read", "deployments.view", "cloud_services.read"])
     ];
 
