@@ -96,6 +96,7 @@ const Eslint = lazy(() => import("./pages/Eslint"));
 const Pylint = lazy(() => import("./pages/Pylint"));
 const Checkstyle = lazy(() => import("./pages/Checkstyle"));
 const Settings = lazy(() => import("./pages/Settings"));
+const HealthPage = lazy(() => import("./pages/HealthPage"));
 
 // Admin-only regardless of Sidebar Access state — same guard the Sidebar
 // tabs themselves already get (see Sidebar.jsx's ADMIN_ONLY_TABS), needed
@@ -105,8 +106,17 @@ const ADMIN_ONLY_TABS = new Set(["codeQuality", "sonarcloud", "services"]);
 function App(){
 
     const { tab, setTab, sidebarAccess, refreshSidebarAccess } = useNavigation();
-    const { user, isAdminSession, grantedPages, oauthStatusChecked, bootstrapError } = useAuth();
+    const { user, isAdminSession, isSuperAdminSession, grantedPages, oauthStatusChecked, bootstrapError } = useAuth();
     const toast = useToast();
+
+    // deploymentportal.in/health - a real URL path, not a ?tab= query
+    // param like everything else here, checked once (this app never
+    // changes window.location.pathname itself, so it can't go stale
+    // mid-session). Evaluated only AFTER the normal !configured gate
+    // below resolves - an unauthenticated visitor sees the exact same
+    // login flow as any other page, and only once a real session exists
+    // does this decide whether to show HealthPage or turn them away.
+    const isHealthRoute = window.location.pathname === "/health";
 
     useCardTilt();
 
@@ -287,6 +297,40 @@ function App(){
             <LoginSignupPage
                 onMfaRequired={() => setMfaPending(true)}
             />
+        );
+
+    }
+
+    // Authenticated (configured is true above), and specifically at
+    // /health - renders in place of the ENTIRE normal app shell
+    // (TopBar/Sidebar/tab content never mount), same "full takeover"
+    // precedent as the pre-auth pages above. isSuperAdminSession is a
+    // client-side hint only (see AuthContext's own comment on it) - the
+    // real floor is that getBackendHealth/getDatabaseHealth are the same
+    // endpoints the CI smoke-test workflow already hits with no session
+    // at all, and the one field worth protecting (Database's host/port/
+    // name) is already gated server-side to Admin sessions regardless of
+    // this check.
+    if (isHealthRoute) {
+
+        if (!isSuperAdminSession) {
+
+            return (
+                <div className="health-page">
+                    <div className="health-page-inner health-page-denied">
+                        <h1>Access restricted</h1>
+                        <p className="field-hint">This page is only available to the portal's super-admin account.</p>
+                        <a href="/" className="btn btn-secondary">&larr; Back to portal</a>
+                    </div>
+                </div>
+            );
+
+        }
+
+        return (
+            <Suspense fallback={<LoadingSpinner />}>
+                <HealthPage />
+            </Suspense>
         );
 
     }

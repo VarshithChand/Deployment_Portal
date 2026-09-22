@@ -8627,3 +8627,77 @@ h1, h2, h3, .card-title, .page-title, .page-header h1, .stat-tile-value, .hero h
     flex:1;
     min-width:0;
 }
+
+/* deploymentportal.in/health - a standalone page (no TopBar/Sidebar,
+   same "full takeover" precedent as .aw-root) reachable only by the
+   super-admin - see App.jsx's own routing gate and HealthPage.jsx. */
+.health-page{
+    min-height:100vh;
+    display:flex;
+    justify-content:center;
+    padding:48px 20px;
+    background:var(--bg);
+}
+
+.health-page-inner{
+    width:100%;
+    max-width:640px;
+}
+
+.health-page-header{
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    text-align:center;
+    gap:10px;
+    margin-bottom:28px;
+}
+
+.health-page-header h1{
+    margin:0;
+    font-size:24px;
+    color:var(--heading-accent);
+}
+
+.health-cards{
+    display:flex;
+    flex-direction:column;
+    gap:16px;
+}
+
+.health-card-head{
+    display:flex;
+    align-items:center;
+    gap:10px;
+    margin-bottom:4px;
+}
+
+.health-card-head .badge{
+    margin-left:auto;
+}
+
+.health-dot{
+    width:10px;
+    height:10px;
+    border-radius:50%;
+    flex:0 0 auto;
+}
+
+.health-dot-ok{
+    background:var(--viz-good);
+    box-shadow:0 0 0 3px color-mix(in srgb, var(--viz-good) 22%, transparent);
+}
+
+.health-dot-bad{
+    background:var(--viz-critical);
+    box-shadow:0 0 0 3px color-mix(in srgb, var(--viz-critical) 22%, transparent);
+}
+
+.health-page-denied{
+    text-align:center;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    gap:14px;
+    margin-top:80px;
+}

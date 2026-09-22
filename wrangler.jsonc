@@ -13,7 +13,17 @@
     "enabled": true
   },
   "assets": {
-    "directory": "deployment-ui/dist"
+    "directory": "deployment-ui/dist",
+    // Was unset - which turned out to mean any path with no literal file
+    // match (e.g. /health, or any mistyped URL) 500'd with Cloudflare
+    // error 1101 ("Worker threw exception") instead of either falling
+    // back to the SPA or returning a clean 404, confirmed live against
+    // the deployed site. This app is a client-side-routed SPA (App.jsx
+    // reads window.location.pathname itself, e.g. for /health below), so
+    // every non-asset path should serve index.html and let the app's own
+    // JS decide what to render - this is also what makes a real path like
+    // /health work at all, not just query-param tabs.
+    "not_found_handling": "single-page-application"
   },
   "compatibility_flags": [
     "nodejs_compat"
