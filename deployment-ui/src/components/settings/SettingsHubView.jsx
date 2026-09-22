@@ -20,6 +20,14 @@ export default function SettingsHubView({
                 </p>
             </button>
 
+            <button type="button" className="settings-hub-tile" onClick={() => setView("organizations")}>
+                <h2>Organizations</h2>
+                <p>
+                    Create or manage organizations, invite members, assign Admin/Contributor/Read
+                    roles, and review the permission matrix.
+                </p>
+            </button>
+
             <button type="button" className="settings-hub-tile" onClick={() => setView("credentials")}>
                 <h2>Credentials</h2>
                 <p>

@@ -16,14 +16,55 @@ public class AzureAppServiceController : ControllerBase
     private readonly CloudStatusService _cloud;
     private readonly AzureAppServiceManagementService _management;
     private readonly ActivityLogService _log;
+    private readonly MembershipService _membership;
+    private readonly OrgAuthorizationService _orgAuth;
+    private readonly OrgCredentialService _orgCredentials;
 
     public AzureAppServiceController(
-        SettingsService settings, CloudStatusService cloud, AzureAppServiceManagementService management, ActivityLogService log)
+        SettingsService settings, CloudStatusService cloud, AzureAppServiceManagementService management, ActivityLogService log,
+        MembershipService membership, OrgAuthorizationService orgAuth, OrgCredentialService orgCredentials)
     {
         _settings = settings;
         _cloud = cloud;
         _management = management;
         _log = log;
+        _membership = membership;
+        _orgAuth = orgAuth;
+        _orgCredentials = orgCredentials;
+    }
+
+    // Same org-vs-Personal resolution as CloudServicesController's own
+    // ResolveAzureCredentialsAsync - see that file's comment for the full
+    // reasoning. Duplicated here (not shared) since these two controllers
+    // have no common base class and this is a small, self-contained method.
+    private async Task<(string? Key, UserAzureCredentials? Credentials, IActionResult? Denied)> ResolveAzureCredentialsAsync()
+    {
+        var (key, authDenied) = RequireAuth.RequireUserId(this);
+        if (authDenied != null) return (null, null, authDenied);
+
+        var orgHeader = Request.Headers["X-Organization-Id"].ToString();
+        var isOrganizationContext = !string.IsNullOrWhiteSpace(orgHeader)
+            && !string.Equals(orgHeader, "personal", StringComparison.OrdinalIgnoreCase);
+
+        if (!isOrganizationContext)
+            return (key, await _settings.GetUserAzureCredentialsAsync(key!), null);
+
+        if (!Guid.TryParse(orgHeader, out var organizationId))
+            return (null, null, StatusCode(400, new { message = "Invalid X-Organization-Id header." }));
+
+        var permissionKey = string.Equals(Request.Method, "GET", StringComparison.OrdinalIgnoreCase)
+            ? "cloud_services.read" : "cloud_services.write";
+
+        var permissionDenied = await OrgAuthGate.DenyUnlessPermissionAsync(
+            this, _membership, _orgAuth, key!, organizationId, permissionKey, "manage this organization's App Service resources");
+        if (permissionDenied != null) return (null, null, permissionDenied);
+
+        var useDenied = await OrgAuthGate.DenyUnlessPermissionAsync(
+            this, _membership, _orgAuth, key!, organizationId, "credentials.use", "use this organization's Azure credentials");
+        if (useDenied != null) return (null, null, useDenied);
+
+        return (key, await _orgCredentials.GetAzureCredentialForUseAsync(organizationId)
+            ?? new UserAzureCredentials(null, null, null, null), null);
     }
 
     private async Task<string> ResolveActorLabelAsync(string sessionKey, UserAzureCredentials creds)
@@ -46,9 +87,8 @@ public class AzureAppServiceController : ControllerBase
     [HttpGet("apps")]
     public async Task<IActionResult> GetApps()
     {
-        var (key, authDenied) = RequireAuth.RequireUserId(this);
-        if (authDenied != null) return authDenied;
-        var creds = await _settings.GetUserAzureCredentialsAsync(key);
+        var (key, creds, credsDenied) = await ResolveAzureCredentialsAsync();
+        if (credsDenied != null) return credsDenied;
 
         return Ok(await _management.GetAppServicesAsync(creds));
     }
@@ -56,9 +96,8 @@ public class AzureAppServiceController : ControllerBase
     [HttpGet("apps/{resourceGroup}/{name}")]
     public async Task<IActionResult> GetAppDetail(string resourceGroup, string name)
     {
-        var (key, authDenied) = RequireAuth.RequireUserId(this);
-        if (authDenied != null) return authDenied;
-        var creds = await _settings.GetUserAzureCredentialsAsync(key);
+        var (key, creds, credsDenied) = await ResolveAzureCredentialsAsync();
+        if (credsDenied != null) return credsDenied;
 
         return Ok(await _management.GetAppServiceDetailAsync(creds, resourceGroup, name));
     }
@@ -83,9 +122,8 @@ public class AzureAppServiceController : ControllerBase
 
     private async Task<IActionResult> RunLifecycle(string resourceGroup, string name, string? slot, Func<UserAzureCredentials, string, string, string?, Task<CloudServiceActionResultDto>> actionFn, string label)
     {
-        var (key, authDenied) = RequireAuth.RequireUserId(this);
-        if (authDenied != null) return authDenied;
-        var creds = await _settings.GetUserAzureCredentialsAsync(key);
+        var (key, creds, credsDenied) = await ResolveAzureCredentialsAsync();
+        if (credsDenied != null) return credsDenied;
         var actor = await ResolveActorLabelAsync(key, creds);
 
         var result = await actionFn(creds, resourceGroup, name, slot);
@@ -97,9 +135,8 @@ public class AzureAppServiceController : ControllerBase
     [HttpPost("apps/{resourceGroup}/{name}/slots/{slot}/swap")]
     public async Task<IActionResult> SwapSlot(string resourceGroup, string name, string slot, [FromBody] AzureSlotSwapRequestDto request)
     {
-        var (key, authDenied) = RequireAuth.RequireUserId(this);
-        if (authDenied != null) return authDenied;
-        var creds = await _settings.GetUserAzureCredentialsAsync(key);
+        var (key, creds, credsDenied) = await ResolveAzureCredentialsAsync();
+        if (credsDenied != null) return credsDenied;
         var actor = await ResolveActorLabelAsync(key, creds);
 
         var result = await _management.SwapSlotAsync(creds, resourceGroup, name, slot, request.TargetSlot);
@@ -114,9 +151,8 @@ public class AzureAppServiceController : ControllerBase
         if (request.Items == null || request.Items.Count == 0)
             return BadRequest("At least one item is required.");
 
-        var (key, authDenied) = RequireAuth.RequireUserId(this);
-        if (authDenied != null) return authDenied;
-        var creds = await _settings.GetUserAzureCredentialsAsync(key);
+        var (key, creds, credsDenied) = await ResolveAzureCredentialsAsync();
+        if (credsDenied != null) return credsDenied;
         var actor = await ResolveActorLabelAsync(key, creds);
 
         var result = await _management.BulkSwapAsync(creds, request.Items);
@@ -130,9 +166,8 @@ public class AzureAppServiceController : ControllerBase
     [HttpGet("apps/{resourceGroup}/{name}/variables")]
     public async Task<IActionResult> GetVariables(string resourceGroup, string name, [FromQuery] string? slot)
     {
-        var (key, authDenied) = RequireAuth.RequireUserId(this);
-        if (authDenied != null) return authDenied;
-        var creds = await _settings.GetUserAzureCredentialsAsync(key);
+        var (key, creds, credsDenied) = await ResolveAzureCredentialsAsync();
+        if (credsDenied != null) return credsDenied;
 
         return Ok(await _management.GetEnvVarsAsync(creds, resourceGroup, name, slot));
     }
@@ -143,9 +178,8 @@ public class AzureAppServiceController : ControllerBase
         if (string.IsNullOrWhiteSpace(request.Name))
             return BadRequest("name is required.");
 
-        var (key, authDenied) = RequireAuth.RequireUserId(this);
-        if (authDenied != null) return authDenied;
-        var creds = await _settings.GetUserAzureCredentialsAsync(key);
+        var (key, creds, credsDenied) = await ResolveAzureCredentialsAsync();
+        if (credsDenied != null) return credsDenied;
         var actor = await ResolveActorLabelAsync(key, creds);
 
         var result = await _management.UpdateEnvVarAsync(creds, resourceGroup, name, slot, request.Name, request.Value);
@@ -157,9 +191,8 @@ public class AzureAppServiceController : ControllerBase
     [HttpPost("apps/{resourceGroup}/{name}/scale")]
     public async Task<IActionResult> Scale(string resourceGroup, string name, [FromBody] AzureAppServiceScaleRequestDto request)
     {
-        var (key, authDenied) = RequireAuth.RequireUserId(this);
-        if (authDenied != null) return authDenied;
-        var creds = await _settings.GetUserAzureCredentialsAsync(key);
+        var (key, creds, credsDenied) = await ResolveAzureCredentialsAsync();
+        if (credsDenied != null) return credsDenied;
         var actor = await ResolveActorLabelAsync(key, creds);
 
         var detail = await _management.GetAppServiceDetailAsync(creds, resourceGroup, name);
@@ -172,9 +205,8 @@ public class AzureAppServiceController : ControllerBase
     [HttpDelete("apps/{resourceGroup}/{name}")]
     public async Task<IActionResult> DeleteApp(string resourceGroup, string name)
     {
-        var (key, authDenied) = RequireAuth.RequireUserId(this);
-        if (authDenied != null) return authDenied;
-        var creds = await _settings.GetUserAzureCredentialsAsync(key);
+        var (key, creds, credsDenied) = await ResolveAzureCredentialsAsync();
+        if (credsDenied != null) return credsDenied;
         var actor = await ResolveActorLabelAsync(key, creds);
 
         var result = await _management.DeleteAppAsync(creds, resourceGroup, name);
@@ -186,9 +218,8 @@ public class AzureAppServiceController : ControllerBase
     [HttpDelete("apps/{resourceGroup}/{name}/slots/{slot}")]
     public async Task<IActionResult> DeleteSlot(string resourceGroup, string name, string slot)
     {
-        var (key, authDenied) = RequireAuth.RequireUserId(this);
-        if (authDenied != null) return authDenied;
-        var creds = await _settings.GetUserAzureCredentialsAsync(key);
+        var (key, creds, credsDenied) = await ResolveAzureCredentialsAsync();
+        if (credsDenied != null) return credsDenied;
         var actor = await ResolveActorLabelAsync(key, creds);
 
         var result = await _management.DeleteSlotAsync(creds, resourceGroup, name, slot);
@@ -200,9 +231,8 @@ public class AzureAppServiceController : ControllerBase
     [HttpGet("apps/{resourceGroup}/{name}/metrics")]
     public async Task<IActionResult> GetMetrics(string resourceGroup, string name, [FromQuery] string? slot, [FromQuery] int rangeMinutes = 60)
     {
-        var (key, authDenied) = RequireAuth.RequireUserId(this);
-        if (authDenied != null) return authDenied;
-        var creds = await _settings.GetUserAzureCredentialsAsync(key);
+        var (key, creds, credsDenied) = await ResolveAzureCredentialsAsync();
+        if (credsDenied != null) return credsDenied;
 
         return Ok(await _management.GetMetricsAsync(creds, resourceGroup, name, slot, rangeMinutes));
     }

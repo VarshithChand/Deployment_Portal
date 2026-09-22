@@ -314,7 +314,9 @@ public class SettingsService
         if (seeded)
             await WriteRootAsync(root);
 
-        return BuildView(root);
+        var view = BuildView(root);
+        view.OrganizationsEnabled = _connectionString != null;
+        return view;
     }
 
     // Every user brings their own GitHub repo + token — stored keyed by

@@ -2,7 +2,7 @@
 // pulled out to its own file (rather than only living inside Settings.jsx)
 // so HeaderSearch can list every sub-page as its own searchable result
 // without a layout component reaching into a page component's internals.
-export const VIEWS = ["hub", "account", "credentials", "activity-log", "access-levels", "branches", "sidebar-access", "smoke-tests", "external-apis", "environments", "appearance", "database", "admin-access", "security-testing", "observability-config"];
+export const VIEWS = ["hub", "account", "organizations", "credentials", "activity-log", "access-levels", "branches", "sidebar-access", "smoke-tests", "external-apis", "environments", "appearance", "database", "admin-access", "security-testing", "observability-config"];
 
 // Every one of these requires Admin server-side (LogsController,
 // SmokeTestController, ExternalHealthController, and the /sidebar/*
@@ -26,6 +26,7 @@ export const SUPER_ADMIN_ONLY_VIEWS = new Set(["database", "admin-access", "secu
 
 export const VIEW_TITLES = {
     account: "Account",
+    organizations: "Organizations",
     credentials: "Credentials",
     "activity-log": "Activity Log",
     "access-levels": "Access Levels",

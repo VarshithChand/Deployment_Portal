@@ -20,6 +20,7 @@ public static class OAuthLoginFinisher
         SessionActivityService activity,
         AuthService auth,
         IEmailService email,
+        OrganizationService organizations,
         string userId,
         string role,
         string? userEmail,
@@ -49,6 +50,10 @@ public static class OAuthLoginFinisher
             "portal_token", jwt, AuthCookie.CrossSiteOptions(controller.Request, DateTimeOffset.UtcNow.AddHours(8)));
 
         await SessionRecorder.RecordSuccessfulLoginAsync(settings, controller.Request, userId, jti);
+
+        // Same Personal-org hook AccountAuthController.IssueSessionAsync
+        // has for the password/email path - see that call site's comment.
+        await organizations.EnsureOwnsPersonalOrganizationAsync(userId, null);
 
         if (!string.IsNullOrWhiteSpace(userEmail))
         {

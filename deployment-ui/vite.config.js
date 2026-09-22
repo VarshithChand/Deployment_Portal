@@ -172,6 +172,23 @@ export default defineConfig({
     __APP_VERSION__: JSON.stringify(process.env.VITE_APP_VERSION || null)
   },
   plugins: [react(), writeSecurityHeadersPlugin()],
+  // Read by `vitest` (via `npm test`), ignored by a plain `vite`/`vite
+  // build` run - this project had no test runner before Phase 7 of the
+  // Organizations/Roles/Permissions feature, so this is new, minimal
+  // config, not a change to how the app itself builds or serves.
+  test: {
+    environment: 'jsdom',
+    globals: true,
+    setupFiles: ['./src/test/setup.js'],
+    // 'threads' rather than Vitest's default 'forks' pool - both hit an
+    // identical "Timeout waiting for worker to respond" error in one
+    // restricted dev sandbox during development, resolved once that
+    // sandbox's process/thread-spawn restriction was lifted for the
+    // command - i.e. an environment permission issue, not a config
+    // problem. 'threads' is kept as the slightly lighter-weight of the
+    // two if this ever recurs elsewhere.
+    pool: 'threads'
+  },
   server: {
     proxy: {
       '/api': {

@@ -88,4 +88,10 @@ public class SettingsViewDto
     // already recognized these grants; this is what lets a grantee
     // actually reach the page in the first place.
     public List<string> GrantedPages { get; set; } = new();
+
+    // Organizations are a Postgres-required feature (see OrganizationSchema's
+    // own header comment) - true only when DATABASE_URL is configured, so
+    // the frontend can hide the org switcher entirely on a JSON-file-only
+    // deployment rather than showing a switcher that can never work.
+    public bool OrganizationsEnabled { get; set; }
 }

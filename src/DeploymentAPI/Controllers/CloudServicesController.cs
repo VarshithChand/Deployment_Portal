@@ -40,14 +40,94 @@ public class CloudServicesController : ControllerBase
     private readonly CloudStatusService _cloud;
     private readonly CloudServiceManagementService _management;
     private readonly ActivityLogService _log;
+    private readonly MembershipService _membership;
+    private readonly OrgAuthorizationService _orgAuth;
+    private readonly OrgCredentialService _orgCredentials;
 
     public CloudServicesController(
-        SettingsService settings, CloudStatusService cloud, CloudServiceManagementService management, ActivityLogService log)
+        SettingsService settings, CloudStatusService cloud, CloudServiceManagementService management, ActivityLogService log,
+        MembershipService membership, OrgAuthorizationService orgAuth, OrgCredentialService orgCredentials)
     {
         _settings = settings;
         _cloud = cloud;
         _management = management;
         _log = log;
+        _membership = membership;
+        _orgAuth = orgAuth;
+        _orgCredentials = orgCredentials;
+    }
+
+    // Org-vs-Personal AWS/Azure credential resolution (Phase 5 of the
+    // Organizations/Roles/Permissions feature) - mirrors DeploymentController.
+    // Deploy's own X-Organization-Id branch exactly (see that file's
+    // comment for the full reasoning): missing header/"personal" is this
+    // controller's existing self-service path, completely UNCHANGED; a
+    // real organization additionally requires cloud_services.read (GET
+    // requests) or cloud_services.write (everything else) plus
+    // credentials.use, then resolves the org's saved credential instead of
+    // this session's own. requireWrite is inferred from the HTTP verb
+    // rather than threaded through every one of this controller's ~40 AWS/
+    // Azure call sites individually, since every one of them already
+    // follows this exact same resolution pattern verbatim - see
+    // OrgCredentialService.GetAwsCredentialForUseAsync/
+    // GetAzureCredentialForUseAsync for why the return shape needs no
+    // changes downstream (CloudServiceManagementService is stateless,
+    // credentials are always just a plain parameter).
+    private async Task<(string? Key, UserAwsCredentials? Credentials, IActionResult? Denied)> ResolveAwsCredentialsAsync()
+    {
+        var (key, authDenied) = RequireAuth.RequireUserId(this);
+        if (authDenied != null) return (null, null, authDenied);
+
+        var orgHeader = Request.Headers["X-Organization-Id"].ToString();
+        var isOrganizationContext = !string.IsNullOrWhiteSpace(orgHeader)
+            && !string.Equals(orgHeader, "personal", StringComparison.OrdinalIgnoreCase);
+
+        if (!isOrganizationContext)
+            return (key, await _settings.GetUserAwsCredentialsAsync(key!), null);
+
+        if (!Guid.TryParse(orgHeader, out var organizationId))
+            return (null, null, StatusCode(400, new { message = "Invalid X-Organization-Id header." }));
+
+        var orgDenied = await DenyUnlessCloudServicesPermissionAsync(key!, organizationId);
+        if (orgDenied != null) return (null, null, orgDenied);
+
+        return (key, await _orgCredentials.GetAwsCredentialForUseAsync(organizationId)
+            ?? new UserAwsCredentials(null, null, null, null, null, null, null, null, null, null, null), null);
+    }
+
+    private async Task<(string? Key, UserAzureCredentials? Credentials, IActionResult? Denied)> ResolveAzureCredentialsAsync()
+    {
+        var (key, authDenied) = RequireAuth.RequireUserId(this);
+        if (authDenied != null) return (null, null, authDenied);
+
+        var orgHeader = Request.Headers["X-Organization-Id"].ToString();
+        var isOrganizationContext = !string.IsNullOrWhiteSpace(orgHeader)
+            && !string.Equals(orgHeader, "personal", StringComparison.OrdinalIgnoreCase);
+
+        if (!isOrganizationContext)
+            return (key, await _settings.GetUserAzureCredentialsAsync(key!), null);
+
+        if (!Guid.TryParse(orgHeader, out var organizationId))
+            return (null, null, StatusCode(400, new { message = "Invalid X-Organization-Id header." }));
+
+        var orgDenied = await DenyUnlessCloudServicesPermissionAsync(key!, organizationId);
+        if (orgDenied != null) return (null, null, orgDenied);
+
+        return (key, await _orgCredentials.GetAzureCredentialForUseAsync(organizationId)
+            ?? new UserAzureCredentials(null, null, null, null), null);
+    }
+
+    private async Task<IActionResult?> DenyUnlessCloudServicesPermissionAsync(string userId, Guid organizationId)
+    {
+        var permissionKey = string.Equals(Request.Method, "GET", StringComparison.OrdinalIgnoreCase)
+            ? "cloud_services.read" : "cloud_services.write";
+
+        var permissionDenied = await OrgAuthGate.DenyUnlessPermissionAsync(
+            this, _membership, _orgAuth, userId, organizationId, permissionKey, "manage this organization's cloud resources");
+        if (permissionDenied != null) return permissionDenied;
+
+        return await OrgAuthGate.DenyUnlessPermissionAsync(
+            this, _membership, _orgAuth, userId, organizationId, "credentials.use", "use this organization's cloud credentials");
     }
 
     // Best-effort - the same STS GetCallerIdentity already used for the
@@ -75,9 +155,8 @@ public class CloudServicesController : ControllerBase
     [HttpPost("ec2/{instanceId}/start")]
     public async Task<IActionResult> StartEc2(string instanceId, [FromQuery] string? region)
     {
-        var (key, authDenied) = RequireAuth.RequireUserId(this);
-        if (authDenied != null) return authDenied;
-        var creds = await _settings.GetUserAwsCredentialsAsync(key);
+        var (key, creds, credsDenied) = await ResolveAwsCredentialsAsync();
+        if (credsDenied != null) return credsDenied;
         var actor = await ResolveActorLabelAsync(key, creds);
 
         var result = await _management.StartEc2InstanceAsync(creds, region, instanceId);
@@ -89,9 +168,8 @@ public class CloudServicesController : ControllerBase
     [HttpPost("ec2/{instanceId}/stop")]
     public async Task<IActionResult> StopEc2(string instanceId, [FromQuery] string? region)
     {
-        var (key, authDenied) = RequireAuth.RequireUserId(this);
-        if (authDenied != null) return authDenied;
-        var creds = await _settings.GetUserAwsCredentialsAsync(key);
+        var (key, creds, credsDenied) = await ResolveAwsCredentialsAsync();
+        if (credsDenied != null) return credsDenied;
         var actor = await ResolveActorLabelAsync(key, creds);
 
         var result = await _management.StopEc2InstanceAsync(creds, region, instanceId);
@@ -103,9 +181,8 @@ public class CloudServicesController : ControllerBase
     [HttpPost("ec2/{instanceId}/reboot")]
     public async Task<IActionResult> RebootEc2(string instanceId, [FromQuery] string? region)
     {
-        var (key, authDenied) = RequireAuth.RequireUserId(this);
-        if (authDenied != null) return authDenied;
-        var creds = await _settings.GetUserAwsCredentialsAsync(key);
+        var (key, creds, credsDenied) = await ResolveAwsCredentialsAsync();
+        if (credsDenied != null) return credsDenied;
         var actor = await ResolveActorLabelAsync(key, creds);
 
         var result = await _management.RebootEc2InstanceAsync(creds, region, instanceId);
@@ -117,9 +194,8 @@ public class CloudServicesController : ControllerBase
     [HttpPost("ec2/{instanceId}/terminate")]
     public async Task<IActionResult> TerminateEc2(string instanceId, [FromQuery] string? region)
     {
-        var (key, authDenied) = RequireAuth.RequireUserId(this);
-        if (authDenied != null) return authDenied;
-        var creds = await _settings.GetUserAwsCredentialsAsync(key);
+        var (key, creds, credsDenied) = await ResolveAwsCredentialsAsync();
+        if (credsDenied != null) return credsDenied;
         var actor = await ResolveActorLabelAsync(key, creds);
 
         var result = await _management.TerminateEc2InstanceAsync(creds, region, instanceId);
@@ -137,9 +213,8 @@ public class CloudServicesController : ControllerBase
     [HttpGet("ec2/{instanceId}")]
     public async Task<IActionResult> GetEc2Detail(string instanceId, [FromQuery] string? region)
     {
-        var (key, authDenied) = RequireAuth.RequireUserId(this);
-        if (authDenied != null) return authDenied;
-        var creds = await _settings.GetUserAwsCredentialsAsync(key);
+        var (key, creds, credsDenied) = await ResolveAwsCredentialsAsync();
+        if (credsDenied != null) return credsDenied;
 
         return Ok(await _management.GetEc2InstanceDetailAsync(creds, region, instanceId));
     }
@@ -147,9 +222,8 @@ public class CloudServicesController : ControllerBase
     [HttpGet("ec2/{instanceId}/firewall")]
     public async Task<IActionResult> GetEc2Firewall(string instanceId, [FromQuery] string? region)
     {
-        var (key, authDenied) = RequireAuth.RequireUserId(this);
-        if (authDenied != null) return authDenied;
-        var creds = await _settings.GetUserAwsCredentialsAsync(key);
+        var (key, creds, credsDenied) = await ResolveAwsCredentialsAsync();
+        if (credsDenied != null) return credsDenied;
 
         return Ok(await _management.GetEc2SecurityGroupsAsync(creds, region, instanceId));
     }
@@ -157,9 +231,8 @@ public class CloudServicesController : ControllerBase
     [HttpPost("ec2/{instanceId}/firewall")]
     public async Task<IActionResult> AddEc2FirewallRule(string instanceId, [FromBody] AddSecurityRuleRequestDto request, [FromQuery] string? region)
     {
-        var (key, authDenied) = RequireAuth.RequireUserId(this);
-        if (authDenied != null) return authDenied;
-        var creds = await _settings.GetUserAwsCredentialsAsync(key);
+        var (key, creds, credsDenied) = await ResolveAwsCredentialsAsync();
+        if (credsDenied != null) return credsDenied;
         var actor = await ResolveActorLabelAsync(key, creds);
 
         var result = await _management.AddEc2SecurityGroupRuleAsync(creds, region, instanceId, request);
@@ -171,9 +244,8 @@ public class CloudServicesController : ControllerBase
     [HttpDelete("ec2/{instanceId}/firewall")]
     public async Task<IActionResult> RemoveEc2FirewallRule(string instanceId, [FromBody] RemoveSecurityRuleRequestDto request, [FromQuery] string? region)
     {
-        var (key, authDenied) = RequireAuth.RequireUserId(this);
-        if (authDenied != null) return authDenied;
-        var creds = await _settings.GetUserAwsCredentialsAsync(key);
+        var (key, creds, credsDenied) = await ResolveAwsCredentialsAsync();
+        if (credsDenied != null) return credsDenied;
         var actor = await ResolveActorLabelAsync(key, creds);
 
         var result = await _management.RemoveEc2SecurityGroupRuleAsync(creds, region, instanceId, request);
@@ -185,9 +257,8 @@ public class CloudServicesController : ControllerBase
     [HttpGet("ec2/{instanceId}/metrics")]
     public async Task<IActionResult> GetEc2Metrics(string instanceId, [FromQuery] string? region, [FromQuery] int rangeMinutes = 60)
     {
-        var (key, authDenied) = RequireAuth.RequireUserId(this);
-        if (authDenied != null) return authDenied;
-        var creds = await _settings.GetUserAwsCredentialsAsync(key);
+        var (key, creds, credsDenied) = await ResolveAwsCredentialsAsync();
+        if (credsDenied != null) return credsDenied;
 
         return Ok(await _management.GetEc2MetricsAsync(creds, region, instanceId, rangeMinutes));
     }
@@ -200,9 +271,8 @@ public class CloudServicesController : ControllerBase
         if (string.IsNullOrWhiteSpace(request.Cluster) || string.IsNullOrWhiteSpace(request.Service))
             return BadRequest("cluster and service are required.");
 
-        var (key, authDenied) = RequireAuth.RequireUserId(this);
-        if (authDenied != null) return authDenied;
-        var creds = await _settings.GetUserAwsCredentialsAsync(key);
+        var (key, creds, credsDenied) = await ResolveAwsCredentialsAsync();
+        if (credsDenied != null) return credsDenied;
         var actor = await ResolveActorLabelAsync(key, creds);
 
         var result = await _management.ScaleEcsServiceAsync(creds, region, request.Cluster, request.Service, request.DesiredCount);
@@ -218,9 +288,8 @@ public class CloudServicesController : ControllerBase
     [HttpGet("ecs/{cluster}/{service}/detail")]
     public async Task<IActionResult> GetEcsServiceDetail(string cluster, string service, [FromQuery] string? region)
     {
-        var (key, authDenied) = RequireAuth.RequireUserId(this);
-        if (authDenied != null) return authDenied;
-        var creds = await _settings.GetUserAwsCredentialsAsync(key);
+        var (key, creds, credsDenied) = await ResolveAwsCredentialsAsync();
+        if (credsDenied != null) return credsDenied;
 
         return Ok(await _management.GetEcsServiceDetailAsync(creds, region, cluster, service));
     }
@@ -228,9 +297,8 @@ public class CloudServicesController : ControllerBase
     [HttpPost("ecs/{cluster}/{service}/restart")]
     public async Task<IActionResult> RestartEcsService(string cluster, string service, [FromQuery] string? region)
     {
-        var (key, authDenied) = RequireAuth.RequireUserId(this);
-        if (authDenied != null) return authDenied;
-        var creds = await _settings.GetUserAwsCredentialsAsync(key);
+        var (key, creds, credsDenied) = await ResolveAwsCredentialsAsync();
+        if (credsDenied != null) return credsDenied;
         var actor = await ResolveActorLabelAsync(key, creds);
 
         var result = await _management.RestartEcsServiceAsync(creds, region, cluster, service);
@@ -242,9 +310,8 @@ public class CloudServicesController : ControllerBase
     [HttpPost("ecs/{cluster}/tasks/{taskId}/stop")]
     public async Task<IActionResult> StopEcsTask(string cluster, string taskId, [FromQuery] string? region)
     {
-        var (key, authDenied) = RequireAuth.RequireUserId(this);
-        if (authDenied != null) return authDenied;
-        var creds = await _settings.GetUserAwsCredentialsAsync(key);
+        var (key, creds, credsDenied) = await ResolveAwsCredentialsAsync();
+        if (credsDenied != null) return credsDenied;
         var actor = await ResolveActorLabelAsync(key, creds);
 
         var result = await _management.StopEcsTaskAsync(creds, region, cluster, taskId);
@@ -259,9 +326,8 @@ public class CloudServicesController : ControllerBase
         if (request.Services == null || request.Services.Count == 0)
             return BadRequest("At least one service is required.");
 
-        var (key, authDenied) = RequireAuth.RequireUserId(this);
-        if (authDenied != null) return authDenied;
-        var creds = await _settings.GetUserAwsCredentialsAsync(key);
+        var (key, creds, credsDenied) = await ResolveAwsCredentialsAsync();
+        if (credsDenied != null) return credsDenied;
         var actor = await ResolveActorLabelAsync(key, creds);
 
         var result = await _management.BulkScaleEcsServicesAsync(creds, region, request.Services, request.DesiredCount);
@@ -275,9 +341,8 @@ public class CloudServicesController : ControllerBase
     [HttpGet("ecs/{cluster}/{service}/metrics")]
     public async Task<IActionResult> GetEcsMetrics(string cluster, string service, [FromQuery] string? region, [FromQuery] int rangeMinutes = 60)
     {
-        var (key, authDenied) = RequireAuth.RequireUserId(this);
-        if (authDenied != null) return authDenied;
-        var creds = await _settings.GetUserAwsCredentialsAsync(key);
+        var (key, creds, credsDenied) = await ResolveAwsCredentialsAsync();
+        if (credsDenied != null) return credsDenied;
 
         return Ok(await _management.GetEcsMetricsAsync(creds, region, cluster, service, rangeMinutes));
     }
@@ -288,9 +353,8 @@ public class CloudServicesController : ControllerBase
         if (string.IsNullOrWhiteSpace(container))
             return BadRequest("container is required.");
 
-        var (key, authDenied) = RequireAuth.RequireUserId(this);
-        if (authDenied != null) return authDenied;
-        var creds = await _settings.GetUserAwsCredentialsAsync(key);
+        var (key, creds, credsDenied) = await ResolveAwsCredentialsAsync();
+        if (credsDenied != null) return credsDenied;
 
         return Ok(await _management.GetEcsTaskLogsAsync(creds, region, cluster, taskId, container, rangeMinutes));
     }
@@ -298,9 +362,8 @@ public class CloudServicesController : ControllerBase
     [HttpGet("ecs/{cluster}/{service}/image")]
     public async Task<IActionResult> GetEcsRunningImage(string cluster, string service, [FromQuery] string? region)
     {
-        var (key, authDenied) = RequireAuth.RequireUserId(this);
-        if (authDenied != null) return authDenied;
-        var creds = await _settings.GetUserAwsCredentialsAsync(key);
+        var (key, creds, credsDenied) = await ResolveAwsCredentialsAsync();
+        if (credsDenied != null) return credsDenied;
 
         return Ok(await _management.GetEcsRunningImageAsync(creds, region, cluster, service));
     }
@@ -310,9 +373,8 @@ public class CloudServicesController : ControllerBase
     [HttpGet("ecr")]
     public async Task<IActionResult> GetEcrRepositories([FromQuery] string? region)
     {
-        var (key, authDenied) = RequireAuth.RequireUserId(this);
-        if (authDenied != null) return authDenied;
-        var creds = await _settings.GetUserAwsCredentialsAsync(key);
+        var (key, creds, credsDenied) = await ResolveAwsCredentialsAsync();
+        if (credsDenied != null) return credsDenied;
 
         return Ok(await _management.GetEcrRepositoriesAsync(creds, region));
     }
@@ -320,9 +382,8 @@ public class CloudServicesController : ControllerBase
     [HttpGet("ecr/{repositoryName}/images")]
     public async Task<IActionResult> GetEcrImages(string repositoryName, [FromQuery] string? region)
     {
-        var (key, authDenied) = RequireAuth.RequireUserId(this);
-        if (authDenied != null) return authDenied;
-        var creds = await _settings.GetUserAwsCredentialsAsync(key);
+        var (key, creds, credsDenied) = await ResolveAwsCredentialsAsync();
+        if (credsDenied != null) return credsDenied;
 
         return Ok(await _management.GetEcrImagesAsync(creds, region, repositoryName));
     }
@@ -333,9 +394,8 @@ public class CloudServicesController : ControllerBase
         if (string.IsNullOrWhiteSpace(request.Name))
             return BadRequest("name is required.");
 
-        var (key, authDenied) = RequireAuth.RequireUserId(this);
-        if (authDenied != null) return authDenied;
-        var creds = await _settings.GetUserAwsCredentialsAsync(key);
+        var (key, creds, credsDenied) = await ResolveAwsCredentialsAsync();
+        if (credsDenied != null) return credsDenied;
         var actor = await ResolveActorLabelAsync(key, creds);
 
         var result = await _management.CreateEcrRepositoryAsync(creds, region, request.Name);
@@ -347,9 +407,8 @@ public class CloudServicesController : ControllerBase
     [HttpDelete("ecr/{repositoryName}")]
     public async Task<IActionResult> DeleteEcrRepository(string repositoryName, [FromQuery] string? region)
     {
-        var (key, authDenied) = RequireAuth.RequireUserId(this);
-        if (authDenied != null) return authDenied;
-        var creds = await _settings.GetUserAwsCredentialsAsync(key);
+        var (key, creds, credsDenied) = await ResolveAwsCredentialsAsync();
+        if (credsDenied != null) return credsDenied;
         var actor = await ResolveActorLabelAsync(key, creds);
 
         var result = await _management.DeleteEcrRepositoryAsync(creds, region, repositoryName);
@@ -366,9 +425,8 @@ public class CloudServicesController : ControllerBase
     [HttpGet("acr")]
     public async Task<IActionResult> GetAcrRegistries()
     {
-        var (key, authDenied) = RequireAuth.RequireUserId(this);
-        if (authDenied != null) return authDenied;
-        var creds = await _settings.GetUserAzureCredentialsAsync(key);
+        var (key, creds, credsDenied) = await ResolveAzureCredentialsAsync();
+        if (credsDenied != null) return credsDenied;
 
         return Ok(await _management.GetAcrRegistriesAsync(creds));
     }
@@ -376,9 +434,8 @@ public class CloudServicesController : ControllerBase
     [HttpGet("acr/{loginServer}/repositories")]
     public async Task<IActionResult> GetAcrRepositories(string loginServer)
     {
-        var (key, authDenied) = RequireAuth.RequireUserId(this);
-        if (authDenied != null) return authDenied;
-        var creds = await _settings.GetUserAzureCredentialsAsync(key);
+        var (key, creds, credsDenied) = await ResolveAzureCredentialsAsync();
+        if (credsDenied != null) return credsDenied;
 
         return Ok(await _management.GetAcrRepositoriesAsync(creds, loginServer));
     }
@@ -386,9 +443,8 @@ public class CloudServicesController : ControllerBase
     [HttpGet("acr/{loginServer}/repositories/{repositoryName}/tags")]
     public async Task<IActionResult> GetAcrTags(string loginServer, string repositoryName)
     {
-        var (key, authDenied) = RequireAuth.RequireUserId(this);
-        if (authDenied != null) return authDenied;
-        var creds = await _settings.GetUserAzureCredentialsAsync(key);
+        var (key, creds, credsDenied) = await ResolveAzureCredentialsAsync();
+        if (credsDenied != null) return credsDenied;
 
         return Ok(await _management.GetAcrTagsAsync(creds, loginServer, repositoryName));
     }
@@ -408,9 +464,8 @@ public class CloudServicesController : ControllerBase
     [HttpGet("azurevm")]
     public async Task<IActionResult> GetAzureVms()
     {
-        var (key, authDenied) = RequireAuth.RequireUserId(this);
-        if (authDenied != null) return authDenied;
-        var creds = await _settings.GetUserAzureCredentialsAsync(key);
+        var (key, creds, credsDenied) = await ResolveAzureCredentialsAsync();
+        if (credsDenied != null) return credsDenied;
 
         return Ok(await _management.GetAzureVmsAsync(creds));
     }
@@ -418,9 +473,8 @@ public class CloudServicesController : ControllerBase
     [HttpPost("azurevm/{resourceGroup}/{vmName}/start")]
     public async Task<IActionResult> StartAzureVm(string resourceGroup, string vmName)
     {
-        var (key, authDenied) = RequireAuth.RequireUserId(this);
-        if (authDenied != null) return authDenied;
-        var creds = await _settings.GetUserAzureCredentialsAsync(key);
+        var (key, creds, credsDenied) = await ResolveAzureCredentialsAsync();
+        if (credsDenied != null) return credsDenied;
         var actor = await ResolveAzureActorLabelAsync(key, creds);
 
         var result = await _management.StartAzureVmAsync(creds, resourceGroup, vmName);
@@ -432,9 +486,8 @@ public class CloudServicesController : ControllerBase
     [HttpPost("azurevm/{resourceGroup}/{vmName}/stop")]
     public async Task<IActionResult> StopAzureVm(string resourceGroup, string vmName)
     {
-        var (key, authDenied) = RequireAuth.RequireUserId(this);
-        if (authDenied != null) return authDenied;
-        var creds = await _settings.GetUserAzureCredentialsAsync(key);
+        var (key, creds, credsDenied) = await ResolveAzureCredentialsAsync();
+        if (credsDenied != null) return credsDenied;
         var actor = await ResolveAzureActorLabelAsync(key, creds);
 
         var result = await _management.StopAzureVmAsync(creds, resourceGroup, vmName);
@@ -446,9 +499,8 @@ public class CloudServicesController : ControllerBase
     [HttpPost("azurevm/{resourceGroup}/{vmName}/restart")]
     public async Task<IActionResult> RestartAzureVm(string resourceGroup, string vmName)
     {
-        var (key, authDenied) = RequireAuth.RequireUserId(this);
-        if (authDenied != null) return authDenied;
-        var creds = await _settings.GetUserAzureCredentialsAsync(key);
+        var (key, creds, credsDenied) = await ResolveAzureCredentialsAsync();
+        if (credsDenied != null) return credsDenied;
         var actor = await ResolveAzureActorLabelAsync(key, creds);
 
         var result = await _management.RestartAzureVmAsync(creds, resourceGroup, vmName);
@@ -460,9 +512,8 @@ public class CloudServicesController : ControllerBase
     [HttpDelete("azurevm/{resourceGroup}/{vmName}")]
     public async Task<IActionResult> DeleteAzureVm(string resourceGroup, string vmName)
     {
-        var (key, authDenied) = RequireAuth.RequireUserId(this);
-        if (authDenied != null) return authDenied;
-        var creds = await _settings.GetUserAzureCredentialsAsync(key);
+        var (key, creds, credsDenied) = await ResolveAzureCredentialsAsync();
+        if (credsDenied != null) return credsDenied;
         var actor = await ResolveAzureActorLabelAsync(key, creds);
 
         var result = await _management.DeleteAzureVmAsync(creds, resourceGroup, vmName);
@@ -474,9 +525,8 @@ public class CloudServicesController : ControllerBase
     [HttpPost("azurevm")]
     public async Task<IActionResult> CreateAzureVm([FromBody] AzureCreateVmRequestDto request)
     {
-        var (key, authDenied) = RequireAuth.RequireUserId(this);
-        if (authDenied != null) return authDenied;
-        var creds = await _settings.GetUserAzureCredentialsAsync(key);
+        var (key, creds, credsDenied) = await ResolveAzureCredentialsAsync();
+        if (credsDenied != null) return credsDenied;
         var actor = await ResolveAzureActorLabelAsync(key, creds);
 
         var result = await _management.CreateAzureVmAsync(creds, request);
@@ -502,9 +552,8 @@ public class CloudServicesController : ControllerBase
     [HttpGet("azurevm/{resourceGroup}/{vmName}/detail")]
     public async Task<IActionResult> GetAzureVmDetail(string resourceGroup, string vmName)
     {
-        var (key, authDenied) = RequireAuth.RequireUserId(this);
-        if (authDenied != null) return authDenied;
-        var creds = await _settings.GetUserAzureCredentialsAsync(key);
+        var (key, creds, credsDenied) = await ResolveAzureCredentialsAsync();
+        if (credsDenied != null) return credsDenied;
 
         return Ok(await _management.GetAzureVmDetailAsync(creds, resourceGroup, vmName));
     }
@@ -512,9 +561,8 @@ public class CloudServicesController : ControllerBase
     [HttpGet("azurevm/{resourceGroup}/{vmName}/firewall")]
     public async Task<IActionResult> GetAzureVmFirewall(string resourceGroup, string vmName, [FromQuery] string? nsgId)
     {
-        var (key, authDenied) = RequireAuth.RequireUserId(this);
-        if (authDenied != null) return authDenied;
-        var creds = await _settings.GetUserAzureCredentialsAsync(key);
+        var (key, creds, credsDenied) = await ResolveAzureCredentialsAsync();
+        if (credsDenied != null) return credsDenied;
 
         return Ok(await _management.GetAzureNsgRulesAsync(creds, nsgId));
     }
@@ -522,9 +570,8 @@ public class CloudServicesController : ControllerBase
     [HttpPost("azurevm/{resourceGroup}/{vmName}/firewall")]
     public async Task<IActionResult> AddAzureVmFirewallRule(string resourceGroup, string vmName, [FromBody] AddSecurityRuleRequestDto request, [FromQuery] string? nsgId)
     {
-        var (key, authDenied) = RequireAuth.RequireUserId(this);
-        if (authDenied != null) return authDenied;
-        var creds = await _settings.GetUserAzureCredentialsAsync(key);
+        var (key, creds, credsDenied) = await ResolveAzureCredentialsAsync();
+        if (credsDenied != null) return credsDenied;
         var actor = await ResolveAzureActorLabelAsync(key, creds);
 
         var result = await _management.AddAzureNsgRuleAsync(creds, nsgId, request);
@@ -536,9 +583,8 @@ public class CloudServicesController : ControllerBase
     [HttpDelete("azurevm/{resourceGroup}/{vmName}/firewall/{ruleName}")]
     public async Task<IActionResult> RemoveAzureVmFirewallRule(string resourceGroup, string vmName, string ruleName, [FromQuery] string? nsgId)
     {
-        var (key, authDenied) = RequireAuth.RequireUserId(this);
-        if (authDenied != null) return authDenied;
-        var creds = await _settings.GetUserAzureCredentialsAsync(key);
+        var (key, creds, credsDenied) = await ResolveAzureCredentialsAsync();
+        if (credsDenied != null) return credsDenied;
         var actor = await ResolveAzureActorLabelAsync(key, creds);
 
         var result = await _management.RemoveAzureNsgRuleAsync(creds, nsgId, ruleName);
@@ -550,9 +596,8 @@ public class CloudServicesController : ControllerBase
     [HttpGet("azurevm/{resourceGroup}/{vmName}/metrics")]
     public async Task<IActionResult> GetAzureVmMetrics(string resourceGroup, string vmName, [FromQuery] int rangeMinutes = 60)
     {
-        var (key, authDenied) = RequireAuth.RequireUserId(this);
-        if (authDenied != null) return authDenied;
-        var creds = await _settings.GetUserAzureCredentialsAsync(key);
+        var (key, creds, credsDenied) = await ResolveAzureCredentialsAsync();
+        if (credsDenied != null) return credsDenied;
 
         return Ok(await _management.GetAzureVmMetricsAsync(creds, resourceGroup, vmName, rangeMinutes));
     }
@@ -567,9 +612,8 @@ public class CloudServicesController : ControllerBase
     [HttpGet("azureresource")]
     public async Task<IActionResult> GetAzureResourceDetail([FromQuery] string resourceId, [FromQuery] string resourceType)
     {
-        var (key, authDenied) = RequireAuth.RequireUserId(this);
-        if (authDenied != null) return authDenied;
-        var creds = await _settings.GetUserAzureCredentialsAsync(key);
+        var (key, creds, credsDenied) = await ResolveAzureCredentialsAsync();
+        if (credsDenied != null) return credsDenied;
 
         return Ok(await _cloud.GetAzureResourceDetailAsync(creds, resourceId, resourceType));
     }
@@ -753,9 +797,8 @@ public class CloudServicesController : ControllerBase
     [HttpGet("lambda")]
     public async Task<IActionResult> GetLambdaFunctions([FromQuery] string? region)
     {
-        var (key, authDenied) = RequireAuth.RequireUserId(this);
-        if (authDenied != null) return authDenied;
-        var creds = await _settings.GetUserAwsCredentialsAsync(key);
+        var (key, creds, credsDenied) = await ResolveAwsCredentialsAsync();
+        if (credsDenied != null) return credsDenied;
 
         return Ok(await _management.GetLambdaFunctionsAsync(creds, region));
     }
@@ -765,9 +808,8 @@ public class CloudServicesController : ControllerBase
     [HttpGet("rds")]
     public async Task<IActionResult> GetRdsInstances([FromQuery] string? region)
     {
-        var (key, authDenied) = RequireAuth.RequireUserId(this);
-        if (authDenied != null) return authDenied;
-        var creds = await _settings.GetUserAwsCredentialsAsync(key);
+        var (key, creds, credsDenied) = await ResolveAwsCredentialsAsync();
+        if (credsDenied != null) return credsDenied;
 
         return Ok(await _management.GetRdsInstancesAsync(creds, region));
     }

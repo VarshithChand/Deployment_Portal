@@ -102,6 +102,15 @@ public class ResendEmailService : IEmailService
         return await SendAsync(toEmail, subject, html, logContext: $"backup export OTP email for '{username}'");
     }
 
+    public async Task<EmailSendResultDto> SendOrganizationInviteEmailAsync(
+        string toEmail, string inviterDisplayName, string organizationName, string roleDisplayName, string acceptUrl)
+    {
+        var subject = $"{inviterDisplayName} invited you to join {organizationName} on Deployment Portal";
+        var html = BuildOrganizationInviteHtml(inviterDisplayName, organizationName, roleDisplayName, acceptUrl);
+
+        return await SendAsync(toEmail, subject, html, logContext: $"organization invite for '{organizationName}' to '{toEmail}'");
+    }
+
     public async Task<EmailSendResultDto> SendDatabaseWipeBackupEmailAsync(
         string toEmail, string performedByLogin, string databaseHost, string backupJsonBase64, string backupFileName)
     {
@@ -310,6 +319,53 @@ public class ResendEmailService : IEmailService
         </td></tr>
         <tr><td style="padding:20px 32px;background:#f9fafb;border-top:1px solid #e5e7eb;">
         <p style="margin:0;font-size:11px;color:#9ca3af;">This link expires in 24 hours. If you didn't create this account, you can safely ignore this email.</p>
+        </td></tr>
+        </table>
+        </td></tr>
+        </table>
+        </body>
+        </html>
+        """;
+    }
+
+    // Same table-based/inline-CSS constraint as BuildWelcomeVerificationHtml
+    // above - acceptUrl carries the raw invitation token, single-use and
+    // hashed at rest (see InvitationService).
+    private static string BuildOrganizationInviteHtml(string inviterDisplayName, string organizationName, string roleDisplayName, string acceptUrl)
+    {
+        var encodedAcceptUrl = WebUtility.HtmlEncode(acceptUrl);
+
+        return $$"""
+        <!DOCTYPE html>
+        <html>
+        <body style="margin:0;padding:0;background:#f3f4f6;font-family:Segoe UI,Helvetica,Arial,sans-serif;">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f3f4f6;padding:32px 0;">
+        <tr><td align="center">
+        <table role="presentation" width="480" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:8px;overflow:hidden;border:1px solid #e5e7eb;">
+        <tr><td style="background:#4f46e5;padding:24px 32px;">
+        <span style="color:#ffffff;font-size:18px;font-weight:700;">Deployment Portal</span>
+        </td></tr>
+        <tr><td style="padding:32px;">
+        <h1 style="margin:0 0 16px;font-size:20px;color:#111827;">You've been invited to {{WebUtility.HtmlEncode(organizationName)}}</h1>
+        <p style="margin:0 0 20px;font-size:14px;line-height:1.6;color:#374151;">
+        {{WebUtility.HtmlEncode(inviterDisplayName)}} invited you to join <strong>{{WebUtility.HtmlEncode(organizationName)}}</strong> on Deployment Portal as a <strong>{{WebUtility.HtmlEncode(roleDisplayName)}}</strong>.
+        </p>
+        <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 0 24px;">
+        <tr><td style="border-radius:6px;background:#4f46e5;">
+        <a href="{{encodedAcceptUrl}}" style="display:inline-block;padding:12px 28px;font-size:14px;font-weight:600;color:#ffffff;text-decoration:none;">Accept Invitation</a>
+        </td></tr>
+        </table>
+        <p style="margin:0 0 20px;font-size:12px;line-height:1.6;color:#9ca3af;">
+        If the button doesn't work, copy and paste this link into your browser:<br>
+        <a href="{{encodedAcceptUrl}}" style="color:#4f46e5;">{{encodedAcceptUrl}}</a>
+        </p>
+        <p style="margin:0;font-size:13px;line-height:1.6;color:#6b7280;">
+        Questions or need help? Contact us at
+        <a href="mailto:support@deploymentportal.in" style="color:#4f46e5;">support@deploymentportal.in</a>.
+        </p>
+        </td></tr>
+        <tr><td style="padding:20px 32px;background:#f9fafb;border-top:1px solid #e5e7eb;">
+        <p style="margin:0;font-size:11px;color:#9ca3af;">This invitation expires in 7 days. If you weren't expecting this, you can safely ignore this email.</p>
         </td></tr>
         </table>
         </td></tr>

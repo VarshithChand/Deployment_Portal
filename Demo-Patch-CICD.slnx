@@ -5,4 +5,7 @@
     <Project Path="src/SecurityAPI/SecurityAPI.csproj" />
     <Project Path="src/DeploymentAPI/DeploymentAPI.csproj" />
   </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/DeploymentAPI.Tests/DeploymentAPI.Tests.csproj" />
+  </Folder>
 </Solution>

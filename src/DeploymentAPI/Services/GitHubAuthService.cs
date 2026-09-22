@@ -74,6 +74,28 @@ public class GitHubAuthService
         _loaded = true;
     }
 
+    // Sibling to LoadAsync() above, NOT a replacement for it - the
+    // middleware in Program.cs already called LoadAsync() unconditionally
+    // before this request's controller action ran (populating the
+    // Personal/per-user defaults), so this always runs strictly AFTER
+    // that, only from DeploymentController.Deploy, only when a real
+    // organization is selected (X-Organization-Id header). Overwrites this
+    // same scoped instance's fields in place - safe because
+    // DeploymentController and DeploymentService both resolve the exact
+    // same request-scoped GitHubAuthService instance, so DeployAsync sees
+    // whichever load ran last. See the plan's Phase 2 note on why this is
+    // additive rather than a change to LoadAsync itself: it's what keeps a
+    // Personal-context deploy byte-for-byte unchanged.
+    public async Task LoadForOrganizationAsync(Guid organizationId, OrgCredentialService orgCredentials)
+    {
+        var credential = await orgCredentials.GetGitHubCredentialForDeployAsync(organizationId);
+
+        _owner = credential?.Owner ?? string.Empty;
+        _repository = credential?.Repository ?? string.Empty;
+        _personalAccessToken = credential?.PersonalAccessToken;
+        _loaded = true;
+    }
+
     public HttpClient CreateClient()
     {
         var client = new HttpClient();

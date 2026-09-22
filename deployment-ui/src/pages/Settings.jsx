@@ -36,6 +36,7 @@ import AccessLevels from "../components/settings/AccessLevels";
 import BranchManager from "../components/settings/BranchManager";
 import SettingsHubView from "../components/settings/SettingsHubView";
 import AccountView from "../components/settings/AccountView";
+import OrganizationsView from "../components/settings/organization/OrganizationsView";
 import CredentialsView from "../components/settings/CredentialsView";
 import AdminAccessView from "../components/settings/AdminAccessView";
 import SidebarAccessView from "../components/settings/SidebarAccessView";
@@ -1138,6 +1139,12 @@ export default function Settings() {
             {view === "account" && (
 
                 <AccountView />
+
+            )}
+
+            {view === "organizations" && (
+
+                <OrganizationsView />
 
             )}
 

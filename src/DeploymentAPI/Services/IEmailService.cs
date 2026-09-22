@@ -76,4 +76,15 @@ public interface IEmailService
     // only (BuildMaskedConnection - never credentials), included so
     // whoever reads this later knows which database it came from.
     Task<EmailSendResultDto> SendDatabaseWipeBackupEmailAsync(string toEmail, string performedByLogin, string databaseHost, string backupJsonBase64, string backupFileName);
+
+    // Organizations/Roles/Permissions - the invitation email (see
+    // InvitationService/InvitationsController). acceptUrl carries the raw,
+    // single-use token in the query string - never logged, never
+    // persisted anywhere but this one outbound email (the database only
+    // ever stores its SHA-256 hash, see InvitationService.ComputeTokenHash).
+    // A send failure here is surfaced back to the inviting admin (not
+    // swallowed like SendWelcomeVerificationEmailAsync's caller) since an
+    // invite that silently never arrives is a real support burden.
+    Task<EmailSendResultDto> SendOrganizationInviteEmailAsync(
+        string toEmail, string inviterDisplayName, string organizationName, string roleDisplayName, string acceptUrl);
 }

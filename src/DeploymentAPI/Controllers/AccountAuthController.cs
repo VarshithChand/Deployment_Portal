@@ -30,6 +30,8 @@ public class AccountAuthController : ControllerBase
     private readonly IEmailService _email;
     private readonly NotificationService _notifications;
     private readonly IOptionsMonitor<GitHubOAuthSettings> _githubOAuthOptions;
+    private readonly OrganizationService _organizations;
+    private readonly MembershipService _membership;
 
     public AccountAuthController(
         AccountAuthService accountAuth,
@@ -38,7 +40,9 @@ public class AccountAuthController : ControllerBase
         SessionActivityService activity,
         IEmailService email,
         NotificationService notifications,
-        IOptionsMonitor<GitHubOAuthSettings> githubOAuthOptions)
+        IOptionsMonitor<GitHubOAuthSettings> githubOAuthOptions,
+        OrganizationService organizations,
+        MembershipService membership)
     {
         _accountAuth = accountAuth;
         _auth = auth;
@@ -47,6 +51,8 @@ public class AccountAuthController : ControllerBase
         _email = email;
         _notifications = notifications;
         _githubOAuthOptions = githubOAuthOptions;
+        _organizations = organizations;
+        _membership = membership;
     }
 
     [HttpPost("signup")]
@@ -547,6 +553,25 @@ public class AccountAuthController : ControllerBase
             return Ok(new { success = false, message = "Type DELETE to confirm." });
         }
 
+        // Refuses the deletion outright if this account is the sole
+        // remaining Admin of a real organization that still has other
+        // members - without this, account deletion would be a way to
+        // silently orphan an organization with zero admins. A no-op
+        // (always allowed) when organizations aren't enabled.
+        if (_settings.GetDatabaseConnectionString() != null)
+        {
+            var deletionCheck = await _membership.HandleAccountDeletionAsync(userId!);
+
+            if (!deletionCheck.Success)
+            {
+                return Ok(new
+                {
+                    success = false,
+                    message = "You're the last Admin of an organization with other members. Transfer ownership or remove the other members before deleting your account."
+                });
+            }
+        }
+
         await _settings.DeletePatUserAsync(userId!);
 
         Response.Cookies.Delete("portal_token");
@@ -676,6 +701,13 @@ public class AccountAuthController : ControllerBase
 
         await _settings.UpdateUserLastLoginAsync(userId);
         await SessionRecorder.RecordSuccessfulLoginAsync(_settings, Request, userId, jti);
+
+        // Every successful password/email login gets (or already has) a
+        // synthetic Personal organization - see OrganizationService's own
+        // comment on why this runs unconditionally, cheaply, right beside
+        // session recording rather than as a separate migration job. A
+        // no-op when organizations aren't enabled (no DATABASE_URL).
+        await _organizations.EnsureOwnsPersonalOrganizationAsync(userId, null);
 
         if (!string.IsNullOrWhiteSpace(email))
         {

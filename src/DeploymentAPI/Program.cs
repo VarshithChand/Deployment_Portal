@@ -42,6 +42,12 @@ var databaseUrl = Environment.GetEnvironmentVariable("DATABASE_URL");
 if (!string.IsNullOrWhiteSpace(databaseUrl))
 {
     await SettingsService.HydrateLocalFileFromDatabaseAsync(databaseUrl, localSettingsPath);
+
+    // Organizations/Roles/Permissions - idempotent DDL + system-role/
+    // permission seed, only when a real Postgres connection exists (see
+    // Data/OrganizationSchema.cs's own header comment for why this feature
+    // has no local-JSON-file fallback the way portal_settings does).
+    await DeploymentAPI.Data.OrganizationSchema.EnsureCreatedAsync(SettingsService.BuildConnectionString(databaseUrl));
 }
 
 builder.Configuration.AddJsonFile(localSettingsPath, optional: true, reloadOnChange: true);
@@ -196,6 +202,19 @@ builder.Services.AddScoped<SettingsService>();
 // Scoped — reads that service's already-parsed DATABASE_URL connection
 // string rather than re-parsing it.
 builder.Services.AddScoped<DatabaseManagementService>();
+// Scoped (not Singleton) for the same reason as DatabaseManagementService
+// above - all three read SettingsService's already-parsed DATABASE_URL
+// connection string. Organizations are additive/new (see the "Organizations,
+// Roles & Permissions" plan) - a JSON-file-only deployment with no
+// DATABASE_URL simply never calls into these (OrganizationsController
+// returns 503, SettingsViewDto.OrganizationsEnabled tells the frontend not
+// to show the switcher).
+builder.Services.AddScoped<OrganizationService>();
+builder.Services.AddScoped<MembershipService>();
+builder.Services.AddScoped<OrgAuthorizationService>();
+builder.Services.AddScoped<OrgCredentialService>();
+builder.Services.AddScoped<InvitationService>();
+builder.Services.AddScoped<AuditLogService>();
 // Scoped for the same reason as DatabaseManagementService above - it
 // depends on SettingsService (Scoped) to read the Resend API key.
 builder.Services.AddScoped<IEmailService, ResendEmailService>();

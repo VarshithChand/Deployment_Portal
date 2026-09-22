@@ -9,6 +9,7 @@ import StyleProvider from "./context/StyleContext";
 import AuthProvider from "./context/AuthContext";
 import NavigationProvider from "./context/NavigationContext";
 import AzureDevOpsProjectProvider from "./context/AzureDevOpsProjectContext";
+import OrgProvider from "./context/OrgContext";
 
 import "./styles/global.css";
 
@@ -34,11 +35,15 @@ const tree = (
 
                     <AuthProvider>
 
-                        <AzureDevOpsProjectProvider>
+                        <OrgProvider>
 
-                            <App/>
+                            <AzureDevOpsProjectProvider>
 
-                        </AzureDevOpsProjectProvider>
+                                <App/>
+
+                            </AzureDevOpsProjectProvider>
+
+                        </OrgProvider>
 
                     </AuthProvider>
 

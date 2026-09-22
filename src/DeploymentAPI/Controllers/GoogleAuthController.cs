@@ -32,6 +32,7 @@ public class GoogleAuthController : ControllerBase
     private readonly IEmailService _email;
     private readonly IOptionsMonitor<GoogleOAuthSettings> _oauthOptions;
     private readonly ActivityLogService _log;
+    private readonly OrganizationService _organizations;
 
     public GoogleAuthController(
         GoogleAuthService google,
@@ -41,7 +42,8 @@ public class GoogleAuthController : ControllerBase
         SessionActivityService activity,
         IEmailService email,
         IOptionsMonitor<GoogleOAuthSettings> oauthOptions,
-        ActivityLogService log)
+        ActivityLogService log,
+        OrganizationService organizations)
     {
         _google = google;
         _accountAuth = accountAuth;
@@ -51,6 +53,7 @@ public class GoogleAuthController : ControllerBase
         _email = email;
         _oauthOptions = oauthOptions;
         _log = log;
+        _organizations = organizations;
     }
 
     // sid is this browser's existing X-Session-Id (see apiBase.js), passed
@@ -96,7 +99,7 @@ public class GoogleAuthController : ControllerBase
             // AuthController.Callback). isNewAccount is what lets it send
             // a welcome email only the first time this Google identity is
             // ever seen, a login notification every time after.
-            return await OAuthLoginFinisher.FinishAsync(this, _settings, _activity, _auth, _email, user.Id, roleResult.Role, user.Email, frontendUrl, isNewAccount);
+            return await OAuthLoginFinisher.FinishAsync(this, _settings, _activity, _auth, _email, _organizations, user.Id, roleResult.Role, user.Email, frontendUrl, isNewAccount);
         }
         catch (UnauthorizedAccessException)
         {

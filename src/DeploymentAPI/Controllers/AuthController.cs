@@ -26,19 +26,22 @@ public class AuthController : ControllerBase
     private readonly SettingsService _settings;
     private readonly SessionActivityService _activity;
     private readonly IEmailService _email;
+    private readonly OrganizationService _organizations;
 
     public AuthController(
         AuthService auth,
         IOptionsMonitor<GitHubOAuthSettings> oauthOptions,
         SettingsService settings,
         SessionActivityService activity,
-        IEmailService email)
+        IEmailService email,
+        OrganizationService organizations)
     {
         _auth = auth;
         _oauthOptions = oauthOptions;
         _settings = settings;
         _activity = activity;
         _email = email;
+        _organizations = organizations;
     }
 
     // See Helpers/AuthCookie.cs - shared with AccountAuthController now
@@ -82,7 +85,7 @@ public class AuthController : ControllerBase
             // to issue a real session yet, or whether this account's MFA
             // has to be satisfied first (same gate password login already
             // goes through - see AccountAuthController).
-            return await OAuthLoginFinisher.FinishAsync(this, _settings, _activity, _auth, _email, login, role, email, frontendUrl);
+            return await OAuthLoginFinisher.FinishAsync(this, _settings, _activity, _auth, _email, _organizations, login, role, email, frontendUrl);
         }
         catch (UnauthorizedAccessException)
         {

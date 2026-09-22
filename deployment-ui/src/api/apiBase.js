@@ -61,6 +61,37 @@ export function clearAuthToken() {
     localStorage.removeItem(AUTH_TOKEN_STORAGE_KEY);
 }
 
+// The currently-selected organization (see context/OrgContext.jsx) -
+// stamped onto every API client's requests below, same shared-module-state
+// pattern as SESSION_STORAGE_KEY/AUTH_TOKEN_STORAGE_KEY above rather than
+// threading it through every individual service file. null/"personal"
+// means Personal context - no header sent at all, which is the backend's
+// own zero-cost default path (see OrgContext.cs's ResolveAsync on the
+// backend: missing header is byte-for-byte identical to today's per-user
+// behavior). Initialized from localStorage synchronously (not left null
+// until OrgProvider's first effect runs) so a page reload with a
+// real organization already selected doesn't send a beat of requests
+// under the wrong context before React mounts.
+const ORGANIZATION_STORAGE_KEY = "selectedOrganizationId";
+
+let selectedOrganizationId = (() => {
+    try {
+        const stored = localStorage.getItem(ORGANIZATION_STORAGE_KEY);
+        return stored && stored !== "personal" ? stored : null;
+    }
+    catch {
+        return null;
+    }
+})();
+
+export function setOrganizationHeader(id) {
+    selectedOrganizationId = id && id !== "personal" ? id : null;
+}
+
+export function getOrganizationHeader() {
+    return selectedOrganizationId;
+}
+
 // Every controller action's response is wrapped server-side in a standard
 // {success,data} / {success,error:{code,message,correlationId}} envelope
 // (see DeploymentAPI's ApiResponseWrapperFilter) - unwrapped back out here,
@@ -119,6 +150,9 @@ export function createApiClient(path, options = {}) {
 
         const authToken = getAuthToken();
         if (authToken) config.headers["Authorization"] = `Bearer ${authToken}`;
+
+        const organizationId = getOrganizationHeader();
+        if (organizationId) config.headers["X-Organization-Id"] = organizationId;
 
         return config;
     });

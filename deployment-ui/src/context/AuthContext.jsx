@@ -281,6 +281,22 @@ export default function AuthProvider({ children }) {
             clearQueryParam(params, "token");
         }
 
+        // The invitation email's accept link (see InvitationsController.
+        // Create/AcceptInvitationCard) - stashed in sessionStorage rather
+        // than left in the URL, since it has to survive whatever auth path
+        // the visitor takes next: a plain password login leaves the URL
+        // alone, but signing up instead means a full page navigation
+        // through the email-verification link first (AccountAuthController.
+        // VerifyEmail), which redirects back to a freshly built URL that
+        // never carries this param through. sessionStorage survives that
+        // same-tab round trip; the query string wouldn't.
+        const inviteToken = params.get("invite");
+
+        if (inviteToken) {
+            sessionStorage.setItem("pendingInviteToken", inviteToken);
+            clearQueryParam(params, "invite");
+        }
+
         // Deferred until any Chrome speculative prerender of this page has
         // actually resolved into a real visit (see runAfterPrerender) - a
         // real network call here during a prerender the user may never

@@ -8,6 +8,7 @@ import AccountAvatar from "../common/AccountAvatar";
 import ActivityBell from "./ActivityBell";
 import TopBarPublicBadge from "./TopBarPublicBadge";
 import HeaderSearch from "./HeaderSearch";
+import OrgSwitcher from "./OrgSwitcher";
 import { getRateLimit } from "../../services/githubService";
 import { getPullRequestCount } from "../../services/pullRequestsService";
 import { setPortalLocked } from "../../utils/portalLock";
@@ -137,6 +138,8 @@ export default function TopBar() {
             <HeaderSearch />
 
             <div className="top-bar-actions">
+
+                {user && <OrgSwitcher />}
 
                 {repoName && (
 
