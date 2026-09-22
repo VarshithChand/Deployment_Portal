@@ -55,10 +55,38 @@ public class AccountAuthController : ControllerBase
         _membership = membership;
     }
 
+    // Register page's "Personal" vs "Organization" choice - see
+    // SignupRequestDto's own comment. Organization creation is attempted
+    // as a side effect right after the account itself is created, and
+    // never blocks or alters the primary signup response either way (the
+    // same "a secondary effect's failure must never break the primary
+    // flow" reasoning SendWelcomeVerificationEmailAsync's own caller
+    // already follows) - a rare CreateOrganizationAsync failure (e.g. a
+    // fresh deploy's system roles not seeded yet) just means this account
+    // ends up with only its own Personal org, same as choosing "Personal"
+    // would have, not a broken signup. The two validation checks below DO
+    // block the request, though - they're free to check before anything is
+    // created, and a silently-ignored "create an organization" choice
+    // would be a confusing surprise, not a graceful fallback.
     [HttpPost("signup")]
     public async Task<IActionResult> SignUp(SignupRequestDto request)
     {
+        var wantsOrganization = string.Equals(request.AccountType, "organization", StringComparison.OrdinalIgnoreCase);
+
+        if (wantsOrganization)
+        {
+            if (_settings.GetDatabaseConnectionString() == null)
+                return Ok(new { success = false, message = "Organizations aren't available on this deployment." });
+
+            if (string.IsNullOrWhiteSpace(request.OrganizationName))
+                return Ok(new { success = false, message = "Organization name is required." });
+        }
+
         var result = await _accountAuth.SignUpAsync(request.Email ?? string.Empty, request.Password ?? string.Empty, request.DisplayName);
+
+        if (wantsOrganization && result.Success && result.User != null)
+            await _organizations.CreateOrganizationAsync(result.User.Id, request.OrganizationName, slug: null, description: null);
+
         return await FinishPrimaryFactorAsync(result);
     }
 

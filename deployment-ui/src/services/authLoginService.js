@@ -9,8 +9,11 @@ import { setAuthToken } from "../api/apiBase";
 // saveMyGitHubSettings/previewGitHubToken, which back the ALREADY-
 // authenticated Settings > Credentials > GitHub reconnect flow, a
 // different use case with different semantics.
-export const signUp = async (email, password, displayName) => {
-    const response = await authApi.post("/signup", { email, password, displayName });
+// accountType is "personal" (default) | "organization" - see
+// AccountAuthController.SignUp/SignupRequestDto. organizationName is only
+// read server-side when accountType is "organization".
+export const signUp = async (email, password, displayName, accountType, organizationName) => {
+    const response = await authApi.post("/signup", { email, password, displayName, accountType, organizationName });
     if (response.data?.token) setAuthToken(response.data.token);
     return response.data;
 };

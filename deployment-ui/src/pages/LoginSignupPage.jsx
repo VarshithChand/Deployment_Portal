@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, lazy, Suspense } from "react";
 import {
-    ShieldCheck, Lock, Eye, EyeOff, User, Wrench, ChevronLeft
+    ShieldCheck, Lock, Eye, EyeOff, User, Wrench, ChevronLeft, UserRound, Building2
 } from "lucide-react";
 
 import {
@@ -119,6 +119,12 @@ export default function LoginSignupPage({ onMfaRequired }) {
     // in time; sharing one field would leak a stale value between them).
     const [regConfirmPassword, setRegConfirmPassword] = useState("");
     const [displayName, setDisplayName] = useState("");
+    // Register page's "Personal" vs "Organization" choice - see
+    // AccountAuthController.SignUp/SignupRequestDto's own comment on what
+    // each does. organizationName is only shown/required when
+    // accountType is "organization".
+    const [accountType, setAccountType] = useState("personal");
+    const [organizationName, setOrganizationName] = useState("");
     const [submitting, setSubmitting] = useState(false);
     const [error, setError] = useState("");
     const [showPassword, setShowPassword] = useState(false);
@@ -226,6 +232,11 @@ export default function LoginSignupPage({ onMfaRequired }) {
                 return;
             }
 
+            if (accountType === "organization" && !organizationName.trim()) {
+                setError("Organization name is required.");
+                return;
+            }
+
         }
 
         setSubmitting(true);
@@ -234,7 +245,7 @@ export default function LoginSignupPage({ onMfaRequired }) {
         try {
 
             const result = isReg
-                ? await signUp(email.trim(), password, displayName.trim() || undefined)
+                ? await signUp(email.trim(), password, displayName.trim() || undefined, accountType, organizationName.trim() || undefined)
                 : await logIn(email.trim(), password);
 
             if (!result.success) {
@@ -1107,6 +1118,47 @@ export default function LoginSignupPage({ onMfaRequired }) {
                             <div className="divider"><span>or use your email</span></div>
 
                             <form className={"form" + (isReg ? " reg" : "")} onSubmit={handleSubmit}>
+
+                                {isReg && (
+
+                                    <div className="tabs" role="tablist" aria-label="Personal or organization account" style={{ marginBottom: 14 }}>
+
+                                        <button type="button" role="tab" aria-selected={accountType === "personal"}
+                                            className={"tab" + (accountType === "personal" ? " on" : "")}
+                                            onClick={() => setAccountType("personal")}>
+                                            <UserRound size={14} style={{ marginRight: 6, verticalAlign: -2 }} />
+                                            Personal
+                                        </button>
+
+                                        <button type="button" role="tab" aria-selected={accountType === "organization"}
+                                            className={"tab" + (accountType === "organization" ? " on" : "")}
+                                            onClick={() => setAccountType("organization")}>
+                                            <Building2 size={14} style={{ marginRight: 6, verticalAlign: -2 }} />
+                                            Organization
+                                        </button>
+
+                                        <span className="tab-ink" style={{ transform: accountType === "organization" ? "translateX(100%)" : "none" }} />
+
+                                    </div>
+
+                                )}
+
+                                {isReg && accountType === "organization" && (
+                                    <label className="field">
+                                        <span>Organization Name</span>
+                                        <div className="input">
+                                            <Building2 size={15} />
+                                            <input
+                                                type="text"
+                                                placeholder="Acme Organization"
+                                                autoComplete="organization"
+                                                value={organizationName}
+                                                onChange={(e) => setOrganizationName(e.target.value)}
+                                                required
+                                            />
+                                        </div>
+                                    </label>
+                                )}
 
                                 {isReg && (
                                     <label className="field">
