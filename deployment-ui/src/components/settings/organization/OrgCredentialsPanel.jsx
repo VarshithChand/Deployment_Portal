@@ -7,10 +7,18 @@ import {
 } from "../../../services/organizationService";
 
 const PROVIDER_FIELDS = {
-    github: [
-        { key: "owner", label: "Repository Owner" },
-        { key: "repository", label: "Repository Name" }
-    ],
+    // Name + PAT only - no separate Owner/Repository fields. config_json
+    // ends up empty for a GitHub credential added this way, which
+    // OrgCredentialService.GetGitHubCredentialForDeployAsync already
+    // handles (Owner/Repository just come back blank) - DeploymentController's
+    // org-scoped deploy path already checks for exactly that and returns
+    // "This organization doesn't have a GitHub credential configured yet"
+    // rather than failing unexpectedly. In practice this means an
+    // org-scoped deploy needs the credential's Owner/Repository added back
+    // some other way before it can actually target a repo - this
+    // simplification trades that off for a faster "just paste a PAT" add
+    // flow, matching how this field set was explicitly requested.
+    github: [],
     aws: [
         { key: "accessKeyId", label: "Access Key ID" },
         { key: "region", label: "Region" }
@@ -184,6 +192,7 @@ export default function OrgCredentialsPanel({ orgId, canWrite }) {
                             value={form.secret}
                             onChange={(e) => setForm({ ...form, secret: e.target.value })}
                             autoComplete="off"
+                            required
                         />
                     </div>
 
