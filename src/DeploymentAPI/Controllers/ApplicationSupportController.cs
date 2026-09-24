@@ -19,18 +19,18 @@ public class ApplicationSupportController : ControllerBase
 {
     private readonly SettingsService _settings;
     private readonly ApplicationSupportToolsService _tools;
-    private readonly IAiAssistantService _ai;
+    private readonly AiAssistantServiceResolver _aiResolver;
     private readonly ActivityLogService _log;
 
     public ApplicationSupportController(
         SettingsService settings,
         ApplicationSupportToolsService tools,
-        IAiAssistantService ai,
+        AiAssistantServiceResolver aiResolver,
         ActivityLogService log)
     {
         _settings = settings;
         _tools = tools;
-        _ai = ai;
+        _aiResolver = aiResolver;
         _log = log;
     }
 
@@ -108,14 +108,14 @@ public class ApplicationSupportController : ControllerBase
             return Ok(new AiChatResponseDto
             {
                 Success = false,
-                Reply = "Deployment Support Copilot isn't configured yet. Add a Gemini API key and " +
+                Reply = "Deployment Support Copilot isn't configured yet. Add an AI provider API key and " +
                         "model in Settings → Credentials → AI Assistant."
             });
         }
 
         var history = request.Messages.TakeLast(20).ToList();
 
-        var result = await _ai.ChatAsync(
+        var result = await _aiResolver.Resolve(creds.Provider).ChatAsync(
             SystemInstruction,
             history,
             _tools.GetToolDefinitions(),

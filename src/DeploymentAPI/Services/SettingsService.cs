@@ -1486,35 +1486,57 @@ public class SettingsService
         // URL as ".../models/{model}:generateContent", so a stored value
         // that still had "models/" on it would 404 twice-prefixed. See
         // GeminiService.NormalizeModel for the same rule applied
-        // defensively at call time too.
+        // defensively at call time too. Groq model names never have this
+        // "models/" prefix convention, so this normalization is harmless
+        // (a no-op) for a Groq-provider save.
         var normalizedModel = (update.Model ?? string.Empty).Trim().Trim('/');
 
         if (normalizedModel.StartsWith("models/", StringComparison.OrdinalIgnoreCase))
             normalizedModel = normalizedModel["models/".Length..];
 
-        ai["Model"] = normalizedModel;
+        var provider = NormalizeAiProvider(update.Provider);
 
+        ai["Model"] = normalizedModel;
+        ai["Provider"] = provider;
+
+        // Each provider keeps its own saved key (GeminiApiKey/GroqApiKey)
+        // - see AiAssistantSettingsUpdateDto's own comment on why:
+        // switching Provider in the dropdown and saving must never
+        // silently discard the OTHER provider's already-saved key.
         if (!string.IsNullOrWhiteSpace(update.ApiKey))
-            ai["GeminiApiKey"] = Protect(update.ApiKey);
+            ai[ApiKeyFieldFor(provider)] = Protect(update.ApiKey);
 
         root["AiAssistant"] = ai;
 
         await WriteRootAsync(root);
 
-        _log.LogInfo("Settings", $"AI Assistant settings saved (model: {update.Model})"
+        _log.LogInfo("Settings", $"AI Assistant settings saved (provider: {provider}, model: {update.Model})"
             + (string.IsNullOrWhiteSpace(update.ApiKey) ? "" : ", API key updated"));
 
         return BuildView(root);
     }
+
+    // "gemini" is the default for null/empty/unrecognized input - both for
+    // a genuinely new/blank save and for reading data saved before this
+    // field existed (see GetAiAssistantCredentialsAsync using the same
+    // fallback), matching AiAssistantServiceResolver's own default.
+    private static string NormalizeAiProvider(string? provider) =>
+        string.Equals(provider, "groq", StringComparison.OrdinalIgnoreCase) ? "groq" : "gemini";
+
+    private static string ApiKeyFieldFor(string provider) =>
+        provider == "groq" ? "GroqApiKey" : "GeminiApiKey";
 
     public async Task<AiAssistantCredentials> GetAiAssistantCredentialsAsync()
     {
         var root = await ReadRootAsync();
         var ai = root["AiAssistant"] as JObject;
 
+        var provider = NormalizeAiProvider(ai?["Provider"]?.ToString());
+
         return new AiAssistantCredentials(
-            Unprotect(ai?["GeminiApiKey"]?.ToString()),
-            ai?["Model"]?.ToString() ?? string.Empty);
+            Unprotect(ai?[ApiKeyFieldFor(provider)]?.ToString()),
+            ai?["Model"]?.ToString() ?? string.Empty,
+            provider);
     }
 
     // Login-notification email (Resend) - same portal-wide, admin-only
@@ -2563,7 +2585,19 @@ public class SettingsService
 
         var root = await ReadRootAsync();
 
-        if (info.SecretField == null)
+        if (section == "ai")
+        {
+            // SectionInfo's static ("AiAssistant", "GeminiApiKey") entry
+            // predates the Groq provider - clearing must remove whichever
+            // provider is CURRENTLY selected, not always Gemini's key,
+            // or "Clear Key" while Groq is active would silently leave the
+            // real active key in place and clear the other provider's
+            // instead. See NormalizeAiProvider/ApiKeyFieldFor above.
+            var ai = root["AiAssistant"] as JObject;
+            var provider = NormalizeAiProvider(ai?["Provider"]?.ToString());
+            ai?.Remove(ApiKeyFieldFor(provider));
+        }
+        else if (info.SecretField == null)
         {
             root.Remove(info.SectionKey);
         }
@@ -4070,9 +4104,10 @@ public class SettingsService
             SuspendedAdminEmails = suspendedAdminEmails,
             SuperAdminEmail = auth?["SuperAdminEmail"]?.ToString(),
 
-            AiProvider = "Google Gemini",
+            AiProvider = NormalizeAiProvider(ai?["Provider"]?.ToString()),
             AiModel = ai?["Model"]?.ToString() ?? string.Empty,
-            AiApiKeyConfigured = !string.IsNullOrWhiteSpace(ai?["GeminiApiKey"]?.ToString()),
+            AiApiKeyConfigured = !string.IsNullOrWhiteSpace(
+                ai?[ApiKeyFieldFor(NormalizeAiProvider(ai?["Provider"]?.ToString()))]?.ToString()),
 
             NotificationsFromEmail = notifications?["FromEmail"]?.ToString() ?? string.Empty,
             NotificationsFromName = notifications?["FromName"]?.ToString() ?? string.Empty,

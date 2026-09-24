@@ -18,14 +18,14 @@ namespace DeploymentAPI.Controllers;
 public class AiController : ControllerBase
 {
     private readonly SettingsService _settings;
-    private readonly IAiAssistantService _ai;
+    private readonly AiAssistantServiceResolver _aiResolver;
     private readonly AiToolsService _tools;
     private readonly ActivityLogService _log;
 
-    public AiController(SettingsService settings, IAiAssistantService ai, AiToolsService tools, ActivityLogService log)
+    public AiController(SettingsService settings, AiAssistantServiceResolver aiResolver, AiToolsService tools, ActivityLogService log)
     {
         _settings = settings;
-        _ai = ai;
+        _aiResolver = aiResolver;
         _tools = tools;
         _log = log;
     }
@@ -80,8 +80,8 @@ public class AiController : ControllerBase
             return Ok(new AiChatResponseDto
             {
                 Success = false,
-                Reply = "Deployment Copilot isn't configured yet. An administrator needs to add a Gemini " +
-                        "API key and model in Settings → Credentials → AI Assistant."
+                Reply = "Deployment Copilot isn't configured yet. An administrator needs to add an AI " +
+                        "provider API key and model in Settings → Credentials → AI Assistant."
             });
         }
 
@@ -95,7 +95,7 @@ public class AiController : ControllerBase
         // token usage without bound (section 23).
         var history = request.Messages.TakeLast(20).ToList();
 
-        var result = await _ai.ChatAsync(
+        var result = await _aiResolver.Resolve(creds.Provider).ChatAsync(
             systemInstruction,
             history,
             tools,

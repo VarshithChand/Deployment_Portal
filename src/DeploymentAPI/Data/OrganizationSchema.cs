@@ -162,6 +162,29 @@ public static class OrganizationSchema
         await ExecuteAsync(connection, "CREATE INDEX IF NOT EXISTS ix_audit_logs_org_time ON audit_logs (organization_id, created_at_utc DESC)");
         await ExecuteAsync(connection, "CREATE INDEX IF NOT EXISTS ix_audit_logs_actor ON audit_logs (actor_user_id)");
 
+        // Storage/editing only - no execution (no terraform binary, no
+        // state backend, no plan/apply) - see TerraformFileService's own
+        // header comment for the full reasoning. content is plain HCL
+        // text, never parsed/validated server-side beyond the file_name
+        // shape check (TerraformFileService.ValidateFileName).
+        await ExecuteAsync(connection, """
+            CREATE TABLE IF NOT EXISTS terraform_files (
+                id UUID PRIMARY KEY,
+                organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+                file_name TEXT NOT NULL,
+                content TEXT NOT NULL DEFAULT '',
+                created_by_user_id TEXT NOT NULL,
+                updated_by_user_id TEXT NOT NULL,
+                created_at_utc TIMESTAMPTZ NOT NULL DEFAULT now(),
+                updated_at_utc TIMESTAMPTZ NOT NULL DEFAULT now()
+            )
+            """);
+        // One file name per org, same "no two credentials silently
+        // shadow each other" reasoning as any other per-org named
+        // resource in this schema.
+        await ExecuteAsync(connection,
+            "CREATE UNIQUE INDEX IF NOT EXISTS ux_terraform_files_org_name ON terraform_files (organization_id, file_name)");
+
         await SeedRolesAndPermissionsAsync(connection);
     }
 
@@ -197,7 +220,14 @@ public static class OrganizationSchema
         // ResolveAwsCredentialsAsync/ResolveAzureCredentialsAsync, which
         // infer which one applies from the request's own HTTP verb.
         ("cloud_services.read", "cloud_services", "read", "View this organization's cloud service resources"),
-        ("cloud_services.write", "cloud_services", "write", "Manage (start/stop/scale/create/delete) this organization's cloud service resources")
+        ("cloud_services.write", "cloud_services", "write", "Manage (start/stop/scale/create/delete) this organization's cloud service resources"),
+        // Terraform config file storage/editing (no execution - see
+        // TerraformFileService). Contributor gets both read+write, unlike
+        // credentials - a .tf file is configuration text, not a secret,
+        // closer to the spec's Environments row (WRITE for Contributor)
+        // than its Credentials row (NONE for Contributor).
+        ("terraform.read", "terraform", "read", "View this organization's Terraform configuration files"),
+        ("terraform.write", "terraform", "write", "Create, edit, or delete this organization's Terraform configuration files")
     ];
 
     // The 3 fixed system roles and the permission keys each one grants -
@@ -219,8 +249,8 @@ public static class OrganizationSchema
         // delete, so the Credentials panel's Add/Edit/Delete controls stay
         // Admin-only while the list itself becomes visible to Contributor
         // and Read alike.
-        ("contributor", "Contributor", ["credentials.read", "credentials.use", "deployments.execute", "deployments.view", "cloud_services.read"]),
-        ("read", "Read", ["credentials.read", "deployments.view", "cloud_services.read"])
+        ("contributor", "Contributor", ["credentials.read", "credentials.use", "deployments.execute", "deployments.view", "cloud_services.read", "terraform.read", "terraform.write"]),
+        ("read", "Read", ["credentials.read", "deployments.view", "cloud_services.read", "terraform.read"])
     ];
 
     private static async Task SeedRolesAndPermissionsAsync(NpgsqlConnection connection)

@@ -176,6 +176,10 @@ export default function Settings() {
     const [adminEmailsText, setAdminEmailsText] = useState("");
     const [savingAdminEmails, setSavingAdminEmails] = useState(false);
 
+    // "gemini" (default) | "groq" - see AiAssistantServiceResolver on the
+    // backend. Each provider keeps its own saved API key server-side, so
+    // switching this and saving never discards the other provider's key.
+    const [aiProvider, setAiProvider] = useState("gemini");
     const [aiModel, setAiModel] = useState("");
     const [aiApiKey, setAiApiKey] = useState("");
     const [aiApiKeyConfigured, setAiApiKeyConfigured] = useState(false);
@@ -238,6 +242,7 @@ export default function Settings() {
             setSuspendedAdminUsernames(data.suspendedAdminGitHubUsernames || []);
             setAdminEmailsText((data.adminEmails || []).join(", "));
 
+            setAiProvider(data.aiProvider || "gemini");
             setAiModel(data.aiModel || "");
             setAiApiKeyConfigured(!!data.aiApiKeyConfigured);
 
@@ -659,6 +664,21 @@ export default function Settings() {
 
     }
 
+    // Switching providers clears the (unsaved, in-form) model/API key/test
+    // result state - each provider has its own model naming scheme and its
+    // own saved key server-side (see AiAssistantSettingsUpdateDto's own
+    // comment), so carrying a Gemini model name or unsaved key over into a
+    // Groq save would silently save the wrong thing. load() (called after
+    // every successful save) re-populates aiModel/aiApiKeyConfigured from
+    // whatever's actually saved for the newly selected provider.
+    function handleAiProviderChange(nextProvider) {
+        setAiProvider(nextProvider);
+        setAiModel("");
+        setAiApiKey("");
+        setAiApiKeyConfigured(false);
+        setAiTestResult(null);
+    }
+
     async function handleSaveAi() {
 
         try {
@@ -667,7 +687,8 @@ export default function Settings() {
 
             await saveAiSettings({
                 apiKey: aiApiKey || null,
-                model: aiModel
+                model: aiModel,
+                provider: aiProvider
             });
 
             setAiApiKey("");
@@ -1185,6 +1206,8 @@ export default function Settings() {
                     setOauthClientSecret={setOauthClientSecret}
                     handleSaveOAuth={handleSaveOAuth}
                     savingOAuth={savingOAuth}
+                    aiProvider={aiProvider}
+                    onAiProviderChange={handleAiProviderChange}
                     aiModel={aiModel}
                     setAiModel={setAiModel}
                     aiApiKey={aiApiKey}

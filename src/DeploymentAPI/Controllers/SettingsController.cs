@@ -23,18 +23,18 @@ public class SettingsController : ControllerBase
     private readonly GitHubApiService _github;
     private readonly CloudStatusService _cloud;
     private readonly GitHubAuthService _githubAuth;
-    private readonly IAiAssistantService _ai;
+    private readonly AiAssistantServiceResolver _aiResolver;
     private readonly IEmailService _email;
     private readonly SessionActivityService _activity;
     private readonly NotificationService _notifications;
 
-    public SettingsController(SettingsService settings, GitHubApiService github, CloudStatusService cloud, GitHubAuthService githubAuth, IAiAssistantService ai, IEmailService email, SessionActivityService activity, NotificationService notifications)
+    public SettingsController(SettingsService settings, GitHubApiService github, CloudStatusService cloud, GitHubAuthService githubAuth, AiAssistantServiceResolver aiResolver, IEmailService email, SessionActivityService activity, NotificationService notifications)
     {
         _settings = settings;
         _github = github;
         _cloud = cloud;
         _githubAuth = githubAuth;
-        _ai = ai;
+        _aiResolver = aiResolver;
         _email = email;
         _activity = activity;
         _notifications = notifications;
@@ -796,11 +796,11 @@ public class SettingsController : ControllerBase
             return Ok(new AiTestConnectionResultDto
             {
                 Success = false,
-                Message = "Add a Gemini API key and model, then save, before testing the connection."
+                Message = "Add an API key and model, then save, before testing the connection."
             });
         }
 
-        return Ok(await _ai.TestConnectionAsync(creds.ApiKey!, creds.Model));
+        return Ok(await _aiResolver.Resolve(creds.Provider).TestConnectionAsync(creds.ApiKey!, creds.Model));
     }
 
     // Super-admin-only, same tier as SaveAdmins/SuspendAdmin below - not

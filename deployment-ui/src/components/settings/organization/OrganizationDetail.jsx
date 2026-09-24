@@ -8,6 +8,7 @@ import InviteMemberForm from "./InviteMemberForm";
 import RolesPermissionsTable from "./RolesPermissionsTable";
 import AuditLogPanel from "./AuditLogPanel";
 import OrgCredentialsPanel from "./OrgCredentialsPanel";
+import TerraformFilesPanel from "./TerraformFilesPanel";
 import {
     listMembers, changeMemberRole, removeMember, listPendingInvitations, revokeInvitation
 } from "../../../services/organizationService";
@@ -31,6 +32,8 @@ export default function OrganizationDetail({ organization, onBack }) {
     const canViewAuditLogs = organization.permissions?.includes("audit_logs.view");
     const canReadCredentials = organization.permissions?.includes("credentials.read");
     const canWriteCredentials = organization.permissions?.includes("credentials.write");
+    const canReadTerraform = organization.permissions?.includes("terraform.read");
+    const canWriteTerraform = organization.permissions?.includes("terraform.write");
 
     const [members, setMembers] = useState([]);
     const [membersLoading, setMembersLoading] = useState(true);
@@ -344,6 +347,15 @@ export default function OrganizationDetail({ organization, onBack }) {
                     use a saved credential without ever seeing it.
                 </p>
                 <OrgCredentialsPanel orgId={organization.id} canWrite={canWriteCredentials} />
+            </div>
+
+        )}
+
+        {canReadTerraform && (
+
+            <div className="card">
+                <h2 className="card-title">Terraform</h2>
+                <TerraformFilesPanel orgId={organization.id} canWrite={canWriteTerraform} />
             </div>
 
         )}

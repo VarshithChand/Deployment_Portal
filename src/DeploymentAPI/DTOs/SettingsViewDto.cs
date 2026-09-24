@@ -45,11 +45,16 @@ public class SettingsViewDto
     // independent credentials, matching the same pattern Docker Hub/GHCR/
     // Harbor/Nexus already use rather than this general settings blob.
 
-    // Deployment Copilot (see GeminiService/AiToolsService/AiController) —
-    // AiModel is a plain configuration value (a model NAME, e.g.
-    // "gemini-2.0-flash"), not a secret, so it's safe to always return.
-    // The Gemini API key itself is never in this DTO under any field name.
-    public string AiProvider { get; set; } = "Google Gemini";
+    // Deployment Copilot (see GeminiService/GroqService/AiAssistantServiceResolver/
+    // AiToolsService/AiController) — the raw provider key ("gemini" |
+    // "groq", see SettingsService.NormalizeAiProvider), not a display
+    // label - the frontend maps this to which API-key/model fields to
+    // show. AiModel is a plain configuration value (a model NAME, e.g.
+    // "gemini-2.0-flash" or "llama-3.3-70b-versatile"), not a secret, so
+    // it's safe to always return. Neither provider's API key is ever in
+    // this DTO under any field name - only AiApiKeyConfigured (bool), for
+    // whichever provider is currently selected.
+    public string AiProvider { get; set; } = "gemini";
 
     public string AiModel { get; set; } = string.Empty;
 

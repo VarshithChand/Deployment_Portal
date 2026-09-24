@@ -131,7 +131,22 @@ const GEMINI_MODEL_OPTIONS = [
     { value: "gemini-2.5-flash-lite", label: "Gemini 2.5 Flash-Lite — fastest, free tier" }
 ];
 
+// Same "convenience picker, not a restriction" reasoning as
+// GEMINI_MODEL_OPTIONS above - Groq's model catalog changes over time too
+// (models get retired the same way Gemini's dated IDs did), so this is
+// deliberately a short, well-known starting point rather than an attempt
+// at a complete/current list. "Custom" is the reliable fallback either way
+// - check console.groq.com/docs/models for whatever's current.
+const GROQ_MODEL_OPTIONS = [
+    { value: "llama-3.3-70b-versatile", label: "Llama 3.3 70B Versatile — strong general + tool-calling" },
+    { value: "llama-3.1-8b-instant", label: "Llama 3.1 8B Instant — fastest, free tier" }
+];
+
 const CUSTOM_MODEL_VALUE = "__custom__";
+const CUSTOM_PROVIDER_MODEL_OPTIONS = {
+    gemini: GEMINI_MODEL_OPTIONS,
+    groq: GROQ_MODEL_OPTIONS
+};
 
 // Pulled out of Settings.jsx's "credentials" view - its own nested
 // loading/repo-preview conditionals were the single largest contributor
@@ -174,6 +189,8 @@ export default function CredentialsView({
     setOauthClientSecret,
     handleSaveOAuth,
     savingOAuth,
+    aiProvider,
+    onAiProviderChange,
     aiModel,
     setAiModel,
     aiApiKey,
@@ -1080,12 +1097,24 @@ export default function CredentialsView({
 
             <div className="form-group">
                 <label htmlFor="ai-provider">Provider</label>
-                <input id="ai-provider" type="text" className="form-control" value="Google Gemini" disabled />
+                <select
+                    id="ai-provider"
+                    className="form-control"
+                    value={aiProvider}
+                    onChange={(e) => onAiProviderChange(e.target.value)}
+                >
+                    <option value="gemini">Google Gemini</option>
+                    <option value="groq">Groq</option>
+                </select>
+                <p className="field-hint" style={{ marginTop: "6px" }}>
+                    Each provider keeps its own saved API key — switching here and saving never
+                    discards the other one's key.
+                </p>
             </div>
 
             <div className="form-group">
                 <label htmlFor="ai-api-key">
-                    Gemini API Key
+                    {aiProvider === "groq" ? "Groq API Key" : "Gemini API Key"}
                     {" "}
                     {aiApiKeyConfigured && (
                         <span className="badge badge-success">Saved</span>
@@ -1104,24 +1133,24 @@ export default function CredentialsView({
 
             <div className="form-group">
 
-                <label htmlFor="ai-gemini-model">Gemini Model</label>
+                <label htmlFor="ai-model">{aiProvider === "groq" ? "Groq Model" : "Gemini Model"}</label>
 
                 <select
-                    id="ai-gemini-model"
+                    id="ai-model"
                     className="form-control"
-                    value={GEMINI_MODEL_OPTIONS.some((o) => o.value === aiModel) ? aiModel : CUSTOM_MODEL_VALUE}
+                    value={CUSTOM_PROVIDER_MODEL_OPTIONS[aiProvider].some((o) => o.value === aiModel) ? aiModel : CUSTOM_MODEL_VALUE}
                     onChange={(e) => setAiModel(e.target.value === CUSTOM_MODEL_VALUE ? "" : e.target.value)}
                 >
-                    {GEMINI_MODEL_OPTIONS.map((o) => (
+                    {CUSTOM_PROVIDER_MODEL_OPTIONS[aiProvider].map((o) => (
                         <option key={o.value} value={o.value}>{o.label}</option>
                     ))}
                     <option value={CUSTOM_MODEL_VALUE}>Custom / other model...</option>
                 </select>
 
-                {!GEMINI_MODEL_OPTIONS.some((o) => o.value === aiModel) && (
+                {!CUSTOM_PROVIDER_MODEL_OPTIONS[aiProvider].some((o) => o.value === aiModel) && (
 
                     <ClearableInput
-                        placeholder="e.g. gemini-2.5-pro"
+                        placeholder={aiProvider === "groq" ? "e.g. gemma2-9b-it" : "e.g. gemini-2.5-pro"}
                         value={aiModel}
                         onChange={(e) => setAiModel(e.target.value)}
                         onClear={() => setAiModel("")}
@@ -1133,9 +1162,13 @@ export default function CredentialsView({
                 )}
 
                 <p className="field-hint" style={{ marginTop: "6px" }}>
-                    Free-tier models on Google AI Studio — pick "Custom" to enter any other model
-                    name. The portal never assumes a specific model; whatever's saved here is what
-                    Deployment Copilot uses.
+                    {aiProvider === "groq"
+                        ? "Free-tier models on Groq — pick \"Custom\" to enter any other model name. The " +
+                          "portal never assumes a specific model; whatever's saved here is what Deployment " +
+                          "Copilot uses."
+                        : "Free-tier models on Google AI Studio — pick \"Custom\" to enter any other model " +
+                          "name. The portal never assumes a specific model; whatever's saved here is what " +
+                          "Deployment Copilot uses."}
                 </p>
 
             </div>
@@ -1149,7 +1182,7 @@ export default function CredentialsView({
                 </p>
                 {!aiApiKeyConfigured && (
                     <p className="field-hint" style={{ marginTop: "6px" }}>
-                        Add a Gemini API key and model to enable Deployment Copilot.
+                        Add a {aiProvider === "groq" ? "Groq" : "Gemini"} API key and model to enable Deployment Copilot.
                     </p>
                 )}
             </div>
@@ -1170,7 +1203,7 @@ export default function CredentialsView({
                     {testingAi ? "Testing..." : "Test Connection"}
                 </button>
 
-                <button type="button" className="btn btn-danger" onClick={() => handleClearAndRelock("ai", "Gemini API key")}>
+                <button type="button" className="btn btn-danger" onClick={() => handleClearAndRelock("ai", aiProvider === "groq" ? "Groq API key" : "Gemini API key")}>
                     Clear Key
                 </button>
 

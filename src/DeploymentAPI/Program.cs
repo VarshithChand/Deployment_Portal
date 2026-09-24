@@ -215,6 +215,7 @@ builder.Services.AddScoped<OrgAuthorizationService>();
 builder.Services.AddScoped<OrgCredentialService>();
 builder.Services.AddScoped<InvitationService>();
 builder.Services.AddScoped<AuditLogService>();
+builder.Services.AddScoped<TerraformFileService>();
 // Scoped for the same reason as DatabaseManagementService above - it
 // depends on SettingsService (Scoped) to read the Resend API key.
 builder.Services.AddScoped<IEmailService, ResendEmailService>();
@@ -267,14 +268,20 @@ builder.Services.AddSingleton<AzureDevOpsService>();
 // Its only state is IMemoryCache-backed pending sign-ins, already a
 // Singleton itself - safe to share the same way.
 builder.Services.AddSingleton<AwsSsoService>();
-// Deployment Copilot. GeminiService is stateless (every call takes its API
-// key/model as parameters, same as CloudStatusService taking credentials
-// per-call) - Singleton, behind the provider-agnostic IAiAssistantService
-// so a future non-Gemini implementation is a one-line swap here. AiToolsService
-// is Scoped because it depends on Scoped services (GitHubAuthService,
-// SettingsService, DatabaseManagementService) that are already resolved to
-// the current request's own session.
-builder.Services.AddSingleton<IAiAssistantService, GeminiService>();
+// Deployment Copilot. GeminiService/GroqService are both stateless (every
+// call takes its API key/model as parameters, same as CloudStatusService
+// taking credentials per-call) - both Singletons, behind the provider-
+// agnostic IAiAssistantService interface. The actual choice between them
+// is a runtime setting now (see AiAssistantCredentials.Provider), not a
+// compile-time one, so callers no longer inject IAiAssistantService
+// directly - they inject AiAssistantServiceResolver and resolve per-request
+// against whichever provider is currently saved. AiToolsService is Scoped
+// because it depends on Scoped services (GitHubAuthService, SettingsService,
+// DatabaseManagementService) that are already resolved to the current
+// request's own session.
+builder.Services.AddSingleton<GeminiService>();
+builder.Services.AddSingleton<GroqService>();
+builder.Services.AddSingleton<AiAssistantServiceResolver>();
 builder.Services.AddScoped<AiToolsService>();
 // Resolved once at startup from real git/environment state (see
 // ApplicationBuildInfoService) - Singleton since none of it changes while
