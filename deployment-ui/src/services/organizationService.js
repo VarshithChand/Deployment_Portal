@@ -87,6 +87,34 @@ export const deleteOrganizationCredential = async (orgId, credentialId) => {
     return response.data;
 };
 
+// Settings > Organizations > Terraform Files - storage/editing only, see
+// TerraformFileService/TerraformFilesController. Never executes anything -
+// no plan/apply, this is just text storage for .tf config.
+export const listTerraformFiles = async (orgId) => {
+    const response = await organizationsApi.get(`/${orgId}/terraform-files`);
+    return response.data;
+};
+
+export const getTerraformFile = async (orgId, fileId) => {
+    const response = await organizationsApi.get(`/${orgId}/terraform-files/${fileId}`);
+    return response.data;
+};
+
+export const createTerraformFile = async (orgId, { fileName, content }) => {
+    const response = await organizationsApi.post(`/${orgId}/terraform-files`, { fileName, content });
+    return response.data;
+};
+
+export const updateTerraformFile = async (orgId, fileId, content) => {
+    const response = await organizationsApi.put(`/${orgId}/terraform-files/${fileId}`, { content });
+    return response.data;
+};
+
+export const deleteTerraformFile = async (orgId, fileId) => {
+    const response = await organizationsApi.delete(`/${orgId}/terraform-files/${fileId}`);
+    return response.data;
+};
+
 // Settings > Organizations > Audit Logs - audit_logs.view-gated server-side
 // (Admin only in the seeded matrix). Returns the most recent 200 entries
 // (see AuditLogService.ListAsync's own cap) - paginated client-side via
