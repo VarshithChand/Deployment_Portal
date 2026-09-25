@@ -151,3 +151,49 @@ public class TerraformProjectPreviewDto
 
     public string? Narrative { get; set; }
 }
+
+// One way to add a new instance of something this project already creates
+// in bulk (a new web app, function app, or service bus queue) without
+// hand-editing HCL - see TerraformResourceExtractor.BuildAddTargets for how
+// this is discovered (a module's own for_each, or - for something like
+// service bus, where the multiplying for_each sits on a resource INSIDE a
+// non-for_each'd module - one hop through that module's own argument
+// passing). VariableName/FileName/Shape describe exactly where a new entry
+// would be inserted (TerraformTfvarsEditor.InsertEntry); ExistingCount is
+// shown so the picker reads as e.g. "api_web_apps (16 existing)".
+public class AddResourceTargetDto
+{
+    public string ResourceType { get; set; } = string.Empty;
+
+    public string ModuleLocalName { get; set; } = string.Empty;
+
+    public string VariableName { get; set; } = string.Empty;
+
+    public string FileName { get; set; } = string.Empty;
+
+    // "Map" (a for_each over a map of objects - each new entry needs a
+    // unique key, e.g. "new-app-name" = {}) or "List" (a for_each/count
+    // over a plain list of strings - each new entry is just another quoted
+    // string, e.g. "new-app-name",).
+    public string Shape { get; set; } = string.Empty;
+
+    public int ExistingCount { get; set; }
+}
+
+public class AddResourceInstanceRequestDto
+{
+    public string? VariableName { get; set; }
+
+    public string? Name { get; set; }
+}
+
+// The "no existing target fits" path - generates a starter HCL block
+// (not fully auto-wired - see TerraformController.GenerateTemplate's own
+// comment) appended to main.tf/variables.tf/terraform.tfvars for the
+// requested kind, as a starting point to review and connect.
+public class GenerateNewTemplateRequestDto
+{
+    public string? Kind { get; set; } // "webApp" | "functionApp" | "serviceBusQueue"
+
+    public string? Name { get; set; }
+}

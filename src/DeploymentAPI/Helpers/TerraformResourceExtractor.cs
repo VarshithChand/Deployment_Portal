@@ -134,6 +134,243 @@ public static class TerraformResourceExtractor
         return results;
     }
 
+    // Discovers "you can add a new X here" targets - each one an editable
+    // spot in an uploaded .tfvars file that already drives a real for_each/
+    // count. Two genuinely different shapes, both covered:
+    //
+    // A) A module's OWN for_each resolves directly to a project-level
+    //    var/local (web apps, function apps) - one target per module call,
+    //    so two modules sharing one source folder (this project's own
+    //    api_web_apps + miscellaneous_web_apps both pointing at
+    //    modules/web_app) correctly show as two separate, separately-
+    //    addable targets, not one merged one.
+    //
+    // B) The multiplying for_each sits on a RESOURCE inside a module that
+    //    itself is NOT for_each'd (service bus queues) - the resource's own
+    //    for_each references a variable that's local to that module
+    //    (declared in the module's own variables.tf), populated by the
+    //    calling module block's own argument passing
+    //    (queues = [for q in var.servicebus_queues : ...]) rather than by a
+    //    for_each. Resolved by one extra hop through that module call's own
+    //    arguments.
+    public static List<AddResourceTargetDto> BuildAddTargets(IEnumerable<PersonalTerraformFileDetailDto> files)
+    {
+        var fileList = files as IReadOnlyCollection<PersonalTerraformFileDetailDto> ?? files.ToList();
+
+        var variableValues = BuildVariableValueIndex(fileList);
+        var localRawValues = BuildLocalRawValueIndex(fileList);
+
+        var targets = new List<AddResourceTargetDto>();
+
+        // Case A.
+        foreach (var file in fileList.Where(f => f.FileName.EndsWith(".tf", StringComparison.OrdinalIgnoreCase)))
+        {
+            foreach (Match header in ModuleHeaderPattern.Matches(file.Content))
+            {
+                var blockStart = header.Index + header.Length - 1;
+                var blockEnd = FindMatchingBrace(file.Content, blockStart);
+                if (blockEnd <= blockStart) continue;
+
+                var block = file.Content.Substring(blockStart, blockEnd - blockStart + 1);
+
+                var sourceRaw = FindTopLevelValue(block, SourceLinePattern);
+                var folder = sourceRaw != null ? NormalizeModuleSource(sourceRaw) : null;
+                if (folder == null) continue;
+
+                var forEachExpr = FindTopLevelValue(block, ForEachLinePattern);
+                if (forEachExpr == null) continue;
+
+                var resolved = ResolveAddableVariable(forEachExpr, variableValues, localRawValues);
+                if (resolved == null) continue;
+
+                var resourceType = GuessPrimaryResourceType(fileList, folder);
+                if (resourceType == null) continue;
+
+                targets.Add(new AddResourceTargetDto
+                {
+                    ResourceType = resourceType,
+                    ModuleLocalName = header.Groups[1].Value,
+                    VariableName = resolved.Value.Name,
+                    FileName = FindTfvarsFileDeclaring(fileList, resolved.Value.Name) ?? "terraform.tfvars",
+                    Shape = resolved.Value.Shape,
+                    ExistingCount = resolved.Value.Count
+                });
+            }
+        }
+
+        // Case B.
+        var moduleArgsByFolder = BuildModuleArgsByFolder(fileList);
+
+        foreach (var file in fileList.Where(f => f.FileName.EndsWith(".tf", StringComparison.OrdinalIgnoreCase)))
+        {
+            var folder = GetContainingFolder(file.FileName);
+            if (!moduleArgsByFolder.TryGetValue(folder, out var argSets)) continue;
+
+            foreach (Match header in ResourceHeaderPattern.Matches(file.Content))
+            {
+                var blockStart = header.Index + header.Length - 1;
+                var blockEnd = FindMatchingBrace(file.Content, blockStart);
+                if (blockEnd <= blockStart) continue;
+
+                var block = file.Content.Substring(blockStart, blockEnd - blockStart + 1);
+                var forEachExpr = FindTopLevelValue(block, ForEachLinePattern);
+                if (forEachExpr == null) continue;
+
+                // Already directly resolvable (a plain project-level var/
+                // local) - case A (or the ordinary Extract() path) already
+                // covers it, no module-argument hop needed.
+                if (ResolveAddableVariable(forEachExpr, variableValues, localRawValues) != null) continue;
+
+                var refMatch = ReferencePattern.Match(forEachExpr.Trim());
+                if (!refMatch.Success || refMatch.Groups[1].Value != "var") continue;
+
+                var localVarName = refMatch.Groups[2].Value;
+
+                foreach (var args in argSets)
+                {
+                    if (!args.TryGetValue(localVarName, out var argValue)) continue;
+
+                    var resolved = ResolveAddableVariable(argValue.Trim(), variableValues, localRawValues);
+                    if (resolved == null) continue;
+
+                    targets.Add(new AddResourceTargetDto
+                    {
+                        ResourceType = header.Groups[1].Value,
+                        ModuleLocalName = string.Empty,
+                        VariableName = resolved.Value.Name,
+                        FileName = FindTfvarsFileDeclaring(fileList, resolved.Value.Name) ?? "terraform.tfvars",
+                        Shape = resolved.Value.Shape,
+                        ExistingCount = resolved.Value.Count
+                    });
+                }
+            }
+        }
+
+        // Dedupe by variable - multiple resources sharing one for_each
+        // source (e.g. servicebus's queue AND its authorization_rule both
+        // driven by the same servicebus_queues variable) means one actual
+        // "add a queue" action, not two near-identical entries differing
+        // only by which resource happened to be scanned.
+        return targets
+            .GroupBy(t => t.VariableName, StringComparer.Ordinal)
+            .Select(g => g.First())
+            .ToList();
+    }
+
+    private static (string Name, string Shape, int Count)? ResolveAddableVariable(
+        string expression, Dictionary<string, string> variableValues, Dictionary<string, string> localRawValues)
+    {
+        var trimmedExpr = expression.Trim();
+
+        // The expression ITSELF may directly be a `[for x in var.Y : ...]`
+        // comprehension - not everywhere this idiom shows up is a locals
+        // value wrapping it; a module ARGUMENT commonly is one directly
+        // (queues = [for queue in var.servicebus_queues : ...]).
+        var directForInVar = ForInVarPattern.Match(trimmedExpr);
+
+        if (directForInVar.Success && variableValues.TryGetValue(directForInVar.Groups[1].Value, out var directRaw))
+        {
+            var directShape = ShapeOf(directRaw);
+            if (directShape != null)
+                return (directForInVar.Groups[1].Value, directShape, CountOf(directRaw, directShape));
+        }
+
+        var match = ReferencePattern.Match(trimmedExpr);
+        if (!match.Success) return null;
+
+        if (match.Groups[1].Value == "var")
+        {
+            if (!variableValues.TryGetValue(match.Groups[2].Value, out var raw)) return null;
+            var shape = ShapeOf(raw);
+            return shape == null ? null : (match.Groups[2].Value, shape, CountOf(raw, shape));
+        }
+
+        // local - only the "for k, v in var.Y : k => {...}" idiom is
+        // resolvable, same as the display-count path.
+        if (!localRawValues.TryGetValue(match.Groups[2].Value, out var localExpr)) return null;
+
+        var forInVarMatch = ForInVarPattern.Match(localExpr);
+        if (!forInVarMatch.Success) return null;
+
+        var sourceVarName = forInVarMatch.Groups[1].Value;
+        if (!variableValues.TryGetValue(sourceVarName, out var sourceRaw)) return null;
+
+        var sourceShape = ShapeOf(sourceRaw);
+        return sourceShape == null ? null : (sourceVarName, sourceShape, CountOf(sourceRaw, sourceShape));
+    }
+
+    private static string? ShapeOf(string raw)
+    {
+        var trimmed = raw.Trim();
+        if (trimmed.StartsWith('{')) return "Map";
+        if (trimmed.StartsWith('[')) return "List";
+        return null;
+    }
+
+    private static int CountOf(string raw, string shape)
+    {
+        var inner = StripOuterBracket(raw.Trim());
+        return shape == "Map" ? ParseTopLevelAssignments(inner).Count : SplitTopLevelElements(inner).Count;
+    }
+
+    // The first resource declared in a module's source folder - a
+    // reasonable stand-in for "the main thing this module creates" (e.g.
+    // modules/web_app declares the web app itself before its deployment
+    // slot), used only to label an add target, never to compute a count.
+    private static string? GuessPrimaryResourceType(IReadOnlyCollection<PersonalTerraformFileDetailDto> fileList, string folder)
+    {
+        foreach (var file in fileList.Where(f => f.FileName.StartsWith(folder + "/", StringComparison.Ordinal)))
+        {
+            var m = ResourceHeaderPattern.Match(file.Content);
+            if (m.Success) return m.Groups[1].Value;
+        }
+
+        return null;
+    }
+
+    private static string? FindTfvarsFileDeclaring(IReadOnlyCollection<PersonalTerraformFileDetailDto> fileList, string variableName)
+    {
+        foreach (var file in fileList.Where(f =>
+            f.FileName.EndsWith(".tfvars", StringComparison.OrdinalIgnoreCase)
+            || f.FileName.EndsWith(".tfvars.json", StringComparison.OrdinalIgnoreCase)))
+        {
+            if (ParseTopLevelAssignments(file.Content).ContainsKey(variableName))
+                return file.FileName;
+        }
+
+        return null;
+    }
+
+    // folder -> every module call's own top-level arguments, for case B's
+    // one-hop resolution above.
+    private static Dictionary<string, List<Dictionary<string, string>>> BuildModuleArgsByFolder(
+        IReadOnlyCollection<PersonalTerraformFileDetailDto> fileList)
+    {
+        var result = new Dictionary<string, List<Dictionary<string, string>>>(StringComparer.Ordinal);
+
+        foreach (var file in fileList.Where(f => f.FileName.EndsWith(".tf", StringComparison.OrdinalIgnoreCase)))
+        {
+            foreach (Match header in ModuleHeaderPattern.Matches(file.Content))
+            {
+                var blockStart = header.Index + header.Length - 1;
+                var blockEnd = FindMatchingBrace(file.Content, blockStart);
+                if (blockEnd <= blockStart) continue;
+
+                var block = file.Content.Substring(blockStart, blockEnd - blockStart + 1);
+                var sourceRaw = FindTopLevelValue(block, SourceLinePattern);
+                var folder = sourceRaw != null ? NormalizeModuleSource(sourceRaw) : null;
+                if (folder == null) continue;
+
+                if (!result.TryGetValue(folder, out var list))
+                    result[folder] = list = new List<Dictionary<string, string>>();
+
+                list.Add(ParseTopLevelAssignments(block));
+            }
+        }
+
+        return result;
+    }
+
     // "modules/web_app/main.tf" -> "modules/web_app"; a root-level file
     // ("main.tf") -> "" (never matches any module's source, which is
     // exactly correct - nothing multiplies a root-level resource).

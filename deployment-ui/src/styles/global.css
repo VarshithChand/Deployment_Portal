@@ -5736,6 +5736,37 @@ textarea{
     .inline-spinner{ animation-duration:2.2s; }
 }
 
+/* Resolved for_each/count instance names (TerraformProjectPage) - one line
+   per base name instead of a comma-joined wall of text, with a paired
+   "-A"/"-B" deployment grouped onto its base name's own line (see
+   groupInstanceNames' own reasoning for why only that specific suffix
+   shape is grouped, never any other trailing token). */
+.terraform-instance-list{
+
+    margin:6px 0 0;
+
+    padding-left:18px;
+
+    font-size:12.5px;
+
+    color:var(--text-muted);
+
+}
+
+.terraform-instance-list li{
+
+    line-height:1.6;
+
+}
+
+.terraform-instance-suffixes{
+
+    color:var(--heading-accent, #2563eb);
+
+    font-weight:600;
+
+}
+
 /* Project file tree (TerraformFileTree) - folders as plain labels, files
    as clickable rows, indentation carrying the nesting instead of connector
    lines (kept deliberately plain - a real IDE tree isn't the point here,

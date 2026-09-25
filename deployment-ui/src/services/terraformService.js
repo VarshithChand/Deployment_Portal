@@ -90,6 +90,26 @@ export const previewTerraformProject = async (projectId) => {
     return response.data;
 };
 
+// "Add a new web app / function app / queue" without hand-editing HCL -
+// see TerraformResourceExtractor.BuildAddTargets's own comment for how
+// these are discovered.
+export const getTerraformAddTargets = async (projectId) => {
+    const response = await terraformApi.get(`/projects/${projectId}/add-targets`);
+    return response.data;
+};
+
+export const addTerraformResourceInstance = async (projectId, variableName, name) => {
+    const response = await terraformApi.post(`/projects/${projectId}/add-instance`, { variableName, name });
+    return response.data;
+};
+
+// No existing target fits - generates a starter (not fully wired) block,
+// see TerraformController.GenerateTemplate's own comment.
+export const generateTerraformTemplate = async (projectId, kind, name) => {
+    const response = await terraformApi.post(`/projects/${projectId}/generate-template`, { kind, name });
+    return response.data;
+};
+
 // Real execution - see TerraformExecutionService.cs's own header comment.
 export const planTerraformProject = async (projectId) => {
     const response = await terraformApi.post(`/projects/${projectId}/plan`);

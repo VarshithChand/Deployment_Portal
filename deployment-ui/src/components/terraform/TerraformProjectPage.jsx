@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from "react";
-import { ArrowLeft, FileCode, FolderUp, Sparkles, PlayCircle, Rocket, Upload } from "lucide-react";
+import { ArrowLeft, FileCode, FolderUp, PlusCircle, Sparkles, PlayCircle, Rocket, Upload } from "lucide-react";
 
 import useToast from "../../hooks/useToast";
 import useConfirm from "../../hooks/useConfirm";
 import CopilotMarkdown from "../copilot/CopilotMarkdown";
 import TypedConfirmDialog from "../cloudServices/TypedConfirmDialog";
 import TerraformFileTree from "./TerraformFileTree";
+import TerraformAddResourceForm from "./TerraformAddResourceForm";
 import { TERRAFORM_RESOURCE_TEMPLATES } from "../../utils/terraformTemplates";
 import {
     getTerraformProject, deleteTerraformProject, uploadFilesToProject,
@@ -28,9 +29,67 @@ function describeResourceInstances(r) {
         return "uses for_each/count - instance count depends on a variable this preview couldn't resolve";
     }
 
-    return r.instanceNames?.length > 0
-        ? `${r.instanceCount} instances: ${r.instanceNames.join(", ")}`
-        : `${r.instanceCount} instances`;
+    return `${r.instanceCount} instance${r.instanceCount === 1 ? "" : "s"}`;
+
+}
+
+// Groups "base-A" / "base-B" pairs (this project's own paired-deployment
+// naming convention) onto one line each instead of a flat comma-separated
+// wall of 24 names - deliberately narrow (only a trailing "-A"/"-B", not
+// any trailing token) so an unrelated numeric or descriptive suffix on some
+// other project's names is left alone as its own standalone line, never
+// silently merged into a group that doesn't actually mean anything.
+function groupInstanceNames(names) {
+
+    const groups = new Map(); // base name -> Set of suffixes, or null for a standalone (no -A/-B) name
+    const order = [];
+
+    for (const name of names || []) {
+
+        const match = name.match(/^(.*)-([AB])$/);
+        const base = match ? match[1] : name;
+        const suffix = match ? match[2] : null;
+
+        if (!groups.has(base)) {
+            groups.set(base, new Set());
+            order.push(base);
+        }
+
+        if (suffix) groups.get(base).add(suffix);
+        else groups.get(base).add(null);
+
+    }
+
+    return order.map((base) => {
+        const suffixes = [...groups.get(base)];
+        const hasRealSuffixes = suffixes.length > 0 && suffixes[0] !== null;
+        return { base, suffixes: hasRealSuffixes ? suffixes.sort() : null };
+    });
+
+}
+
+function InstanceNamesList({ names }) {
+
+    if (!names || names.length === 0) return null;
+
+    const grouped = groupInstanceNames(names);
+
+    return (
+
+        <ul className="terraform-instance-list">
+            {grouped.map(({ base, suffixes }) => (
+                <li key={base}>
+                    {base}
+                    {suffixes && (
+                        <span className="terraform-instance-suffixes">
+                            {" "}({suffixes.join(", ")})
+                        </span>
+                    )}
+                </li>
+            ))}
+        </ul>
+
+    );
 
 }
 
@@ -58,6 +117,8 @@ export default function TerraformProjectPage({ projectId, onBack, onDeleted }) {
 
     const [uploading, setUploading] = useState(false);
     const [uploadCount, setUploadCount] = useState(0);
+
+    const [addResourceOpen, setAddResourceOpen] = useState(false);
 
     const [selectedPath, setSelectedPath] = useState(null);
     const [openContent, setOpenContent] = useState("");
@@ -370,6 +431,10 @@ export default function TerraformProjectPage({ projectId, onBack, onDeleted }) {
                 </button>
                 <h2 className="settings-subhead" style={{ margin: 0 }}>{project.name}</h2>
                 <div className="button-row" style={{ margin: 0 }}>
+                    <button type="button" className="btn btn-primary" onClick={() => setAddResourceOpen(true)}>
+                        <PlusCircle size={14} style={{ marginRight: 4, verticalAlign: -2 }} />
+                        Add Resource
+                    </button>
                     <button type="button" className="btn btn-secondary" disabled={uploading} onClick={() => filesInputRef.current?.click()}>
                         <Upload size={14} style={{ marginRight: 4, verticalAlign: -2 }} />
                         Add Files
@@ -434,6 +499,7 @@ export default function TerraformProjectPage({ projectId, onBack, onDeleted }) {
                                         {fileResources.map((r, i) => (
                                             <li key={i}>
                                                 <strong>{r.resourceType}</strong> "{r.localName}" &rarr; {describeResourceInstances(r)}
+                                                <InstanceNamesList names={r.instanceNames} />
                                             </li>
                                         ))}
                                     </ul>
@@ -576,7 +642,10 @@ export default function TerraformProjectPage({ projectId, onBack, onDeleted }) {
                                             <tr key={i}>
                                                 <td>{r.resourceType}</td>
                                                 <td>{r.localName}</td>
-                                                <td>{describeResourceInstances(r)}</td>
+                                                <td>
+                                                    {describeResourceInstances(r)}
+                                                    <InstanceNamesList names={r.instanceNames} />
+                                                </td>
                                                 <td>{r.fileName}</td>
                                             </tr>
                                         ))}
@@ -636,6 +705,13 @@ export default function TerraformProjectPage({ projectId, onBack, onDeleted }) {
                 />
 
             </div>
+
+            <TerraformAddResourceForm
+                projectId={projectId}
+                open={addResourceOpen}
+                onClose={() => setAddResourceOpen(false)}
+                onAdded={load}
+            />
 
         </div>
 

@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using DeploymentAPI.DTOs;
 using DeploymentAPI.Helpers;
 using DeploymentAPI.Services;
@@ -390,6 +391,131 @@ public class TerraformController : ControllerBase
         return r.InstanceNames is { Count: > 0 }
             ? line + $" -> {r.InstanceCount} instances: {string.Join(", ", r.InstanceNames)}"
             : line + $" -> {r.InstanceCount} instances";
+    }
+
+    // Discovers "add a new X" spots already driving a real for_each/count in
+    // this project (see TerraformResourceExtractor.BuildAddTargets) - a new
+    // web app, function app, etc, without hand-editing HCL. Read-only, no
+    // Azure calls.
+    [HttpGet("projects/{projectId:guid}/add-targets")]
+    public async Task<IActionResult> GetAddTargets(Guid projectId)
+    {
+        var (key, denied) = RequireAuth.RequireUserId(this);
+        if (denied != null) return denied;
+
+        var files = await _settings.GetAllProjectFilesAsync(key!, projectId);
+
+        return Ok(new { targets = TerraformResourceExtractor.BuildAddTargets(files) });
+    }
+
+    // Inserts a new entry into an existing add target's tfvars variable
+    // (TerraformTfvarsEditor.InsertEntry) - re-resolves the target fresh
+    // from the CURRENT files rather than trusting whatever the frontend
+    // cached, so a target that's stopped existing (the file was deleted or
+    // edited since the picker was shown) is caught here, not silently
+    // written to the wrong place.
+    [HttpPost("projects/{projectId:guid}/add-instance")]
+    public async Task<IActionResult> AddInstance(Guid projectId, AddResourceInstanceRequestDto request)
+    {
+        var (key, denied) = RequireAuth.RequireUserId(this);
+        if (denied != null) return denied;
+
+        var name = request.Name?.Trim();
+
+        if (string.IsNullOrWhiteSpace(request.VariableName) || string.IsNullOrWhiteSpace(name))
+            return BadRequest(new { message = "A target and a name are required." });
+
+        if (!Regex.IsMatch(name, @"^[A-Za-z0-9._-]+$"))
+            return BadRequest(new { message = "Name must contain only letters, numbers, dots, dashes, or underscores." });
+
+        var files = await _settings.GetAllProjectFilesAsync(key!, projectId);
+        var target = TerraformResourceExtractor.BuildAddTargets(files)
+            .FirstOrDefault(t => t.VariableName == request.VariableName);
+
+        if (target == null)
+        {
+            return Ok(new
+            {
+                success = false,
+                message = "That target isn't available in this project anymore - refresh and try again."
+            });
+        }
+
+        var file = files.FirstOrDefault(f => string.Equals(f.FileName, target.FileName, StringComparison.OrdinalIgnoreCase));
+
+        if (file == null)
+            return Ok(new { success = false, message = $"{target.FileName} wasn't found." });
+
+        var entryText = target.Shape == "Map" ? $"\"{name}\" = {{}}" : $"\"{name}\",";
+
+        var (success, error, updatedContent) = TerraformTfvarsEditor.InsertEntry(file.Content, target.VariableName, entryText);
+
+        if (!success)
+            return Ok(new { success = false, message = error });
+
+        await _settings.UpdateProjectFileAsync(key!, projectId, target.FileName, updatedContent);
+
+        return Ok(new { success = true });
+    }
+
+    // The "no existing target fits" path - deliberately NOT fully wired
+    // (see GenerateNewTemplateRequestDto's own comment): appends a starter
+    // resource + module block to main.tf, a matching variable declaration
+    // to variables.tf, and one starter entry to terraform.tfvars. A
+    // starting point to review and connect (Resource Group id, Plan id,
+    // etc), same as the existing "Insert starter code" template picker in
+    // the file editor - not an attempt to fully automate wiring a new
+    // Resource Group/Plan/module set, which would need this app to
+    // understand far more about the specific project's own conventions
+    // than a static text scan safely can.
+    [HttpPost("projects/{projectId:guid}/generate-template")]
+    public async Task<IActionResult> GenerateTemplate(Guid projectId, GenerateNewTemplateRequestDto request)
+    {
+        var (key, denied) = RequireAuth.RequireUserId(this);
+        if (denied != null) return denied;
+
+        var name = request.Name?.Trim();
+
+        if (string.IsNullOrWhiteSpace(name) || string.IsNullOrWhiteSpace(request.Kind))
+            return BadRequest(new { message = "A kind and a name are required." });
+
+        if (!Regex.IsMatch(name, @"^[A-Za-z0-9._-]+$"))
+            return BadRequest(new { message = "Name must contain only letters, numbers, dots, dashes, or underscores." });
+
+        var template = TerraformNewResourceTemplates.Build(request.Kind, name);
+
+        if (template == null)
+            return BadRequest(new { message = "Unknown kind." });
+
+        var files = await _settings.GetAllProjectFilesAsync(key!, projectId);
+
+        // Upsert (not update-only) - a project might not already have a
+        // separate variables.tf/terraform.tfvars (e.g. a project built
+        // entirely from starter-template inserts so far), and this should
+        // create them rather than silently drop the template's content.
+        string AppendOrCreate(string fileName, string block)
+        {
+            var existing = files.FirstOrDefault(f => string.Equals(f.FileName, fileName, StringComparison.OrdinalIgnoreCase));
+            return existing == null ? block + "\n" : existing.Content.TrimEnd() + "\n\n" + block + "\n";
+        }
+
+        var uploads = new List<TerraformFileUploadEntryDto>
+        {
+            new() { FileName = "main.tf", Content = AppendOrCreate("main.tf", template.MainTfBlock) },
+            new() { FileName = "variables.tf", Content = AppendOrCreate("variables.tf", template.VariableBlock) },
+            new() { FileName = "terraform.tfvars", Content = AppendOrCreate("terraform.tfvars", template.TfvarsBlock) }
+        };
+
+        var results = await _settings.UploadFilesToProjectAsync(key!, projectId, uploads);
+
+        if (results == null)
+            return NotFound(new { message = "Project not found." });
+
+        return Ok(new
+        {
+            success = true,
+            updatedFiles = results.Where(r => r.Accepted).Select(r => r.FileName).ToList()
+        });
     }
 
     // Real execution - see TerraformExecutionService's own header comment
