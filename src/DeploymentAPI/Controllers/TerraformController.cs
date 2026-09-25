@@ -428,6 +428,16 @@ public class TerraformController : ControllerBase
         if (!Regex.IsMatch(name, @"^[A-Za-z0-9._-]+$"))
             return BadRequest(new { message = "Name must contain only letters, numbers, dots, dashes, or underscores." });
 
+        var pathPattern = new Regex(@"^[A-Za-z0-9._/-]+$");
+        var appsettingsFile = request.AppsettingsFile?.Trim();
+        var connectionstringsFile = request.ConnectionstringsFile?.Trim();
+
+        if (!string.IsNullOrEmpty(appsettingsFile) && !pathPattern.IsMatch(appsettingsFile))
+            return BadRequest(new { message = "Appsettings file can only contain letters, numbers, dots, dashes, underscores, or slashes." });
+
+        if (!string.IsNullOrEmpty(connectionstringsFile) && !pathPattern.IsMatch(connectionstringsFile))
+            return BadRequest(new { message = "Connection strings file can only contain letters, numbers, dots, dashes, underscores, or slashes." });
+
         var files = await _settings.GetAllProjectFilesAsync(key!, projectId);
         var target = TerraformResourceExtractor.BuildAddTargets(files)
             .FirstOrDefault(t => t.VariableName == request.VariableName);
@@ -446,7 +456,17 @@ public class TerraformController : ControllerBase
         if (file == null)
             return Ok(new { success = false, message = $"{target.FileName} wasn't found." });
 
-        var entryText = target.Shape == "Map" ? $"\"{name}\" = {{}}" : $"\"{name}\",";
+        // Web-app-only attributes (see AddResourceInstanceRequestDto's own
+        // comment) - every other kind still gets the plain "name" = {}/",".
+        var attributes = new List<string>();
+        if (!string.IsNullOrEmpty(appsettingsFile)) attributes.Add($"appsettings_file = \"{appsettingsFile}\"");
+        if (!string.IsNullOrEmpty(connectionstringsFile)) attributes.Add($"connectionstrings_file = \"{connectionstringsFile}\"");
+
+        var entryText = target.Shape != "Map"
+            ? $"\"{name}\","
+            : attributes.Count > 0
+                ? $"\"{name}\" = {{ {string.Join(", ", attributes)} }}"
+                : $"\"{name}\" = {{}}";
 
         var (success, error, updatedContent) = TerraformTfvarsEditor.InsertEntry(file.Content, target.VariableName, entryText);
 

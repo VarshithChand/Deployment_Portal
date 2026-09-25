@@ -26,13 +26,31 @@ const NEW_KINDS = [
 
 const NEW_TARGET_VALUE = "__new__";
 
+const WEB_APP_TYPES = new Set(["azurerm_windows_web_app", "azurerm_linux_web_app"]);
+
+const DEPLOYMENT_MODES = [
+    { value: "A", label: "A only" },
+    { value: "B", label: "B only" },
+    { value: "A+B", label: "A + B (both)" }
+];
+
 // "Add a web app / function app / service bus queue" without hand-editing
 // HCL - picks an existing for_each-driven target already in the project
 // (see TerraformResourceExtractor.BuildAddTargets) and inserts one new
 // entry into the right .tfvars variable, or - if nothing existing fits -
 // generates a starter template (TerraformNewResourceTemplates.cs) to
 // review and connect.
-export default function TerraformAddResourceForm({ projectId, open, onClose, onAdded }) {
+//
+// Adding to an EXISTING web app target is staged, not written immediately:
+// this project's own web apps come in "-A"/"-B" paired-deployment names
+// (see TerraformProjectPage's groupInstanceNames), and each one carries its
+// own appsettings_file/connectionstrings_file config - enough to fill in
+// wrong that the caller (TerraformProjectPage) holds these as pending
+// drafts, shown in green, until an explicit "Save Changes" actually writes
+// them. Every other kind (function app, service bus, or "no existing
+// target fits") has no such per-entry config to get wrong, and keeps
+// today's immediate write via onAdded.
+export default function TerraformAddResourceForm({ projectId, open, onClose, onAdded, onStage }) {
 
     const toast = useToast();
 
@@ -41,6 +59,9 @@ export default function TerraformAddResourceForm({ projectId, open, onClose, onA
     const [selectedTarget, setSelectedTarget] = useState("");
     const [newKind, setNewKind] = useState(NEW_KINDS[0].value);
     const [name, setName] = useState("");
+    const [appsettingsFile, setAppsettingsFile] = useState("config/appsettings.json");
+    const [connectionstringsFile, setConnectionstringsFile] = useState("config/connectionstrings.json");
+    const [deploymentMode, setDeploymentMode] = useState("A+B");
     const [submitting, setSubmitting] = useState(false);
 
     useEffect(() => {
@@ -50,6 +71,9 @@ export default function TerraformAddResourceForm({ projectId, open, onClose, onA
         setLoading(true);
         setSelectedTarget("");
         setName("");
+        setAppsettingsFile("config/appsettings.json");
+        setConnectionstringsFile("config/connectionstrings.json");
+        setDeploymentMode("A+B");
 
         getTerraformAddTargets(projectId)
             .then((result) => {
@@ -70,6 +94,10 @@ export default function TerraformAddResourceForm({ projectId, open, onClose, onA
 
     if (!open) return null;
 
+    const selectedIsExisting = selectedTarget !== NEW_TARGET_VALUE;
+    const selectedTargetObj = targets.find((t) => t.variableName === selectedTarget);
+    const isWebAppTarget = selectedIsExisting && WEB_APP_TYPES.has(selectedTargetObj?.resourceType);
+
     async function handleSubmit(e) {
 
         e.preventDefault();
@@ -82,6 +110,32 @@ export default function TerraformAddResourceForm({ projectId, open, onClose, onA
         setSubmitting(true);
 
         try {
+
+            if (isWebAppTarget) {
+
+                const baseName = name.trim();
+                const suffixes = deploymentMode === "A+B" ? ["A", "B"] : [deploymentMode];
+
+                const items = suffixes.map((suffix) => ({
+                    tempId: crypto.randomUUID(),
+                    resourceType: selectedTargetObj.resourceType,
+                    variableName: selectedTargetObj.variableName,
+                    fileName: selectedTargetObj.fileName,
+                    name: `${baseName}-${suffix}`,
+                    displayName: `${baseName}-${suffix}`,
+                    appsettingsFile: appsettingsFile.trim(),
+                    connectionstringsFile: connectionstringsFile.trim()
+                }));
+
+                onStage(items);
+                toast.show(
+                    `"${baseName}" staged (${suffixes.join(", ")}) - click Save Changes to write it to terraform.tfvars.`,
+                    "success"
+                );
+                onClose();
+                return;
+
+            }
 
             let touchedFiles = [];
 
@@ -130,8 +184,6 @@ export default function TerraformAddResourceForm({ projectId, open, onClose, onA
         }
 
     }
-
-    const selectedIsExisting = selectedTarget !== NEW_TARGET_VALUE;
 
     return (
 
@@ -196,7 +248,7 @@ export default function TerraformAddResourceForm({ projectId, open, onClose, onA
                         )}
 
                         <div className="form-group">
-                            <label htmlFor="tf-add-name">Name</label>
+                            <label htmlFor="tf-add-name">Name{isWebAppTarget ? " (without -A/-B)" : ""}</label>
                             <input
                                 id="tf-add-name"
                                 type="text"
@@ -208,9 +260,64 @@ export default function TerraformAddResourceForm({ projectId, open, onClose, onA
                             />
                         </div>
 
+                        {isWebAppTarget && (
+
+                            <>
+
+                                <div className="form-group">
+                                    <label htmlFor="tf-add-deployment-mode">Deployment</label>
+                                    <select
+                                        id="tf-add-deployment-mode"
+                                        className="form-control"
+                                        value={deploymentMode}
+                                        onChange={(e) => setDeploymentMode(e.target.value)}
+                                    >
+                                        {DEPLOYMENT_MODES.map((m) => (
+                                            <option key={m.value} value={m.value}>{m.label}</option>
+                                        ))}
+                                    </select>
+                                    <p className="field-hint" style={{ marginTop: "6px" }}>
+                                        This project's web apps come in paired "-A"/"-B" deployments - pick which
+                                        one(s) to create.
+                                    </p>
+                                </div>
+
+                                <div className="form-group">
+                                    <label htmlFor="tf-add-appsettings">Appsettings file</label>
+                                    <input
+                                        id="tf-add-appsettings"
+                                        type="text"
+                                        className="form-control"
+                                        value={appsettingsFile}
+                                        onChange={(e) => setAppsettingsFile(e.target.value)}
+                                        placeholder="config/appsettings.json"
+                                    />
+                                </div>
+
+                                <div className="form-group">
+                                    <label htmlFor="tf-add-connectionstrings">Connection strings file</label>
+                                    <input
+                                        id="tf-add-connectionstrings"
+                                        type="text"
+                                        className="form-control"
+                                        value={connectionstringsFile}
+                                        onChange={(e) => setConnectionstringsFile(e.target.value)}
+                                        placeholder="config/connectionstrings.json"
+                                    />
+                                </div>
+
+                                <p className="field-hint" style={{ marginTop: "-4px" }}>
+                                    Not written to terraform.tfvars yet - click "Stage" below, then "Save Changes"
+                                    on the project page when you're ready.
+                                </p>
+
+                            </>
+
+                        )}
+
                         <div className="button-row">
                             <button type="submit" className="btn btn-primary" disabled={submitting}>
-                                {submitting ? "Adding..." : "Add"}
+                                {submitting ? "Adding..." : isWebAppTarget ? "Stage" : "Add"}
                             </button>
                             <button type="button" className="btn btn-secondary" disabled={submitting} onClick={onClose}>
                                 Cancel

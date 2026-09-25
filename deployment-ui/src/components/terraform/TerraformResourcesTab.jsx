@@ -1,10 +1,9 @@
 import { useEffect, useState } from "react";
-import { Check, PlusCircle } from "lucide-react";
+import { Check, X } from "lucide-react";
 
 import useToast from "../../hooks/useToast";
 import usePagination from "../../hooks/usePagination";
 import Pagination from "../common/Pagination";
-import TerraformAddResourceForm from "./TerraformAddResourceForm";
 import { getTerraformResourceInstances, renameTerraformResourceInstance } from "../../services/terraformService";
 
 const KIND_LABELS = {
@@ -15,7 +14,32 @@ const KIND_LABELS = {
     azurerm_servicebus_queue: "Service Bus Queue"
 };
 
-function ResourceRow({ instance, onSaved }) {
+// A staged-but-not-yet-saved web app (see TerraformAddResourceForm's own
+// comment) - no rename/save here, just its name and a way to drop it
+// before it's ever written to terraform.tfvars.
+function PendingResourceRow({ instance, onRemove }) {
+
+    return (
+
+        <tr className="terraform-row-just-saved">
+            <td>
+                {instance.displayName}
+                {" "}
+                <span className="badge badge-warning">Unsaved</span>
+            </td>
+            <td>
+                <button type="button" className="btn btn-sm btn-secondary" onClick={() => onRemove(instance.tempId)}>
+                    <X size={13} style={{ verticalAlign: -2 }} />
+                    Remove
+                </button>
+            </td>
+        </tr>
+
+    );
+
+}
+
+function ResourceRow({ instance, onSaved, forceFlash }) {
 
     const toast = useToast();
     const [value, setValue] = useState(instance.displayName);
@@ -56,7 +80,7 @@ function ResourceRow({ instance, onSaved }) {
 
     return (
 
-        <tr className={justSaved ? "terraform-row-just-saved" : ""}>
+        <tr className={(justSaved || forceFlash) ? "terraform-row-just-saved" : ""}>
             <td>
                 <input
                     type="text"
@@ -77,8 +101,11 @@ function ResourceRow({ instance, onSaved }) {
 
 }
 
-function ResourceGroup({ projectId, resourceType, variableName, instances, onSaved }) {
+function ResourceGroup({ projectId, resourceType, variableName, instances, pendingInstances, onSaved, onRemovePending, flashedKeys }) {
 
+    // Pending drafts always show (unpaginated, there's realistically only a
+    // handful in flight at once) ahead of the already-saved, paginated list -
+    // an in-progress add shouldn't be buried on page 3.
     const { page, setPage, pageCount, pageItems, totalCount, startIndex, endIndex } = usePagination(instances, 10);
 
     return (
@@ -98,11 +125,15 @@ function ResourceGroup({ projectId, resourceType, variableName, instances, onSav
                         </tr>
                     </thead>
                     <tbody>
+                        {pendingInstances.map((instance) => (
+                            <PendingResourceRow key={instance.tempId} instance={instance} onRemove={onRemovePending} />
+                        ))}
                         {pageItems.map((instance) => (
                             <ResourceRow
                                 key={instance.key}
                                 instance={{ ...instance, projectId }}
                                 onSaved={onSaved}
+                                forceFlash={flashedKeys?.has(`${instance.variableName}::${instance.key}`)}
                             />
                         ))}
                     </tbody>
@@ -126,15 +157,16 @@ function ResourceGroup({ projectId, resourceType, variableName, instances, onSav
 
 // The friendly, non-technical view over every individual resource instance
 // this project creates (one row per web app / function app / queue, not
-// per HCL block) - rename and save without hand-editing HCL, and add new
-// ones via the same wizard the project page's own "Add Resource" button
-// uses. See TerraformResourceExtractor.BuildResourceInstances for how each
-// row is discovered.
-export default function TerraformResourcesTab({ projectId }) {
+// per HCL block) - rename and save without hand-editing HCL. "Add Resource"
+// itself lives on the project page (TerraformProjectPage), shared with the
+// Files tab's own button and the one place pending (unsaved) web app
+// drafts are held - see that component's own comment. See
+// TerraformResourceExtractor.BuildResourceInstances for how each row is
+// discovered.
+export default function TerraformResourcesTab({ projectId, pendingInstances, onRemovePending, flashedKeys, refreshToken }) {
 
     const [instances, setInstances] = useState([]);
     const [loading, setLoading] = useState(true);
-    const [addResourceOpen, setAddResourceOpen] = useState(false);
 
     function load() {
         setLoading(true);
@@ -145,32 +177,23 @@ export default function TerraformResourcesTab({ projectId }) {
     }
 
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    useEffect(load, [projectId]);
+    useEffect(load, [projectId, refreshToken]);
 
-    const groups = [];
+    // Every group that has either a real (saved) instance OR a pending
+    // draft - a brand new target with zero existing entries yet would
+    // otherwise have no group to stage its first draft into.
+    const variableNames = [];
     const seen = new Set();
 
-    for (const instance of instances) {
+    for (const instance of [...instances, ...(pendingInstances || [])]) {
         if (seen.has(instance.variableName)) continue;
         seen.add(instance.variableName);
-        groups.push({
-            resourceType: instance.resourceType,
-            variableName: instance.variableName,
-            instances: instances.filter((i) => i.variableName === instance.variableName)
-        });
+        variableNames.push({ variableName: instance.variableName, resourceType: instance.resourceType });
     }
 
     return (
 
         <div>
-
-            <div className="access-panel-header">
-                <h3 className="settings-subhead" style={{ margin: 0 }}>Resources</h3>
-                <button type="button" className="btn btn-primary" onClick={() => setAddResourceOpen(true)}>
-                    <PlusCircle size={14} style={{ marginRight: 4, verticalAlign: -2 }} />
-                    Add Resource
-                </button>
-            </div>
 
             <p className="field-hint" style={{ marginTop: 0 }}>
                 Every web app, function app, and queue this project creates - rename one and save to
@@ -179,29 +202,25 @@ export default function TerraformResourcesTab({ projectId }) {
 
             {loading ? (
                 <p className="field-hint">Loading...</p>
-            ) : groups.length === 0 ? (
+            ) : variableNames.length === 0 ? (
                 <p className="empty-state">
                     No resources found yet. Upload your files, or click "Add Resource" to create one.
                 </p>
             ) : (
-                groups.map((g) => (
+                variableNames.map((g) => (
                     <ResourceGroup
                         key={g.variableName}
                         projectId={projectId}
                         resourceType={g.resourceType}
                         variableName={g.variableName}
-                        instances={g.instances}
+                        instances={instances.filter((i) => i.variableName === g.variableName)}
+                        pendingInstances={(pendingInstances || []).filter((i) => i.variableName === g.variableName)}
                         onSaved={load}
+                        onRemovePending={onRemovePending}
+                        flashedKeys={flashedKeys}
                     />
                 ))
             )}
-
-            <TerraformAddResourceForm
-                projectId={projectId}
-                open={addResourceOpen}
-                onClose={() => setAddResourceOpen(false)}
-                onAdded={load}
-            />
 
         </div>
 

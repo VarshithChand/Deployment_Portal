@@ -185,6 +185,13 @@ public class AddResourceInstanceRequestDto
     public string? VariableName { get; set; }
 
     public string? Name { get; set; }
+
+    // Web-app-only, optional - when either is given, the new map entry gets
+    // those attributes set (e.g. `"new-app" = { appsettings_file = "..." }`)
+    // instead of the plain `"new-app" = {}` every other kind still gets.
+    public string? AppsettingsFile { get; set; }
+
+    public string? ConnectionstringsFile { get; set; }
 }
 
 // One individual instance (one web app, one queue, ...) - the "Resources"

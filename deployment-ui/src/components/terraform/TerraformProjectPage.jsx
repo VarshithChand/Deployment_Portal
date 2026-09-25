@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { ArrowLeft, ChevronDown, ChevronRight, FileCode, FolderUp, KeyRound, PlusCircle, Sparkles, PlayCircle, Rocket, Upload } from "lucide-react";
+import { AlertTriangle, ArrowLeft, ChevronDown, ChevronRight, FileCode, FolderUp, KeyRound, PlusCircle, Sparkles, PlayCircle, Rocket, Upload } from "lucide-react";
 
 import useToast from "../../hooks/useToast";
 import useConfirm from "../../hooks/useConfirm";
@@ -14,7 +14,8 @@ import { TERRAFORM_RESOURCE_TEMPLATES } from "../../utils/terraformTemplates";
 import {
     getTerraformProject, deleteTerraformProject, uploadFilesToProject,
     getTerraformProjectFile, updateTerraformProjectFile, deleteTerraformProjectFile,
-    explainTerraformProject, previewTerraformProject, planTerraformProject, applyTerraformProject
+    explainTerraformProject, previewTerraformProject, planTerraformProject, applyTerraformProject,
+    addTerraformResourceInstance
 } from "../../services/terraformService";
 
 // A single `resource` block with for_each/count creates one ACTUAL Azure
@@ -136,6 +137,127 @@ export default function TerraformProjectPage({ projectId, onBack, onDeleted }) {
         setHighlightedPaths(new Set(fileNames));
         setTimeout(() => setHighlightedPaths(new Set()), 2200);
     }
+
+    // Staged-but-not-yet-saved web app drafts (see TerraformAddResourceForm's
+    // own comment) - held here, not on the Resources tab, so they survive a
+    // Files/Resources tab switch and so "Back to All Projects" can guard
+    // against losing them. Cleared only by an explicit save or discard.
+    const [pendingWebApps, setPendingWebApps] = useState([]);
+    const [savingPending, setSavingPending] = useState(false);
+    const [flashedResourceKeys, setFlashedResourceKeys] = useState(new Set());
+    const [resourcesRefreshToken, setResourcesRefreshToken] = useState(0);
+    const [unsavedPromptOpen, setUnsavedPromptOpen] = useState(false);
+
+    function flashResourceKeys(keys) {
+        if (!keys || keys.length === 0) return;
+        setFlashedResourceKeys(new Set(keys));
+        setTimeout(() => setFlashedResourceKeys(new Set()), 2200);
+    }
+
+    function handleStageWebApps(items) {
+        setPendingWebApps((prev) => [...prev, ...items]);
+    }
+
+    function handleRemovePending(tempId) {
+        setPendingWebApps((prev) => prev.filter((i) => i.tempId !== tempId));
+    }
+
+    async function handleSaveAllPending() {
+
+        if (pendingWebApps.length === 0) return true;
+
+        setSavingPending(true);
+
+        const stillPending = [];
+        const touchedFiles = new Set();
+        const savedKeys = [];
+        let anyFailed = false;
+
+        try {
+
+            for (const item of pendingWebApps) {
+
+                try {
+
+                    const result = await addTerraformResourceInstance(projectId, item.variableName, item.name, {
+                        appsettingsFile: item.appsettingsFile,
+                        connectionstringsFile: item.connectionstringsFile
+                    });
+
+                    if (!result.success) {
+                        toast.show(`"${item.name}": ${result.message || "unable to save."}`, "error");
+                        stillPending.push(item);
+                        anyFailed = true;
+                        continue;
+                    }
+
+                    touchedFiles.add(item.fileName);
+                    savedKeys.push(`${item.variableName}::${item.name}`);
+
+                }
+                catch (err) {
+                    toast.show(`"${item.name}": ${err.response?.data?.message || "unable to save right now."}`, "error");
+                    stillPending.push(item);
+                    anyFailed = true;
+                }
+
+            }
+
+            setPendingWebApps(stillPending);
+
+            if (savedKeys.length > 0) {
+                toast.show(`${savedKeys.length} web app(s) saved.`, "success");
+                flashPaths([...touchedFiles]);
+                flashResourceKeys(savedKeys);
+                setResourcesRefreshToken((v) => v + 1);
+                load();
+            }
+
+            return !anyFailed;
+
+        }
+        finally {
+            setSavingPending(false);
+        }
+
+    }
+
+    async function handleDiscardAllPending() {
+
+        if (!(await confirm({
+            title: "Discard unsaved web apps?",
+            message: `${pendingWebApps.length} unsaved web app(s) will be discarded - nothing was written to terraform.tfvars.`,
+            confirmLabel: "Discard",
+            danger: true
+        }))) {
+            return;
+        }
+
+        setPendingWebApps([]);
+
+    }
+
+    function handleBackClick() {
+        if (pendingWebApps.length > 0) {
+            setUnsavedPromptOpen(true);
+            return;
+        }
+        onBack();
+    }
+
+    useEffect(() => {
+
+        if (pendingWebApps.length === 0) return;
+
+        function handleBeforeUnload(e) {
+            e.preventDefault();
+            e.returnValue = "";
+        }
+
+        window.addEventListener("beforeunload", handleBeforeUnload);
+        return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+
+    }, [pendingWebApps.length]);
 
     const [selectedPath, setSelectedPath] = useState(null);
     const [openContent, setOpenContent] = useState("");
@@ -448,7 +570,7 @@ export default function TerraformProjectPage({ projectId, onBack, onDeleted }) {
             {dialog}
 
             <div className="access-panel-header">
-                <button type="button" className="btn" onClick={onBack}>
+                <button type="button" className="btn" onClick={handleBackClick}>
                     <ArrowLeft size={14} style={{ marginRight: 4, verticalAlign: -2 }} />
                     All Projects
                 </button>
@@ -498,9 +620,32 @@ export default function TerraformProjectPage({ projectId, onBack, onDeleted }) {
                 onSelect={setActiveTab}
             />
 
+            {pendingWebApps.length > 0 && (
+                <div className="card" style={{ marginTop: 14, display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 10 }}>
+                    <span className="field-hint" style={{ margin: 0 }}>
+                        <AlertTriangle size={14} style={{ marginRight: 6, verticalAlign: -2, color: "var(--viz-warning, #b45309)" }} />
+                        {pendingWebApps.length} unsaved web app{pendingWebApps.length === 1 ? "" : "s"} - not yet written to terraform.tfvars.
+                    </span>
+                    <div className="button-row" style={{ margin: 0 }}>
+                        <button type="button" className="btn btn-primary" disabled={savingPending} onClick={handleSaveAllPending}>
+                            {savingPending ? "Saving..." : "Save Changes"}
+                        </button>
+                        <button type="button" className="btn btn-secondary" disabled={savingPending} onClick={handleDiscardAllPending}>
+                            Discard
+                        </button>
+                    </div>
+                </div>
+            )}
+
             {activeTab === "resources" ? (
 
-                <TerraformResourcesTab projectId={projectId} />
+                <TerraformResourcesTab
+                    projectId={projectId}
+                    pendingInstances={pendingWebApps}
+                    onRemovePending={handleRemovePending}
+                    flashedKeys={flashedResourceKeys}
+                    refreshToken={resourcesRefreshToken}
+                />
 
             ) : (
 
@@ -773,7 +918,65 @@ export default function TerraformProjectPage({ projectId, onBack, onDeleted }) {
                 open={addResourceOpen}
                 onClose={() => setAddResourceOpen(false)}
                 onAdded={(touchedFiles) => { flashPaths(touchedFiles); load(); }}
+                onStage={handleStageWebApps}
             />
+
+            {unsavedPromptOpen && (
+
+                <div className="dialog-backdrop" role="presentation">
+
+                    <div className="dialog" role="dialog" aria-modal="true" aria-labelledby="tf-unsaved-title">
+
+                        <h2 id="tf-unsaved-title">
+                            <AlertTriangle size={18} style={{ marginRight: 6, verticalAlign: -3 }} />
+                            Unsaved web apps
+                        </h2>
+
+                        <p className="field-hint" style={{ marginTop: 0 }}>
+                            {pendingWebApps.length} unsaved web app{pendingWebApps.length === 1 ? "" : "s"} haven't
+                            been written to terraform.tfvars yet. Save them, leave without saving, or go back and
+                            keep working.
+                        </p>
+
+                        <div className="button-row">
+
+                            <button
+                                type="button"
+                                className="btn btn-primary"
+                                disabled={savingPending}
+                                onClick={async () => {
+                                    const allSaved = await handleSaveAllPending();
+                                    setUnsavedPromptOpen(false);
+                                    if (allSaved) onBack();
+                                }}
+                            >
+                                {savingPending ? "Saving..." : "Save & Leave"}
+                            </button>
+
+                            <button
+                                type="button"
+                                className="btn btn-danger"
+                                disabled={savingPending}
+                                onClick={() => {
+                                    setPendingWebApps([]);
+                                    setUnsavedPromptOpen(false);
+                                    onBack();
+                                }}
+                            >
+                                Leave Without Saving
+                            </button>
+
+                            <button type="button" className="btn btn-secondary" disabled={savingPending} onClick={() => setUnsavedPromptOpen(false)}>
+                                Cancel
+                            </button>
+
+                        </div>
+
+                    </div>
+
+                </div>
+
+            )}
 
         </div>
 

@@ -98,8 +98,16 @@ export const getTerraformAddTargets = async (projectId) => {
     return response.data;
 };
 
-export const addTerraformResourceInstance = async (projectId, variableName, name) => {
-    const response = await terraformApi.post(`/projects/${projectId}/add-instance`, { variableName, name });
+// extra: optional { appsettingsFile, connectionstringsFile } - web-app-only
+// attributes for the new map entry (see AddResourceInstanceRequestDto's own
+// comment on the backend).
+export const addTerraformResourceInstance = async (projectId, variableName, name, extra = {}) => {
+    const response = await terraformApi.post(`/projects/${projectId}/add-instance`, {
+        variableName,
+        name,
+        appsettingsFile: extra.appsettingsFile || undefined,
+        connectionstringsFile: extra.connectionstringsFile || undefined
+    });
     return response.data;
 };
 
