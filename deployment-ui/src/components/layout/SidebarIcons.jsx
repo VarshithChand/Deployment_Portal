@@ -896,6 +896,19 @@ export function ElasticBeanstalkIcon() {
     );
 }
 
+// Three inset, offset layers (each narrower and shifted right of the one
+// below) — reads as "infrastructure stacked in layers", distinct from
+// ServicesIcon's three equal-width bars.
+export function TerraformIcon() {
+    return (
+        <svg {...common}>
+            <rect x="2.5" y="3" width="10" height="3" rx="0.8" stroke="currentColor" strokeWidth="1.3" />
+            <rect x="4.5" y="7.5" width="10" height="3" rx="0.8" stroke="currentColor" strokeWidth="1.3" />
+            <rect x="2.5" y="12" width="10" height="3" rx="0.8" stroke="currentColor" strokeWidth="1.3" />
+        </svg>
+    );
+}
+
 export function ChevronIcon({ direction = "left" }) {
     return (
         <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true"

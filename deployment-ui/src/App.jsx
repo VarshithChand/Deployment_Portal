@@ -90,6 +90,7 @@ const Jaeger = lazy(() => import("./pages/Jaeger"));
 const Zipkin = lazy(() => import("./pages/Zipkin"));
 const Services = lazy(() => import("./pages/Services"));
 const Docker = lazy(() => import("./pages/Docker"));
+const Terraform = lazy(() => import("./pages/Terraform"));
 const CodeQuality = lazy(() => import("./pages/CodeQuality"));
 const SonarCloud = lazy(() => import("./pages/SonarCloud"));
 const CodeQl = lazy(() => import("./pages/CodeQl"));
@@ -411,6 +412,7 @@ function App(){
                             {tab === "zipkin" && <Zipkin/>}
                             {tab === "services" && <Services/>}
                             {tab === "docker" && <Docker/>}
+                            {tab === "terraform" && <Terraform/>}
                             {tab === "codeQuality" && <CodeQuality/>}
                             {tab === "sonarcloud" && <SonarCloud/>}
                             {tab === "codeql" && <CodeQl/>}

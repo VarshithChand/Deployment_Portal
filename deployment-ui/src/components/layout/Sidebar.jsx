@@ -17,6 +17,7 @@ import {
     TemplatesIcon,
     ServicesIcon,
     DockerIcon,
+    TerraformIcon,
     CodeQualityIcon,
     SonarQubeIcon,
     SonarCloudIcon,
@@ -289,6 +290,11 @@ export const TABS = [
     },
     { key: "services", label: "Services", Icon: ServicesIcon },
     { key: "docker", label: "Docker", Icon: DockerIcon },
+    // Personal (non-org) Terraform page - storage/editing only, own
+    // credential = own auth boundary, same self-service posture as Hosting
+    // Providers/Cloud Services above (not in GATED_TABS/ADMIN_ONLY_TABS
+    // below). See pages/Terraform.jsx and TerraformController.cs.
+    { key: "terraform", label: "Terraform", Icon: TerraformIcon },
     // Every code-quality/static-analysis tool as its own nested sidebar
     // page, same "collapsible group" treatment as GitHub above - each
     // child is a real, independently-navigable page (own tab key, own

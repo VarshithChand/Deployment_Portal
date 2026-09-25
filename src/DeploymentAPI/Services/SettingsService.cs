@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
 using DeploymentAPI.DTOs;
+using DeploymentAPI.Helpers;
 using DeploymentAPI.Models;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Identity;
@@ -840,6 +841,230 @@ public class SettingsService
 
             _log.LogInfo("Settings", "Azure credentials cleared for a session.");
         }
+    }
+
+    // Personal (non-org) Terraform page - a dedicated service principal,
+    // deliberately separate storage from UserAzureCredentials (see
+    // UserTerraformCredentials' own header comment for why). Same
+    // Protect/Unprotect-the-secret-only shape as every other per-user
+    // credential in this file.
+    public async Task<UserTerraformCredentials> GetUserTerraformCredentialsAsync(string key)
+    {
+        var root = await ReadRootAsync();
+        var entry = (root["UserTerraformCredentials"] as JObject)?[key] as JObject;
+
+        return new UserTerraformCredentials(
+            entry?["TenantId"]?.ToString(),
+            entry?["ClientId"]?.ToString(),
+            Unprotect(entry?["ClientSecret"]?.ToString()),
+            entry?["SubscriptionId"]?.ToString());
+    }
+
+    // Blank fields keep whatever was already saved - see SaveUserAzureCredentialsAsync.
+    public async Task SaveUserTerraformCredentialsAsync(string key, TerraformCredentialsUpdateDto update)
+    {
+        using var _ = await AcquireWriteLockAsync();
+
+        var root = await ReadRootAsync();
+        var users = root["UserTerraformCredentials"] as JObject ?? new JObject();
+        var entry = users[key] as JObject ?? new JObject();
+
+        if (!string.IsNullOrWhiteSpace(update.TenantId))
+            entry["TenantId"] = update.TenantId.Trim();
+
+        if (!string.IsNullOrWhiteSpace(update.ClientId))
+            entry["ClientId"] = update.ClientId.Trim();
+
+        if (!string.IsNullOrWhiteSpace(update.ClientSecret))
+            entry["ClientSecret"] = Protect(update.ClientSecret.Trim());
+
+        if (!string.IsNullOrWhiteSpace(update.SubscriptionId))
+            entry["SubscriptionId"] = update.SubscriptionId.Trim();
+
+        users[key] = entry;
+        root["UserTerraformCredentials"] = users;
+        await WriteRootAsync(root);
+
+        _log.LogInfo("Settings", "Terraform credentials saved for a session.");
+    }
+
+    public async Task ClearUserTerraformCredentialsAsync(string key)
+    {
+        using var _ = await AcquireWriteLockAsync();
+
+        var root = await ReadRootAsync();
+
+        if (root["UserTerraformCredentials"] is JObject users && users[key] != null)
+        {
+            users.Remove(key);
+            await WriteRootAsync(root);
+
+            _log.LogInfo("Settings", "Terraform credentials cleared for a session.");
+        }
+    }
+
+    // Personal Terraform file storage - the JSONB-blob-backed sibling of
+    // TerraformFileService's org/Postgres table (see that class's header
+    // comment for the shared "storage and editing only, no execution"
+    // reasoning; this shares its filename validation via
+    // TerraformFileNaming but not its storage). A flat per-user array
+    // rather than a table, matching every other per-user credential/data
+    // section in this file - this feature doesn't need relational
+    // membership/permission joins the way the org version does.
+    private const int MaxUserTerraformFiles = 100;
+    private const int MaxUserTerraformFileContentLength = 500_000; // ~500 KB of HCL text is a generous ceiling
+
+    public async Task<List<PersonalTerraformFileSummaryDto>> ListUserTerraformFilesAsync(string key)
+    {
+        var root = await ReadRootAsync();
+        var files = (root["UserTerraformFiles"] as JObject)?[key] as JArray;
+
+        if (files == null)
+            return new List<PersonalTerraformFileSummaryDto>();
+
+        return files
+            .OfType<JObject>()
+            .Select(f => new PersonalTerraformFileSummaryDto
+            {
+                FileName = f["FileName"]?.ToString() ?? string.Empty,
+                ContentLength = (f["Content"]?.ToString() ?? string.Empty).Length,
+                UpdatedAtUtc = f["UpdatedAtUtc"]?.ToObject<DateTime>() ?? default
+            })
+            .OrderBy(f => f.FileName, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
+    public async Task<PersonalTerraformFileDetailDto?> GetUserTerraformFileAsync(string key, string fileName)
+    {
+        var root = await ReadRootAsync();
+        var files = (root["UserTerraformFiles"] as JObject)?[key] as JArray;
+
+        var entry = files?.OfType<JObject>()
+            .FirstOrDefault(f => string.Equals(f["FileName"]?.ToString(), fileName, StringComparison.OrdinalIgnoreCase));
+
+        if (entry == null)
+            return null;
+
+        var content = entry["Content"]?.ToString() ?? string.Empty;
+
+        return new PersonalTerraformFileDetailDto
+        {
+            FileName = entry["FileName"]?.ToString() ?? string.Empty,
+            Content = content,
+            ContentLength = content.Length,
+            UpdatedAtUtc = entry["UpdatedAtUtc"]?.ToObject<DateTime>() ?? default
+        };
+    }
+
+    // Upsert-by-filename (unlike the org panel's strict create-only) - see
+    // TerraformFileUploadEntryDto's own comment for why: re-uploading the
+    // same local folder after editing it is the expected everyday flow for
+    // this picker, not an error case. Returns per-file accept/reject so the
+    // caller can report exactly which files (if any) were skipped and why,
+    // rather than failing the whole batch for one bad name.
+    public async Task<List<(string FileName, bool Accepted, string? Error)>> UploadUserTerraformFilesAsync(
+        string key, List<TerraformFileUploadEntryDto> uploads)
+    {
+        using var _ = await AcquireWriteLockAsync();
+
+        var root = await ReadRootAsync();
+        var allFiles = root["UserTerraformFiles"] as JObject ?? new JObject();
+        var files = allFiles[key] as JArray ?? new JArray();
+
+        var results = new List<(string, bool, string?)>();
+        var now = DateTime.UtcNow;
+
+        foreach (var upload in uploads)
+        {
+            var (valid, error) = TerraformFileNaming.ValidateFileName(upload.FileName);
+
+            if (!valid)
+            {
+                results.Add((upload.FileName ?? string.Empty, false, error));
+                continue;
+            }
+
+            var trimmedName = upload.FileName!.Trim();
+            var content = upload.Content ?? string.Empty;
+
+            if (content.Length > MaxUserTerraformFileContentLength)
+            {
+                results.Add((trimmedName, false, $"File is too large (over {MaxUserTerraformFileContentLength / 1000} KB)."));
+                continue;
+            }
+
+            var existing = files.OfType<JObject>()
+                .FirstOrDefault(f => string.Equals(f["FileName"]?.ToString(), trimmedName, StringComparison.OrdinalIgnoreCase));
+
+            if (existing != null)
+            {
+                existing["Content"] = content;
+                existing["UpdatedAtUtc"] = now;
+            }
+            else
+            {
+                if (files.Count >= MaxUserTerraformFiles)
+                {
+                    results.Add((trimmedName, false, $"You've reached the {MaxUserTerraformFiles}-file limit for this page."));
+                    continue;
+                }
+
+                files.Add(new JObject
+                {
+                    ["FileName"] = trimmedName,
+                    ["Content"] = content,
+                    ["UpdatedAtUtc"] = now
+                });
+            }
+
+            results.Add((trimmedName, true, null));
+        }
+
+        allFiles[key] = files;
+        root["UserTerraformFiles"] = allFiles;
+        await WriteRootAsync(root);
+
+        _log.LogInfo("Settings", $"{results.Count(r => r.Item2)} Terraform file(s) uploaded for a session.");
+
+        return results;
+    }
+
+    public async Task<bool> UpdateUserTerraformFileAsync(string key, string fileName, string? content)
+    {
+        using var _ = await AcquireWriteLockAsync();
+
+        var root = await ReadRootAsync();
+        var files = (root["UserTerraformFiles"] as JObject)?[key] as JArray;
+
+        var entry = files?.OfType<JObject>()
+            .FirstOrDefault(f => string.Equals(f["FileName"]?.ToString(), fileName, StringComparison.OrdinalIgnoreCase));
+
+        if (entry == null)
+            return false;
+
+        entry["Content"] = content ?? string.Empty;
+        entry["UpdatedAtUtc"] = DateTime.UtcNow;
+
+        await WriteRootAsync(root);
+        return true;
+    }
+
+    public async Task<bool> DeleteUserTerraformFileAsync(string key, string fileName)
+    {
+        using var _ = await AcquireWriteLockAsync();
+
+        var root = await ReadRootAsync();
+        var files = (root["UserTerraformFiles"] as JObject)?[key] as JArray;
+
+        var entry = files?.OfType<JObject>()
+            .FirstOrDefault(f => string.Equals(f["FileName"]?.ToString(), fileName, StringComparison.OrdinalIgnoreCase));
+
+        if (entry == null)
+            return false;
+
+        files!.Remove(entry);
+        await WriteRootAsync(root);
+        return true;
     }
 
     public async Task<UserGcpCredentials> GetUserGcpCredentialsAsync(string key)

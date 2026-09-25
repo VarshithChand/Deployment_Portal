@@ -1,5 +1,5 @@
-using System.Text.RegularExpressions;
 using DeploymentAPI.DTOs;
+using DeploymentAPI.Helpers;
 using Npgsql;
 
 namespace DeploymentAPI.Services;
@@ -13,20 +13,13 @@ namespace DeploymentAPI.Services;
 // materially different, much higher-risk feature (a real execution
 // sandbox, a state backend, credential injection into that sandbox) that
 // was explicitly scoped OUT when this was built - see the "Organizations,
-// Roles & Permissions" work this sits alongside.
+// Roles & Permissions" work this sits alongside. See also
+// SettingsService's personal (non-org) Terraform file storage, which
+// shares TerraformFileNaming's validation but persists to the JSONB
+// settings blob instead of this table - a deliberately separate, simpler
+// path for a single user's own files rather than an organization's.
 public class TerraformFileService
 {
-    // Plain filename only (no directories) - this is a flat per-org list,
-    // not a real filesystem tree. Letters/digits/dot/dash/underscore only,
-    // must end in .tf or .tf.json (Terraform's own two recognized config
-    // extensions) - rejects anything that looks like a path traversal
-    // attempt (no '/', no '..') even though this never touches a real
-    // filesystem today, on the same "defend the invariant now, not only
-    // once it's load-bearing" reasoning as everywhere else secrets/paths
-    // are validated in this codebase.
-    private static readonly Regex ValidFileNamePattern = new(
-        @"^[A-Za-z0-9._-]+\.tf(\.json)?$", RegexOptions.Compiled);
-
     private readonly SettingsService _settings;
 
     public TerraformFileService(SettingsService settings)
@@ -36,21 +29,8 @@ public class TerraformFileService
 
     // Pure - no DB dependency, unit-testable in isolation (see
     // OrgAuthorizationService.ApplyOverrides' identical reasoning).
-    internal static (bool Valid, string? Error) ValidateFileName(string? fileName)
-    {
-        if (string.IsNullOrWhiteSpace(fileName))
-            return (false, "A file name is required.");
-
-        var trimmed = fileName.Trim();
-
-        if (trimmed.Length > 200)
-            return (false, "File name is too long.");
-
-        if (!ValidFileNamePattern.IsMatch(trimmed))
-            return (false, "File name must contain only letters, numbers, dots, dashes, or underscores, and end in .tf or .tf.json.");
-
-        return (true, null);
-    }
+    internal static (bool Valid, string? Error) ValidateFileName(string? fileName) =>
+        TerraformFileNaming.ValidateFileName(fileName);
 
     private async Task<NpgsqlConnection> OpenAsync()
     {
