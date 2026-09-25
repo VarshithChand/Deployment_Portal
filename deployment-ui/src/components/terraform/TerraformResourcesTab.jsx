@@ -14,7 +14,8 @@ const KIND_LABELS = {
     azurerm_linux_web_app: "Web App",
     azurerm_windows_function_app: "Function App",
     azurerm_linux_function_app: "Function App",
-    azurerm_servicebus_queue: "Service Bus Queue"
+    azurerm_servicebus_queue: "Service Bus Queue",
+    azurerm_application_insights: "Application Insights"
 };
 
 // A staged-but-not-yet-saved web app (see TerraformAddResourceForm's own

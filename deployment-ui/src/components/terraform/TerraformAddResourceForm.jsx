@@ -8,20 +8,22 @@ import {
 
 // Friendlier labels for the raw azurerm_* resource type strings -
 // deliberately a small fixed map (not a generic formatter) since these are
-// exactly the three kinds this wizard (and TerraformNewResourceTemplates.cs
-// on the backend) knows how to create.
+// exactly the kinds this wizard (and TerraformNewResourceTemplates.cs on
+// the backend) knows how to create.
 const KIND_LABELS = {
     azurerm_windows_web_app: "Web App",
     azurerm_linux_web_app: "Web App",
     azurerm_windows_function_app: "Function App",
     azurerm_linux_function_app: "Function App",
-    azurerm_servicebus_queue: "Service Bus Queue"
+    azurerm_servicebus_queue: "Service Bus Queue",
+    azurerm_application_insights: "Application Insights"
 };
 
 const NEW_KINDS = [
     { value: "webApp", label: "Web App" },
     { value: "functionApp", label: "Function App" },
-    { value: "serviceBusQueue", label: "Service Bus Queue" }
+    { value: "serviceBusQueue", label: "Service Bus Queue" },
+    { value: "applicationInsights", label: "Application Insights" }
 ];
 
 const NEW_TARGET_VALUE = "__new__";
@@ -243,10 +245,10 @@ export default function TerraformAddResourceForm({ projectId, open, onClose, onA
                                 <p className="field-hint" style={{ marginTop: "6px" }}>
                                     Generates a starter module block appended to main.tf, and writes the
                                     module's own files under modules/&lt;kind&gt;/ if they don't already exist
-                                    (an existing real module is never overwritten). Function App also bundles
-                                    its own Application Insights resource. Review and connect (existing
-                                    Resource Group reference, Plan SKU) before running Plan - not a finished
-                                    wire-up.
+                                    (an existing real module is never overwritten). Application Insights is
+                                    its own separate kind - add one and wire its instrumentation key into a
+                                    function app or web app yourself. Review and connect (existing Resource
+                                    Group reference, Plan SKU) before running Plan - not a finished wire-up.
                                 </p>
                             </div>
                         )}

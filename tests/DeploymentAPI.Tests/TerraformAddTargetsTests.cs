@@ -347,6 +347,7 @@ public class TerraformNewResourceTemplatesTests
     [InlineData("webApp", "azurerm_windows_web_app", "Map")]
     [InlineData("functionApp", "azurerm_windows_function_app", "List")]
     [InlineData("serviceBusQueue", "azurerm_servicebus_queue", "List")]
+    [InlineData("applicationInsights", "azurerm_application_insights", "List")]
     public void GeneratedTemplate_IsImmediatelyUsableAsAnAddTarget(string kind, string expectedResourceType, string expectedShape)
     {
         var template = TerraformNewResourceTemplates.Build(kind, "myapp");
@@ -367,19 +368,33 @@ public class TerraformNewResourceTemplatesTests
         Assert.Equal(1, target.ExistingCount);
     }
 
+    // Application Insights is its own separate, independently addable kind -
+    // Function App no longer bundles one, so nothing here should wire the
+    // two together automatically.
     [Fact]
-    public void BuildFunctionApp_BundlesItsOwnApplicationInsightsInsideTheModule()
+    public void BuildFunctionApp_DoesNotBundleApplicationInsights()
     {
         var template = TerraformNewResourceTemplates.Build("functionApp", "myapp");
 
         Assert.NotNull(template);
+        Assert.DoesNotContain("azurerm_application_insights", template!.ModuleMainTf);
+    }
+
+    [Fact]
+    public void BuildApplicationInsights_IsItsOwnStandaloneKind()
+    {
+        var template = TerraformNewResourceTemplates.Build("applicationInsights", "myapp");
+
+        Assert.NotNull(template);
         Assert.Contains("azurerm_application_insights", template!.ModuleMainTf);
+        Assert.Equal("modules/application_insights", template.ModuleFolder);
     }
 
     [Theory]
     [InlineData("webApp")]
     [InlineData("functionApp")]
     [InlineData("serviceBusQueue")]
+    [InlineData("applicationInsights")]
     public void EveryTemplate_OnlyReferencesAnExistingResourceGroupNeverCreatesOne(string kind)
     {
         var template = TerraformNewResourceTemplates.Build(kind, "myapp");

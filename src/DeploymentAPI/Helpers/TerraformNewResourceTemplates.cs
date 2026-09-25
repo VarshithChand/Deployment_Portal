@@ -42,6 +42,7 @@ public static class TerraformNewResourceTemplates
             "webApp" => BuildWebApp(name, safeVarName),
             "functionApp" => BuildFunctionApp(name, safeVarName),
             "serviceBusQueue" => BuildServiceBusQueue(name, safeVarName),
+            "applicationInsights" => BuildApplicationInsights(name, safeVarName),
             _ => null
         };
     }
@@ -160,9 +161,11 @@ public static class TerraformNewResourceTemplates
         var mainTf = $$"""
             # Starter template for a new function app group - review and
             # connect (existing Resource Group reference, storage account,
-            # Plan) before running Plan. Each function app this creates also
-            # gets its own Application Insights resource (see
-            # modules/function_app/main.tf).
+            # Plan) before running Plan. Application Insights is its own
+            # separate kind (see "Add Resource" - "Application Insights") -
+            # add one and wire its instrumentation key into this function
+            # app's app_settings yourself, rather than every function app
+            # automatically getting its own.
             resource "azurerm_storage_account" "{{safeVarName}}_storage" {
               name                     = "st{{safeVarName}}fn"
               resource_group_name      = module.resource_group.name
@@ -206,13 +209,10 @@ public static class TerraformNewResourceTemplates
             """;
 
         var moduleMainTf = """
-            # Function app module - bundles its own Application Insights
-            # resource (one per function app, the common Azure pairing)
-            # rather than requiring a separate "add Application Insights"
-            # step. Uses classic (non-workspace-based) Application Insights -
-            # if your subscription requires workspace-based App Insights,
-            # add a "workspace_id" argument here pointing at your existing
-            # Log Analytics Workspace before running Plan.
+            # Function app module - one call site per for_each key from the
+            # parent module block. No Application Insights here - that's its
+            # own separate module (modules/application_insights), added and
+            # wired in independently.
             variable "app_name" {
               type = string
             }
@@ -238,12 +238,6 @@ public static class TerraformNewResourceTemplates
               sensitive = true
             }
 
-            # Declared first (Terraform doesn't care about declaration order,
-            # dependencies are resolved by reference either way) - this
-            # module's PRIMARY resource is the function app, not its App
-            # Insights companion; TerraformResourceExtractor.GuessPrimaryResourceType
-            # takes whichever resource block appears first in the module's
-            # own file as the resource type this module represents.
             resource "azurerm_windows_function_app" "function_app" {
               name                       = var.app_name
               resource_group_name        = var.resource_group_name
@@ -252,32 +246,97 @@ public static class TerraformNewResourceTemplates
               storage_account_name       = var.storage_account_name
               storage_account_access_key = var.storage_account_access_key
 
-              app_settings = {
-                APPINSIGHTS_INSTRUMENTATIONKEY        = azurerm_application_insights.insights.instrumentation_key
-                APPLICATIONINSIGHTS_CONNECTION_STRING = azurerm_application_insights.insights.connection_string
-              }
-
               site_config {}
-            }
-
-            resource "azurerm_application_insights" "insights" {
-              name                = "appi-${var.app_name}"
-              resource_group_name = var.resource_group_name
-              location            = var.location
-              application_type    = "web"
             }
 
             output "id" {
               value = azurerm_windows_function_app.function_app.id
             }
 
-            output "application_insights_instrumentation_key" {
-              value     = azurerm_application_insights.insights.instrumentation_key
-              sensitive = true
+            output "default_hostname" {
+              value = azurerm_windows_function_app.function_app.default_hostname
             }
             """;
 
         return new Template(mainTf, variableBlock, tfvarsBlock, "modules/function_app", moduleMainTf);
+    }
+
+    private static Template BuildApplicationInsights(string name, string safeVarName)
+    {
+        var varName = $"{safeVarName}_app_insights";
+
+        var mainTf = $$"""
+            # Starter template for a new Application Insights group - review
+            # and connect (existing Resource Group reference) before running
+            # Plan. Add more entries to {{varName}} in terraform.tfvars to
+            # create more instances later, and wire an instance's
+            # instrumentation_key/connection_string output into whichever
+            # function app or web app should use it.
+            module "{{safeVarName}}_app_insights" {
+              source              = "./modules/application_insights"
+              for_each            = toset(var.{{varName}})
+              name                = each.value
+              resource_group_name = module.resource_group.name
+              location            = module.resource_group.location
+            }
+            """;
+
+        var variableBlock = $$"""
+            variable "{{varName}}" {
+              description = "Application Insights instances created for {{name}}."
+              type        = list(string)
+              default     = []
+            }
+            """;
+
+        var tfvarsBlock = $$"""
+            {{varName}} = [
+              "{{name}}"
+            ]
+            """;
+
+        var moduleMainTf = """
+            # Application Insights module - one call site per for_each key
+            # from the parent module block. Uses classic (non-workspace-
+            # based) Application Insights - if your subscription requires
+            # workspace-based App Insights, add a "workspace_id" argument
+            # here pointing at your existing Log Analytics Workspace before
+            # running Plan.
+            variable "name" {
+              type = string
+            }
+
+            variable "resource_group_name" {
+              type = string
+            }
+
+            variable "location" {
+              type = string
+            }
+
+            resource "azurerm_application_insights" "insights" {
+              name                = var.name
+              resource_group_name = var.resource_group_name
+              location            = var.location
+              application_type    = "web"
+            }
+
+            output "id" {
+              value = azurerm_application_insights.insights.id
+            }
+
+            output "instrumentation_key" {
+              value     = azurerm_application_insights.insights.instrumentation_key
+              sensitive = true
+            }
+
+            output "connection_string" {
+              value     = azurerm_application_insights.insights.connection_string
+              sensitive = true
+            }
+            """;
+
+        return new Template(mainTf, variableBlock, tfvarsBlock, "modules/application_insights", moduleMainTf);
     }
 
     private static Template BuildServiceBusQueue(string name, string safeVarName)
