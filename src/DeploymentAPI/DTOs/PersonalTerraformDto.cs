@@ -117,6 +117,17 @@ public class CreateTerraformProjectRequestDto
 // pretending to resolve something this app never evaluates). Pairs with an
 // AI-written narrative for "what would this actually mean" - see
 // TerraformProjectPreviewDto below.
+//
+// One HCL `resource` BLOCK is not the same as one actual Azure resource
+// when it declares for_each/count - a single block with
+// `for_each = var.web_apps` creates one resource per entry in that map.
+// InstanceCount/InstanceNames are populated when this app can resolve that
+// variable's literal value from an uploaded .tfvars file (see
+// TerraformResourceExtractor.TryResolveInstances) - null when it can't
+// (the variable isn't in any uploaded .tfvars, or its value isn't a plain
+// literal list/map this app can read), in which case HasForEachOrCount
+// alone tells the caller "more than one may be created, but this app can't
+// say how many."
 public class ProjectResourceSummaryDto
 {
     public string FileName { get; set; } = string.Empty;
@@ -126,6 +137,12 @@ public class ProjectResourceSummaryDto
     public string LocalName { get; set; } = string.Empty;
 
     public string? DeclaredName { get; set; }
+
+    public bool HasForEachOrCount { get; set; }
+
+    public int? InstanceCount { get; set; }
+
+    public List<string>? InstanceNames { get; set; }
 }
 
 public class TerraformProjectPreviewDto

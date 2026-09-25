@@ -13,6 +13,27 @@ import {
     explainTerraformProject, previewTerraformProject, planTerraformProject, applyTerraformProject
 } from "../../services/terraformService";
 
+// A single `resource` block with for_each/count creates one ACTUAL Azure
+// resource per entry, not one - see TerraformResourceExtractor.cs's own
+// header comment for how instanceCount/instanceNames get resolved (from an
+// uploaded .tfvars file) and why they're sometimes still null (the
+// referenced value wasn't a literal this app could read).
+function describeResourceInstances(r) {
+
+    if (!r.hasForEachOrCount) {
+        return r.declaredName ? `1 instance, name = "${r.declaredName}"` : "1 instance, name depends on a variable";
+    }
+
+    if (r.instanceCount == null) {
+        return "uses for_each/count - instance count depends on a variable this preview couldn't resolve";
+    }
+
+    return r.instanceNames?.length > 0
+        ? `${r.instanceCount} instances: ${r.instanceNames.join(", ")}`
+        : `${r.instanceCount} instances`;
+
+}
+
 function readFileAsText(file) {
     return new Promise((resolve, reject) => {
         const reader = new FileReader();
@@ -412,8 +433,7 @@ export default function TerraformProjectPage({ projectId, onBack, onDeleted }) {
                                     <ul style={{ margin: 0, paddingLeft: 20 }}>
                                         {fileResources.map((r, i) => (
                                             <li key={i}>
-                                                <strong>{r.resourceType}</strong> "{r.localName}"
-                                                {r.declaredName ? <> &rarr; name = "{r.declaredName}"</> : <> &rarr; name depends on a variable</>}
+                                                <strong>{r.resourceType}</strong> "{r.localName}" &rarr; {describeResourceInstances(r)}
                                             </li>
                                         ))}
                                     </ul>
@@ -547,7 +567,7 @@ export default function TerraformProjectPage({ projectId, onBack, onDeleted }) {
                                         <tr>
                                             <th>Type</th>
                                             <th>Local Name</th>
-                                            <th>Declared Name</th>
+                                            <th>Instances &amp; Names</th>
                                             <th>File</th>
                                         </tr>
                                     </thead>
@@ -556,7 +576,7 @@ export default function TerraformProjectPage({ projectId, onBack, onDeleted }) {
                                             <tr key={i}>
                                                 <td>{r.resourceType}</td>
                                                 <td>{r.localName}</td>
-                                                <td>{r.declaredName || <em>depends on a variable</em>}</td>
+                                                <td>{describeResourceInstances(r)}</td>
                                                 <td>{r.fileName}</td>
                                             </tr>
                                         ))}

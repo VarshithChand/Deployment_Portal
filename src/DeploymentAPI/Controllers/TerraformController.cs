@@ -320,21 +320,23 @@ public class TerraformController : ControllerBase
 
         if (creds.IsConfigured && resources.Count > 0)
         {
-            var resourceList = string.Join(
-                "\n",
-                resources.Select(r => $"- {r.ResourceType} \"{r.LocalName}\" (file: {r.FileName})" +
-                    (r.DeclaredName != null ? $" -> name = \"{r.DeclaredName}\"" : " -> name is not a literal string (variable/expression)")));
+            var resourceList = string.Join("\n", resources.Select(DescribeResourceForAi));
 
             const string systemInstruction =
                 "You are previewing what a Terraform configuration would create, for someone about to " +
                 "decide whether to run a real terraform plan against their Azure subscription. You are " +
-                "given a plain list of resource blocks already extracted from their files (type, local " +
-                "name, and declared \"name\" attribute where it's a literal string). Write a short, " +
-                "concrete summary of what would be created (e.g. \"1 Resource Group, 1 App Service Plan, " +
-                "1 Linux Web App named app-example\"), grouped sensibly, in plain English. Do not invent " +
-                "resources beyond this list, and do not claim to know the actual values of any name shown " +
-                "as \"not a literal string\" - say it depends on a variable instead. You have no live " +
-                "Azure state and are not running terraform.";
+                "given a plain list of resource blocks already extracted from their files: type, local " +
+                "name, declared \"name\" attribute where it's a literal string, and - critically - how " +
+                "many actual Azure resources that ONE block creates. A block using for_each/count creates " +
+                "one resource PER ENTRY, not one resource total - when the line gives you an instance " +
+                "count and list of instance names, that IS the real count and names to report (e.g. \"3 " +
+                "Windows Web Apps: billing-app, reporting-app, ops-app\"), not \"1\". When a line says the " +
+                "instance count could not be resolved, say plainly that it uses for_each/count so the " +
+                "real number depends on a variable this preview couldn't read - never guess a number. " +
+                "Write a short, concrete summary of what would be created, grouped sensibly, in plain " +
+                "English. Do not invent resources beyond this list, and do not claim to know the actual " +
+                "value of any name shown as unresolved - say it depends on a variable instead. You have " +
+                "no live Azure state and are not running terraform.";
 
             var history = new List<AiChatMessageDto>
             {
@@ -354,6 +356,25 @@ public class TerraformController : ControllerBase
         }
 
         return Ok(new { success = true, resources, narrative });
+    }
+
+    private static string DescribeResourceForAi(ProjectResourceSummaryDto r)
+    {
+        var line = $"- {r.ResourceType} \"{r.LocalName}\" (file: {r.FileName})";
+
+        if (!r.HasForEachOrCount)
+        {
+            return line + (r.DeclaredName != null
+                ? $" -> 1 instance, name = \"{r.DeclaredName}\""
+                : " -> 1 instance, name is not a literal string (variable/expression)");
+        }
+
+        if (r.InstanceCount == null)
+            return line + " -> uses for_each/count; instance count could not be resolved from an uploaded .tfvars file";
+
+        return r.InstanceNames is { Count: > 0 }
+            ? line + $" -> {r.InstanceCount} instances: {string.Join(", ", r.InstanceNames)}"
+            : line + $" -> {r.InstanceCount} instances";
     }
 
     // Real execution - see TerraformExecutionService's own header comment
