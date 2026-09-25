@@ -83,6 +83,8 @@ export default function TerraformAddResourceForm({ projectId, open, onClose, onA
 
         try {
 
+            let touchedFiles = [];
+
             if (selectedTarget === NEW_TARGET_VALUE) {
 
                 const result = await generateTerraformTemplate(projectId, newKind, name.trim());
@@ -91,6 +93,8 @@ export default function TerraformAddResourceForm({ projectId, open, onClose, onA
                     toast.show(result.message || "Unable to generate a template.", "error");
                     return;
                 }
+
+                touchedFiles = result.updatedFiles || [];
 
                 toast.show(
                     `Starter template added to ${result.updatedFiles.join(", ")} - review and connect before running Plan.`,
@@ -107,11 +111,14 @@ export default function TerraformAddResourceForm({ projectId, open, onClose, onA
                     return;
                 }
 
+                const target = targets.find((t) => t.variableName === selectedTarget);
+                touchedFiles = target ? [target.fileName] : [];
+
                 toast.show(`"${name.trim()}" added.`, "success");
 
             }
 
-            onAdded();
+            onAdded(touchedFiles);
             onClose();
 
         }

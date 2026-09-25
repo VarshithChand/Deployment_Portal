@@ -103,6 +103,17 @@ export const addTerraformResourceInstance = async (projectId, variableName, name
     return response.data;
 };
 
+// Every individual instance across every add target - the "Resources" tab.
+export const getTerraformResourceInstances = async (projectId) => {
+    const response = await terraformApi.get(`/projects/${projectId}/resource-instances`);
+    return response.data;
+};
+
+export const renameTerraformResourceInstance = async (projectId, variableName, oldKey, newKey) => {
+    const response = await terraformApi.post(`/projects/${projectId}/rename-instance`, { variableName, oldKey, newKey });
+    return response.data;
+};
+
 // No existing target fits - generates a starter (not fully wired) block,
 // see TerraformController.GenerateTemplate's own comment.
 export const generateTerraformTemplate = async (projectId, kind, name) => {

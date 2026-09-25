@@ -50,14 +50,16 @@ export default function Terraform() {
 
             <div className="card">
 
-                <TerraformCredentialsSection />
-
-                <hr style={{ margin: "24px 0", border: "none", borderTop: "1px solid var(--border)" }} />
-
                 {projectId ? (
                     <TerraformProjectPage projectId={projectId} onBack={backToList} onDeleted={backToList} />
                 ) : (
-                    <TerraformProjectsList onOpenProject={openProject} />
+                    <>
+                        <TerraformProjectsList onOpenProject={openProject} />
+
+                        <hr style={{ margin: "24px 0", border: "none", borderTop: "1px solid var(--border)" }} />
+
+                        <TerraformCredentialsSection />
+                    </>
                 )}
 
             </div>

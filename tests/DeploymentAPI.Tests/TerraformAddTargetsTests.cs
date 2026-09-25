@@ -126,6 +126,129 @@ public class TerraformAddTargetsTests
 
         Assert.Empty(TerraformResourceExtractor.BuildAddTargets(files));
     }
+
+    [Fact]
+    public void BuildResourceInstances_FlattensEveryEntryAcrossEveryTarget()
+    {
+        var files = new[]
+        {
+            File("main.tf", """
+                module "api_web_apps" {
+                  source   = "./modules/web_app"
+                  for_each = var.api_web_apps
+                }
+                """),
+            File("terraform.tfvars", """
+                api_web_apps = {
+                  "app-a" = {}
+                  "app-b" = { appsettings_file = "x.json" }
+                }
+                """),
+            File("modules/web_app/main.tf", "resource \"azurerm_windows_web_app\" \"web_app\" { name = var.app_name }")
+        };
+
+        var instances = TerraformResourceExtractor.BuildResourceInstances(files);
+
+        Assert.Equal(2, instances.Count);
+        Assert.Contains(instances, i => i.Key == "app-a" && i.VariableName == "api_web_apps" && i.Shape == "Map");
+        Assert.Contains(instances, i => i.Key == "app-b");
+        Assert.All(instances, i => Assert.Equal("terraform.tfvars", i.FileName));
+    }
+
+    [Fact]
+    public void BuildResourceInstances_PrefersANestedDeclaredNameOverTheMapKey()
+    {
+        var files = new[]
+        {
+            File("main.tf", """
+                module "web_apps" {
+                  source   = "./modules/web_app"
+                  for_each = var.web_apps
+                }
+                """),
+            File("terraform.tfvars", """
+                web_apps = {
+                  billing = { name = "billing-app-01" }
+                }
+                """),
+            File("modules/web_app/main.tf", "resource \"azurerm_windows_web_app\" \"web_app\" { name = var.app_name }")
+        };
+
+        var instance = Assert.Single(TerraformResourceExtractor.BuildResourceInstances(files));
+
+        Assert.Equal("billing", instance.Key);
+        Assert.Equal("billing-app-01", instance.DisplayName);
+    }
+}
+
+public class TerraformTfvarsEditorRenameTests
+{
+    [Fact]
+    public void RenameEntry_RenamesAMapKeyAndKeepsItsValueIntact()
+    {
+        var content = """
+            resource_group_name = "cluster04"
+            web_apps = {
+              "old-name" = { appsettings_file = "x.json" }
+              "other-app" = {}
+            }
+            """;
+
+        var (success, error, updated) = TerraformTfvarsEditor.RenameEntry(content, "web_apps", "Map", "old-name", "new-name");
+
+        Assert.True(success, error);
+        Assert.Contains("\"new-name\" = { appsettings_file = \"x.json\" }", updated);
+        Assert.DoesNotContain("\"old-name\"", updated);
+        Assert.Contains("\"other-app\" = {}", updated); // untouched sibling
+        Assert.Contains("resource_group_name = \"cluster04\"", updated); // untouched, unrelated variable
+    }
+
+    [Fact]
+    public void RenameEntry_RenamesAListElement()
+    {
+        var content = "function_apps = [\n  \"old-fn\",\n  \"other-fn\"\n]";
+
+        var (success, _, updated) = TerraformTfvarsEditor.RenameEntry(content, "function_apps", "List", "old-fn", "new-fn");
+
+        Assert.True(success);
+        Assert.Contains("\"new-fn\"", updated);
+        Assert.DoesNotContain("\"old-fn\"", updated);
+        Assert.Contains("\"other-fn\"", updated);
+    }
+
+    [Fact]
+    public void RenameEntry_FailsCleanlyWhenTheOldKeyDoesNotExist()
+    {
+        var content = "web_apps = {\n  \"a\" = {}\n}";
+
+        var (success, error, updated) = TerraformTfvarsEditor.RenameEntry(content, "web_apps", "Map", "does-not-exist", "new-name");
+
+        Assert.False(success);
+        Assert.NotNull(error);
+        Assert.Null(updated);
+    }
+
+    [Fact]
+    public void RenameEntry_FailsCleanlyWhenTheNewKeyAlreadyExists()
+    {
+        var content = "web_apps = {\n  \"a\" = {}\n  \"b\" = {}\n}";
+
+        var (success, error, _) = TerraformTfvarsEditor.RenameEntry(content, "web_apps", "Map", "a", "b");
+
+        Assert.False(success);
+        Assert.Contains("already exists", error);
+    }
+
+    [Fact]
+    public void RenameEntry_AllowsRenamingToTheSameNameAsANoOp()
+    {
+        var content = "web_apps = {\n  \"a\" = {}\n}";
+
+        var (success, _, updated) = TerraformTfvarsEditor.RenameEntry(content, "web_apps", "Map", "a", "a");
+
+        Assert.True(success);
+        Assert.Contains("\"a\" = {}", updated);
+    }
 }
 
 public class TerraformTfvarsEditorTests

@@ -5905,6 +5905,22 @@ button.terraform-tree-file:hover{
 
 }
 
+/* Brief "saved"/"just updated" flash - a resource-instance row after a
+   rename (TerraformResourcesTab), or a file-tree row after an upload/save/
+   add-resource action touches it (TerraformFileTree). Fades out on its own
+   once the row's own setTimeout removes the class, never a persistent
+   marker. The button.terraform-tree-file selector's own background:none
+   otherwise outranks a bare .terraform-row-just-saved, so it's repeated
+   combined with that element selector here to win the same way. */
+.terraform-row-just-saved,
+button.terraform-tree-file.terraform-row-just-saved{
+
+    background:color-mix(in srgb, var(--viz-good) 16%, transparent);
+
+    transition:background 1.8s ease-out;
+
+}
+
 /* ---- Breadcrumbs + detail-page header (CloudServiceDetailPage) ---- */
 
 .cloud-service-breadcrumbs{

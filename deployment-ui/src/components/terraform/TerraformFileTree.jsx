@@ -41,7 +41,7 @@ function buildTree(files) {
 
 }
 
-function TreeNode({ node, depth, selectedPath, onSelect }) {
+function TreeNode({ node, depth, selectedPath, onSelect, highlightedPaths }) {
 
     const folderEntries = [...node.folders.entries()].sort((a, b) => a[0].localeCompare(b[0]));
     const fileEntries = [...node.files].sort((a, b) => a.label.localeCompare(b.label));
@@ -62,7 +62,13 @@ function TreeNode({ node, depth, selectedPath, onSelect }) {
                         {name}
                     </div>
 
-                    <TreeNode node={child} depth={depth + 1} selectedPath={selectedPath} onSelect={onSelect} />
+                    <TreeNode
+                        node={child}
+                        depth={depth + 1}
+                        selectedPath={selectedPath}
+                        onSelect={onSelect}
+                        highlightedPaths={highlightedPaths}
+                    />
 
                 </div>
 
@@ -73,7 +79,12 @@ function TreeNode({ node, depth, selectedPath, onSelect }) {
                 <button
                     key={file.fileName}
                     type="button"
-                    className={`terraform-tree-row terraform-tree-file ${selectedPath === file.fileName ? "terraform-tree-file-selected" : ""}`}
+                    className={[
+                        "terraform-tree-row",
+                        "terraform-tree-file",
+                        selectedPath === file.fileName ? "terraform-tree-file-selected" : "",
+                        highlightedPaths?.has(file.fileName) ? "terraform-row-just-saved" : ""
+                    ].filter(Boolean).join(" ")}
                     style={{ paddingLeft: 10 + depth * 16 }}
                     onClick={() => onSelect(file.fileName)}
                 >
@@ -90,7 +101,12 @@ function TreeNode({ node, depth, selectedPath, onSelect }) {
 
 }
 
-export default function TerraformFileTree({ files, selectedPath, onSelect }) {
+// highlightedPaths (a Set of fileName strings, optional): a brief "just
+// updated" flash on the file(s) an upload/save/add-resource action just
+// touched - the same fading treatment TerraformResourcesTab gives a
+// renamed row, applied here so a change is visible right where it landed
+// in the tree too.
+export default function TerraformFileTree({ files, selectedPath, onSelect, highlightedPaths }) {
 
     if (files.length === 0) {
         return <p className="empty-state">No files in this project yet.</p>;
@@ -101,7 +117,7 @@ export default function TerraformFileTree({ files, selectedPath, onSelect }) {
     return (
 
         <div className="terraform-tree">
-            <TreeNode node={tree} depth={0} selectedPath={selectedPath} onSelect={onSelect} />
+            <TreeNode node={tree} depth={0} selectedPath={selectedPath} onSelect={onSelect} highlightedPaths={highlightedPaths} />
         </div>
 
     );

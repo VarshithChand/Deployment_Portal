@@ -193,7 +193,7 @@ public static class TerraformResourceExtractor
                     VariableName = resolved.Value.Name,
                     FileName = FindTfvarsFileDeclaring(fileList, resolved.Value.Name) ?? "terraform.tfvars",
                     Shape = resolved.Value.Shape,
-                    ExistingCount = resolved.Value.Count
+                    ExistingCount = resolved.Value.Entries.Count
                 });
             }
         }
@@ -240,7 +240,7 @@ public static class TerraformResourceExtractor
                         VariableName = resolved.Value.Name,
                         FileName = FindTfvarsFileDeclaring(fileList, resolved.Value.Name) ?? "terraform.tfvars",
                         Shape = resolved.Value.Shape,
-                        ExistingCount = resolved.Value.Count
+                        ExistingCount = resolved.Value.Entries.Count
                     });
                 }
             }
@@ -257,7 +257,45 @@ public static class TerraformResourceExtractor
             .ToList();
     }
 
-    private static (string Name, string Shape, int Count)? ResolveAddableVariable(
+    // Every INDIVIDUAL instance across every add target - what the
+    // "Resources" tab lists for renaming. Reuses BuildAddTargets to find
+    // valid targets (VariableName/Shape/FileName/ResourceType, already
+    // resolved through any local/module-argument indirection - case A/B
+    // above), then re-reads each target's own resolved variable directly
+    // (always a plain top-level tfvars variable by the time BuildAddTargets
+    // hands it back, regardless of how indirect the ORIGINAL for_each
+    // expression was) to flatten its individual entries.
+    public static List<ResourceInstanceDto> BuildResourceInstances(IEnumerable<PersonalTerraformFileDetailDto> files)
+    {
+        var fileList = files as IReadOnlyCollection<PersonalTerraformFileDetailDto> ?? files.ToList();
+
+        var variableValues = BuildVariableValueIndex(fileList);
+        var targets = BuildAddTargets(fileList);
+
+        var instances = new List<ResourceInstanceDto>();
+
+        foreach (var target in targets)
+        {
+            if (!variableValues.TryGetValue(target.VariableName, out var raw)) continue;
+
+            foreach (var (key, displayName) in EntriesOf(raw, target.Shape))
+            {
+                instances.Add(new ResourceInstanceDto
+                {
+                    ResourceType = target.ResourceType,
+                    VariableName = target.VariableName,
+                    FileName = target.FileName,
+                    Shape = target.Shape,
+                    Key = key,
+                    DisplayName = displayName
+                });
+            }
+        }
+
+        return instances;
+    }
+
+    private static (string Name, string Shape, List<(string Key, string DisplayName)> Entries)? ResolveAddableVariable(
         string expression, Dictionary<string, string> variableValues, Dictionary<string, string> localRawValues)
     {
         var trimmedExpr = expression.Trim();
@@ -272,7 +310,7 @@ public static class TerraformResourceExtractor
         {
             var directShape = ShapeOf(directRaw);
             if (directShape != null)
-                return (directForInVar.Groups[1].Value, directShape, CountOf(directRaw, directShape));
+                return (directForInVar.Groups[1].Value, directShape, EntriesOf(directRaw, directShape));
         }
 
         var match = ReferencePattern.Match(trimmedExpr);
@@ -282,7 +320,7 @@ public static class TerraformResourceExtractor
         {
             if (!variableValues.TryGetValue(match.Groups[2].Value, out var raw)) return null;
             var shape = ShapeOf(raw);
-            return shape == null ? null : (match.Groups[2].Value, shape, CountOf(raw, shape));
+            return shape == null ? null : (match.Groups[2].Value, shape, EntriesOf(raw, shape));
         }
 
         // local - only the "for k, v in var.Y : k => {...}" idiom is
@@ -296,7 +334,7 @@ public static class TerraformResourceExtractor
         if (!variableValues.TryGetValue(sourceVarName, out var sourceRaw)) return null;
 
         var sourceShape = ShapeOf(sourceRaw);
-        return sourceShape == null ? null : (sourceVarName, sourceShape, CountOf(sourceRaw, sourceShape));
+        return sourceShape == null ? null : (sourceVarName, sourceShape, EntriesOf(sourceRaw, sourceShape));
     }
 
     private static string? ShapeOf(string raw)
@@ -307,10 +345,30 @@ public static class TerraformResourceExtractor
         return null;
     }
 
-    private static int CountOf(string raw, string shape)
+    // Key = the exact map key or list element's own literal string (what
+    // TerraformTfvarsEditor.RenameEntry actually matches against to rename
+    // an entry); DisplayName = a friendlier label where one exists (a map
+    // entry's own nested "name" attribute) but always falls back to Key.
+    private static List<(string Key, string DisplayName)> EntriesOf(string raw, string shape)
     {
         var inner = StripOuterBracket(raw.Trim());
-        return shape == "Map" ? ParseTopLevelAssignments(inner).Count : SplitTopLevelElements(inner).Count;
+
+        if (shape == "Map")
+        {
+            return ParseTopLevelAssignments(inner)
+                .Select(e => (e.Key, ExtractNameOrFallback(e.Value, e.Key)))
+                .ToList();
+        }
+
+        return SplitTopLevelElements(inner)
+            .Select(el => (StripQuotesIfPresent(el), ExtractNameOrLiteral(el)))
+            .ToList();
+    }
+
+    private static string StripQuotesIfPresent(string text)
+    {
+        var trimmed = text.Trim();
+        return trimmed.Length >= 2 && trimmed[0] == '"' && trimmed[^1] == '"' ? trimmed[1..^1] : trimmed;
     }
 
     // The first resource declared in a module's source folder - a
@@ -657,7 +715,7 @@ public static class TerraformResourceExtractor
         return nameMatch.Success ? nameMatch.Groups[1].Value : trimmed;
     }
 
-    private static string StripOuterBracket(string text) =>
+    internal static string StripOuterBracket(string text) =>
         text.Length >= 2 ? text[1..^1] : string.Empty;
 
     // A deliberately loose HCL-lite scanner, for text that is PURELY a
@@ -686,7 +744,7 @@ public static class TerraformResourceExtractor
     private static readonly Regex IdentifierEqualsPattern = new(
         @"\G(?:([A-Za-z_][A-Za-z0-9_-]*)|""([^""]*)"")[ \t]*=[ \t]*", RegexOptions.Compiled);
 
-    private static Dictionary<string, string> ParseTopLevelAssignments(string text)
+    internal static Dictionary<string, string> ParseTopLevelAssignments(string text)
     {
         var result = new Dictionary<string, string>(StringComparer.Ordinal);
         var position = 0;
@@ -810,7 +868,7 @@ public static class TerraformResourceExtractor
     // Comma-or-newline-separated top-level elements inside a [...] list's
     // inner text - same bracket/quote-depth reasoning as
     // FindAssignmentValueEnd, just splitting on "," in addition to "\n".
-    private static List<string> SplitTopLevelElements(string text)
+    internal static List<string> SplitTopLevelElements(string text)
     {
         var elements = new List<string>();
         var depth = 0;

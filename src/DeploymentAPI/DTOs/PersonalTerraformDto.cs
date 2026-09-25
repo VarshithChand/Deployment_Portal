@@ -187,6 +187,35 @@ public class AddResourceInstanceRequestDto
     public string? Name { get; set; }
 }
 
+// One individual instance (one web app, one queue, ...) - the "Resources"
+// tab's own row. Key is the exact map key/list element TerraformTfvarsEditor.
+// RenameEntry matches against to rename it; DisplayName is what's shown/
+// edited (falls back to Key when there's no nested "name" attribute to
+// prefer).
+public class ResourceInstanceDto
+{
+    public string ResourceType { get; set; } = string.Empty;
+
+    public string VariableName { get; set; } = string.Empty;
+
+    public string FileName { get; set; } = string.Empty;
+
+    public string Shape { get; set; } = string.Empty;
+
+    public string Key { get; set; } = string.Empty;
+
+    public string DisplayName { get; set; } = string.Empty;
+}
+
+public class RenameResourceInstanceRequestDto
+{
+    public string? VariableName { get; set; }
+
+    public string? OldKey { get; set; }
+
+    public string? NewKey { get; set; }
+}
+
 // The "no existing target fits" path - generates a starter HCL block
 // (not fully auto-wired - see TerraformController.GenerateTemplate's own
 // comment) appended to main.tf/variables.tf/terraform.tfvars for the

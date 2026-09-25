@@ -458,6 +458,68 @@ public class TerraformController : ControllerBase
         return Ok(new { success = true });
     }
 
+    // Every individual instance across every add target (see
+    // TerraformResourceExtractor.BuildResourceInstances) - the "Resources"
+    // tab's own list. Read-only, no Azure calls.
+    [HttpGet("projects/{projectId:guid}/resource-instances")]
+    public async Task<IActionResult> GetResourceInstances(Guid projectId)
+    {
+        var (key, denied) = RequireAuth.RequireUserId(this);
+        if (denied != null) return denied;
+
+        var files = await _settings.GetAllProjectFilesAsync(key!, projectId);
+
+        return Ok(new { instances = TerraformResourceExtractor.BuildResourceInstances(files) });
+    }
+
+    // Renames one existing instance's map key/list value in place
+    // (TerraformTfvarsEditor.RenameEntry) - re-resolves both the target AND
+    // the specific instance fresh from the CURRENT files first, same
+    // "don't trust what the frontend cached" reasoning as AddInstance above.
+    [HttpPost("projects/{projectId:guid}/rename-instance")]
+    public async Task<IActionResult> RenameInstance(Guid projectId, RenameResourceInstanceRequestDto request)
+    {
+        var (key, denied) = RequireAuth.RequireUserId(this);
+        if (denied != null) return denied;
+
+        var newKey = request.NewKey?.Trim();
+
+        if (string.IsNullOrWhiteSpace(request.VariableName) || string.IsNullOrWhiteSpace(request.OldKey) || string.IsNullOrWhiteSpace(newKey))
+            return BadRequest(new { message = "A target, its current name, and a new name are required." });
+
+        if (!Regex.IsMatch(newKey, @"^[A-Za-z0-9._-]+$"))
+            return BadRequest(new { message = "Name must contain only letters, numbers, dots, dashes, or underscores." });
+
+        var files = await _settings.GetAllProjectFilesAsync(key!, projectId);
+
+        var instance = TerraformResourceExtractor.BuildResourceInstances(files)
+            .FirstOrDefault(i => i.VariableName == request.VariableName && i.Key == request.OldKey);
+
+        if (instance == null)
+        {
+            return Ok(new
+            {
+                success = false,
+                message = "That instance isn't available in this project anymore - refresh and try again."
+            });
+        }
+
+        var file = files.FirstOrDefault(f => string.Equals(f.FileName, instance.FileName, StringComparison.OrdinalIgnoreCase));
+
+        if (file == null)
+            return Ok(new { success = false, message = $"{instance.FileName} wasn't found." });
+
+        var (success, error, updatedContent) = TerraformTfvarsEditor.RenameEntry(
+            file.Content, instance.VariableName, instance.Shape, instance.Key, newKey);
+
+        if (!success)
+            return Ok(new { success = false, message = error });
+
+        await _settings.UpdateProjectFileAsync(key!, projectId, instance.FileName, updatedContent);
+
+        return Ok(new { success = true });
+    }
+
     // The "no existing target fits" path - deliberately NOT fully wired
     // (see GenerateNewTemplateRequestDto's own comment): appends a starter
     // resource + module block to main.tf, a matching variable declaration

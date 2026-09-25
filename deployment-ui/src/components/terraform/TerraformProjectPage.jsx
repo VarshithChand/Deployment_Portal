@@ -1,12 +1,15 @@
 import { useEffect, useRef, useState } from "react";
-import { ArrowLeft, FileCode, FolderUp, PlusCircle, Sparkles, PlayCircle, Rocket, Upload } from "lucide-react";
+import { ArrowLeft, ChevronDown, ChevronRight, FileCode, FolderUp, KeyRound, PlusCircle, Sparkles, PlayCircle, Rocket, Upload } from "lucide-react";
 
 import useToast from "../../hooks/useToast";
 import useConfirm from "../../hooks/useConfirm";
 import CopilotMarkdown from "../copilot/CopilotMarkdown";
 import TypedConfirmDialog from "../cloudServices/TypedConfirmDialog";
+import SectionTabs from "../common/SectionTabs";
 import TerraformFileTree from "./TerraformFileTree";
 import TerraformAddResourceForm from "./TerraformAddResourceForm";
+import TerraformResourcesTab from "./TerraformResourcesTab";
+import TerraformCredentialsSection from "./TerraformCredentialsSection";
 import { TERRAFORM_RESOURCE_TEMPLATES } from "../../utils/terraformTemplates";
 import {
     getTerraformProject, deleteTerraformProject, uploadFilesToProject,
@@ -120,6 +123,20 @@ export default function TerraformProjectPage({ projectId, onBack, onDeleted }) {
 
     const [addResourceOpen, setAddResourceOpen] = useState(false);
 
+    const [activeTab, setActiveTab] = useState("files");
+    const [credentialsOpen, setCredentialsOpen] = useState(false);
+
+    const [highlightedPaths, setHighlightedPaths] = useState(new Set());
+
+    // Brief "just updated" flash on whichever file(s) an action just
+    // touched - see TerraformFileTree's own comment. Fades on its own;
+    // never a persistent marker.
+    function flashPaths(fileNames) {
+        if (!fileNames || fileNames.length === 0) return;
+        setHighlightedPaths(new Set(fileNames));
+        setTimeout(() => setHighlightedPaths(new Set()), 2200);
+    }
+
     const [selectedPath, setSelectedPath] = useState(null);
     const [openContent, setOpenContent] = useState("");
     const [openLoading, setOpenLoading] = useState(false);
@@ -190,6 +207,7 @@ export default function TerraformProjectPage({ projectId, onBack, onDeleted }) {
 
             if (result.accepted?.length > 0) {
                 toast.show(`${result.accepted.length} file(s) uploaded.`, "success");
+                flashPaths(result.accepted);
             }
 
             if (result.rejected?.length > 0) {
@@ -249,6 +267,7 @@ export default function TerraformProjectPage({ projectId, onBack, onDeleted }) {
         try {
             await updateTerraformProjectFile(projectId, selectedPath, openContent);
             toast.show("Saved.", "success");
+            flashPaths([selectedPath]);
             load();
         }
         catch (err) {
@@ -365,14 +384,18 @@ export default function TerraformProjectPage({ projectId, onBack, onDeleted }) {
             const result = await planTerraformProject(projectId);
 
             if (!result.success) {
-                setPlanError(result.message || "terraform plan failed.");
+                const message = result.message || "terraform plan failed.";
+                setPlanError(message);
+                if (message.includes("Service Principal")) setCredentialsOpen(true);
                 return;
             }
 
             setPlan(result);
         }
         catch (err) {
-            setPlanError(err.response?.data?.message || "Unable to run terraform plan right now.");
+            const message = err.response?.data?.message || "Unable to run terraform plan right now.";
+            setPlanError(message);
+            if (message.includes("Service Principal")) setCredentialsOpen(true);
         }
         finally {
             setPlanning(false);
@@ -466,10 +489,30 @@ export default function TerraformProjectPage({ projectId, onBack, onDeleted }) {
                 </div>
             )}
 
+            <SectionTabs
+                sections={[
+                    { key: "files", label: "Files" },
+                    { key: "resources", label: "Resources" }
+                ]}
+                active={activeTab}
+                onSelect={setActiveTab}
+            />
+
+            {activeTab === "resources" ? (
+
+                <TerraformResourcesTab projectId={projectId} />
+
+            ) : (
+
             <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginTop: 14 }}>
 
                 <div style={{ flex: "1 1 260px", minWidth: 220 }}>
-                    <TerraformFileTree files={project.files} selectedPath={selectedPath} onSelect={handleOpenFile} />
+                    <TerraformFileTree
+                        files={project.files}
+                        selectedPath={selectedPath}
+                        onSelect={handleOpenFile}
+                        highlightedPaths={highlightedPaths}
+                    />
                 </div>
 
                 <div style={{ flex: "2 1 420px", minWidth: 280 }}>
@@ -560,6 +603,8 @@ export default function TerraformProjectPage({ projectId, onBack, onDeleted }) {
 
             </div>
 
+            )}
+
             <hr style={{ margin: "24px 0", border: "none", borderTop: "1px solid var(--border)" }} />
 
             <div className="settings-subsection">
@@ -575,6 +620,23 @@ export default function TerraformProjectPage({ projectId, onBack, onDeleted }) {
                     changes, or destroys real resources and requires typing the plan's own summary line
                     to confirm.
                 </p>
+
+                <button
+                    type="button"
+                    className="btn btn-secondary"
+                    style={{ marginBottom: 14 }}
+                    onClick={() => setCredentialsOpen((v) => !v)}
+                >
+                    <KeyRound size={14} style={{ marginRight: 4, verticalAlign: -2 }} />
+                    {credentialsOpen ? <ChevronDown size={14} style={{ verticalAlign: -2 }} /> : <ChevronRight size={14} style={{ verticalAlign: -2 }} />}
+                    {" "}Azure Service Principal
+                </button>
+
+                {credentialsOpen && (
+                    <div style={{ marginBottom: 14 }}>
+                        <TerraformCredentialsSection />
+                    </div>
+                )}
 
                 <div className="button-row">
 
@@ -710,7 +772,7 @@ export default function TerraformProjectPage({ projectId, onBack, onDeleted }) {
                 projectId={projectId}
                 open={addResourceOpen}
                 onClose={() => setAddResourceOpen(false)}
-                onAdded={load}
+                onAdded={(touchedFiles) => { flashPaths(touchedFiles); load(); }}
             />
 
         </div>
