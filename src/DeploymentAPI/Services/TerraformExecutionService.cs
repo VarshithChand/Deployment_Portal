@@ -35,18 +35,19 @@ public class TerraformExecutionService
     private readonly SettingsService _settings;
     private readonly ActivityLogService _log;
 
-    // One live plan per user - a fresh Plan call discards any previous
-    // unclaimed one for that user rather than accumulating temp
-    // directories. Static (not per-request) since this service is
-    // registered scoped but the in-flight plan needs to survive across the
-    // Plan and Apply requests, which are two separate HTTP calls (and,
-    // realistically, two separate DI scopes).
+    // One live plan per (user, project) - a fresh Plan call discards any
+    // previous unclaimed one for that same project rather than accumulating
+    // temp directories, but leaves other projects' own in-flight plans
+    // alone. Static (not per-request) since this service is registered
+    // scoped but the in-flight plan needs to survive across the Plan and
+    // Apply requests, which are two separate HTTP calls (and, realistically,
+    // two separate DI scopes).
     private static readonly ConcurrentDictionary<string, PlanRecord> Plans = new();
 
     private static readonly TimeSpan PlanExpiry = TimeSpan.FromMinutes(20);
     private static readonly TimeSpan ProcessTimeout = TimeSpan.FromMinutes(8);
 
-    private sealed record PlanRecord(string PlanId, string UserId, string WorkDir, string SummaryLine, DateTime CreatedAtUtc);
+    private sealed record PlanRecord(string PlanId, string UserId, Guid ProjectId, string WorkDir, string SummaryLine, DateTime CreatedAtUtc);
 
     public TerraformExecutionService(SettingsService settings, ActivityLogService log)
     {
@@ -54,19 +55,19 @@ public class TerraformExecutionService
         _log = log;
     }
 
-    public async Task<(bool Success, string? Error, string? PlanId, string? Output, string? SummaryLine)> PlanAsync(string userId)
+    public async Task<(bool Success, string? Error, string? PlanId, string? Output, string? SummaryLine)> PlanAsync(string userId, Guid projectId)
     {
         var creds = await _settings.GetUserTerraformCredentialsAsync(userId);
 
         if (!creds.IsConfigured)
             return (false, "Azure Service Principal credentials aren't configured yet.", null, null, null);
 
-        var files = await _settings.GetAllUserTerraformFilesAsync(userId);
+        var files = await _settings.GetAllProjectFilesAsync(userId, projectId);
 
         if (files.Count == 0)
-            return (false, "No Terraform files are stored yet - upload your .tf files first.", null, null, null);
+            return (false, "No Terraform files are stored in this project yet - upload your .tf files first.", null, null, null);
 
-        DiscardExistingPlan(userId);
+        DiscardExistingPlan(userId, projectId);
 
         var workDir = Path.Combine(Path.GetTempPath(), "tf-plan-" + Guid.NewGuid().ToString("N"));
 
@@ -103,7 +104,7 @@ public class TerraformExecutionService
             var summaryLine = ExtractSummaryLine(planResult.Output) ?? "No changes.";
             var planId = Guid.NewGuid().ToString("N");
 
-            Plans[planId] = new PlanRecord(planId, userId, workDir, summaryLine, DateTime.UtcNow);
+            Plans[planId] = new PlanRecord(planId, userId, projectId, workDir, summaryLine, DateTime.UtcNow);
 
             _log.LogInfo("Terraform", "A plan was generated for a user's personal Terraform files.");
 
@@ -126,10 +127,13 @@ public class TerraformExecutionService
     // TerraformController's own comment) - this is what makes "type to
     // confirm" mean something concrete rather than a generic "yes" that
     // proves nothing about whether the plan was actually read.
-    public async Task<(bool Success, string? Error, string? Output)> ApplyAsync(string userId, string? planId, string? confirmationText)
+    public async Task<(bool Success, string? Error, string? Output)> ApplyAsync(string userId, Guid projectId, string? planId, string? confirmationText)
     {
-        if (string.IsNullOrWhiteSpace(planId) || !Plans.TryGetValue(planId, out var record) || record.UserId != userId)
+        if (string.IsNullOrWhiteSpace(planId) || !Plans.TryGetValue(planId, out var record)
+            || record.UserId != userId || record.ProjectId != projectId)
+        {
             return (false, "That plan wasn't found - it may have already been applied or expired. Run Plan again.", null);
+        }
 
         if (DateTime.UtcNow - record.CreatedAtUtc > PlanExpiry)
         {
@@ -182,11 +186,11 @@ public class TerraformExecutionService
         }
     }
 
-    private static void DiscardExistingPlan(string userId)
+    private static void DiscardExistingPlan(string userId, Guid projectId)
     {
         foreach (var kvp in Plans.ToArray())
         {
-            if (kvp.Value.UserId != userId) continue;
+            if (kvp.Value.UserId != userId || kvp.Value.ProjectId != projectId) continue;
 
             if (Plans.TryRemove(kvp.Key, out var record))
                 CleanupDir(record.WorkDir);

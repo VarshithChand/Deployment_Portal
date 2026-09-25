@@ -11,6 +11,12 @@ public class TerraformFileNamingTests
     [InlineData("modules/network/main.tf")]
     [InlineData("modules/network/subnets/main.tf")]
     [InlineData("network-config_v2.tf")]
+    [InlineData("terraform.tfvars")]
+    [InlineData("prod.tfvars.json")]
+    [InlineData("config.json")]
+    [InlineData("README.md")]
+    [InlineData(".gitignore")]
+    [InlineData(".terraform-version")]
     public void ValidateRelativePath_AcceptsWellFormedPaths(string path)
     {
         var (valid, error, normalized) = TerraformFileNaming.ValidateRelativePath(path);

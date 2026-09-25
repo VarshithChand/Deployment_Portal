@@ -76,3 +76,61 @@ public class TerraformApplyRequestDto
 
     public string? ConfirmationText { get; set; }
 }
+
+// A project is one uploaded folder (or a from-scratch set of files) - its
+// own file tree, its own Explain/Preview/Plan/Apply, its own page. Replaces
+// the earlier single-flat-list-per-user model once a user has uploaded more
+// than one real project (e.g. "terraform_full web app creation" and
+// "cluster creation infra" from two different local folders) - keeping
+// them in one shared list meant same-named files (every project's own
+// main.tf) silently overwrote each other.
+public class TerraformProjectSummaryDto
+{
+    public Guid ProjectId { get; set; }
+
+    public string Name { get; set; } = string.Empty;
+
+    public int FileCount { get; set; }
+
+    public DateTime CreatedAtUtc { get; set; }
+
+    public DateTime UpdatedAtUtc { get; set; }
+}
+
+public class TerraformProjectDetailDto : TerraformProjectSummaryDto
+{
+    public List<PersonalTerraformFileSummaryDto> Files { get; set; } = new();
+}
+
+public class CreateTerraformProjectRequestDto
+{
+    public string? Name { get; set; }
+
+    public List<TerraformFileUploadEntryDto> Files { get; set; } = new();
+}
+
+// The "fake plan" - a static, deterministic extraction (regex over the
+// stored HCL text, not a real parse and definitely not real terraform) of
+// every `resource "TYPE" "local_name" { ... }` block, plus that block's own
+// `name = "..."` attribute when it's a literal string (left null when it's
+// an expression/variable reference like var.app_name, rather than
+// pretending to resolve something this app never evaluates). Pairs with an
+// AI-written narrative for "what would this actually mean" - see
+// TerraformProjectPreviewDto below.
+public class ProjectResourceSummaryDto
+{
+    public string FileName { get; set; } = string.Empty;
+
+    public string ResourceType { get; set; } = string.Empty;
+
+    public string LocalName { get; set; } = string.Empty;
+
+    public string? DeclaredName { get; set; }
+}
+
+public class TerraformProjectPreviewDto
+{
+    public List<ProjectResourceSummaryDto> Resources { get; set; } = new();
+
+    public string? Narrative { get; set; }
+}

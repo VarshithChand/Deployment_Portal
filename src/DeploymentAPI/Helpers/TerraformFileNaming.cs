@@ -40,6 +40,18 @@ public static class TerraformFileNaming
     private static readonly Regex ValidPathSegmentPattern = new(
         @"^[A-Za-z0-9._-]+$", RegexOptions.Compiled);
 
+    // Wider than ValidFileNamePattern - a real Terraform project folder
+    // isn't only .tf files (.tfvars for variable values, a plain .json,
+    // README.md, .gitignore) and rejecting everything else meant a folder
+    // upload silently dropped files a plan/apply would actually need.
+    // Still an allowlist, not "anything goes" - same no-traversal,
+    // restricted-character-class posture as every other name validated in
+    // this codebase, just a bigger extension set plus bare dotfiles
+    // (.gitignore, .terraform-version).
+    private static readonly Regex ValidProjectFileNamePattern = new(
+        @"^([A-Za-z0-9._-]+\.(tf|tf\.json|tfvars|tfvars\.json|json|md)|\.[A-Za-z0-9_-]+)$",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
     // A second, deliberately separate validator - ONLY for the personal
     // Terraform page's file storage (see SettingsService's
     // UploadUserTerraformFilesAsync), which preserves folder structure so
@@ -77,8 +89,8 @@ public static class TerraformFileNaming
 
             if (isLast)
             {
-                if (!ValidFileNamePattern.IsMatch(segment))
-                    return (false, "The file itself must contain only letters, numbers, dots, dashes, or underscores, and end in .tf or .tf.json.", null);
+                if (!ValidProjectFileNamePattern.IsMatch(segment))
+                    return (false, "The file itself must be a .tf, .tf.json, .tfvars, .tfvars.json, .json, .md, or dotfile name.", null);
             }
             else if (!ValidPathSegmentPattern.IsMatch(segment))
             {

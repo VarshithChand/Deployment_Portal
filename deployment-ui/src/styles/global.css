@@ -5736,6 +5736,112 @@ textarea{
     .inline-spinner{ animation-duration:2.2s; }
 }
 
+/* Project file tree (TerraformFileTree) - folders as plain labels, files
+   as clickable rows, indentation carrying the nesting instead of connector
+   lines (kept deliberately plain - a real IDE tree isn't the point here,
+   just "which file is this"). */
+.terraform-tree{
+
+    border:1px solid var(--border);
+
+    border-radius:6px;
+
+    overflow:hidden;
+
+}
+
+.terraform-tree-row{
+
+    display:flex;
+
+    align-items:center;
+
+    padding:6px 10px;
+
+    font-size:13px;
+
+    line-height:1.4;
+
+}
+
+.terraform-tree-folder{
+
+    color:var(--text-muted);
+
+    font-weight:600;
+
+}
+
+button.terraform-tree-file{
+
+    width:100%;
+
+    background:none;
+
+    border:none;
+
+    border-top:1px solid var(--border);
+
+    cursor:pointer;
+
+    text-align:left;
+
+    color:inherit;
+
+    font:inherit;
+
+}
+
+button.terraform-tree-file:hover{
+
+    background:var(--bg);
+
+}
+
+.terraform-tree-file-selected{
+
+    background:var(--heading-accent, #2563eb);
+
+    color:#ffffff;
+
+}
+
+.terraform-tree-file-selected:hover{
+
+    background:var(--heading-accent, #2563eb) !important;
+
+}
+
+.terraform-tree-file-label{
+
+    flex:1;
+
+    overflow:hidden;
+
+    text-overflow:ellipsis;
+
+    white-space:nowrap;
+
+}
+
+.terraform-tree-file-size{
+
+    color:var(--text-muted);
+
+    font-size:11px;
+
+    margin-left:10px;
+
+    flex-shrink:0;
+
+}
+
+.terraform-tree-file-selected .terraform-tree-file-size{
+
+    color:rgba(255,255,255,.85);
+
+}
+
 /* Raw terraform plan/apply/init output (TerraformExecutionPanel) - same
    "wide content scrolls in its own box, never the page" treatment as the
    JSON block just above, just taller since real terraform output runs

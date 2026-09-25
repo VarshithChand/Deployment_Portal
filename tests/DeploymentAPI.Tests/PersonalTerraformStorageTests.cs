@@ -9,12 +9,12 @@ using Xunit;
 
 namespace DeploymentAPI.Tests;
 
-// Exercises SettingsService's personal (non-org) Terraform file storage
-// directly - the exact layer TerraformController.UploadFiles/ListFiles/
-// GetFile call - against a real temp JSON file, bypassing HTTP and the
-// full login flow entirely (this app has no WebApplicationFactory-based
-// integration test infra yet). Each test gets its own SETTINGS_FILE_PATH
-// so they can run without colliding.
+// Exercises SettingsService's personal (non-org) Terraform PROJECT storage
+// directly - the exact layer TerraformController's projects/* actions call -
+// against a real temp JSON file, bypassing HTTP and the full login flow
+// entirely (this app has no WebApplicationFactory-based integration test
+// infra yet). Each test gets its own SETTINGS_FILE_PATH so they can run
+// without colliding.
 public class PersonalTerraformStorageTests : IDisposable
 {
     private sealed class FakeHostEnvironment : IHostEnvironment
@@ -55,23 +55,36 @@ public class PersonalTerraformStorageTests : IDisposable
     }
 
     [Fact]
-    public async Task UploadThenList_RoundTripsAFlatFile()
+    public async Task CreateProject_RoundTripsAFlatFile()
     {
         const string userId = "usr_test1";
 
-        var results = await _settings.UploadUserTerraformFilesAsync(userId, new List<TerraformFileUploadEntryDto>
-        {
-            new() { FileName = "main.tf", Content = "resource \"azurerm_resource_group\" \"x\" {}" }
-        });
+        var (success, error, project, fileResults) = await _settings.CreateUserTerraformProjectAsync(
+            userId, "Web App Creation", new List<TerraformFileUploadEntryDto>
+            {
+                new() { FileName = "main.tf", Content = "resource \"azurerm_resource_group\" \"x\" {}" }
+            });
 
-        Assert.Single(results);
-        Assert.True(results[0].Accepted, results[0].Error);
+        Assert.True(success, error);
+        Assert.NotNull(project);
+        Assert.Equal("Web App Creation", project!.Name);
+        Assert.Single(project.Files);
+        Assert.True(fileResults[0].Accepted, fileResults[0].Error);
 
-        var files = await _settings.ListUserTerraformFilesAsync(userId);
+        var projects = await _settings.ListUserTerraformProjectsAsync(userId);
+        Assert.Single(projects);
+        Assert.Equal(project.ProjectId, projects[0].ProjectId);
+    }
 
-        Assert.Single(files);
-        Assert.Equal("main.tf", files[0].FileName);
-        Assert.True(files[0].ContentLength > 0);
+    [Fact]
+    public async Task CreateProject_RequiresAName()
+    {
+        var (success, error, project, _) = await _settings.CreateUserTerraformProjectAsync(
+            "usr_test", "   ", new List<TerraformFileUploadEntryDto>());
+
+        Assert.False(success);
+        Assert.NotNull(error);
+        Assert.Null(project);
     }
 
     [Fact]
@@ -79,70 +92,154 @@ public class PersonalTerraformStorageTests : IDisposable
     {
         const string userId = "usr_test2";
 
-        var results = await _settings.UploadUserTerraformFilesAsync(userId, new List<TerraformFileUploadEntryDto>
-        {
-            new() { FileName = "modules/network/main.tf", Content = "# network module" }
-        });
+        var (_, _, project, _) = await _settings.CreateUserTerraformProjectAsync(
+            userId, "Cluster Infra", new List<TerraformFileUploadEntryDto>
+            {
+                new() { FileName = "modules/network/main.tf", Content = "# network module" }
+            });
 
-        Assert.True(results[0].Accepted, results[0].Error);
-
-        var detail = await _settings.GetUserTerraformFileAsync(userId, "modules/network/main.tf");
+        var detail = await _settings.GetProjectFileAsync(userId, project!.ProjectId, "modules/network/main.tf");
 
         Assert.NotNull(detail);
         Assert.Equal("# network module", detail!.Content);
     }
 
     [Fact]
-    public async Task Upload_IsIsolatedPerUser()
+    public async Task Projects_AreIsolatedPerUser()
     {
-        await _settings.UploadUserTerraformFilesAsync("usr_a", new List<TerraformFileUploadEntryDto>
-        {
-            new() { FileName = "main.tf", Content = "# a" }
-        });
+        await _settings.CreateUserTerraformProjectAsync(
+            "usr_a", "Project A", new List<TerraformFileUploadEntryDto>
+            {
+                new() { FileName = "main.tf", Content = "# a" }
+            });
 
-        var filesForOtherUser = await _settings.ListUserTerraformFilesAsync("usr_b");
+        var projectsForOtherUser = await _settings.ListUserTerraformProjectsAsync("usr_b");
 
-        Assert.Empty(filesForOtherUser);
+        Assert.Empty(projectsForOtherUser);
     }
 
     [Fact]
-    public async Task Upload_RejectsAnInvalidFileNameButAcceptsTheRest()
+    public async Task TwoProjects_CanEachHaveTheirOwnSameNamedFile()
     {
         const string userId = "usr_test3";
 
-        var results = await _settings.UploadUserTerraformFilesAsync(userId, new List<TerraformFileUploadEntryDto>
+        var (_, _, projectA, _) = await _settings.CreateUserTerraformProjectAsync(
+            userId, "Web App", new List<TerraformFileUploadEntryDto>
+            {
+                new() { FileName = "main.tf", Content = "# web app version" }
+            });
+
+        var (_, _, projectB, _) = await _settings.CreateUserTerraformProjectAsync(
+            userId, "Cluster Infra", new List<TerraformFileUploadEntryDto>
+            {
+                new() { FileName = "main.tf", Content = "# cluster version" }
+            });
+
+        var fileA = await _settings.GetProjectFileAsync(userId, projectA!.ProjectId, "main.tf");
+        var fileB = await _settings.GetProjectFileAsync(userId, projectB!.ProjectId, "main.tf");
+
+        Assert.Equal("# web app version", fileA!.Content);
+        Assert.Equal("# cluster version", fileB!.Content);
+
+        var projects = await _settings.ListUserTerraformProjectsAsync(userId);
+        Assert.Equal(2, projects.Count);
+    }
+
+    [Fact]
+    public async Task Upload_AcceptsWidenedFileTypesLikeTfvarsAndMarkdown()
+    {
+        const string userId = "usr_test4";
+
+        var (success, _, project, fileResults) = await _settings.CreateUserTerraformProjectAsync(
+            userId, "Web App", new List<TerraformFileUploadEntryDto>
+            {
+                new() { FileName = "main.tf", Content = "# tf" },
+                new() { FileName = "terraform.tfvars", Content = "location = \"eastus\"" },
+                new() { FileName = "README.md", Content = "# docs" },
+                new() { FileName = ".gitignore", Content = ".terraform/" },
+                new() { FileName = "notes.txt", Content = "not allowed" }
+            });
+
+        Assert.True(success);
+        Assert.Equal(4, project!.Files.Count);
+        Assert.True(fileResults.Single(r => r.FileName == "notes.txt").Accepted == false);
+    }
+
+    [Fact]
+    public async Task UploadFilesToProject_RejectsAnInvalidPathButAcceptsTheRest()
+    {
+        const string userId = "usr_test5";
+
+        var (_, _, project, _) = await _settings.CreateUserTerraformProjectAsync(
+            userId, "Web App", new List<TerraformFileUploadEntryDto>
+            {
+                new() { FileName = "main.tf", Content = "# ok" }
+            });
+
+        var results = await _settings.UploadFilesToProjectAsync(userId, project!.ProjectId, new List<TerraformFileUploadEntryDto>
         {
-            new() { FileName = "main.tf", Content = "# ok" },
+            new() { FileName = "variables.tf", Content = "# ok too" },
             new() { FileName = "../../etc/passwd.tf", Content = "# bad" }
         });
 
-        Assert.Equal(2, results.Count);
-        Assert.True(results.Single(r => r.FileName == "main.tf").Accepted);
+        Assert.NotNull(results);
+        Assert.True(results!.Single(r => r.FileName == "variables.tf").Accepted);
         Assert.False(results.Single(r => r.FileName == "../../etc/passwd.tf").Accepted);
 
-        var files = await _settings.ListUserTerraformFilesAsync(userId);
-        Assert.Single(files);
+        var detail = await _settings.GetUserTerraformProjectAsync(userId, project.ProjectId);
+        Assert.Equal(2, detail!.Files.Count);
+    }
+
+    [Fact]
+    public async Task UploadFilesToProject_ReturnsNullForAMissingProject()
+    {
+        var results = await _settings.UploadFilesToProjectAsync(
+            "usr_test6", Guid.NewGuid(), new List<TerraformFileUploadEntryDto>
+            {
+                new() { FileName = "main.tf", Content = "x" }
+            });
+
+        Assert.Null(results);
     }
 
     [Fact]
     public async Task ReUpload_UpsertsRatherThanDuplicating()
     {
-        const string userId = "usr_test4";
+        const string userId = "usr_test7";
 
-        await _settings.UploadUserTerraformFilesAsync(userId, new List<TerraformFileUploadEntryDto>
-        {
-            new() { FileName = "main.tf", Content = "v1" }
-        });
+        var (_, _, project, _) = await _settings.CreateUserTerraformProjectAsync(
+            userId, "Web App", new List<TerraformFileUploadEntryDto>
+            {
+                new() { FileName = "main.tf", Content = "v1" }
+            });
 
-        await _settings.UploadUserTerraformFilesAsync(userId, new List<TerraformFileUploadEntryDto>
+        await _settings.UploadFilesToProjectAsync(userId, project!.ProjectId, new List<TerraformFileUploadEntryDto>
         {
             new() { FileName = "main.tf", Content = "v2" }
         });
 
-        var files = await _settings.ListUserTerraformFilesAsync(userId);
-        Assert.Single(files);
+        var detail = await _settings.GetUserTerraformProjectAsync(userId, project.ProjectId);
+        Assert.Single(detail!.Files);
 
-        var detail = await _settings.GetUserTerraformFileAsync(userId, "main.tf");
-        Assert.Equal("v2", detail!.Content);
+        var file = await _settings.GetProjectFileAsync(userId, project.ProjectId, "main.tf");
+        Assert.Equal("v2", file!.Content);
+    }
+
+    [Fact]
+    public async Task DeleteProject_RemovesItAndItsFiles()
+    {
+        const string userId = "usr_test8";
+
+        var (_, _, project, _) = await _settings.CreateUserTerraformProjectAsync(
+            userId, "Web App", new List<TerraformFileUploadEntryDto>
+            {
+                new() { FileName = "main.tf", Content = "x" }
+            });
+
+        var deleted = await _settings.DeleteUserTerraformProjectAsync(userId, project!.ProjectId);
+        Assert.True(deleted);
+
+        Assert.Empty(await _settings.ListUserTerraformProjectsAsync(userId));
+        Assert.Null(await _settings.GetUserTerraformProjectAsync(userId, project.ProjectId));
     }
 }

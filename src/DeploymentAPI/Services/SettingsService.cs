@@ -903,41 +903,153 @@ public class SettingsService
         }
     }
 
-    // Personal Terraform file storage - the JSONB-blob-backed sibling of
+    // Personal Terraform PROJECT storage - the JSONB-blob-backed sibling of
     // TerraformFileService's org/Postgres table (see that class's header
     // comment for the shared "storage and editing only, no execution"
-    // reasoning; this shares its filename validation via
-    // TerraformFileNaming but not its storage). A flat per-user array
-    // rather than a table, matching every other per-user credential/data
-    // section in this file - this feature doesn't need relational
-    // membership/permission joins the way the org version does.
-    private const int MaxUserTerraformFiles = 100;
-    private const int MaxUserTerraformFileContentLength = 500_000; // ~500 KB of HCL text is a generous ceiling
+    // reasoning for the file-CRUD half of this; this shares its filename
+    // validation via TerraformFileNaming but not its storage). Each
+    // uploaded folder becomes its own project - its own file tree, own
+    // Explain/Preview/Plan/Apply - rather than one flat list every upload
+    // merged into, which meant two projects that each had their own
+    // main.tf silently overwrote each other's. A per-user array of
+    // projects, each holding its own array of files, matching every other
+    // per-user data section in this file - no relational membership/
+    // permission joins needed the way the org version has.
+    private const int MaxUserTerraformProjects = 20;
+    private const int MaxProjectTerraformFiles = 100;
+    private const int MaxProjectTerraformFileContentLength = 500_000; // ~500 KB of HCL text is a generous ceiling
 
-    public async Task<List<PersonalTerraformFileSummaryDto>> ListUserTerraformFilesAsync(string key)
+    public async Task<List<TerraformProjectSummaryDto>> ListUserTerraformProjectsAsync(string key)
     {
         var root = await ReadRootAsync();
-        var files = (root["UserTerraformFiles"] as JObject)?[key] as JArray;
+        var projects = (root["UserTerraformProjects"] as JObject)?[key] as JArray;
 
-        if (files == null)
-            return new List<PersonalTerraformFileSummaryDto>();
+        if (projects == null)
+            return new List<TerraformProjectSummaryDto>();
 
-        return files
+        return projects
             .OfType<JObject>()
-            .Select(f => new PersonalTerraformFileSummaryDto
-            {
-                FileName = f["FileName"]?.ToString() ?? string.Empty,
-                ContentLength = (f["Content"]?.ToString() ?? string.Empty).Length,
-                UpdatedAtUtc = f["UpdatedAtUtc"]?.ToObject<DateTime>() ?? default
-            })
-            .OrderBy(f => f.FileName, StringComparer.OrdinalIgnoreCase)
+            .Select(ToProjectSummary)
+            .OrderByDescending(p => p.UpdatedAtUtc)
             .ToList();
     }
 
-    public async Task<PersonalTerraformFileDetailDto?> GetUserTerraformFileAsync(string key, string fileName)
+    private static TerraformProjectSummaryDto ToProjectSummary(JObject project) => new()
+    {
+        ProjectId = project["ProjectId"]?.ToObject<Guid>() ?? Guid.Empty,
+        Name = project["Name"]?.ToString() ?? string.Empty,
+        FileCount = (project["Files"] as JArray)?.Count ?? 0,
+        CreatedAtUtc = project["CreatedAtUtc"]?.ToObject<DateTime>() ?? default,
+        UpdatedAtUtc = project["UpdatedAtUtc"]?.ToObject<DateTime>() ?? default
+    };
+
+    private static JObject? FindProject(JArray? projects, Guid projectId) =>
+        projects?.OfType<JObject>()
+            .FirstOrDefault(p => p["ProjectId"]?.ToObject<Guid>() == projectId);
+
+    public async Task<TerraformProjectDetailDto?> GetUserTerraformProjectAsync(string key, Guid projectId)
     {
         var root = await ReadRootAsync();
-        var files = (root["UserTerraformFiles"] as JObject)?[key] as JArray;
+        var projects = (root["UserTerraformProjects"] as JObject)?[key] as JArray;
+        var project = FindProject(projects, projectId);
+
+        if (project == null)
+            return null;
+
+        var summary = ToProjectSummary(project);
+        var files = (project["Files"] as JArray) ?? new JArray();
+
+        return new TerraformProjectDetailDto
+        {
+            ProjectId = summary.ProjectId,
+            Name = summary.Name,
+            FileCount = summary.FileCount,
+            CreatedAtUtc = summary.CreatedAtUtc,
+            UpdatedAtUtc = summary.UpdatedAtUtc,
+            Files = files.OfType<JObject>().Select(ToFileSummary)
+                .OrderBy(f => f.FileName, StringComparer.OrdinalIgnoreCase).ToList()
+        };
+    }
+
+    private static PersonalTerraformFileSummaryDto ToFileSummary(JObject f) => new()
+    {
+        FileName = f["FileName"]?.ToString() ?? string.Empty,
+        ContentLength = (f["Content"]?.ToString() ?? string.Empty).Length,
+        UpdatedAtUtc = f["UpdatedAtUtc"]?.ToObject<DateTime>() ?? default
+    };
+
+    // Creates a new project from an upload - the "pick a folder, it becomes
+    // a project" flow. Validates every file the same way
+    // UploadFilesToProjectAsync does; a project with zero accepted files
+    // (every one rejected) is still created empty rather than silently
+    // discarded, since the caller's own per-file accept/reject list already
+    // explains why nothing landed.
+    public async Task<(bool Success, string? Error, TerraformProjectDetailDto? Project, List<(string FileName, bool Accepted, string? Error)> FileResults)>
+        CreateUserTerraformProjectAsync(string key, string? name, List<TerraformFileUploadEntryDto> uploads)
+    {
+        var trimmedName = (name ?? string.Empty).Trim();
+
+        if (string.IsNullOrWhiteSpace(trimmedName))
+            return (false, "A project name is required.", null, new());
+
+        if (trimmedName.Length > 120)
+            return (false, "Project name is too long.", null, new());
+
+        using var _ = await AcquireWriteLockAsync();
+
+        var root = await ReadRootAsync();
+        var allProjects = root["UserTerraformProjects"] as JObject ?? new JObject();
+        var projects = allProjects[key] as JArray ?? new JArray();
+
+        if (projects.Count >= MaxUserTerraformProjects)
+            return (false, $"You've reached the {MaxUserTerraformProjects}-project limit.", null, new());
+
+        var now = DateTime.UtcNow;
+        var files = new JArray();
+
+        var fileResults = ApplyUploads(files, uploads, now, MaxProjectTerraformFiles, MaxProjectTerraformFileContentLength);
+
+        var project = new JObject
+        {
+            ["ProjectId"] = Guid.NewGuid(),
+            ["Name"] = trimmedName,
+            ["CreatedAtUtc"] = now,
+            ["UpdatedAtUtc"] = now,
+            ["Files"] = files
+        };
+
+        projects.Add(project);
+        allProjects[key] = projects;
+        root["UserTerraformProjects"] = allProjects;
+        await WriteRootAsync(root);
+
+        _log.LogInfo("Settings", $"A Terraform project (\"{trimmedName}\") was created with {fileResults.Count(r => r.Item2)} file(s).");
+
+        return (true, null, await GetUserTerraformProjectAsync(key, (Guid)project["ProjectId"]!), fileResults);
+    }
+
+    public async Task<bool> DeleteUserTerraformProjectAsync(string key, Guid projectId)
+    {
+        using var _ = await AcquireWriteLockAsync();
+
+        var root = await ReadRootAsync();
+        var projects = (root["UserTerraformProjects"] as JObject)?[key] as JArray;
+        var project = FindProject(projects, projectId);
+
+        if (project == null)
+            return false;
+
+        projects!.Remove(project);
+        await WriteRootAsync(root);
+        return true;
+    }
+
+    public async Task<PersonalTerraformFileDetailDto?> GetProjectFileAsync(string key, Guid projectId, string fileName)
+    {
+        var root = await ReadRootAsync();
+        var projects = (root["UserTerraformProjects"] as JObject)?[key] as JArray;
+        var project = FindProject(projects, projectId);
+        var files = project?["Files"] as JArray;
 
         var entry = files?.OfType<JObject>()
             .FirstOrDefault(f => string.Equals(f["FileName"]?.ToString(), fileName, StringComparison.OrdinalIgnoreCase));
@@ -956,23 +1068,46 @@ public class SettingsService
         };
     }
 
-    // Upsert-by-filename (unlike the org panel's strict create-only) - see
+    // Upsert-by-path (unlike the org panel's strict create-only) - see
     // TerraformFileUploadEntryDto's own comment for why: re-uploading the
     // same local folder after editing it is the expected everyday flow for
-    // this picker, not an error case. Returns per-file accept/reject so the
-    // caller can report exactly which files (if any) were skipped and why,
-    // rather than failing the whole batch for one bad name.
-    public async Task<List<(string FileName, bool Accepted, string? Error)>> UploadUserTerraformFilesAsync(
-        string key, List<TerraformFileUploadEntryDto> uploads)
+    // this picker, not an error case. Returns null (not an empty list) when
+    // the project itself doesn't exist, so the controller can tell "no such
+    // project" apart from "uploaded zero files".
+    public async Task<List<(string FileName, bool Accepted, string? Error)>?> UploadFilesToProjectAsync(
+        string key, Guid projectId, List<TerraformFileUploadEntryDto> uploads)
     {
         using var _ = await AcquireWriteLockAsync();
 
         var root = await ReadRootAsync();
-        var allFiles = root["UserTerraformFiles"] as JObject ?? new JObject();
-        var files = allFiles[key] as JArray ?? new JArray();
+        var projects = (root["UserTerraformProjects"] as JObject)?[key] as JArray;
+        var project = FindProject(projects, projectId);
 
-        var results = new List<(string, bool, string?)>();
+        if (project == null)
+            return null;
+
+        var files = project["Files"] as JArray ?? new JArray();
         var now = DateTime.UtcNow;
+
+        var results = ApplyUploads(files, uploads, now, MaxProjectTerraformFiles, MaxProjectTerraformFileContentLength);
+
+        project["Files"] = files;
+        project["UpdatedAtUtc"] = now;
+        await WriteRootAsync(root);
+
+        _log.LogInfo("Settings", $"{results.Count(r => r.Item2)} Terraform file(s) uploaded to a project.");
+
+        return results;
+    }
+
+    // Shared by CreateUserTerraformProjectAsync (a fresh, empty Files
+    // array) and UploadFilesToProjectAsync (an existing project's array) -
+    // validates and upserts each entry in place, same per-file accept/
+    // reject reasoning either way.
+    private static List<(string FileName, bool Accepted, string? Error)> ApplyUploads(
+        JArray files, List<TerraformFileUploadEntryDto> uploads, DateTime now, int maxFiles, int maxContentLength)
+    {
+        var results = new List<(string, bool, string?)>();
 
         foreach (var upload in uploads)
         {
@@ -992,9 +1127,9 @@ public class SettingsService
             var trimmedName = normalized!;
             var content = upload.Content ?? string.Empty;
 
-            if (content.Length > MaxUserTerraformFileContentLength)
+            if (content.Length > maxContentLength)
             {
-                results.Add((trimmedName, false, $"File is too large (over {MaxUserTerraformFileContentLength / 1000} KB)."));
+                results.Add((trimmedName, false, $"File is too large (over {maxContentLength / 1000} KB)."));
                 continue;
             }
 
@@ -1008,9 +1143,9 @@ public class SettingsService
             }
             else
             {
-                if (files.Count >= MaxUserTerraformFiles)
+                if (files.Count >= maxFiles)
                 {
-                    results.Add((trimmedName, false, $"You've reached the {MaxUserTerraformFiles}-file limit for this page."));
+                    results.Add((trimmedName, false, $"You've reached the {maxFiles}-file limit for this project."));
                     continue;
                 }
 
@@ -1025,21 +1160,17 @@ public class SettingsService
             results.Add((trimmedName, true, null));
         }
 
-        allFiles[key] = files;
-        root["UserTerraformFiles"] = allFiles;
-        await WriteRootAsync(root);
-
-        _log.LogInfo("Settings", $"{results.Count(r => r.Item2)} Terraform file(s) uploaded for a session.");
-
         return results;
     }
 
-    public async Task<bool> UpdateUserTerraformFileAsync(string key, string fileName, string? content)
+    public async Task<bool> UpdateProjectFileAsync(string key, Guid projectId, string fileName, string? content)
     {
         using var _ = await AcquireWriteLockAsync();
 
         var root = await ReadRootAsync();
-        var files = (root["UserTerraformFiles"] as JObject)?[key] as JArray;
+        var projects = (root["UserTerraformProjects"] as JObject)?[key] as JArray;
+        var project = FindProject(projects, projectId);
+        var files = project?["Files"] as JArray;
 
         var entry = files?.OfType<JObject>()
             .FirstOrDefault(f => string.Equals(f["FileName"]?.ToString(), fileName, StringComparison.OrdinalIgnoreCase));
@@ -1047,19 +1178,24 @@ public class SettingsService
         if (entry == null)
             return false;
 
+        var now = DateTime.UtcNow;
+
         entry["Content"] = content ?? string.Empty;
-        entry["UpdatedAtUtc"] = DateTime.UtcNow;
+        entry["UpdatedAtUtc"] = now;
+        project!["UpdatedAtUtc"] = now;
 
         await WriteRootAsync(root);
         return true;
     }
 
-    public async Task<bool> DeleteUserTerraformFileAsync(string key, string fileName)
+    public async Task<bool> DeleteProjectFileAsync(string key, Guid projectId, string fileName)
     {
         using var _ = await AcquireWriteLockAsync();
 
         var root = await ReadRootAsync();
-        var files = (root["UserTerraformFiles"] as JObject)?[key] as JArray;
+        var projects = (root["UserTerraformProjects"] as JObject)?[key] as JArray;
+        var project = FindProject(projects, projectId);
+        var files = project?["Files"] as JArray;
 
         var entry = files?.OfType<JObject>()
             .FirstOrDefault(f => string.Equals(f["FileName"]?.ToString(), fileName, StringComparison.OrdinalIgnoreCase));
@@ -1068,18 +1204,21 @@ public class SettingsService
             return false;
 
         files!.Remove(entry);
+        project!["UpdatedAtUtc"] = DateTime.UtcNow;
         await WriteRootAsync(root);
         return true;
     }
 
-    // Full content for every stored file at once - used only by
+    // Full content for every file in one project at once - used by
     // TerraformExecutionService to materialize a real working directory for
-    // plan/apply (a single blob read, rather than N individual
-    // GetUserTerraformFileAsync round trips).
-    public async Task<List<PersonalTerraformFileDetailDto>> GetAllUserTerraformFilesAsync(string key)
+    // plan/apply, and by the preview/explain endpoints (a single blob read,
+    // rather than N individual GetProjectFileAsync round trips).
+    public async Task<List<PersonalTerraformFileDetailDto>> GetAllProjectFilesAsync(string key, Guid projectId)
     {
         var root = await ReadRootAsync();
-        var files = (root["UserTerraformFiles"] as JObject)?[key] as JArray;
+        var projects = (root["UserTerraformProjects"] as JObject)?[key] as JArray;
+        var project = FindProject(projects, projectId);
+        var files = project?["Files"] as JArray;
 
         if (files == null)
             return new List<PersonalTerraformFileDetailDto>();

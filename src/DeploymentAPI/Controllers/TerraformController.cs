@@ -8,19 +8,20 @@ namespace DeploymentAPI.Controllers;
 // Personal (non-org) Terraform page - a standalone top-level sidebar page,
 // not nested under Settings/Organizations and not tied to picking an
 // organization first (see TerraformFilesController for that org-scoped
-// sibling, which stays storage/editing-only). Every file/credential here
-// belongs to the calling user alone (RequireAuth.RequireUserId is the only
-// scoping - no roles/permissions needed, unlike the org version).
+// sibling, which stays storage/editing-only). Every project/file/
+// credential here belongs to the calling user alone (RequireAuth.
+// RequireUserId is the only scoping - no roles/permissions needed, unlike
+// the org version).
 //
-// File storage/editing (credentials, files/*) is low-risk, same shape as
-// every other per-user credential section in this app. Plan/Apply are
-// deliberately different: they run the real terraform CLI against the
-// calling user's real Azure subscription (see TerraformExecutionService's
-// own header comment for the state-backend reasoning behind why that's
-// safe on this container's ephemeral disk), so both are PIN-gated the same
-// way saving the credentials themselves is - reading the decrypted client
-// secret to build the terraform environment is exactly the kind of action
-// CredentialGate exists for.
+// Each uploaded folder is its own PROJECT (own file tree, own Explain/
+// Preview/Plan/Apply) - see SettingsService's ListUserTerraformProjectsAsync
+// and friends for why that replaced one flat file list per user. Project
+// file CRUD is low-risk, same shape as every other per-user credential
+// section in this app. Preview is a static, no-Azure-calls "fake plan" (see
+// TerraformResourceExtractor); Plan/Apply are the real thing, and PIN-gated
+// the same way saving the credentials themselves is - reading the decrypted
+// client secret to build the terraform environment is exactly the kind of
+// action CredentialGate exists for.
 [ApiController]
 [Route("api/terraform")]
 public class TerraformController : ControllerBase
@@ -101,39 +102,75 @@ public class TerraformController : ControllerBase
         return Ok();
     }
 
-    [HttpGet("files")]
-    public async Task<IActionResult> ListFiles()
+    [HttpGet("projects")]
+    public async Task<IActionResult> ListProjects()
     {
         var (key, denied) = RequireAuth.RequireUserId(this);
         if (denied != null) return denied;
 
-        return Ok(new { files = await _settings.ListUserTerraformFilesAsync(key!) });
+        return Ok(new { projects = await _settings.ListUserTerraformProjectsAsync(key!) });
     }
 
-    // {*fileName} (catch-all) rather than {fileName} - a stored name can now
-    // contain "/" (see TerraformFileNaming.ValidateRelativePath), which a
-    // plain route parameter would otherwise split into extra path segments.
-    [HttpGet("files/{*fileName}")]
-    public async Task<IActionResult> GetFile(string fileName)
+    // Creates a new project from an upload - "pick a folder, it becomes its
+    // own project" (see CreateTerraformProjectRequestDto). Redirect-to-the-
+    // new-project's-page is a frontend concern; this just returns the
+    // created project (with its ProjectId) plus the same per-file accept/
+    // reject detail UploadFiles below returns.
+    [HttpPost("projects")]
+    public async Task<IActionResult> CreateProject(CreateTerraformProjectRequestDto request)
     {
         var (key, denied) = RequireAuth.RequireUserId(this);
         if (denied != null) return denied;
 
-        var file = await _settings.GetUserTerraformFileAsync(key!, fileName);
+        var (success, error, project, fileResults) =
+            await _settings.CreateUserTerraformProjectAsync(key!, request.Name, request.Files);
 
-        if (file == null)
-            return NotFound(new { message = "File not found." });
+        if (!success)
+            return Ok(new { success = false, message = error });
 
-        return Ok(file);
+        return Ok(new
+        {
+            success = true,
+            project,
+            accepted = fileResults.Where(r => r.Accepted).Select(r => r.FileName).ToList(),
+            rejected = fileResults.Where(r => !r.Accepted).Select(r => new { fileName = r.FileName, error = r.Error }).ToList()
+        });
     }
 
-    // Bulk upload - the "pick multiple .tf files (or a whole folder) from my
-    // local Terraform project" flow. Upsert-by-path (see
-    // UploadUserTerraformFilesAsync's own comment), so re-uploading the same
-    // folder after local edits just refreshes what's stored rather than
-    // erroring on "already exists".
-    [HttpPost("files")]
-    public async Task<IActionResult> UploadFiles(UploadTerraformFilesRequestDto request)
+    [HttpGet("projects/{projectId:guid}")]
+    public async Task<IActionResult> GetProject(Guid projectId)
+    {
+        var (key, denied) = RequireAuth.RequireUserId(this);
+        if (denied != null) return denied;
+
+        var project = await _settings.GetUserTerraformProjectAsync(key!, projectId);
+
+        if (project == null)
+            return NotFound(new { message = "Project not found." });
+
+        return Ok(project);
+    }
+
+    [HttpDelete("projects/{projectId:guid}")]
+    public async Task<IActionResult> DeleteProject(Guid projectId)
+    {
+        var (key, denied) = RequireAuth.RequireUserId(this);
+        if (denied != null) return denied;
+
+        var deleted = await _settings.DeleteUserTerraformProjectAsync(key!, projectId);
+
+        if (!deleted)
+            return NotFound(new { message = "Project not found." });
+
+        return Ok(new { success = true });
+    }
+
+    // Add/refresh files within an EXISTING project - the same picker as
+    // project creation, just scoped to one already-created project (e.g.
+    // re-syncing after local edits, or adding files that were missed the
+    // first time).
+    [HttpPost("projects/{projectId:guid}/files")]
+    public async Task<IActionResult> UploadFiles(Guid projectId, UploadTerraformFilesRequestDto request)
     {
         var (key, denied) = RequireAuth.RequireUserId(this);
         if (denied != null) return denied;
@@ -141,7 +178,10 @@ public class TerraformController : ControllerBase
         if (request.Files.Count == 0)
             return BadRequest(new { message = "No files were provided." });
 
-        var results = await _settings.UploadUserTerraformFilesAsync(key!, request.Files);
+        var results = await _settings.UploadFilesToProjectAsync(key!, projectId, request.Files);
+
+        if (results == null)
+            return NotFound(new { message = "Project not found." });
 
         return Ok(new
         {
@@ -150,13 +190,30 @@ public class TerraformController : ControllerBase
         });
     }
 
-    [HttpPut("files/{*fileName}")]
-    public async Task<IActionResult> UpdateFile(string fileName, UpdateTerraformFileContentDto request)
+    // {*fileName} (catch-all) rather than {fileName} - a stored path can
+    // contain "/" (see TerraformFileNaming.ValidateRelativePath), which a
+    // plain route parameter would otherwise split into extra path segments.
+    [HttpGet("projects/{projectId:guid}/files/{*fileName}")]
+    public async Task<IActionResult> GetFile(Guid projectId, string fileName)
     {
         var (key, denied) = RequireAuth.RequireUserId(this);
         if (denied != null) return denied;
 
-        var updated = await _settings.UpdateUserTerraformFileAsync(key!, fileName, request.Content);
+        var file = await _settings.GetProjectFileAsync(key!, projectId, fileName);
+
+        if (file == null)
+            return NotFound(new { message = "File not found." });
+
+        return Ok(file);
+    }
+
+    [HttpPut("projects/{projectId:guid}/files/{*fileName}")]
+    public async Task<IActionResult> UpdateFile(Guid projectId, string fileName, UpdateTerraformFileContentDto request)
+    {
+        var (key, denied) = RequireAuth.RequireUserId(this);
+        if (denied != null) return denied;
+
+        var updated = await _settings.UpdateProjectFileAsync(key!, projectId, fileName, request.Content);
 
         if (!updated)
             return NotFound(new { message = "File not found." });
@@ -164,13 +221,13 @@ public class TerraformController : ControllerBase
         return Ok(new { success = true });
     }
 
-    [HttpDelete("files/{*fileName}")]
-    public async Task<IActionResult> DeleteFile(string fileName)
+    [HttpDelete("projects/{projectId:guid}/files/{*fileName}")]
+    public async Task<IActionResult> DeleteFile(Guid projectId, string fileName)
     {
         var (key, denied) = RequireAuth.RequireUserId(this);
         if (denied != null) return denied;
 
-        var deleted = await _settings.DeleteUserTerraformFileAsync(key!, fileName);
+        var deleted = await _settings.DeleteProjectFileAsync(key!, projectId, fileName);
 
         if (!deleted)
             return NotFound(new { message = "File not found." });
@@ -183,16 +240,16 @@ public class TerraformController : ControllerBase
     // credential Deployment Copilot uses) and asks for a plain-English
     // explanation. No tools, no Azure calls, no terraform - this never
     // touches your subscription, it only reads text you already uploaded.
-    [HttpPost("explain")]
-    public async Task<IActionResult> Explain()
+    [HttpPost("projects/{projectId:guid}/explain")]
+    public async Task<IActionResult> Explain(Guid projectId)
     {
         var (key, denied) = RequireAuth.RequireUserId(this);
         if (denied != null) return denied;
 
-        var files = await _settings.GetAllUserTerraformFilesAsync(key!);
+        var files = await _settings.GetAllProjectFilesAsync(key!, projectId);
 
         if (files.Count == 0)
-            return Ok(new { success = false, message = "No Terraform files are stored yet - upload your .tf files first." });
+            return Ok(new { success = false, message = "No Terraform files are stored in this project yet - upload your .tf files first." });
 
         var creds = await _settings.GetAiAssistantCredentialsAsync();
 
@@ -237,12 +294,74 @@ public class TerraformController : ControllerBase
         return Ok(new { success = true, explanation = result.Reply });
     }
 
+    // The "fake plan" - deterministic resource extraction (see
+    // TerraformResourceExtractor's own header comment: regex over stored
+    // text, not a real parse, never terraform, never Azure) plus an
+    // optional AI narrative built from that same extracted list. Safe to
+    // call with no Terraform credentials configured at all, and safe to
+    // call as often as you like - nothing here is rate-limited by risk the
+    // way real Plan/Apply are, because nothing here can change anything.
+    [HttpPost("projects/{projectId:guid}/preview")]
+    public async Task<IActionResult> Preview(Guid projectId)
+    {
+        var (key, denied) = RequireAuth.RequireUserId(this);
+        if (denied != null) return denied;
+
+        var files = await _settings.GetAllProjectFilesAsync(key!, projectId);
+
+        if (files.Count == 0)
+            return Ok(new { success = false, message = "No Terraform files are stored in this project yet - upload your .tf files first." });
+
+        var resources = TerraformResourceExtractor.Extract(files);
+
+        string? narrative = null;
+
+        var creds = await _settings.GetAiAssistantCredentialsAsync();
+
+        if (creds.IsConfigured && resources.Count > 0)
+        {
+            var resourceList = string.Join(
+                "\n",
+                resources.Select(r => $"- {r.ResourceType} \"{r.LocalName}\" (file: {r.FileName})" +
+                    (r.DeclaredName != null ? $" -> name = \"{r.DeclaredName}\"" : " -> name is not a literal string (variable/expression)")));
+
+            const string systemInstruction =
+                "You are previewing what a Terraform configuration would create, for someone about to " +
+                "decide whether to run a real terraform plan against their Azure subscription. You are " +
+                "given a plain list of resource blocks already extracted from their files (type, local " +
+                "name, and declared \"name\" attribute where it's a literal string). Write a short, " +
+                "concrete summary of what would be created (e.g. \"1 Resource Group, 1 App Service Plan, " +
+                "1 Linux Web App named app-example\"), grouped sensibly, in plain English. Do not invent " +
+                "resources beyond this list, and do not claim to know the actual values of any name shown " +
+                "as \"not a literal string\" - say it depends on a variable instead. You have no live " +
+                "Azure state and are not running terraform.";
+
+            var history = new List<AiChatMessageDto>
+            {
+                new() { Role = "user", Content = "Extracted resources:\n" + resourceList }
+            };
+
+            var result = await _aiResolver.Resolve(creds.Provider).ChatAsync(
+                systemInstruction,
+                history,
+                new List<AiToolDefinition>(),
+                (_, _) => Task.FromResult(string.Empty),
+                creds.ApiKey!,
+                creds.Model);
+
+            if (result.Success)
+                narrative = result.Reply;
+        }
+
+        return Ok(new { success = true, resources, narrative });
+    }
+
     // Real execution - see TerraformExecutionService's own header comment
     // for the full reasoning (state backend requirement, plan/apply
     // separation, etc). PIN-gated: this decrypts and uses the real client
     // secret to talk to Azure.
-    [HttpPost("plan")]
-    public async Task<IActionResult> Plan()
+    [HttpPost("projects/{projectId:guid}/plan")]
+    public async Task<IActionResult> Plan(Guid projectId)
     {
         if (await CredentialGate.DenyUnlessUnlockedAsync(this, _settings, _activity, "terraform") is IActionResult gateDenied)
             return gateDenied;
@@ -250,7 +369,7 @@ public class TerraformController : ControllerBase
         var (key, denied) = RequireAuth.RequireUserId(this);
         if (denied != null) return denied;
 
-        var (success, error, planId, output, summaryLine) = await _execution.PlanAsync(key!);
+        var (success, error, planId, output, summaryLine) = await _execution.PlanAsync(key!, projectId);
 
         if (!success)
             return Ok(new { success = false, message = error });
@@ -258,8 +377,8 @@ public class TerraformController : ControllerBase
         return Ok(new { success = true, planId, output, summaryLine });
     }
 
-    [HttpPost("apply")]
-    public async Task<IActionResult> Apply(TerraformApplyRequestDto request)
+    [HttpPost("projects/{projectId:guid}/apply")]
+    public async Task<IActionResult> Apply(Guid projectId, TerraformApplyRequestDto request)
     {
         if (await CredentialGate.DenyUnlessUnlockedAsync(this, _settings, _activity, "terraform") is IActionResult gateDenied)
             return gateDenied;
@@ -267,10 +386,10 @@ public class TerraformController : ControllerBase
         var (key, denied) = RequireAuth.RequireUserId(this);
         if (denied != null) return denied;
 
-        var (success, error, output) = await _execution.ApplyAsync(key!, request.PlanId, request.ConfirmationText);
+        var (success, error, output) = await _execution.ApplyAsync(key!, projectId, request.PlanId, request.ConfirmationText);
 
         var actor = await AdminGate.ResolveCallerLoginAsync(this) ?? $"session {key![..Math.Min(8, key.Length)]}";
-        _log.LogInfo("Terraform", $"{actor} {(success ? "applied" : "attempted to apply")} their personal Terraform plan.");
+        _log.LogInfo("Terraform", $"{actor} {(success ? "applied" : "attempted to apply")} a personal Terraform plan.");
 
         if (!success)
             return Ok(new { success = false, message = error });
