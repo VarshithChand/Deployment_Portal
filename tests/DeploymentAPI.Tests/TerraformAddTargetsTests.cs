@@ -110,6 +110,81 @@ public class TerraformAddTargetsTests
         Assert.Equal(2, target.ExistingCount);
     }
 
+    // Same Case B shape as above, but the module argument is passed straight
+    // through under the SAME name on both sides - e.g. `app_service_names =
+    // var.app_service_names` - a very common real-world Terraform pattern
+    // (found live in the user's own "web app creation" project). This used
+    // to defeat resolution entirely: the resource's raw for_each expression
+    // ("var.app_service_names") was "directly resolvable" against the
+    // project-level variable of the same name, which incorrectly looked
+    // like Case A already covered it (it doesn't - the module call itself
+    // has no for_each), silently dropping the target to zero.
+    [Fact]
+    public void BuildAddTargets_ResolvesAModuleArgumentPassedThroughUnderTheSameName()
+    {
+        var files = new[]
+        {
+            File("main.tf", """
+                module "webapps" {
+                  source             = "./modules/webapps"
+                  app_service_names  = var.app_service_names
+                }
+                """),
+            File("terraform.tfvars", """
+                app_service_names = ["app-a", "app-b"]
+                """),
+            File("modules/webapps/main.tf", """
+                resource "azurerm_windows_web_app" "this" {
+                  for_each = toset(var.app_service_names)
+                  name     = each.key
+                }
+                """)
+        };
+
+        var target = Assert.Single(TerraformResourceExtractor.BuildAddTargets(files));
+
+        Assert.Equal("azurerm_windows_web_app", target.ResourceType);
+        Assert.Equal("app_service_names", target.VariableName);
+        Assert.Equal("List", target.Shape);
+        Assert.Equal(2, target.ExistingCount);
+    }
+
+    // A resource-level for_each INSIDE a module that's ALSO for_each'd at
+    // the call site is a compound multiplication this app deliberately
+    // doesn't attempt to resolve (same "drop names, don't cross-product"
+    // posture as Extract()'s own Combine()) - Case A's own target for the
+    // module-level for_each is enough; Case B must not ALSO add a second,
+    // wrong target for the inner resource.
+    [Fact]
+    public void BuildAddTargets_DoesNotDoubleCountAResourceForEachInsideAnAlreadyForEachedModule()
+    {
+        var files = new[]
+        {
+            File("main.tf", """
+                module "web_apps" {
+                  source   = "./modules/web_app"
+                  for_each = var.web_apps
+                }
+                """),
+            File("terraform.tfvars", """
+                web_apps = {
+                  "group-a" = {}
+                }
+                """),
+            File("modules/web_app/main.tf", """
+                resource "azurerm_windows_web_app" "this" {
+                  for_each = toset(["always-one"])
+                  name     = each.key
+                }
+                """)
+        };
+
+        var target = Assert.Single(TerraformResourceExtractor.BuildAddTargets(files));
+
+        Assert.Equal("web_apps", target.VariableName);
+        Assert.Equal("Map", target.Shape);
+    }
+
     [Fact]
     public void BuildAddTargets_ReturnsNothingForAModuleWithNoForEach()
     {

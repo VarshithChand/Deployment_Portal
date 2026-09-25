@@ -162,6 +162,18 @@ public static class TerraformResourceExtractor
 
         var targets = new List<AddResourceTargetDto>();
 
+        // Folders whose module call is ITSELF for_each'd - tracked so Case B
+        // (below) can tell "this resource's multiplication is already
+        // accounted for by Case A, at the module level" apart from "this
+        // resource's for_each expression merely NAMES a variable that also
+        // happens to exist at the project level" (see Case B's own comment
+        // for why that distinction matters - real Terraform very commonly
+        // passes a module argument straight through under the SAME name,
+        // e.g. `app_service_names = var.app_service_names`, which makes the
+        // raw expression "directly resolvable" even though the module call
+        // has no for_each of its own and Case A never added a target for it).
+        var forEachedModuleFolders = new HashSet<string>(StringComparer.Ordinal);
+
         // Case A.
         foreach (var file in fileList.Where(f => f.FileName.EndsWith(".tf", StringComparison.OrdinalIgnoreCase)))
         {
@@ -179,6 +191,8 @@ public static class TerraformResourceExtractor
 
                 var forEachExpr = FindTopLevelValue(block, ForEachLinePattern);
                 if (forEachExpr == null) continue;
+
+                forEachedModuleFolders.Add(folder);
 
                 var resolved = ResolveAddableVariable(forEachExpr, variableValues, localRawValues);
                 if (resolved == null) continue;
@@ -206,6 +220,13 @@ public static class TerraformResourceExtractor
             var folder = GetContainingFolder(file.FileName);
             if (!moduleArgsByFolder.TryGetValue(folder, out var argSets)) continue;
 
+            // The containing module call already has its OWN for_each -
+            // Case A already added (or tried to add) a target for it, and a
+            // resource inside ALSO for_each'ing is a compound multiplication
+            // this app doesn't attempt to resolve (same "drop names rather
+            // than a cross product" posture as Extract()'s own Combine()).
+            if (forEachedModuleFolders.Contains(folder)) continue;
+
             foreach (Match header in ResourceHeaderPattern.Matches(file.Content))
             {
                 var blockStart = header.Index + header.Length - 1;
@@ -215,11 +236,6 @@ public static class TerraformResourceExtractor
                 var block = file.Content.Substring(blockStart, blockEnd - blockStart + 1);
                 var forEachExpr = FindTopLevelValue(block, ForEachLinePattern);
                 if (forEachExpr == null) continue;
-
-                // Already directly resolvable (a plain project-level var/
-                // local) - case A (or the ordinary Extract() path) already
-                // covers it, no module-argument hop needed.
-                if (ResolveAddableVariable(forEachExpr, variableValues, localRawValues) != null) continue;
 
                 var refMatch = ReferencePattern.Match(forEachExpr.Trim());
                 if (!refMatch.Success || refMatch.Groups[1].Value != "var") continue;
