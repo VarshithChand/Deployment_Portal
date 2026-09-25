@@ -216,6 +216,7 @@ builder.Services.AddScoped<OrgCredentialService>();
 builder.Services.AddScoped<InvitationService>();
 builder.Services.AddScoped<AuditLogService>();
 builder.Services.AddScoped<TerraformFileService>();
+builder.Services.AddScoped<TerraformExecutionService>();
 // Scoped for the same reason as DatabaseManagementService above - it
 // depends on SettingsService (Scoped) to read the Resend API key.
 builder.Services.AddScoped<IEmailService, ResendEmailService>();

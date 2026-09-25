@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from "react";
-import { FileCode, Upload } from "lucide-react";
+import { FileCode, FolderUp, Upload } from "lucide-react";
 
 import useToast from "../../hooks/useToast";
 import useConfirm from "../../hooks/useConfirm";
 import usePagination from "../../hooks/usePagination";
 import Pagination from "../common/Pagination";
+import { TERRAFORM_RESOURCE_TEMPLATES } from "../../utils/terraformTemplates";
 import {
     listTerraformFiles, getTerraformFile, uploadTerraformFiles, updateTerraformFile, deleteTerraformFile
 } from "../../services/terraformService";
@@ -28,17 +29,18 @@ function readFileAsText(file) {
     });
 }
 
-// Storage and editing only - see TerraformController.cs's own header
-// comment for why nothing here ever runs terraform plan/apply. The upload
-// picker reads each selected .tf file's text client-side (this app's
-// backend has no access to your local filesystem) and uploads its content;
-// re-selecting the same folder later just refreshes what's stored, since
-// uploads upsert by file name.
+// File CRUD - storage and editing only, no Azure calls (see
+// TerraformExecutionPanel for the real plan/apply/explain, which lives
+// alongside this section on the page). The upload picker reads each
+// selected .tf file's text client-side (this app's backend has no access
+// to your local filesystem) and uploads its content; re-selecting the same
+// folder later just refreshes what's stored, since uploads upsert by path.
 export default function TerraformFilesSection() {
 
     const toast = useToast();
     const { confirm, dialog } = useConfirm();
-    const fileInputRef = useRef(null);
+    const filesInputRef = useRef(null);
+    const folderInputRef = useRef(null);
 
     const [files, setFiles] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -63,29 +65,41 @@ export default function TerraformFilesSection() {
         page, setPage, pageCount, pageItems, totalCount, startIndex, endIndex
     } = usePagination(files, 10);
 
-    async function handlePickFiles(e) {
+    // Shared by both pickers below. A folder pick's File objects carry
+    // webkitRelativePath (e.g. "vipscloudpms-azure-infrastructure/modules/
+    // network/main.tf") - the folder's own top-level name is stripped so
+    // storage is relative to its CONTENTS ("modules/network/main.tf"),
+    // preserving subfolder structure so local module references
+    // (source = "./modules/network") keep resolving when a real plan/apply
+    // writes these files back out to disk. A plain file pick (no
+    // webkitRelativePath) just uses the bare filename, same as before.
+    async function processPicked(pickedList) {
 
-        const picked = Array.from(e.target.files || []);
-        e.target.value = "";
+        const picked = Array.from(pickedList || []);
 
         if (picked.length === 0) return;
 
-        const nonTf = picked.filter((f) => !/\.tf(\.json)?$/i.test(f.name));
+        const tfFiles = picked.filter((f) => /\.tf(\.json)?$/i.test(f.name));
+        const skippedCount = picked.length - tfFiles.length;
 
-        if (nonTf.length > 0) {
-            toast.show(`Skipped ${nonTf.length} file(s) that weren't .tf or .tf.json.`, "error");
+        if (skippedCount > 0) {
+            toast.show(`Skipped ${skippedCount} file(s) that weren't .tf or .tf.json.`, "error");
         }
 
-        const tfFiles = picked.filter((f) => /\.tf(\.json)?$/i.test(f.name));
-
         if (tfFiles.length === 0) return;
+
+        function relativePathFor(f) {
+            if (!f.webkitRelativePath) return f.name;
+            const parts = f.webkitRelativePath.split("/");
+            return parts.length > 1 ? parts.slice(1).join("/") : f.name;
+        }
 
         setUploading(true);
 
         try {
 
             const entries = await Promise.all(
-                tfFiles.map(async (f) => ({ fileName: f.name, content: await readFileAsText(f) }))
+                tfFiles.map(async (f) => ({ fileName: relativePathFor(f), content: await readFileAsText(f) }))
             );
 
             const result = await uploadTerraformFiles(entries);
@@ -111,6 +125,18 @@ export default function TerraformFilesSection() {
             setUploading(false);
         }
 
+    }
+
+    function handlePickFiles(e) {
+        const picked = e.target.files;
+        e.target.value = "";
+        processPicked(picked);
+    }
+
+    function handlePickFolder(e) {
+        const picked = e.target.files;
+        e.target.value = "";
+        processPicked(picked);
     }
 
     async function handleOpen(file) {
@@ -203,6 +229,30 @@ export default function TerraformFilesSection() {
 
                     <>
 
+                        <div className="form-group" style={{ marginBottom: 8 }}>
+                            <label htmlFor="tf-insert-template">Insert starter code</label>
+                            <select
+                                id="tf-insert-template"
+                                className="form-control"
+                                value=""
+                                onChange={(e) => {
+                                    const template = TERRAFORM_RESOURCE_TEMPLATES.find((t) => t.key === e.target.value);
+                                    if (!template) return;
+                                    setOpenContent((prev) => (prev && !prev.endsWith("\n") ? prev + "\n\n" : prev + "\n") + template.hcl);
+                                    e.target.value = "";
+                                }}
+                            >
+                                <option value="" disabled>Choose a resource to insert...</option>
+                                {TERRAFORM_RESOURCE_TEMPLATES.map((t) => (
+                                    <option key={t.key} value={t.key}>{t.label}</option>
+                                ))}
+                            </select>
+                            <p className="field-hint" style={{ marginTop: "6px" }}>
+                                Appends a starter HCL block with placeholder names to the end of this file -
+                                pure text, nothing is created in Azure until you run terraform yourself.
+                            </p>
+                        </div>
+
                         <textarea
                             className="form-control"
                             style={{ fontFamily: "monospace", fontSize: 13, minHeight: 360, whiteSpace: "pre", width: "100%" }}
@@ -238,24 +288,46 @@ export default function TerraformFilesSection() {
 
             <div className="access-panel-header">
                 <h3 className="settings-subhead" style={{ margin: 0 }}>Terraform Files</h3>
-                <button type="button" className="btn btn-primary" disabled={uploading} onClick={() => fileInputRef.current?.click()}>
-                    <Upload size={14} style={{ marginRight: 4, verticalAlign: -2 }} />
-                    {uploading ? "Uploading..." : "Upload Files"}
-                </button>
+                <div className="button-row" style={{ margin: 0 }}>
+                    <button type="button" className="btn btn-primary" disabled={uploading} onClick={() => filesInputRef.current?.click()}>
+                        <Upload size={14} style={{ marginRight: 4, verticalAlign: -2 }} />
+                        {uploading ? "Uploading..." : "Upload Files"}
+                    </button>
+                    <button type="button" className="btn btn-secondary" disabled={uploading} onClick={() => folderInputRef.current?.click()}>
+                        <FolderUp size={14} style={{ marginRight: 4, verticalAlign: -2 }} />
+                        {uploading ? "Uploading..." : "Upload Folder"}
+                    </button>
+                </div>
                 <input
-                    ref={fileInputRef}
+                    ref={filesInputRef}
                     type="file"
                     multiple
                     accept=".tf,.tf.json"
                     style={{ display: "none" }}
                     onChange={handlePickFiles}
                 />
+                {/* webkitdirectory (Chrome/Edge/Firefox/Safari, non-standard but
+                    universally supported) turns this into a folder picker - every
+                    file inside the chosen folder, including subfolders, comes
+                    back in one FileList with webkitRelativePath set. */}
+                <input
+                    ref={folderInputRef}
+                    type="file"
+                    webkitdirectory=""
+                    directory=""
+                    multiple
+                    style={{ display: "none" }}
+                    onChange={handlePickFolder}
+                />
             </div>
 
             <p className="field-hint" style={{ marginTop: 0 }}>
-                Select multiple .tf files from your local Terraform folder to store and edit them
-                here. Nothing here runs terraform plan/apply - this is storage and editing only, and
-                re-uploading a file refreshes its saved content.
+                Select individual .tf files, or upload a whole folder (e.g. your local
+                <code style={{ margin: "0 4px" }}>vipscloudpms-azure-infrastructure</code>
+                folder) at once - every .tf/.tf.json file inside it, including subfolders, gets
+                stored here with its folder structure preserved (so local module references keep
+                working). Re-uploading a file refreshes its saved content. Use Explain/Plan/Apply
+                below to actually work with what's stored here.
             </p>
 
             {loading ? (

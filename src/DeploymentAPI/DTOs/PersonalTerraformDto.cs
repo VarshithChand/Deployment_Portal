@@ -65,3 +65,14 @@ public class UpdateTerraformFileContentDto
 {
     public string? Content { get; set; }
 }
+
+// confirmationText must exactly match the plan's own summary line (e.g.
+// "Plan: 3 to add, 0 to change, 1 to destroy.") - see
+// TerraformExecutionService.ApplyAsync's own comment for why a generic
+// "yes" wouldn't actually prove the plan was read.
+public class TerraformApplyRequestDto
+{
+    public string? PlanId { get; set; }
+
+    public string? ConfirmationText { get; set; }
+}

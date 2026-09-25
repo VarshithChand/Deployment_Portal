@@ -34,4 +34,58 @@ public static class TerraformFileNaming
 
         return (true, null);
     }
+
+    // Directory-segment names (no extension requirement) - same character
+    // class as a leaf filename minus the ".tf" requirement.
+    private static readonly Regex ValidPathSegmentPattern = new(
+        @"^[A-Za-z0-9._-]+$", RegexOptions.Compiled);
+
+    // A second, deliberately separate validator - ONLY for the personal
+    // Terraform page's file storage (see SettingsService's
+    // UploadUserTerraformFilesAsync), which preserves folder structure so
+    // local module references (source = "./modules/x") keep resolving when
+    // real terraform execution writes these files back out to disk.
+    // ValidateFileName above stays exactly as it was (flat-only) for the
+    // org-scoped TerraformFileService, which has its own existing tests
+    // asserting "sub/dir/main.tf" is rejected - this is a genuinely
+    // separate invariant, not a relaxation of that one.
+    public static (bool Valid, string? Error, string? Normalized) ValidateRelativePath(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            return (false, "A file path is required.", null);
+
+        var trimmed = path.Trim().Replace('\\', '/');
+
+        if (trimmed.Length > 300)
+            return (false, "File path is too long.", null);
+
+        if (trimmed.StartsWith('/') || trimmed.EndsWith('/'))
+            return (false, "File path can't start or end with a slash.", null);
+
+        var segments = trimmed.Split('/');
+
+        if (segments.Length > 12)
+            return (false, "File path is nested too deeply.", null);
+
+        for (var i = 0; i < segments.Length; i++)
+        {
+            var segment = segments[i];
+            var isLast = i == segments.Length - 1;
+
+            if (segment.Length == 0 || segment == "." || segment == "..")
+                return (false, "File path contains an invalid segment.", null);
+
+            if (isLast)
+            {
+                if (!ValidFileNamePattern.IsMatch(segment))
+                    return (false, "The file itself must contain only letters, numbers, dots, dashes, or underscores, and end in .tf or .tf.json.", null);
+            }
+            else if (!ValidPathSegmentPattern.IsMatch(segment))
+            {
+                return (false, "Folder names must contain only letters, numbers, dots, dashes, or underscores.", null);
+            }
+        }
+
+        return (true, null, trimmed);
+    }
 }

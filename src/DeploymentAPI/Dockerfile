@@ -13,10 +13,23 @@ WORKDIR /app
 # curl for the HEALTHCHECK below — docker-compose uses this to know when
 # the API is actually ready to serve requests, not just that the process
 # has started, so the frontend container doesn't come up and start
-# proxying to a backend that isn't listening yet.
+# proxying to a backend that isn't listening yet. unzip is for the
+# Terraform CLI install just below.
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends curl \
+    && apt-get install -y --no-install-recommends curl unzip \
     && rm -rf /var/lib/apt/lists/*
+
+# Terraform CLI - powers Settings' personal Terraform page's real plan/apply
+# (see TerraformExecutionService.cs). Version resolved from HashiCorp's own
+# checkpoint API at image-build time rather than a hardcoded string, so
+# this doesn't quietly go stale the way a pinned version would.
+RUN TF_VERSION=$(curl -fsSL https://checkpoint-api.hashicorp.com/v1/check/terraform \
+        | grep -o '"current_version":"[^"]*"' | cut -d'"' -f4) \
+    && curl -fsSL -o /tmp/terraform.zip "https://releases.hashicorp.com/terraform/${TF_VERSION}/terraform_${TF_VERSION}_linux_amd64.zip" \
+    && unzip -o /tmp/terraform.zip -d /usr/local/bin \
+    && rm /tmp/terraform.zip \
+    && chmod +x /usr/local/bin/terraform \
+    && terraform -version
 
 COPY --from=build /app/publish .
 

@@ -976,7 +976,12 @@ public class SettingsService
 
         foreach (var upload in uploads)
         {
-            var (valid, error) = TerraformFileNaming.ValidateFileName(upload.FileName);
+            // Relative-path validator, not the org feature's flat-only one -
+            // see TerraformFileNaming.ValidateRelativePath's own comment for
+            // why: preserving folder structure here is what lets local
+            // module references keep resolving when TerraformExecutionService
+            // writes these files back out to disk for a real plan/apply.
+            var (valid, error, normalized) = TerraformFileNaming.ValidateRelativePath(upload.FileName);
 
             if (!valid)
             {
@@ -984,7 +989,7 @@ public class SettingsService
                 continue;
             }
 
-            var trimmedName = upload.FileName!.Trim();
+            var trimmedName = normalized!;
             var content = upload.Content ?? string.Empty;
 
             if (content.Length > MaxUserTerraformFileContentLength)
@@ -1065,6 +1070,35 @@ public class SettingsService
         files!.Remove(entry);
         await WriteRootAsync(root);
         return true;
+    }
+
+    // Full content for every stored file at once - used only by
+    // TerraformExecutionService to materialize a real working directory for
+    // plan/apply (a single blob read, rather than N individual
+    // GetUserTerraformFileAsync round trips).
+    public async Task<List<PersonalTerraformFileDetailDto>> GetAllUserTerraformFilesAsync(string key)
+    {
+        var root = await ReadRootAsync();
+        var files = (root["UserTerraformFiles"] as JObject)?[key] as JArray;
+
+        if (files == null)
+            return new List<PersonalTerraformFileDetailDto>();
+
+        return files
+            .OfType<JObject>()
+            .Select(f =>
+            {
+                var content = f["Content"]?.ToString() ?? string.Empty;
+
+                return new PersonalTerraformFileDetailDto
+                {
+                    FileName = f["FileName"]?.ToString() ?? string.Empty,
+                    Content = content,
+                    ContentLength = content.Length,
+                    UpdatedAtUtc = f["UpdatedAtUtc"]?.ToObject<DateTime>() ?? default
+                };
+            })
+            .ToList();
     }
 
     public async Task<UserGcpCredentials> GetUserGcpCredentialsAsync(string key)

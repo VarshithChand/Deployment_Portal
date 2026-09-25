@@ -5688,6 +5688,38 @@ textarea{
 
 }
 
+/* Raw terraform plan/apply/init output (TerraformExecutionPanel) - same
+   "wide content scrolls in its own box, never the page" treatment as the
+   JSON block just above, just taller since real terraform output runs
+   long. */
+.terraform-output{
+
+    margin:0;
+
+    padding:10px 12px;
+
+    background:var(--bg);
+
+    border:1px solid var(--border);
+
+    border-radius:6px;
+
+    font-family:"SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+
+    font-size:12px;
+
+    line-height:1.5;
+
+    max-height:420px;
+
+    overflow:auto;
+
+    white-space:pre-wrap;
+
+    word-break:break-word;
+
+}
+
 /* ---- Breadcrumbs + detail-page header (CloudServiceDetailPage) ---- */
 
 .cloud-service-breadcrumbs{
