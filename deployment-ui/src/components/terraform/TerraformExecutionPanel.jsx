@@ -149,6 +149,15 @@ export default function TerraformExecutionPanel() {
 
             </div>
 
+            {(explaining || planning || applying) && (
+                <div className="inline-loading-row" role="status" aria-live="polite">
+                    <span className="inline-spinner" aria-hidden="true"></span>
+                    {explaining && "Asking the AI Assistant to explain your files..."}
+                    {planning && "Running terraform init + plan against Azure - this can take a minute..."}
+                    {applying && "Running terraform apply against Azure..."}
+                </div>
+            )}
+
             {explanation && (
                 <div className="card" style={{ marginTop: 14 }}>
                     <CopilotMarkdown text={explanation} />

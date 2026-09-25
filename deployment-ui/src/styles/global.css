@@ -5688,6 +5688,54 @@ textarea{
 
 }
 
+/* Inline "this is actually working" feedback for an action with no other
+   visible progress cue (Terraform folder upload, plan/apply) - a small
+   spinner + text, distinct from LoadingMark's full decorative mark, which
+   is too heavy to repeat inline next to a button. */
+.inline-loading-row{
+
+    display:flex;
+
+    align-items:center;
+
+    gap:8px;
+
+    margin:10px 0;
+
+    font-size:13px;
+
+    color:var(--text-muted);
+
+}
+
+.inline-spinner{
+
+    display:inline-block;
+
+    width:14px;
+
+    height:14px;
+
+    border:2px solid var(--border);
+
+    border-top-color:var(--heading-accent, #2563eb);
+
+    border-radius:50%;
+
+    animation:inline-spin .7s linear infinite;
+
+    flex-shrink:0;
+
+}
+
+@keyframes inline-spin{
+    to{ transform:rotate(360deg); }
+}
+
+@media(prefers-reduced-motion:reduce){
+    .inline-spinner{ animation-duration:2.2s; }
+}
+
 /* Raw terraform plan/apply/init output (TerraformExecutionPanel) - same
    "wide content scrolls in its own box, never the page" treatment as the
    JSON block just above, just taller since real terraform output runs

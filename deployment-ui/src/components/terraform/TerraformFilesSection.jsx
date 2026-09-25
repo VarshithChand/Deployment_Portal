@@ -45,6 +45,7 @@ export default function TerraformFilesSection() {
     const [files, setFiles] = useState([]);
     const [loading, setLoading] = useState(true);
     const [uploading, setUploading] = useState(false);
+    const [uploadCount, setUploadCount] = useState(0);
 
     const [openFile, setOpenFile] = useState(null);
     const [openContent, setOpenContent] = useState("");
@@ -94,6 +95,12 @@ export default function TerraformFilesSection() {
             return parts.length > 1 ? parts.slice(1).join("/") : f.name;
         }
 
+        // Set before the (possibly slow, for a big folder) read/upload work
+        // below even starts, so the inline spinner appears the instant the
+        // OS file-picker dialog closes - not just once the network call
+        // begins, which previously left folder selections with no visible
+        // feedback for however long readFileAsText took on a large batch.
+        setUploadCount(tfFiles.length);
         setUploading(true);
 
         try {
@@ -329,6 +336,13 @@ export default function TerraformFilesSection() {
                 working). Re-uploading a file refreshes its saved content. Use Explain/Plan/Apply
                 below to actually work with what's stored here.
             </p>
+
+            {uploading && (
+                <div className="inline-loading-row" role="status" aria-live="polite">
+                    <span className="inline-spinner" aria-hidden="true"></span>
+                    Uploading {uploadCount} file{uploadCount === 1 ? "" : "s"}...
+                </div>
+            )}
 
             {loading ? (
 
