@@ -251,6 +251,71 @@ public class TerraformTfvarsEditorRenameTests
     }
 }
 
+public class TerraformNewResourceTemplatesTests
+{
+    private static PersonalTerraformFileDetailDto File(string name, string content) => new()
+    {
+        FileName = name,
+        Content = content,
+        ContentLength = content.Length
+    };
+
+    // Every generated template must be immediately usable by "Add Resource"
+    // too, not just a one-off insert - assembles a fake project exactly the
+    // way GenerateTemplate would leave one (main.tf's calling block + the
+    // module's own generated file + a starter tfvars entry) and confirms
+    // BuildAddTargets finds it as a valid target of the right shape/
+    // resource type. This is the real regression check for
+    // TerraformNewResourceTemplates - if a generated module's shape ever
+    // stops matching what the extractor understands, this catches it.
+    [Theory]
+    [InlineData("webApp", "azurerm_windows_web_app", "Map")]
+    [InlineData("functionApp", "azurerm_windows_function_app", "List")]
+    [InlineData("serviceBusQueue", "azurerm_servicebus_queue", "List")]
+    public void GeneratedTemplate_IsImmediatelyUsableAsAnAddTarget(string kind, string expectedResourceType, string expectedShape)
+    {
+        var template = TerraformNewResourceTemplates.Build(kind, "myapp");
+        Assert.NotNull(template);
+
+        var files = new[]
+        {
+            File("main.tf", "module \"resource_group\" {\n  source = \"./modules/resource_group\"\n}\n\n" + template!.MainTfBlock),
+            File("variables.tf", template.VariableBlock),
+            File("terraform.tfvars", template.TfvarsBlock),
+            File($"{template.ModuleFolder}/main.tf", template.ModuleMainTf)
+        };
+
+        var target = Assert.Single(TerraformResourceExtractor.BuildAddTargets(files));
+
+        Assert.Equal(expectedResourceType, target.ResourceType);
+        Assert.Equal(expectedShape, target.Shape);
+        Assert.Equal(1, target.ExistingCount);
+    }
+
+    [Fact]
+    public void BuildFunctionApp_BundlesItsOwnApplicationInsightsInsideTheModule()
+    {
+        var template = TerraformNewResourceTemplates.Build("functionApp", "myapp");
+
+        Assert.NotNull(template);
+        Assert.Contains("azurerm_application_insights", template!.ModuleMainTf);
+    }
+
+    [Theory]
+    [InlineData("webApp")]
+    [InlineData("functionApp")]
+    [InlineData("serviceBusQueue")]
+    public void EveryTemplate_OnlyReferencesAnExistingResourceGroupNeverCreatesOne(string kind)
+    {
+        var template = TerraformNewResourceTemplates.Build(kind, "myapp");
+
+        Assert.NotNull(template);
+        Assert.DoesNotContain("resource \"azurerm_resource_group\"", template!.MainTfBlock);
+        Assert.DoesNotContain("resource \"azurerm_resource_group\"", template.ModuleMainTf);
+        Assert.Contains("module.resource_group", template.MainTfBlock);
+    }
+}
+
 public class TerraformTfvarsEditorRemoveTests
 {
     [Fact]

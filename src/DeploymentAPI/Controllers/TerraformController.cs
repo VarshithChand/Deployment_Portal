@@ -587,14 +587,16 @@ public class TerraformController : ControllerBase
 
     // The "no existing target fits" path - deliberately NOT fully wired
     // (see GenerateNewTemplateRequestDto's own comment): appends a starter
-    // resource + module block to main.tf, a matching variable declaration
-    // to variables.tf, and one starter entry to terraform.tfvars. A
-    // starting point to review and connect (Resource Group id, Plan id,
+    // module-call block to main.tf, a matching variable declaration to
+    // variables.tf, and one starter entry to terraform.tfvars, exactly like
+    // before. What's new: it also writes that module's OWN main.tf under
+    // modules/<kind>/ (see TerraformNewResourceTemplates's own header
+    // comment) - but ONLY when nothing is already there, so a project that
+    // already has its own real modules/web_app (etc) keeps it untouched,
+    // never silently overwritten by the starter version. Still a starting
+    // point to review and connect (Resource Group reference, Plan SKU,
     // etc), same as the existing "Insert starter code" template picker in
-    // the file editor - not an attempt to fully automate wiring a new
-    // Resource Group/Plan/module set, which would need this app to
-    // understand far more about the specific project's own conventions
-    // than a static text scan safely can.
+    // the file editor.
     [HttpPost("projects/{projectId:guid}/generate-template")]
     public async Task<IActionResult> GenerateTemplate(Guid projectId, GenerateNewTemplateRequestDto request)
     {
@@ -632,6 +634,12 @@ public class TerraformController : ControllerBase
             new() { FileName = "variables.tf", Content = AppendOrCreate("variables.tf", template.VariableBlock) },
             new() { FileName = "terraform.tfvars", Content = AppendOrCreate("terraform.tfvars", template.TfvarsBlock) }
         };
+
+        var moduleFileName = $"{template.ModuleFolder}/main.tf";
+        var moduleAlreadyExists = files.Any(f => string.Equals(f.FileName, moduleFileName, StringComparison.OrdinalIgnoreCase));
+
+        if (!moduleAlreadyExists)
+            uploads.Add(new TerraformFileUploadEntryDto { FileName = moduleFileName, Content = template.ModuleMainTf });
 
         var results = await _settings.UploadFilesToProjectAsync(key!, projectId, uploads);
 

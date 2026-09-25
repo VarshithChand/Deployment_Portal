@@ -241,8 +241,12 @@ export default function TerraformAddResourceForm({ projectId, open, onClose, onA
                                     ))}
                                 </select>
                                 <p className="field-hint" style={{ marginTop: "6px" }}>
-                                    Generates a starter Resource Group/Plan/module block appended to main.tf - a
-                                    starting point to review and connect, not a finished wire-up.
+                                    Generates a starter module block appended to main.tf, and writes the
+                                    module's own files under modules/&lt;kind&gt;/ if they don't already exist
+                                    (an existing real module is never overwritten). Function App also bundles
+                                    its own Application Insights resource. Review and connect (existing
+                                    Resource Group reference, Plan SKU) before running Plan - not a finished
+                                    wire-up.
                                 </p>
                             </div>
                         )}

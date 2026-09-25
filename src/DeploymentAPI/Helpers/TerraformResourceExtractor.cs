@@ -541,11 +541,25 @@ public static class TerraformResourceExtractor
         return trimmed.TrimEnd('/');
     }
 
+    // Project-level variable defaults ONLY - a `variable "X" { default = ... }`
+    // declared inside a MODULE's own folder (modules/foo/variables.tf, or
+    // inline in modules/foo/main.tf) is that module's own INPUT variable,
+    // invisible outside it, and must never be treated as if it were a
+    // project-level fallback for `var.X` elsewhere. Without this
+    // root-only filter, a module declaring its own `variable "queues"`
+    // (entirely normal, idiomatic Terraform - every generated module in
+    // TerraformNewResourceTemplates does exactly this) would fool Case B's
+    // "already directly resolvable" check into thinking the module's OWN
+    // for_each-driving resource was a project-level variable with the
+    // module's default value, silently dropping it as an add target
+    // instead of resolving it through the calling module's own argument.
     private static Dictionary<string, string> BuildVariableValueIndex(IReadOnlyCollection<PersonalTerraformFileDetailDto> files)
     {
         var values = new Dictionary<string, string>(StringComparer.Ordinal);
 
-        foreach (var file in files.Where(f => f.FileName.EndsWith(".tf", StringComparison.OrdinalIgnoreCase)))
+        foreach (var file in files.Where(f =>
+            f.FileName.EndsWith(".tf", StringComparison.OrdinalIgnoreCase)
+            && GetContainingFolder(f.FileName).Length == 0))
         {
             foreach (Match m in VariableBlockPattern.Matches(file.Content))
             {
@@ -574,12 +588,16 @@ public static class TerraformResourceExtractor
 
     // local name -> its raw, unresolved expression text (may itself be a
     // literal map/list, or a for-expression matching ForInVarPattern, or
-    // something else this app leaves alone).
+    // something else this app leaves alone). Root-only, same reasoning as
+    // BuildVariableValueIndex's own comment - a `locals` block inside a
+    // module folder is scoped to that module alone.
     private static Dictionary<string, string> BuildLocalRawValueIndex(IReadOnlyCollection<PersonalTerraformFileDetailDto> files)
     {
         var values = new Dictionary<string, string>(StringComparer.Ordinal);
 
-        foreach (var file in files.Where(f => f.FileName.EndsWith(".tf", StringComparison.OrdinalIgnoreCase)))
+        foreach (var file in files.Where(f =>
+            f.FileName.EndsWith(".tf", StringComparison.OrdinalIgnoreCase)
+            && GetContainingFolder(f.FileName).Length == 0))
         {
             foreach (Match m in LocalsBlockPattern.Matches(file.Content))
             {
