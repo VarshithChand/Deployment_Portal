@@ -2,9 +2,12 @@ import { useEffect, useState } from "react";
 import { Check, X } from "lucide-react";
 
 import useToast from "../../hooks/useToast";
+import useConfirm from "../../hooks/useConfirm";
 import usePagination from "../../hooks/usePagination";
 import Pagination from "../common/Pagination";
-import { getTerraformResourceInstances, renameTerraformResourceInstance } from "../../services/terraformService";
+import {
+    getTerraformResourceInstances, renameTerraformResourceInstance, removeTerraformResourceInstance
+} from "../../services/terraformService";
 
 const KIND_LABELS = {
     azurerm_windows_web_app: "Web App",
@@ -39,7 +42,7 @@ function PendingResourceRow({ instance, onRemove }) {
 
 }
 
-function ResourceRow({ instance, onSaved, forceFlash }) {
+function ResourceRow({ instance, onSaved, onRemove, removing, forceFlash }) {
 
     const toast = useToast();
     const [value, setValue] = useState(instance.displayName);
@@ -90,9 +93,18 @@ function ResourceRow({ instance, onSaved, forceFlash }) {
                     onChange={(e) => setValue(e.target.value)}
                 />
             </td>
-            <td>
-                <button type="button" className="btn btn-sm btn-primary" disabled={!dirty || saving} onClick={handleSave}>
+            <td style={{ whiteSpace: "nowrap" }}>
+                <button type="button" className="btn btn-sm btn-primary" disabled={!dirty || saving || removing} onClick={handleSave}>
                     {saving ? "Saving..." : justSaved ? <><Check size={13} style={{ verticalAlign: -2 }} /> Saved</> : "Save"}
+                </button>
+                {" "}
+                <button
+                    type="button"
+                    className="btn btn-sm btn-danger"
+                    disabled={saving || removing}
+                    onClick={() => onRemove(instance)}
+                >
+                    {removing ? "Removing..." : "Remove"}
                 </button>
             </td>
         </tr>
@@ -101,7 +113,10 @@ function ResourceRow({ instance, onSaved, forceFlash }) {
 
 }
 
-function ResourceGroup({ projectId, resourceType, variableName, instances, pendingInstances, onSaved, onRemovePending, flashedKeys }) {
+function ResourceGroup({
+    projectId, resourceType, variableName, instances, pendingInstances,
+    onSaved, onRemovePending, onRemove, removingKey, flashedKeys
+}) {
 
     // Pending drafts always show (unpaginated, there's realistically only a
     // handful in flight at once) ahead of the already-saved, paginated list -
@@ -133,6 +148,8 @@ function ResourceGroup({ projectId, resourceType, variableName, instances, pendi
                                 key={instance.key}
                                 instance={{ ...instance, projectId }}
                                 onSaved={onSaved}
+                                onRemove={onRemove}
+                                removing={removingKey === `${instance.variableName}::${instance.key}`}
                                 forceFlash={flashedKeys?.has(`${instance.variableName}::${instance.key}`)}
                             />
                         ))}
@@ -165,8 +182,12 @@ function ResourceGroup({ projectId, resourceType, variableName, instances, pendi
 // discovered.
 export default function TerraformResourcesTab({ projectId, pendingInstances, onRemovePending, flashedKeys, refreshToken }) {
 
+    const toast = useToast();
+    const { confirm, dialog } = useConfirm();
+
     const [instances, setInstances] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [removingKey, setRemovingKey] = useState(null);
 
     function load() {
         setLoading(true);
@@ -178,6 +199,45 @@ export default function TerraformResourcesTab({ projectId, pendingInstances, onR
 
     // eslint-disable-next-line react-hooks/exhaustive-deps
     useEffect(load, [projectId, refreshToken]);
+
+    // Removes an EXISTING (already-saved) instance - distinct from
+    // onRemovePending, which just drops a not-yet-written draft. This is a
+    // real tfvars edit (see TerraformTfvarsEditor.RemoveEntry's own
+    // comment), so it's confirmed first.
+    async function handleRemoveInstance(instance) {
+
+        if (!(await confirm({
+            title: "Remove this resource?",
+            message: `"${instance.displayName}" will be removed from terraform.tfvars. This doesn't touch Azure until you run Plan/Apply.`,
+            confirmLabel: "Remove",
+            danger: true
+        }))) {
+            return;
+        }
+
+        setRemovingKey(`${instance.variableName}::${instance.key}`);
+
+        try {
+
+            const result = await removeTerraformResourceInstance(projectId, instance.variableName, instance.key);
+
+            if (!result.success) {
+                toast.show(result.message || "Unable to remove that.", "error");
+                return;
+            }
+
+            toast.show(`"${instance.displayName}" removed.`, "success");
+            load();
+
+        }
+        catch (err) {
+            toast.show(err.response?.data?.message || "Unable to remove that right now.", "error");
+        }
+        finally {
+            setRemovingKey(null);
+        }
+
+    }
 
     // Every group that has either a real (saved) instance OR a pending
     // draft - a brand new target with zero existing entries yet would
@@ -195,9 +255,11 @@ export default function TerraformResourcesTab({ projectId, pendingInstances, onR
 
         <div>
 
+            {dialog}
+
             <p className="field-hint" style={{ marginTop: 0 }}>
-                Every web app, function app, and queue this project creates - rename one and save to
-                edit terraform.tfvars directly, no HCL editing needed.
+                Every web app, function app, and queue this project creates - rename or remove one and
+                save to edit terraform.tfvars directly, no HCL editing needed.
             </p>
 
             {loading ? (
@@ -217,6 +279,8 @@ export default function TerraformResourcesTab({ projectId, pendingInstances, onR
                         pendingInstances={(pendingInstances || []).filter((i) => i.variableName === g.variableName)}
                         onSaved={load}
                         onRemovePending={onRemovePending}
+                        onRemove={handleRemoveInstance}
+                        removingKey={removingKey}
                         flashedKeys={flashedKeys}
                     />
                 ))

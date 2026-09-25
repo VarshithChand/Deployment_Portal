@@ -125,6 +125,69 @@ public static class TerraformTfvarsEditor
         return (true, null, updated);
     }
 
+    // Deletes one existing map key or list element from a variable's value -
+    // the "already exists, I don't want it anymore" counterpart to
+    // RenameEntry, reusing the same hardened parsing helpers for the same
+    // reason. This is a tfvars edit only: it never calls Azure, so an
+    // existing resource isn't actually destroyed until Plan/Apply runs
+    // against the now-shorter list - the caller is expected to make that
+    // clear before calling this.
+    public static (bool Success, string? Error, string? UpdatedContent) RemoveEntry(
+        string tfvarsContent, string variableName, string shape, string key)
+    {
+        var valueStart = FindVariableValueStart(tfvarsContent, variableName);
+
+        if (valueStart == null)
+            return (false, $"Variable \"{variableName}\" wasn't found in this file.", null);
+
+        if (valueStart.Value >= tfvarsContent.Length)
+            return (false, $"\"{variableName}\" has no value to remove from.", null);
+
+        var openBracket = tfvarsContent[valueStart.Value];
+
+        if (openBracket != '{' && openBracket != '[')
+            return (false, $"\"{variableName}\" isn't a map or list this app can edit.", null);
+
+        var valueEnd = FindMatchingBracket(tfvarsContent, valueStart.Value);
+
+        if (valueEnd < 0)
+            return (false, $"\"{variableName}\"'s value looks malformed.", null);
+
+        var inner = tfvarsContent[(valueStart.Value + 1)..valueEnd];
+        string rebuiltInner;
+
+        if (shape == "Map")
+        {
+            var entries = TerraformResourceExtractor.ParseTopLevelAssignments(inner);
+
+            if (!entries.ContainsKey(key))
+                return (false, $"\"{key}\" wasn't found in \"{variableName}\".", null);
+
+            rebuiltInner = string.Concat(entries.Where(e => e.Key != key).Select(e =>
+                $"\n  \"{e.Key}\" = {e.Value}"));
+        }
+        else
+        {
+            var elements = TerraformResourceExtractor.SplitTopLevelElements(inner);
+            var index = elements.FindIndex(el => StripQuotesIfPresent(el) == key);
+
+            if (index < 0)
+                return (false, $"\"{key}\" wasn't found in \"{variableName}\".", null);
+
+            elements.RemoveAt(index);
+            rebuiltInner = string.Concat(elements.Select(el => $"\n  {el}"));
+        }
+
+        // Formatting only, terraform reads either the same: keep the closing
+        // bracket on its own line (matching InsertEntry/RenameEntry) even
+        // when removing the last entry leaves the map/list empty.
+        rebuiltInner += "\n";
+
+        var updated = tfvarsContent[..(valueStart.Value + 1)] + rebuiltInner + tfvarsContent[valueEnd..];
+
+        return (true, null, updated);
+    }
+
     private static string StripQuotesIfPresent(string text)
     {
         var trimmed = text.Trim();

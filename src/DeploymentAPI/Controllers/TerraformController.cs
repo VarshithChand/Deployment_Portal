@@ -540,6 +540,51 @@ public class TerraformController : ControllerBase
         return Ok(new { success = true });
     }
 
+    // Deletes one existing instance's map key/list value from terraform.tfvars
+    // (TerraformTfvarsEditor.RemoveEntry) - same fresh re-resolve as
+    // RenameInstance/AddInstance above. A tfvars edit only - it doesn't touch
+    // Azure, so the actual resource isn't destroyed until Plan/Apply runs
+    // against the now-shorter list; the frontend confirms that before calling
+    // this.
+    [HttpPost("projects/{projectId:guid}/remove-instance")]
+    public async Task<IActionResult> RemoveInstance(Guid projectId, RemoveResourceInstanceRequestDto request)
+    {
+        var (key, denied) = RequireAuth.RequireUserId(this);
+        if (denied != null) return denied;
+
+        if (string.IsNullOrWhiteSpace(request.VariableName) || string.IsNullOrWhiteSpace(request.Key))
+            return BadRequest(new { message = "A target and its current name are required." });
+
+        var files = await _settings.GetAllProjectFilesAsync(key!, projectId);
+
+        var instance = TerraformResourceExtractor.BuildResourceInstances(files)
+            .FirstOrDefault(i => i.VariableName == request.VariableName && i.Key == request.Key);
+
+        if (instance == null)
+        {
+            return Ok(new
+            {
+                success = false,
+                message = "That instance isn't available in this project anymore - refresh and try again."
+            });
+        }
+
+        var file = files.FirstOrDefault(f => string.Equals(f.FileName, instance.FileName, StringComparison.OrdinalIgnoreCase));
+
+        if (file == null)
+            return Ok(new { success = false, message = $"{instance.FileName} wasn't found." });
+
+        var (success, error, updatedContent) = TerraformTfvarsEditor.RemoveEntry(
+            file.Content, instance.VariableName, instance.Shape, instance.Key);
+
+        if (!success)
+            return Ok(new { success = false, message = error });
+
+        await _settings.UpdateProjectFileAsync(key!, projectId, instance.FileName, updatedContent);
+
+        return Ok(new { success = true });
+    }
+
     // The "no existing target fits" path - deliberately NOT fully wired
     // (see GenerateNewTemplateRequestDto's own comment): appends a starter
     // resource + module block to main.tf, a matching variable declaration

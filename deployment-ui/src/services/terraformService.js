@@ -122,6 +122,13 @@ export const renameTerraformResourceInstance = async (projectId, variableName, o
     return response.data;
 };
 
+// tfvars edit only - doesn't touch Azure, the actual resource isn't
+// destroyed until Plan/Apply runs against the now-shorter list.
+export const removeTerraformResourceInstance = async (projectId, variableName, key) => {
+    const response = await terraformApi.post(`/projects/${projectId}/remove-instance`, { variableName, key });
+    return response.data;
+};
+
 // No existing target fits - generates a starter (not fully wired) block,
 // see TerraformController.GenerateTemplate's own comment.
 export const generateTerraformTemplate = async (projectId, kind, name) => {

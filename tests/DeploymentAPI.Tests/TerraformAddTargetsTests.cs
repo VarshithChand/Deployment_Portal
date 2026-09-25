@@ -251,6 +251,64 @@ public class TerraformTfvarsEditorRenameTests
     }
 }
 
+public class TerraformTfvarsEditorRemoveTests
+{
+    [Fact]
+    public void RemoveEntry_RemovesAMapKeyAndKeepsSiblingsIntact()
+    {
+        var content = """
+            resource_group_name = "cluster04"
+            web_apps = {
+              "doomed-app" = { appsettings_file = "x.json" }
+              "other-app" = {}
+            }
+            """;
+
+        var (success, error, updated) = TerraformTfvarsEditor.RemoveEntry(content, "web_apps", "Map", "doomed-app");
+
+        Assert.True(success, error);
+        Assert.DoesNotContain("doomed-app", updated);
+        Assert.Contains("\"other-app\" = {}", updated);
+        Assert.Contains("resource_group_name = \"cluster04\"", updated);
+    }
+
+    [Fact]
+    public void RemoveEntry_RemovesAListElement()
+    {
+        var content = "function_apps = [\n  \"doomed-fn\",\n  \"other-fn\"\n]";
+
+        var (success, _, updated) = TerraformTfvarsEditor.RemoveEntry(content, "function_apps", "List", "doomed-fn");
+
+        Assert.True(success);
+        Assert.DoesNotContain("doomed-fn", updated);
+        Assert.Contains("\"other-fn\"", updated);
+    }
+
+    [Fact]
+    public void RemoveEntry_FailsCleanlyWhenTheKeyDoesNotExist()
+    {
+        var content = "web_apps = {\n  \"a\" = {}\n}";
+
+        var (success, error, updated) = TerraformTfvarsEditor.RemoveEntry(content, "web_apps", "Map", "does-not-exist");
+
+        Assert.False(success);
+        Assert.NotNull(error);
+        Assert.Null(updated);
+    }
+
+    [Fact]
+    public void RemoveEntry_RemovingTheOnlyEntryLeavesAValidEmptyMap()
+    {
+        var content = "web_apps = {\n  \"a\" = {}\n}";
+
+        var (success, _, updated) = TerraformTfvarsEditor.RemoveEntry(content, "web_apps", "Map", "a");
+
+        Assert.True(success);
+        Assert.DoesNotContain("\"a\"", updated);
+        Assert.Contains("web_apps = {", updated);
+    }
+}
+
 public class TerraformTfvarsEditorTests
 {
     [Fact]

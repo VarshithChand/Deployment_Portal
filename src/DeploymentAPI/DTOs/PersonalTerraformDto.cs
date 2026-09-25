@@ -223,6 +223,13 @@ public class RenameResourceInstanceRequestDto
     public string? NewKey { get; set; }
 }
 
+public class RemoveResourceInstanceRequestDto
+{
+    public string? VariableName { get; set; }
+
+    public string? Key { get; set; }
+}
+
 // The "no existing target fits" path - generates a starter HCL block
 // (not fully auto-wired - see TerraformController.GenerateTemplate's own
 // comment) appended to main.tf/variables.tf/terraform.tfvars for the
