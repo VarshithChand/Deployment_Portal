@@ -273,7 +273,7 @@ public class TerraformController : ControllerBase
             "use, and anything that stands out (hardcoded values, missing variables, anything that looks " +
             "risky). Be concise but specific - name actual resource names/types from the files, don't " +
             "speak generically. You are not running terraform and have no live Azure state - you're " +
-            "reading static text only.";
+            "reading static text only.\n\n" + MarkdownFormattingConstraint;
 
         var history = new List<AiChatMessageDto>
         {
@@ -336,7 +336,7 @@ public class TerraformController : ControllerBase
                 "Write a short, concrete summary of what would be created, grouped sensibly, in plain " +
                 "English. Do not invent resources beyond this list, and do not claim to know the actual " +
                 "value of any name shown as unresolved - say it depends on a variable instead. You have " +
-                "no live Azure state and are not running terraform.";
+                "no live Azure state and are not running terraform.\n\n" + MarkdownFormattingConstraint;
 
             var history = new List<AiChatMessageDto>
             {
@@ -357,6 +357,21 @@ public class TerraformController : ControllerBase
 
         return Ok(new { success = true, resources, narrative });
     }
+
+    // The frontend renders every AI reply through CopilotMarkdown.jsx - a
+    // deliberately minimal, safety-by-construction renderer (real React
+    // elements, never dangerouslySetInnerHTML) that only understands
+    // # headings, -/* bullets, 1. numbered lists, **bold**, and `code`.
+    // Without this constraint the model tends to reach for a markdown
+    // table (very natural for "type | count | name" data) or raw <br>
+    // tags for line breaks - neither of which that renderer understands,
+    // so they show up as literal pipe/dash/HTML text instead of formatting.
+    private const string MarkdownFormattingConstraint =
+        "Formatting: your reply is rendered by a minimal markdown renderer that ONLY understands " +
+        "# headings, - bullet lists, 1. numbered lists, **bold**, and `inline code` - plain paragraphs " +
+        "otherwise. Do NOT use markdown tables (| ... |), do NOT use raw HTML tags like <br> or <table>, " +
+        "and do NOT rely on any other markdown syntax - use nested bullet lists instead of a table when " +
+        "you need to present structured, multi-field information.";
 
     private static string DescribeResourceForAi(ProjectResourceSummaryDto r)
     {
