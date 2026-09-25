@@ -46,6 +46,17 @@ export const deleteTerraformProject = async (projectId) => {
     return response.data;
 };
 
+// Zips up every stored file (preserving folder structure) and returns it as
+// a blob - fetched through the authenticated client (responseType "blob"),
+// not a plain <a href>, since this app's auth is a Bearer header (see
+// apiBase.js's own comment on why) that a direct cross-origin browser
+// navigation can't attach. The caller turns this into an actual file save
+// via URL.createObjectURL + a synthetic <a download> click.
+export const downloadTerraformProject = async (projectId) => {
+    const response = await terraformApi.get(`/projects/${projectId}/download`, { responseType: "blob" });
+    return response.data;
+};
+
 // Encodes each path segment separately (joined back with literal "/") -
 // encodeURIComponent on the whole path would turn "/" into "%2F", which
 // Kestrel rejects in a raw URL by default. The backend's catch-all

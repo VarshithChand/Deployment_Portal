@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { AlertTriangle, ArrowLeft, ChevronDown, ChevronRight, Download, FileCode, FolderUp, KeyRound, PlusCircle, Sparkles, PlayCircle, Rocket, Upload } from "lucide-react";
 
-import { API_BASE } from "../../api/apiBase";
 import useToast from "../../hooks/useToast";
 import useConfirm from "../../hooks/useConfirm";
 import CopilotMarkdown from "../copilot/CopilotMarkdown";
@@ -16,7 +15,7 @@ import {
     getTerraformProject, deleteTerraformProject, uploadFilesToProject,
     getTerraformProjectFile, updateTerraformProjectFile, deleteTerraformProjectFile,
     explainTerraformProject, previewTerraformProject, planTerraformProject, applyTerraformProject,
-    addTerraformResourceInstance
+    addTerraformResourceInstance, downloadTerraformProject
 } from "../../services/terraformService";
 
 // A single `resource` block with for_each/count creates one ACTUAL Azure
@@ -122,6 +121,7 @@ export default function TerraformProjectPage({ projectId, onBack, onDeleted }) {
 
     const [uploading, setUploading] = useState(false);
     const [uploadCount, setUploadCount] = useState(0);
+    const [downloading, setDownloading] = useState(false);
 
     const [addResourceOpen, setAddResourceOpen] = useState(false);
 
@@ -447,6 +447,33 @@ export default function TerraformProjectPage({ projectId, onBack, onDeleted }) {
 
     }
 
+    async function handleDownload() {
+
+        setDownloading(true);
+
+        try {
+
+            const blob = await downloadTerraformProject(projectId);
+            const url = URL.createObjectURL(blob);
+
+            const link = document.createElement("a");
+            link.href = url;
+            link.download = `${(project?.name || "terraform-project").replace(/[^A-Za-z0-9._-]+/g, "_")}.zip`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+
+        }
+        catch (err) {
+            toast.show("Unable to download this project. If you were signed out, refresh and try again.", "error");
+        }
+        finally {
+            setDownloading(false);
+        }
+
+    }
+
     async function handleExplain() {
 
         setExplaining(true);
@@ -589,13 +616,10 @@ export default function TerraformProjectPage({ projectId, onBack, onDeleted }) {
                         <FolderUp size={14} style={{ marginRight: 4, verticalAlign: -2 }} />
                         Add Folder
                     </button>
-                    <a
-                        href={`${API_BASE}/api/terraform/projects/${projectId}/download`}
-                        className="btn btn-secondary"
-                    >
+                    <button type="button" className="btn btn-secondary" disabled={downloading} onClick={handleDownload}>
                         <Download size={14} style={{ marginRight: 4, verticalAlign: -2 }} />
-                        Download
-                    </a>
+                        {downloading ? "Downloading..." : "Download"}
+                    </button>
                     <button type="button" className="btn btn-danger" onClick={handleDeleteProject}>
                         Delete Project
                     </button>
