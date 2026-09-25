@@ -88,7 +88,7 @@ function ResourceRow({ instance, onSaved, onRemove, removing, forceFlash }) {
                 <input
                     type="text"
                     className="form-control"
-                    style={{ maxWidth: 320 }}
+                    style={{ width: "100%", boxSizing: "border-box" }}
                     value={value}
                     onChange={(e) => setValue(e.target.value)}
                 />
@@ -132,7 +132,11 @@ function ResourceGroup({
             </h4>
 
             <div className="table-scroll">
-                <table className="data-table">
+                <table className="data-table" style={{ width: "100%", tableLayout: "fixed" }}>
+                    <colgroup>
+                        <col />
+                        <col style={{ width: 190 }} />
+                    </colgroup>
                     <thead>
                         <tr>
                             <th>Name</th>
