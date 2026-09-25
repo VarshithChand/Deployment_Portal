@@ -134,14 +134,21 @@ export default function TerraformFilesSection() {
 
     }
 
+    // Array.from() MUST run before resetting e.target.value - input.files
+    // is a live FileList tied to the input, not a frozen snapshot, and
+    // clearing the input's value clears that same FileList in place. Doing
+    // the reset first (as this used to) left processPicked reading an
+    // already-emptied list on every pick, so it silently returned at its
+    // very first check - no toast, no upload, no visible sign anything had
+    // even run.
     function handlePickFiles(e) {
-        const picked = e.target.files;
+        const picked = Array.from(e.target.files || []);
         e.target.value = "";
         processPicked(picked);
     }
 
     function handlePickFolder(e) {
-        const picked = e.target.files;
+        const picked = Array.from(e.target.files || []);
         e.target.value = "";
         processPicked(picked);
     }
