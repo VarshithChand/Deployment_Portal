@@ -1,3 +1,4 @@
+using System.IO.Compression;
 using System.Text.RegularExpressions;
 using DeploymentAPI.DTOs;
 using DeploymentAPI.Helpers;
@@ -150,6 +151,44 @@ public class TerraformController : ControllerBase
             return NotFound(new { message = "Project not found." });
 
         return Ok(project);
+    }
+
+    // The "get my files back out" counterpart to the folder upload picker -
+    // zips up every stored file, preserving the same folder structure
+    // (fileName may contain "/") the project already stores, and streams it
+    // back as a single .zip. A plain <a href> download link (see
+    // ArtifactsTable.jsx's own GitHub-artifact download for the identical
+    // pattern) rather than a JS fetch+blob dance, since this app's auth is
+    // cookie-based and a direct browser navigation already carries it.
+    [HttpGet("projects/{projectId:guid}/download")]
+    public async Task<IActionResult> DownloadProject(Guid projectId)
+    {
+        var (key, denied) = RequireAuth.RequireUserId(this);
+        if (denied != null) return denied;
+
+        var project = await _settings.GetUserTerraformProjectAsync(key!, projectId);
+        if (project == null)
+            return NotFound(new { message = "Project not found." });
+
+        var files = await _settings.GetAllProjectFilesAsync(key!, projectId);
+
+        using var zipStream = new MemoryStream();
+
+        using (var archive = new ZipArchive(zipStream, ZipArchiveMode.Create, leaveOpen: true))
+        {
+            foreach (var file in files)
+            {
+                var entry = archive.CreateEntry(file.FileName, CompressionLevel.Optimal);
+                await using var entryStream = entry.Open();
+                await using var writer = new StreamWriter(entryStream);
+                await writer.WriteAsync(file.Content);
+            }
+        }
+
+        var safeName = Regex.Replace(project.Name, @"[^A-Za-z0-9._-]+", "_").Trim('_');
+        if (string.IsNullOrEmpty(safeName)) safeName = "terraform-project";
+
+        return File(zipStream.ToArray(), "application/zip", $"{safeName}.zip");
     }
 
     [HttpDelete("projects/{projectId:guid}")]

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
-import { AlertTriangle, ArrowLeft, ChevronDown, ChevronRight, FileCode, FolderUp, KeyRound, PlusCircle, Sparkles, PlayCircle, Rocket, Upload } from "lucide-react";
+import { AlertTriangle, ArrowLeft, ChevronDown, ChevronRight, Download, FileCode, FolderUp, KeyRound, PlusCircle, Sparkles, PlayCircle, Rocket, Upload } from "lucide-react";
 
+import { API_BASE } from "../../api/apiBase";
 import useToast from "../../hooks/useToast";
 import useConfirm from "../../hooks/useConfirm";
 import CopilotMarkdown from "../copilot/CopilotMarkdown";
@@ -588,6 +589,13 @@ export default function TerraformProjectPage({ projectId, onBack, onDeleted }) {
                         <FolderUp size={14} style={{ marginRight: 4, verticalAlign: -2 }} />
                         Add Folder
                     </button>
+                    <a
+                        href={`${API_BASE}/api/terraform/projects/${projectId}/download`}
+                        className="btn btn-secondary"
+                    >
+                        <Download size={14} style={{ marginRight: 4, verticalAlign: -2 }} />
+                        Download
+                    </a>
                     <button type="button" className="btn btn-danger" onClick={handleDeleteProject}>
                         Delete Project
                     </button>
